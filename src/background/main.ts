@@ -2,9 +2,8 @@
 
 import { COMPILED_KEYMAP_VERSION } from "../shared/protocol.ts";
 import type { KeymapTree, KeysApi } from "../shared/protocol.ts";
-import { DEFAULT_KEYMAP, compile_default_keymap } from "./default_keymap.ts";
+import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "./commands/index.ts";
 import { notify_refusal } from "./notify.ts";
-import { registry } from "./registry.ts";
 import { create_router } from "./router.ts";
 import type { RouterApi } from "./router.ts";
 

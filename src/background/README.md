@@ -4,12 +4,12 @@ The persistent background page. It owns the command registry, compiles the defau
 
 ## Files
 
-- `registry.ts`: the one table of commands. `motion.*` run in the chrome runtime and carry no handler. `msg.*` run here.
-- `default_keymap.ts`: the default bindings and their compile through the vendored compiler.
+- `commands/`: the command table, one file per group. `define.ts` holds the `CommandGroup` shape, which requires `bridge: boolean` on every command, and the `scoped` wrapper. `motion.ts` holds `motion.*`, which run in the chrome runtime and carry no handler. `messages.ts` holds `msg.*`, which run here. A group lists its commands and the default normal-mode keys that run them. `index.ts` joins the groups into `registry`, `DEFAULT_KEYMAP` and `compile_default_keymap` (the default bindings through the vendored compiler). A new group is one file and one line in `GROUPS`.
 - `main.ts`: stores the compiled keymap under `desertbird_compiled_keymap` with a hash of the default bindings, calls `keys.install` on every start and again when storage changes, and routes `keys.onInvocation` to the router.
 - `router.ts`: look up, `check_args`, check `needs`, call the handler on the message ids the invocation carries. Any failure ends in a notification.
 - `notify.ts`: shows a refusal. A key never fails silently.
 - `handlers/message.ts`, `handlers/identity.ts`: archive, delete and reply. They take the API subset in a scope object and never read a global.
+- `handlers/each_message.ts`, `handlers/displayed_folder.ts`, `handlers/special_folder.ts`: shared helpers. Loop over the selected ids with the empty-selection refusal, read the displayed folder, and find a folder by special use.
 
 ## Rules
 

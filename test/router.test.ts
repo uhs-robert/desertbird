@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { registry } from "../src/background/registry.ts";
+import { registry } from "../src/background/commands/index.ts";
 import { create_registry } from "../vendor/desertfox/registry/define.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
