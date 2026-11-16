@@ -341,3 +341,73 @@ test("with a menu open every key passes to the menu and runs nothing", () => {
     assert.equal(window.selected, 0);
     assert.deepEqual(emitted, []);
 });
+
+// The chords the phase 2 groups bind. No default binding exists yet, so a test tree binds each one to its own background id.
+const BOUND_CHORDS = ["o", "i", "l", "j", "k", "x", "c", "h"];
+const chord_id = (letter: string) => `test.ctrl_${letter}`;
+const chord_tree = () => {
+    const with_chords = tree();
+    for (const letter of BOUND_CHORDS) Object.assign(with_chords.root.children, { [`<C-${letter}>`]: leaf(chord_id(letter), "background") });
+    return with_chords;
+};
+const press_ctrl = (window: FakeWindow, letter: string, options: Partial<KeydownEvent> = {}) => press(window, letter, { ctrlKey: true, code: `Key${letter.toUpperCase()}`, ...options });
+
+test("each bound chord runs its command and is cancelled, so the Thunderbird default does not fire", () => {
+    for (const letter of BOUND_CHORDS) {
+        const { windows, emitted, runtime } = setup();
+        runtime.install(chord_tree());
+        assert.equal(press_ctrl(windows[0]!, letter).cancelled, true, `<C-${letter}>`);
+        assert.deepEqual(emitted.map((invocation) => invocation.command), [chord_id(letter)]);
+    }
+});
+
+test("an unbound chord passes untouched and runs nothing", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(chord_tree());
+    const window = windows[0]!;
+    for (const options of [{}, { shiftKey: true }]) assert.equal(press_ctrl(window, "q", options).cancelled, false);
+    assert.equal(press_ctrl(window, "o", { shiftKey: true }).cancelled, false, "<CS-o> is not <C-o>");
+    assert.equal(press(window, "h", { altKey: true, code: "KeyH" }).cancelled, false, "alt chords stay unbound");
+    assert.equal(press(window, "o", { metaKey: true, code: "KeyO" }).cancelled, false);
+    assert.equal(press(window, "Tab", { ctrlKey: true }).cancelled, false);
+    assert.deepEqual(emitted, []);
+});
+
+test("a bound chord passes untouched in a text field, an open menu, the reading pane and another tab", () => {
+    const away: [string, (window: FakeWindow) => KeyResult][] = [
+        ["a text field", (window) => press_ctrl(window, "c", { target: { localName: "input" } })],
+        ["an open menu", (window) => ((window.menu_open = true), press_ctrl(window, "c"))],
+        ["the reading pane", (window) => ((window.in_reading_pane = true), press_ctrl(window, "c"))],
+        ["another tab", (window) => ((window.in_mail_tab = false), press_ctrl(window, "c"))],
+    ];
+    for (const [name, press_away] of away) {
+        const { windows, emitted, runtime } = setup();
+        runtime.install(chord_tree());
+        assert.equal(press_away(windows[0]!).cancelled, false, name);
+        assert.deepEqual(emitted, [], name);
+    }
+});
+
+test("a chord after a half-typed plain sequence drops the sequence", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(chord_tree());
+    const window = windows[0]!;
+    const commands = () => emitted.map((invocation) => invocation.command);
+    press(window, "d");
+    assert.equal(press_ctrl(window, "o").cancelled, true, "a bound chord still runs as a first key");
+    press(window, "d");
+    assert.deepEqual(commands(), [chord_id("o")], "the d before the chord does not pair with the d after it");
+    assert.equal(press_ctrl(window, "q").cancelled, false, "an unbound chord still passes");
+    press(window, "d");
+    assert.deepEqual(commands(), [chord_id("o")], "nor does a d before an unbound chord");
+    press(window, "d");
+    assert.deepEqual(commands(), [chord_id("o"), "msg.delete"], "a fresh d d still deletes");
+});
+
+test("a count reaches a bound chord", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(chord_tree());
+    press(windows[0]!, "3");
+    press_ctrl(windows[0]!, "j");
+    assert.equal(emitted[0]?.count, 3);
+});

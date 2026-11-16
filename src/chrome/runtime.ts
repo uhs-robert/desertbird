@@ -91,7 +91,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     }
 
     function on_keydown(window: Window, event: KeydownEvent): void {
-        if (!matcher || event.ctrlKey || event.altKey || event.metaKey) return;
+        if (!matcher) return;
+        // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         const token = event_to_token(event);
         if (token === null) return;
         const port = list_port_for(window, event);
