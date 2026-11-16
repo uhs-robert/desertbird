@@ -113,7 +113,7 @@ The table has 41 rows. 26 run without the Experiment (25 Standard and one Standa
 The rules of addons.thunderbird.net shape the build:
 
 - An add-on with an Experiment gets a manual review, so the split table stays the evidence that the Experiment does only what no standard API does.
-- Bundled libraries are exact, pinned releases from a trusted host, kept unmodified and listed in `VENDOR.md` or `package.json`.
+- Third-party libraries (`marked`, `turndown`) ship as the exact release files in a vendor folder, listed in `VENDOR.md` or `package.json`. They load beside the esbuild bundle and never go into it, so the store can match them against the release.
 - A build that bundles our own code needs a source archive with build instructions and a lockfile, and `npm ci` must work.
 - The Experiment bundle stays unminified, so the reviewer reads what ships. It is built with esbuild because the chrome runtime reuses the core key matcher.
 
@@ -133,7 +133,7 @@ New work: the Thunderbird commands, the chrome runtime and verbs, a `thunderbird
 
 ## Build order
 
-0. Measure on the target Thunderbird ESR and on Betterbird, and write `thunderbird-behavior.md`. Capture plain keys in `about:3pane` from the Experiment, and cancel Thunderbird's own single-key shortcuts (`a`, `j`, `f` and others) in normal mode. Take keys in the message pane through `messageDisplayScripts`. Mount an extension page overlay in the chrome window. Time the round trip from the chrome runtime to the background and back. Check that each standard row in the table exists on the target ESR. Find the native host manifest folders for Thunderbird and Betterbird, which are unverified. Check that Betterbird is at 153.2.0 or later for `filter.set` and `search.threads`. This phase needs no shared core.
+0. Measure on the target Thunderbird ESR and on Betterbird, and write `thunderbird-behavior.md`. Capture plain keys in `about:3pane` from the Experiment, and cancel Thunderbird's own single-key shortcuts (`a`, `j`, `f` and others) in normal mode. Take keys in the message pane through `messageDisplayScripts`. Mount an extension page overlay in the chrome window. Time the round trip from the chrome runtime to the background and back. Check that each standard row in the table exists on the target ESR. Find the native host manifest folders for Thunderbird and Betterbird, which are unverified. Check that Betterbird is at 153.2.0 or later for `filter.set` and `search.threads`. Check that `tabs.create` works from a compose window, for `help.open`. This phase needs no shared core.
 1. Move the shared core into `packages/core` in the DesertFox repo and point DesertBird at it. Then set up the skeleton: the manifest, the Experiment with `keys.*` and `view.*`, and the registry with the motions and message actions.
 2. Port the standard commands, group by group, in table order.
 3. Command line, which-key and hints.
