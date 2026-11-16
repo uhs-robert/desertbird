@@ -1,0 +1,79 @@
+[
+  {
+    "namespace": "keys",
+    "description": "Key handling in the main mail window. The chrome runtime matches keys locally and reports only the finished commands that run in the background.",
+    "functions": [
+      {
+        "name": "install",
+        "type": "function",
+        "async": true,
+        "description": "Installs the compiled keymap, or replaces the one installed. The first call starts the key listeners and later calls add none.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "tree": {
+                "type": "object",
+                "description": "The one loose object of the API. It is the compiled keymap as data: a version the parent checks, and the root branch whose leaves name command ids. The parent walks it with the key matcher and runs a leaf only when its id is in the fixed motion table. A deep schema would copy the compiler's tree shape and break on each change to it.",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "root": {
+                    "type": "any"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "any"
+                }
+              },
+              "settings": {
+                "type": "object",
+                "description": "The settings the key matcher reads. It reads none today.",
+                "properties": {}
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onInvocation",
+        "type": "function",
+        "description": "A key sequence finished on a command that runs in the background. The payload is output only, so it takes no argument check.",
+        "parameters": [
+          {
+            "name": "invocation",
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "any"
+                }
+              },
+              "count": {
+                "type": "integer"
+              },
+              "windowId": {
+                "type": "integer"
+              },
+              "messageIds": {
+                "type": "array",
+                "description": "The MailExtension ids of the messages selected at the key press.",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
