@@ -42,8 +42,10 @@ function note(app, kind, name, detail) {
   console.log(`NOTE ${app}/${kind} ${name} -- ${detail}`);
 }
 
-// Opens the Inbox with keys only. `folder_row_tabs` Tabs (seven) reach the Local Folders row, Right expands it, Down selects the Inbox and three more Tabs reach the thread list.
+// Opens the Inbox with keys only. `folder_row_tabs` Tabs (seven) reach the Local Folders row, Right expands it, Down selects the Inbox and F6 moves focus to the thread list.
 // With no identity the New Message button is disabled and skipped by Tab, so the folder row is one Tab sooner.
+// F6 cycles the panes: folder pane, thread list, message body (when a message shows), spaces toolbar, global search. Measured on both apps through the focus chain.
+// Counted Tabs from the folder pane are not used: on Betterbird three Tabs end on a column header.
 async function open_inbox(instance, folder_row_tabs = 7) {
   for (let count = 0; count < folder_row_tabs; count++) await instance.press(["-k", "Tab"]);
   await instance.press(["-k", "Right"]);
@@ -51,7 +53,7 @@ async function open_inbox(instance, folder_row_tabs = 7) {
   await instance.press(["-k", "Down"]);
   await sleep(1500);
   const opened = (await instance.ask("state")).mail_tab?.folder;
-  for (let count = 0; count < 3; count++) await instance.press(["-k", "Tab"]);
+  await instance.press(["-k", "F6"]);
   return opened;
 }
 
@@ -117,29 +119,17 @@ async function run_default(instance) {
   await shot("quick_filter", "quick filter holds the typed text and the list is narrowed");
   const bound = await key_and_state(instance, ["x"], 1500);
   check(app, kind, "x typed into the quick filter archives nothing", same(bound.folders["/Inbox"], before.folders["/Inbox"]) && bound.listed.length === 0, `listed ${bound.listed.length}, Inbox ${bound.folders["/Inbox"]?.length}`);
+  // Escape clears the filter text, and Escape in an empty filter returns focus to the thread list (measured on both apps).
   await instance.press(["-k", "Escape"]);
   await sleep(1000);
   const cleared = await instance.ask("state");
   note(app, kind, "quick filter after Escape", `listed ${cleared.listed.length}`);
-  if (cleared.listed.length !== start.listed.length) {
-    // Escape did not clear it. Ctrl+Shift+K and Escape again, then return to the list.
-    await instance.press(["-k", "Escape"]);
-    await sleep(800);
-  }
-  // Back to the thread list: Shift+Tab from the quick filter is not stable, so use F6 cycling and check by a key.
-  await instance.press(["-k", "F6"]);
-  await sleep(500);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
 
-  // j after the focus changes, then reload, then one j.
+  await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
-  state = await key_and_state(instance, ["g"]);
-  note(app, kind, "list focus after the quick filter", `g g selected ${first_selected(state)}`);
-  const list_has_focus = first_selected(state) === rows[0];
-  if (!list_has_focus) {
-    for (let count = 0; count < 3; count++) await instance.press(["-k", "Tab"]);
-    await key_and_state(instance, ["g"]);
-    state = await key_and_state(instance, ["g"]);
-  }
+  check(app, kind, "after the quick filter, focus is back in the list and g g reaches the top", first_selected(state) === rows[0] && state.listed.length === start.listed.length, `selected ${first_selected(state)}, listed ${state.listed.length}`);
   await shot("after_filter_cleared", "Inbox after the quick filter was cleared");
 
   // runtime.reload(): the helper switches DesertBird off and on, which tears down and restarts the add-on.
@@ -180,7 +170,9 @@ async function run_default(instance) {
       check(app, kind, `${command === "x" ? "x archives" : "d d trashes"} the ${where} row's message`, done, `${target} is in ${JSON.stringify(homes)}`);
       if (done) gone.add(target);
       const after = state.selected.map((m) => m.header_id);
-      note(app, kind, `selection after ${command} on the ${where} row`, `removed row ${target_row} of ${rows_total}; now selected ${JSON.stringify(after)} at row ${row_of(after[0])} of ${live_rows().length}${done ? "" : " (the key did nothing)"}`);
+      // DesertBird does not reselect. Thunderbird keeps a row selected: the next message, or the previous one at the end of the list.
+      const expected_next = live_rows()[Math.min(target_row, live_rows().length - 1)];
+      check(app, kind, `Thunderbird keeps a row selected after ${command} on the ${where} row`, done && after.length > 0 && after[0] === expected_next, `removed row ${target_row} of ${rows_total}; now selected ${JSON.stringify(after)} at row ${row_of(after[0])} of ${live_rows().length}, expected ${expected_next}`);
       await shot(`after_${command}_${where}`, `list after ${command} on the ${where} row, see the selection note`);
       if (!done) {
         // The key failed, so measure what Thunderbird itself leaves selected after an API call on the same message.
@@ -192,15 +184,16 @@ async function run_default(instance) {
       }
     }
   }
-  check(app, kind, "view.rows and view.select answer (x and d d ran the reselect code without a refusal)", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
+  check(app, kind, "x and d d ran four times without a refusal", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
 
   // r on a collapsed thread root replies to the displayed message, the root.
   await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
+  const root_displayed = state.displayed;
   state = await key_and_state(instance, ["r"], 6000);
   const root_compose = state.windows.find((window) => window.type === "messageCompose");
   const root_subject = root_compose?.tabs.map((tab) => tab.subject).find(Boolean);
-  check(app, kind, "r on a collapsed thread root opens one reply to the root", state.windows.filter((window) => window.type === "messageCompose").length === 1 && root_subject === "Re: Thread 0", `compose subject ${JSON.stringify(root_subject)}`);
+  check(app, kind, "r on a collapsed thread root opens one reply to the root", state.windows.filter((window) => window.type === "messageCompose").length === 1 && root_subject === "Re: Thread 0", `compose subject ${JSON.stringify(root_subject)}, the pane displayed ${root_displayed.length} message(s)`);
   await shot("after_r_root", "compose window for the reply to the collapsed thread root");
   await instance.ask("close_compose");
   await sleep(1500);
@@ -219,8 +212,8 @@ async function run_default(instance) {
   state = await instance.ask("state");
   check(app, kind, "the app survived the reply", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
 
-  // Reading pane: five Tabs from the thread list pass the Reply button, the sender, the recipient and the subject, and reach the message body.
-  // The runtime must let the key through there (the target is a browser), so Thunderbird acts on it.
+  // Reading pane: with a message shown, one F6 from the thread list puts focus in the message body (measured on both apps through the focus chain).
+  // Plain printable keys are swallowed there, so j neither runs a motion nor reaches Thunderbird's junk shortcut.
   await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
   const pane_list_focus = first_selected(state) === rows[0];
@@ -228,14 +221,20 @@ async function run_default(instance) {
   await key_and_state(instance, ["G"]);
   state = await key_and_state(instance, ["k"]);
   const pane_message = first_selected(state);
-  for (let count = 0; count < 5; count++) await instance.press(["-k", "Tab"]);
+  check(app, kind, "the list has focus and a message shows before the reading pane check", pane_list_focus && pane_message === live_rows().at(-2), `g g reached the top: ${pane_list_focus}, selected ${pane_message}`);
+  await instance.press(["-k", "F6"]);
   await sleep(500);
-  await shot("reading_pane_focus", "message pane shown with focus moved by five Tabs from the list");
+  await shot("reading_pane_focus", "message body has focus after one F6 from the list");
   const junk_before = Object.values((await instance.ask("state")).flags).filter((flags) => flags.junk).length;
   state = await key_and_state(instance, ["j"], 2500);
   const junked = Object.entries(state.flags).filter(([, flags]) => flags.junk).map(([id]) => id);
-  check(app, kind, "j with focus in the reading pane does nothing (no junk, selection unchanged)", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}; list focus confirmed before: ${pane_list_focus}`);
-  await shot("after_reading_pane_j", "state after j with focus in the reading pane");
+  check(app, kind, "j with focus in the message body does nothing (no junk, selection unchanged)", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}`);
+  await shot("after_reading_pane_j", "state after j with focus in the message body");
+  // Shift+F6 goes back one pane. j then moves one row, which proves the j above ran one pane after the list, in the message body.
+  await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
+  await sleep(500);
+  state = await key_and_state(instance, ["j"]);
+  check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
 }
 
 async function run_no_identity(instance) {
