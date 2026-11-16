@@ -17,7 +17,8 @@ export interface Selection {
 export interface MessageApi extends IdentityApi {
     messages: { archive(ids: number[]): Promise<void>; delete(ids: number[]): Promise<void> };
     compose: { beginReply(id: number, type: "replyToSender"): Promise<unknown> };
-    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ messages: { id: number; folder?: { accountId: string } }[] }> };
+    // An array, unlike `mailTabs.getSelectedMessages`, on Thunderbird 153 and Betterbird.
+    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number; folder?: { accountId: string } }[]> };
     mailTabs: { getSelectedMessages(tab_id: number): Promise<{ messages: { id: number; folder?: { accountId: string } }[] }> };
 }
 
@@ -63,8 +64,7 @@ export function delete_messages(scope: HandlerScope): Promise<void> {
 
 // The selection of a collapsed thread root holds every message of the thread, while the pane shows one. Reply to what the pane shows.
 export async function reply(scope: HandlerScope, args: CheckedArgs): Promise<void> {
-    const { messages } = await scope.api.messageDisplay.getDisplayedMessages(scope.selection.tab_id);
-    const [message, ...others] = messages;
+    const [message, ...others] = await scope.api.messageDisplay.getDisplayedMessages(scope.selection.tab_id);
     if (message === undefined) throw new RuntimeRefusal("No message is displayed to reply to.");
     if (others.length > 0) throw new RuntimeRefusal("More than one message is displayed. Select one message to reply to.");
     await require_identity(scope.api, message.folder?.accountId);

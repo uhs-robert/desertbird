@@ -27,7 +27,8 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 return { messages: selection_reads === 1 ? (options.selected ?? []) : (options.selected_after ?? options.selected ?? []) };
             },
         },
-        messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), { messages: options.displayed ?? options.selected ?? [] }) },
+        // A bare array, as Thunderbird 153 and Betterbird return it.
+        messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), options.displayed ?? options.selected ?? []) },
         messages: {
             archive: async (ids) => void calls.push(`messages.archive ${ids.join(",")}`),
             delete: async (ids) => void calls.push(`messages.delete ${ids.join(",")}`),
