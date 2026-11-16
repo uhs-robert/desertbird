@@ -1,0 +1,23 @@
+{
+  "name": "desertbird",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Keyboard-first Thunderbird add-on.",
+  "license": "MPL-2.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && node tools/build.mjs",
+    "lint": "eslint",
+    "test": "node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\"",
+    "check": "npm run --silent lint && npm run --silent typecheck && npm run --silent test"
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.1",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.39.5",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.72.2"
+  }
+}

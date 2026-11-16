@@ -13,6 +13,8 @@ Read the design for an area before you change it. Read a folder's README before 
 | Topic                                          | File                               |
 | ---------------------------------------------- | ---------------------------------- |
 | Architecture, chrome verbs, split table, scope | [`docs/design.md`](docs/design.md) |
+| Messages and Experiment call shapes shared by the chrome and background sides | [`src/shared/protocol.ts`](src/shared/protocol.ts) |
+| Build entry points and bundling | [`tools/build.mjs`](tools/build.mjs) |
 
 Add a row for each new doc or source folder README in the same commit that creates it.
 
@@ -48,7 +50,13 @@ Treat this repository as public.
 
 ## Commands
 
-There is no build or test tooling yet. Add each command here in the commit that adds the tool.
+Run `npm ci` once. Add each new command here in the commit that adds it.
+
+- `npm run check`: lint, typecheck and test. Run it before every commit.
+- `npm run lint`: typescript-eslint with `no-floating-promises` and `no-misused-promises` on `src/` and `tools/`.
+- `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
+- `npm test`: `node --test` on `test/**/*.test.ts`.
+- `npm run build`: typecheck, then `tools/build.mjs`. The script is a no-op until the bundles are wired.
 
 ## Planning
 
