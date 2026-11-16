@@ -78,7 +78,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `mark.set {slot}`, `mark.jump {slot}` | `M <key>`, `' <key>` | Standard | Folder marks in `storage.local`, `mailTabs.update` |
 | `jump.back`, `jump.forward` | `<C-o>`, `<C-i>` | Standard | Folder history in `storage.local`, `mailTabs.onDisplayedFolderChanged` |
 | `step.unread {scope: folder, all_folders}` | `] u`, `[ u`, `] U`, `[ U` | Standard, if fast enough | `mailTabs.getListedMessages`, `messages.query`, `mailTabs.setSelectedMessages`. Measured slow: `messages.query` over 5,000 messages takes about 1.1 s and one folder of 10,000 about 2.2 s (see [`thunderbird-behavior.md`](thunderbird-behavior.md), Unread queries). |
-| `step.starred`, `step.attachment` | `] s`, `[ s`, `] a`, `[ a` | Standard | Same as above. Phase 0 checks how `setSelectedMessages` treats a message inside a collapsed thread. |
+| `step.starred`, `step.attachment` | `] s`, `[ s`, `] a`, `[ a` | Standard | Same as above. Measured: `setSelectedMessages` on a message inside a collapsed thread selects it and opens the thread (see the Phase 0 findings below). |
 | `search.threads {query}` | `/` in the thread list | Standard | `mailTabs.setQuickFilter` with text |
 | `search.message {query}` | `/` in the message pane, `n`, `N` | Standard | `messageDisplayScripts` find in the body |
 | `compose.edit_external` | `e`, `<C-e>`, `:edit` | Standard | `compose.getComposeDetails` and `setComposeDetails`, host `editor_start` and `editor_collect` |
@@ -158,7 +158,7 @@ Phase 0 ran on Thunderbird 153.7.0 ESR and Betterbird 153.7.0, with the same res
 - Collapsed threads: `mailTabs.setSelectedMessages` on a message inside a collapsed thread selects it and opens the thread.
 - `tabs.remove` on the primary mail tab is a no-op, also when it is the only tab. `tab.close` refuses there.
 - `messages.tags.list` needs the `messagesTagsList` permission. `commands`, `menus` and `addressBooks` calls need their own permission or key too. There is no `messenger.clipboard`.
-- Plain keys: a capture listener on the top window sees every key in every window type and cancels every Thunderbird single-key shortcut that acts (`m`, `s`, `j`, `a`, `f`, `b`, `n`, `p`, `1`, `Enter`). `r` and `R` do nothing by default. The first press after a focus change can be lost.
+- Plain keys: a capture listener on the top window sees plain keys in the thread list, the message pane, a message tab and a message window, and cancels each Thunderbird single-key shortcut that acts there (`m`, `s`, `j`, `a`, `f`, `b`, `n`, `p`, `1`, `Enter`). `r` and `R` do nothing by default. The first press after a focus change can be lost.
 - Message pane: for local mail the message body browser is not remote, so a chrome listener sees its keys. This differs from the Architecture row for `messageDisplayScripts`. The decision stands until feed, IMAP and remote content are measured.
 - Round trip: a key reaches the background in under 1 ms, so the chrome runtime can send finished invocations to the background. The motions stay in the chrome runtime by decision. Held keys were not timed.
 - Native host manifests: both apps read only `~/.mozilla/native-messaging-hosts/` in the user folders. The system folders were not tested.
