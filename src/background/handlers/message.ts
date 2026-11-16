@@ -31,35 +31,19 @@ export interface HandlerScope {
 
 const REPLY_TYPE = { sender: "replyToSender" } as const;
 
-// The row range is clamped by the Experiment. A range this large asks for every row.
-const ALL_ROWS = { first: 0, last: 2 ** 31 - 1 };
-
 function require_messages(selection: Selection): number[] {
     if (selection.messages.length === 0) throw new RuntimeRefusal("No message is selected.");
     return selection.messages.map((message) => message.id);
 }
 
-// Archive and delete may leave the list with no selection. Then the row the selection stood on, or the nearest one after the removal, takes it, so the next key still has a target.
-async function act_and_keep_selection(scope: HandlerScope, act: (ids: number[]) => Promise<void>): Promise<void> {
-    const ids = require_messages(scope.selection);
-    const rows_before = await scope.view.rows(ALL_ROWS);
-    const row_index = Math.max(0, rows_before.findIndex((row) => ids.includes(row.id)));
-    await act(ids);
-    const remaining = await scope.api.mailTabs.getSelectedMessages(scope.selection.tab_id);
-    if (remaining.messages.length > 0) return;
-    const rows_after = await scope.view.rows(ALL_ROWS);
-    if (rows_after.length === 0) return;
-    const target = Math.min(row_index, rows_after.length - 1);
-    await scope.view.select({ anchor: target, end: target });
-}
-
+// Thunderbird itself keeps a row selected after an archive or a delete (the next message, or the previous one at the end of the list), so the add-on reselects nothing.
 export function archive(scope: HandlerScope): Promise<void> {
-    return act_and_keep_selection(scope, (ids) => scope.api.messages.archive(ids));
+    return scope.api.messages.archive(require_messages(scope.selection));
 }
 
 // `messages.delete` without `skipTrash` moves the messages to Trash.
 export function delete_messages(scope: HandlerScope): Promise<void> {
-    return act_and_keep_selection(scope, (ids) => scope.api.messages.delete(ids));
+    return scope.api.messages.delete(require_messages(scope.selection));
 }
 
 // The selection of a collapsed thread root holds every message of the thread, while the pane shows one. Reply to what the pane shows.

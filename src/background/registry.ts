@@ -22,7 +22,6 @@ registry.define("msg.archive", {
     runs_in: "background",
     label: "Archive",
     intent: "Archive the selected messages.",
-    needs: ["view.rows", "view.select"],
     run: scoped(archive),
 });
 
@@ -30,7 +29,6 @@ registry.define("msg.delete", {
     runs_in: "background",
     label: "Delete",
     intent: "Move the selected messages to Trash.",
-    needs: ["view.rows", "view.select"],
     run: scoped(delete_messages),
 });
 

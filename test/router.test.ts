@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { registry } from "../src/background/registry.ts";
+import { create_registry } from "../vendor/desertfox/registry/define.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
 
 interface FakeOptions {
     selected?: { id: number; folder?: { accountId: string } }[];
     displayed?: { id: number; folder?: { accountId: string } }[];
-    selected_after?: { id: number }[];
     identities?: unknown[];
     experiment?: boolean;
     row_ids?: number[];
@@ -16,16 +16,11 @@ interface FakeOptions {
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
 export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[] } {
     const calls: string[] = [];
-    let selection_reads = 0;
     const row_ids = options.row_ids ?? [10, 11, 12];
     const api: RouterApi = {
         tabs: { query: async (query) => (calls.push(`tabs.query ${query.windowId}`), [{ id: 7 }]) },
         mailTabs: {
-            getSelectedMessages: async (tab_id) => {
-                calls.push(`mailTabs.getSelectedMessages ${tab_id}`);
-                selection_reads += 1;
-                return { messages: selection_reads === 1 ? (options.selected ?? []) : (options.selected_after ?? options.selected ?? []) };
-            },
+            getSelectedMessages: async (tab_id) => (calls.push(`mailTabs.getSelectedMessages ${tab_id}`), { messages: options.selected ?? [] }),
         },
         // A bare array, as Thunderbird 153 and Betterbird return it.
         messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), options.displayed ?? options.selected ?? []) },
@@ -88,16 +83,20 @@ test("r with no displayed message refuses", async () => {
 });
 
 test("a missing Experiment refuses a command that needs it, before any selection read", async () => {
+    const local = create_registry();
+    local.define("test.needs_rows", { runs_in: "background", label: "Probe", intent: "Probe the Experiment check.", needs: ["view.rows"], run: async () => {} });
     const { api, calls } = fake_api({ selected: [{ id: 5 }], experiment: false });
-    await create_router(registry, api).run(invoke("msg.archive"));
+    await create_router(local, api).run(invoke("test.needs_rows"));
     assert.deepEqual(calls.map((call) => call.split(" ")[0]), ["notify"]);
     assert.match(notifications(calls)[0] ?? "", /Experiment/);
 });
 
 test("a missing Experiment does not block a command that needs no view verb", async () => {
-    const { api, calls } = fake_api({ selected: [{ id: 5, folder: { accountId: "a1" } }], experiment: false });
-    await create_router(registry, api).run(invoke("msg.reply", { to: "sender" }));
-    assert.ok(calls.includes("compose.beginReply 5 replyToSender"));
+    for (const [command, call] of [["msg.reply", "compose.beginReply 5 replyToSender"], ["msg.archive", "messages.archive 5"], ["msg.delete", "messages.delete 5"]] as const) {
+        const { api, calls } = fake_api({ selected: [{ id: 5, folder: { accountId: "a1" } }], experiment: false });
+        await create_router(registry, api).run(invoke(command, command === "msg.reply" ? { to: "sender" } : {}));
+        assert.ok(calls.includes(call), command);
+    }
 });
 
 test("x and d d pass every selected id", async () => {
@@ -109,17 +108,12 @@ test("x and d d pass every selected id", async () => {
     }
 });
 
-test("a lost selection after archive moves to the nearest valid row", async () => {
-    const { api, calls } = fake_api({ selected: [{ id: 12 }], selected_after: [], row_ids: [10, 11, 12] });
-    await create_router(registry, api).run(invoke("msg.archive"));
-    // rows_before has id 12 at index 2. The same fake rows come back after, so index 2 is still valid.
-    assert.ok(calls.includes("view.select 2,2"));
-});
-
-test("a kept selection after delete is left alone", async () => {
-    const { api, calls } = fake_api({ selected: [{ id: 11 }], selected_after: [{ id: 12 }] });
-    await create_router(registry, api).run(invoke("msg.delete"));
-    assert.equal(calls.some((call) => call.startsWith("view.select")), false);
+test("x and d d leave the selection to Thunderbird", async () => {
+    for (const command of ["msg.archive", "msg.delete"]) {
+        const { api, calls } = fake_api({ selected: [{ id: 12 }] });
+        await create_router(registry, api).run(invoke(command));
+        assert.equal(calls.some((call) => call.startsWith("view.")), false, command);
+    }
 });
 
 test("a bad arg, an unknown command and a chrome command each end in a notification", async () => {
