@@ -28,40 +28,57 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-let parent_source = "";
-let parent_inputs: string[] = [];
+const PARENT_NAMES = ["keys", "view"];
+const sources: Record<string, string> = {};
+const inputs: Record<string, string[]> = {};
 
 before(() => {
     out_dir = mkdtempSync(join(tmpdir(), "desertbird-build-"));
     execFileSync("node", ["tools/build.mjs", "--out", out_dir], { cwd: root, stdio: "pipe" });
-    parent_source = readFileSync(join(out_dir, "experiment/parent.js"), "utf8");
-    parent_inputs = Object.keys((JSON.parse(readFileSync(join(out_dir, "meta/parent.json"), "utf8")) as { inputs: object }).inputs);
+    for (const name of PARENT_NAMES) {
+        sources[name] = readFileSync(join(out_dir, `experiment/${name}.js`), "utf8");
+        inputs[name] = Object.keys((JSON.parse(readFileSync(join(out_dir, `meta/parent_${name}.json`), "utf8")) as { inputs: object }).inputs);
+    }
 });
 
 after(() => rmSync(out_dir, { recursive: true, force: true }));
 
-test("the parent bundle takes only allowlisted inputs", () => {
-    assert.ok(parent_inputs.length > 0);
-    for (const input of parent_inputs) assert.ok(PARENT_ALLOWED_INPUTS.some((allowed) => allowed.test(input)), `${input} is not allowed in the parent bundle`);
+test("each parent bundle takes only allowlisted inputs", () => {
+    for (const name of PARENT_NAMES) {
+        assert.ok(inputs[name]!.length > 0);
+        for (const input of inputs[name]!) assert.ok(PARENT_ALLOWED_INPUTS.some((allowed) => allowed.test(input)), `${input} is not allowed in the ${name} bundle`);
+    }
 });
 
-test("the parent bundle excludes the registry", () => {
-    assert.deepEqual(parent_inputs.filter((input) => /registry/.test(input) || input.startsWith("src/background/")), []);
+test("no parent bundle takes the registry or the background", () => {
+    for (const name of PARENT_NAMES) assert.deepEqual(inputs[name]!.filter((input) => /registry/.test(input) || input.startsWith("src/background/")), [], name);
 });
 
-test("the parent bundle uses no banned API", () => {
-    for (const [name, pattern] of BANNED_IN_PARENT) assert.ok(!pattern.test(parent_source), `the parent bundle contains ${name}`);
+test("no parent bundle uses a banned API", () => {
+    for (const name of PARENT_NAMES) for (const [banned, pattern] of BANNED_IN_PARENT) assert.ok(!pattern.test(sources[name]!), `the ${name} bundle contains ${banned}`);
 });
 
-test("the parent bundle defines both API classes", () => {
-    assert.match(parent_source, /^var keys = class extends ExtensionAPI/m);
-    assert.match(parent_source, /^var view = class extends ExtensionAPI/m);
+test("each parent bundle defines only its own API class", () => {
+    assert.match(sources["keys"]!, /^var keys = class extends ExtensionAPI/m);
+    assert.doesNotMatch(sources["keys"]!, /^var view = /m);
+    assert.match(sources["view"]!, /^var view = class extends ExtensionAPI/m);
+    assert.doesNotMatch(sources["view"]!, /^var keys = /m);
 });
 
-test("the parent bundle stays within the size guard", () => {
-    const size = readFileSync(join(out_dir, "experiment/parent.js")).length;
+test("each parent bundle stays within the size guard", () => {
     assert.ok(PARENT_MAX_BYTES > 0);
-    assert.ok(size <= PARENT_MAX_BYTES, `parent.js is ${size} bytes, over ${PARENT_MAX_BYTES}`);
+    for (const name of PARENT_NAMES) {
+        const size = readFileSync(join(out_dir, `experiment/${name}.js`)).length;
+        assert.ok(size <= PARENT_MAX_BYTES, `${name}.js is ${size} bytes, over ${PARENT_MAX_BYTES}`);
+    }
+});
+
+test("each manifest entry names its own script and schema", () => {
+    const manifest = JSON.parse(readFileSync(join(out_dir, "manifest.json"), "utf8")) as { experiment_apis: Record<string, { schema: string; parent: { script: string } }> };
+    for (const name of PARENT_NAMES) {
+        assert.equal(manifest.experiment_apis[name]!.schema, `experiment/${name}.schema.json`);
+        assert.equal(manifest.experiment_apis[name]!.parent.script, `experiment/${name}.js`);
+    }
 });
 
 test("AGENTS.md records the size guard", () => {
@@ -70,6 +87,6 @@ test("AGENTS.md records the size guard", () => {
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/schema.json", "experiment/parent.js"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/view.schema.json", "experiment/view.js"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
 });

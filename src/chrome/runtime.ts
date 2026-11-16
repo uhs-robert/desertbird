@@ -10,6 +10,8 @@ import type { ViewPort } from "./motions.ts";
 
 export interface KeydownEvent extends KeyEventLike {
     target: unknown;
+    originalTarget?: unknown;
+    composedPath?(): unknown[];
     preventDefault(): void;
     stopPropagation(): void;
 }
@@ -39,7 +41,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     open_windows(): Window[];
     /** The thread list of the window's front tab, or null when that tab is not the mail tab. Keys then pass through. */
     view_port_of(window: Window): ViewPort | null;
-    is_typing_target(target: unknown): boolean;
+    /** Whether the key is meant for a text field. The event target is not enough: see `focus.ts`. */
+    is_typing_target(window: Window, event: KeydownEvent): boolean;
     window_id_of(window: Window): number;
     emit(invocation: Invocation): void;
 }
@@ -84,7 +87,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     }
 
     function on_keydown(window: Window, event: KeydownEvent): void {
-        if (!matcher || event.ctrlKey || event.altKey || event.metaKey || deps.is_typing_target(event.target)) return;
+        if (!matcher || event.ctrlKey || event.altKey || event.metaKey || deps.is_typing_target(window, event)) return;
         const port = deps.view_port_of(window);
         const token = event_to_token(event);
         if (!port || token === null) return;

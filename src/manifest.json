@@ -16,19 +16,19 @@
     "permissions": ["accountsRead", "compose", "messagesDelete", "messagesMove", "messagesRead", "notifications", "storage"],
     "experiment_apis": {
         "keys": {
-            "schema": "experiment/schema.json",
+            "schema": "experiment/keys.schema.json",
             "parent": {
                 "scopes": ["addon_parent"],
                 "paths": [["keys"]],
-                "script": "experiment/parent.js"
+                "script": "experiment/keys.js"
             }
         },
         "view": {
-            "schema": "experiment/schema.json",
+            "schema": "experiment/view.schema.json",
             "parent": {
                 "scopes": ["addon_parent"],
                 "paths": [["view"]],
-                "script": "experiment/parent.js"
+                "script": "experiment/view.js"
             }
         }
     }

@@ -22,7 +22,7 @@ interface Namespace {
     events?: SchemaNode[];
 }
 
-const schema = JSON.parse(readFileSync(new URL("../src/experiment/schema.json", import.meta.url), "utf8")) as Namespace[];
+const schema = ["keys", "view"].flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
 const namespace_named = (name: string): Namespace => schema.find((entry) => entry.namespace === name)!;
 
 function walk(node: SchemaNode, path: string, visit: (node: SchemaNode, path: string) => void): void {
@@ -37,9 +37,10 @@ const function_parameters = (): { path: string; node: SchemaNode }[] =>
 
 test("the schema functions and events equal the parent exports", async () => {
     const platform = stub_platform();
-    const parent = await import("../src/chrome/parent.ts");
+    const keys_parent = await import("../src/chrome/parent_keys.ts");
+    const view_parent = await import("../src/chrome/parent_view.ts");
     const context = { extension: { messageManager: { convert: () => ({ id: 0 }) } } };
-    const apis = { ...parent.get_keys_api(context), ...parent.get_view_api(context) } as Record<string, Record<string, unknown>>;
+    const apis = { ...keys_parent.get_keys_api(context), ...view_parent.get_view_api(context) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
@@ -48,7 +49,7 @@ test("the schema functions and events equal the parent exports", async () => {
         assert.deepEqual(exported_functions.sort(), (entry.functions ?? []).map((fn) => fn.name).sort(), `${entry.namespace} functions`);
         assert.deepEqual(exported_events.sort(), (entry.events ?? []).map((event) => event.name).sort(), `${entry.namespace} events`);
     }
-    parent.shutdown();
+    keys_parent.shutdown();
     platform.restore();
 });
 

@@ -77,7 +77,7 @@ function setup() {
         unregister_window_listener: () => void unregisters++,
         open_windows: () => windows,
         view_port_of: (window) => (window.in_mail_tab ? window.port() : null),
-        is_typing_target: (target) => (target as { localName: string }).localName === "input",
+        is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
         window_id_of: () => 7,
         emit: (invocation) => void emitted.push(invocation),
     };
@@ -212,10 +212,11 @@ test("shutdown removes every listener, unregisters the window listener and clear
 test("the parent removes the window listener on shutdown and every verb rethrows an ExtensionError", async () => {
     const window = new FakeWindow();
     const platform = stub_platform([window]);
-    const parent = await import("../src/chrome/parent.ts");
+    const keys_parent = await import("../src/chrome/parent_keys.ts");
+    const view_parent = await import("../src/chrome/parent_view.ts");
     const context = { extension: { messageManager: { convert: () => ({ id: 1 }) } } };
-    const keys = parent.get_keys_api(context).keys;
-    const view = parent.get_view_api(context).view;
+    const keys = keys_parent.get_keys_api(context).keys;
+    const view = view_parent.get_view_api(context).view;
 
     await assert.rejects(keys.install({ tree: { version: 0 as never, root: {} }, settings: {} }), (error) => error instanceof StubExtensionError && /^keys\.install: keymap version 0/.test(error.message));
     await assert.rejects(view.rows({ first: 0, last: 3 }), (error) => error instanceof StubExtensionError && /^view\.rows: no mail window/.test(error.message));
@@ -227,7 +228,7 @@ test("the parent removes the window listener on shutdown and every verb rethrows
     assert.equal(platform.window_listeners.size, 1);
     assert.equal(window.listeners.size, 1);
 
-    parent.shutdown();
+    keys_parent.shutdown();
     assert.equal(platform.window_listeners.size, 0);
     assert.equal(window.listeners.size, 0);
     platform.restore();
