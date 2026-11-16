@@ -29,6 +29,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
         },
         compose: { beginReply: async (id, type) => (calls.push(`compose.beginReply ${id} ${type}`), undefined) },
         identities: { list: async (account_id) => (calls.push(`identities.list ${account_id}`), options.identities ?? [{ id: "i1" }]) },
+        mailTabs: { query: async () => [], update: async () => undefined, setQuickFilter: async () => {} },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
         keys: options.experiment === false ? undefined : { install: async () => {}, onInvocation: { addListener: () => {}, removeListener: () => {} } },
     };

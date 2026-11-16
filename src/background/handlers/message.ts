@@ -16,9 +16,10 @@ export interface MessageApi extends IdentityApi {
     compose: { beginReply(id: number, type: "replyToSender"): Promise<unknown> };
 }
 
-/** What the router hands a handler: the API subset and the ids of the messages selected when the key was pressed. */
-export interface HandlerScope {
-    api: MessageApi;
+/** What the router hands a handler: the API subset, the window the key was pressed in and the ids of the messages selected when the key was pressed. */
+export interface HandlerScope<Api = MessageApi> {
+    api: Api;
+    window_id: number;
     message_ids: number[];
 }
 

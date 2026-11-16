@@ -47,11 +47,40 @@ const BASE_PREFS = {
   "mail.collect_email_address_outgoing": false,
 };
 
+// The Views folder serves the view setting checks. Six single messages: 3 unread (v0 to v2), 2 starred (v0, v1), 1 with an attachment (v0). The helper add-on tags v4 and v5.
+const VIEWS_COUNT = 6;
+function views_text() {
+  const entries = [];
+  for (let index = 0; index < VIEWS_COUNT; index++) {
+    const unread = index < 3;
+    const starred = index < 2;
+    const time = new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString();
+    const head = [
+      `From v${index}@fixture.invalid ${time}`,
+      `X-Mozilla-Status: ${((unread ? 0 : 1) | (starred ? 4 : 0)).toString(16).padStart(4, "0")}`,
+      "X-Mozilla-Status2: 00000000",
+      `Message-ID: <views-${index}@fixture.invalid>`,
+      `Date: ${time.replace("GMT", "+0000")}`,
+      `From: Views Sender <v${index}@fixture.invalid>`,
+      "To: Local <local@fixture.invalid>",
+      `Subject: Views ${index}`,
+      "MIME-Version: 1.0",
+    ];
+    const body =
+      index === 0
+        ? ['Content-Type: multipart/mixed; boundary="views-boundary"', "", "--views-boundary", "Content-Type: text/plain; charset=UTF-8", "", "Body of views-0.", "--views-boundary", 'Content-Type: application/octet-stream; name="note.bin"', 'Content-Disposition: attachment; filename="note.bin"', "Content-Transfer-Encoding: base64", "", "SGVsbG8gYXR0YWNobWVudA==", "--views-boundary--"]
+        : ["Content-Type: text/plain; charset=UTF-8", "", `Body of views-${index}.`];
+    entries.push([...head, ...body, ""].join("\n") + "\n");
+  }
+  return entries.join("");
+}
+
 // kind "default" has an identity. kind "reply_no_identity" has an account with none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
   rmSync(profile_dir, { recursive: true, force: true });
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
   const folder_dir = write_fixtures(profile_dir);
+  writeFileSync(join(folder_dir, "Views"), views_text());
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
   const prefs = { ...BASE_PREFS, ...(kind === "reply_no_identity" ? {} : IDENTITY_PREFS), "mail.server.server1.directory": folder_dir };

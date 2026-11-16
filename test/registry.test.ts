@@ -8,6 +8,7 @@ import { DEFAULT_KEYMAP, GROUPS, registry } from "../src/background/commands/ind
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.reply"] },
+    view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -65,7 +66,6 @@ const PHASE_1_COMMANDS = [
 
 test("the phase 1 commands keep their keys, args, side and bridge value", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(Object.keys(normal).sort(), PHASE_1_COMMANDS.map((row) => row.keys).sort());
     for (const row of PHASE_1_COMMANDS) {
         const binding = normal[row.keys];
         assert.ok(binding && !Array.isArray(binding), row.id);

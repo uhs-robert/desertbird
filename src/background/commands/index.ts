@@ -7,10 +7,11 @@ import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
 import { messages } from "./messages.ts";
 import { motion } from "./motion.ts";
+import { view } from "./view.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, view };
 
 export const registry = create_registry();
 

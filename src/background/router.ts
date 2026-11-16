@@ -6,11 +6,12 @@ import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
 import type { KeysApi, KeysInvocation } from "../shared/protocol.ts";
 import type { MessageApi } from "./handlers/message.ts";
+import type { ViewApi } from "./handlers/view.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 import type { ScopedContext } from "./commands/index.ts";
 
-export interface RouterApi extends MessageApi, NotificationsApi {
+export interface RouterApi extends MessageApi, ViewApi, NotificationsApi {
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
 }

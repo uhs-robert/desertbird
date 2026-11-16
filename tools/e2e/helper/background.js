@@ -34,7 +34,7 @@ async function folder_contents(folders, into, flags) {
 async function collect() {
   const state = { time: Date.now() };
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true }).catch(() => []);
-  state.mail_tab = mail_tab ? { id: mail_tab.id, folder: mail_tab.displayedFolder?.path ?? null, message_pane_visible: mail_tab.messagePaneVisible } : null;
+  state.mail_tab = mail_tab ? { id: mail_tab.id, folder: mail_tab.displayedFolder?.path ?? null, message_pane_visible: mail_tab.messagePaneVisible, folder_pane_visible: mail_tab.folderPaneVisible, sort_type: mail_tab.sortType, sort_order: mail_tab.sortOrder } : null;
   state.selected = mail_tab ? (await all_messages(await browser.mailTabs.getSelectedMessages(mail_tab.id))).map(describe_message) : [];
   state.displayed = mail_tab ? (await browser.messageDisplay.getDisplayedMessages(mail_tab.id)).map((message) => ({ header_id: message.headerMessageId, subject: message.subject, date: new Date(message.date).getTime() })) : [];
   state.listed = mail_tab ? (await all_messages(await browser.mailTabs.getListedMessages(mail_tab.id))).map((message) => message.headerMessageId) : [];
@@ -73,6 +73,34 @@ async function act_on_selected(name) {
   else await browser.messages.delete(ids);
 }
 
+// Shows the Views folder, tags two of its messages and returns the tab the view commands act on.
+async function prepare_views() {
+  const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+  const folders = (await browser.accounts.list(true)).flatMap((account) => account.folders ?? []);
+  const views = folders.find((folder) => folder.path === "/Views");
+  // The first display of a folder reports an error although the folder shows.
+  await browser.mailTabs.update(mail_tab.id, { displayedFolder: views }).catch(() => {});
+  // A folder shown for the first time lists no messages until Thunderbird has read its mbox.
+  let messages = [];
+  for (let attempt = 0; attempt < 20 && messages.length < 6; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    messages = await all_messages(await browser.messages.list(views.id));
+  }
+  const seen = [];
+  for (const message of messages) {
+    seen.push(message.headerMessageId);
+    if (["views-4@fixture.invalid", "views-5@fixture.invalid"].includes(message.headerMessageId)) await browser.messages.update(message.id, { tags: ["$label1"] });
+  }
+  return seen;
+}
+
+// Applies a quick filter or a tab update straight through the API, for the commands that have no default key.
+async function api_view(args) {
+  const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+  if (args.filter) await browser.mailTabs.setQuickFilter(mail_tab.id, args.filter);
+  if (args.update) await browser.mailTabs.update(mail_tab.id, args.update);
+}
+
 async function post(body) {
   await fetch(`${SINK_URL}/state`, { method: "POST", body: JSON.stringify(body) });
 }
@@ -89,6 +117,12 @@ async function poll_forever() {
       } else if (command.name === "close_compose") {
         await close_compose_windows();
         await post({ seq: command.seq, closed: true });
+      } else if (command.name === "prepare_views") {
+        const seen = await prepare_views();
+        await post({ seq: command.seq, prepared: true, seen });
+      } else if (command.name === "api_view") {
+        await api_view(command.args);
+        await post({ seq: command.seq, applied: true });
       } else if (command.name === "reload_desertbird") {
         await reload_desertbird();
         await post({ seq: command.seq, reloaded: true });

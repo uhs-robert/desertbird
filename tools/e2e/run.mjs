@@ -271,6 +271,57 @@ async function run_default(instance) {
   await sleep(500);
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
+
+  await run_view_settings(instance, { app, kind });
+  await shot("after_view_settings", "Views folder after the view setting keys");
+}
+
+// The view settings, read as row counts of the Views folder (6 messages: 3 unread, 2 starred, 1 with an attachment, 2 tagged).
+// The tag, search and sort forms have no default key, so the helper applies the same arguments the handlers send, straight through the API.
+async function run_view_settings(instance, check_in) {
+  const { app, kind } = check_in;
+  const prepared = await instance.ask("prepare_views", 30000);
+  check(app, kind, "the helper shows the Views folder and tags two messages", prepared.prepared === true, prepared.error ?? JSON.stringify(prepared.seen));
+  await sleep(2000);
+  let state = await instance.ask("state");
+  check(app, kind, "the Views folder is displayed with 6 messages", state.mail_tab?.folder === "/Views" && state.listed.length === 6, `folder ${state.mail_tab?.folder}, listed ${state.listed.length}`);
+  const listed_after = async (args, wait_ms = 1500) => (await key_and_state(instance, args, wait_ms)).listed.length;
+  for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "f"], 1], ["all", ["F", "a"], 6]]) {
+    await instance.press([keys[0]]);
+    const count = await listed_after([keys[1]]);
+    check(app, kind, `F ${keys[1]} (${name}) shows ${expected} rows`, count === expected, `listed ${count}`);
+  }
+  await instance.ask("api_view", 20000, { filter: { tags: { mode: "any", tags: { $label1: true } } } });
+  await sleep(1500);
+  state = await instance.ask("state");
+  const tagged = Object.entries(state.flags).filter(([, flags]) => flags.tags?.length).map(([id]) => id);
+  check(app, kind, "the tag filter the handler sends shows the 2 tagged rows", state.listed.length === 2, `listed ${state.listed.length}, tagged messages ${JSON.stringify(tagged)}`);
+  await instance.ask("api_view", 20000, { filter: { text: { text: "Views 3", subject: true, author: true } } });
+  await sleep(1500);
+  check(app, kind, "the text filter search.threads sends shows 1 row", (await instance.ask("state")).listed.length === 1);
+  await instance.ask("api_view", 20000, { filter: {} });
+  await sleep(1500);
+  check(app, kind, "clearing with {} restores 6 rows", (await instance.ask("state")).listed.length === 6);
+  await instance.ask("api_view", 20000, { update: { sortType: "subject", sortOrder: "descending" } });
+  await sleep(1000);
+  state = await instance.ask("state");
+  note(app, kind, "sort.set arguments through the API", `sortType ${state.mail_tab?.sort_type}, sortOrder ${state.mail_tab?.sort_order}`);
+  check(app, kind, "the sort arguments sort.set sends take effect", state.mail_tab?.sort_type === "subject" && state.mail_tab?.sort_order === "descending");
+  const panes = (current) => `${current.mail_tab?.message_pane_visible}/${current.mail_tab?.folder_pane_visible}`;
+  const before = await instance.ask("state");
+  await instance.press(["t"]);
+  state = await key_and_state(instance, ["m"]);
+  check(app, kind, "t m toggles the message pane", state.mail_tab?.message_pane_visible === !before.mail_tab?.message_pane_visible, `message/folder pane ${panes(before)} then ${panes(state)}`);
+  await instance.press(["t"]);
+  state = await key_and_state(instance, ["m"]);
+  check(app, kind, "a second t m restores the message pane", state.mail_tab?.message_pane_visible === before.mail_tab?.message_pane_visible, `message/folder pane ${panes(state)}`);
+  await instance.press(["t"]);
+  const folder_toggled = await key_and_state(instance, ["f"]);
+  check(app, kind, "t f toggles the folder pane", folder_toggled.mail_tab?.folder_pane_visible === !before.mail_tab?.folder_pane_visible, `message/folder pane ${panes(before)} then ${panes(folder_toggled)}`);
+  await instance.press(["t"]);
+  state = await key_and_state(instance, ["f"]);
+  check(app, kind, "a second t f restores the folder pane", state.mail_tab?.folder_pane_visible === before.mail_tab?.folder_pane_visible);
+  check(app, kind, "the view keys changed no mail", instance.exited() === null);
 }
 
 async function run_no_identity(instance) {
