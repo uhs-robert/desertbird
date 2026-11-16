@@ -1,7 +1,7 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
 import { in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
-import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
+import { guard, load_platform, open_main_windows, tab_strip_of, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
 import type { KeysInstallArgs, KeysInvocation } from "../shared/protocol.ts";
@@ -36,6 +36,11 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
         menu_is_open: (window: MainWindow) => menu_is_open(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
+        on_tab_select(window, listener) {
+            const strip = tab_strip_of(window);
+            strip?.addEventListener("TabSelect", listener);
+            return () => strip?.removeEventListener("TabSelect", listener);
+        },
         window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {
             for (const listener of invocation_listeners) listener(invocation);

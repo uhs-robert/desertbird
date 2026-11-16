@@ -38,6 +38,14 @@ export function load_platform(): Platform {
 
 export const open_main_windows = (): MainWindow[] => Array.from(Services.wm.getEnumerator(MAIN_WINDOW_TYPE));
 
+export interface TabStripLike {
+    addEventListener(type: "TabSelect", listener: () => void): void;
+    removeEventListener(type: "TabSelect", listener: () => void): void;
+}
+
+// `tabmail.tabContainer` reads undefined from the Experiment on Thunderbird 153.7 (measured), so the strip is looked up by its id. It fires `TabSelect` on every change of the front tab, also one made through the API.
+export const tab_strip_of = (window: MainWindow): TabStripLike | null => window.document.getElementById("tabmail-tabs") as TabStripLike | null;
+
 export const tabmail_of = (window: MainWindow): TabmailLike | null => window.document.getElementById("tabmail") as TabmailLike | null;
 
 // The default error of an Experiment verb hides the cause, so each verb rethrows an ExtensionError that carries the message.

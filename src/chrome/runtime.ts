@@ -39,6 +39,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     menu_is_open(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
+    /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
+    on_tab_select(window: Window, listener: () => void): () => void;
     window_id_of(window: Window): number;
     emit(invocation: KeysInvocation): void;
 }
@@ -66,7 +68,7 @@ function read_root(tree: { version: number; root: unknown }): TreeBranch {
 const keymap_of = (root: TreeBranch): CompiledKeymap => ({ format_version: COMPILED_KEYMAP_VERSION, modes: { [NORMAL_MODE]: root } }) as CompiledKeymap;
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
-    const hooked = new Map<Window, (event: KeydownEvent) => void>();
+    const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void }>();
     let matcher: ReturnType<typeof create_matcher> | null = null;
     let listening = false;
     // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
@@ -118,14 +120,17 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     function hook(window: Window): void {
         if (hooked.has(window)) return;
         const handler = (event: KeydownEvent) => on_keydown(window, event);
-        hooked.set(window, handler);
+        // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
+        const stop_tab_listening = deps.on_tab_select(window, () => matcher?.reset());
+        hooked.set(window, { handler, stop_tab_listening });
         window.addEventListener("keydown", handler, true);
     }
 
     function unhook(window: Window): void {
-        const handler = hooked.get(window);
-        if (!handler) return;
-        window.removeEventListener("keydown", handler, true);
+        const entry = hooked.get(window);
+        if (!entry) return;
+        window.removeEventListener("keydown", entry.handler, true);
+        entry.stop_tab_listening();
         hooked.delete(window);
         if (sequence_window === window) sequence_window = null;
     }
