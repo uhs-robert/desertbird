@@ -27,7 +27,7 @@ The floor is ESR 153. Both apps report `rv:153.0` and Thunderbird 153.7.0.
 ### Setup
 
 - Linux, Wayland. A headless `labwc` display that nothing shows on a real screen. `wtype` sent real key presses through the compositor's virtual keyboard, so each key is a trusted event with a real `code`. `grim` took the screenshots. The window is 1280x720.
-- A new profile, a new `HOME` and no session bus for each scenario, started with `-profile <dir> -no-remote`. The profile holds Local Folders and generated mbox files. No mail account exists and nothing goes over the network. The account has one identity with no server, because compose fails without one (see Notes).
+- A new profile, a new `HOME` and no session bus for each scenario, started with `-profile <dir> -no-remote`. The profile holds Local Folders and generated mbox files. No mail server account exists and nothing goes over the network. The profile has one identity with no server, because compose fails without one (see Notes).
 - The fixture: an Inbox of 60 messages (10 threads of 4 and 20 single messages, 33 unread) and 50 folders of 100 messages each, 5,000 in all, with 30 unread in each. One extra folder of one HTML message (`Html`) serves the message pane test. The query test on a large folder adds a folder of 10,000 messages to its own profile only. Every message has no attachment.
 - A throwaway probe add-on: a MailExtension plus one Experiment, installed unsigned (`xpinstall.signatures.required` false, `extensions.experiments.enabled` true). The Experiment has typed verbs only: no eval, no free-string command and no free URL. It reports every `keydown` from its listeners, cancels keys on request, moves focus, reads the thread view and the process of the message pane, mounts overlays and runs the round trip loop.
 - Each scenario runs as its own job in a fresh profile, so no state leaks from one scenario into the next. The probe asks a local server for each key press and screenshot. After each focus change it presses a bare Shift until a listener sees it (the settle step), so no measured key is the first press after the change.
@@ -54,7 +54,7 @@ The Experiment listened in three places: the top window in the capture phase (`t
 | Folder tree (`ul#folderTree`) | seen | seen | seen | none there |
 | Message pane document (`about:message` body) | seen | seen | seen | none there |
 | Message body (`messagepane`, in the parent process, see Message pane process) | seen | seen | seen | seen (`messageDisplayScripts`) |
-| Message in a tab | seen | seen | seen | seen |
+| Message in a tab | seen | not seen, the tab's own `about:message` listener sees it | seen | seen |
 | Message in its own window | seen | not hooked | seen | seen |
 | Compose body (editor document `about:blank?compose`) | seen | not hooked | seen | seen (`composeScripts`) |
 | Compose To field (`input#toAddrInput`) | seen, target `input` | not hooked | seen | not hooked |
@@ -115,7 +115,7 @@ The Experiment mounted the same extension page four ways, in a red box. The page
 | The same `browser` in the main window document | The page loaded with the extension APIs (`messenger` defined, `runtime.sendMessage` reached the background), 16 ms (Betterbird) and 14 ms (Thunderbird) after the call. `abc` and `Escape` reached it. |
 | The same `browser` inside a XUL `panel` opened with `openPopupAtScreen` | The page loaded and got the keys, 16 ms (Betterbird) and 28 ms (Thunderbird) after the call. It was `0x0` and the screenshot shows an empty panel, because the sizing code of `ExtensionPopups` was not copied. |
 
-- The iframe failure is most likely a process mismatch. The `browser` mounts are remote (`isRemoteBrowser` true, `remoteType` `extension`) and loaded the same URL with no `web_accessible_resources`. An extension page runs in the extension process, and an iframe in a chrome document of the parent process cannot change process. The `web_accessible_resources` run rules out a missing web-accessible entry. A load of the page through a system principal or another frame type was not tried.
+- The iframe failure is most likely a process mismatch. The `browser` mounts are remote (`isRemoteBrowser` true, `remoteType` `extension`) and loaded the same URL with no `web_accessible_resources`. An extension page runs in the extension process, and an iframe in a chrome document of the parent process cannot change process. The `web_accessible_resources` run rules out a missing web-accessible entry. Both iframe attempts used a system principal. A different frame type, such as `type=content` on the iframe, was not tried.
 - The listener of the top window also saw each overlay key, with target `browser`. The chrome runtime has to ignore keys that the overlay has focus for.
 - Without focus on the overlay, typed text goes to the thread list and triggers shortcuts. The probe sets the focus first.
 - The frame loader of a remote `browser` can fire its creation event before a listener that code adds after `appendChild`. Add the listener first.
@@ -135,7 +135,7 @@ Two measurements, both with the clock stamped in the Experiment and in the backg
 | Key to the background, idle, 40 presses (median, p95, max) | 0.32 ms, 0.46 ms, 0.99 ms | 0.33 ms, 0.50 ms, 0.56 ms |
 | Key to the background, 8 bursts of 5 keys while an all-folder unread query runs (median, p95, max) | 0.12 ms, 0.30 ms, 0.40 ms | 0.13 ms, 0.54 ms, 0.74 ms |
 
-An idle key costs more than the ping because the event wakes an idle page. The burst rows are lower because the page is already awake. The added cost is under 1 ms in every sample. These numbers cover the path from the Experiment to the background. They do not cover the time Thunderbird spends on the key itself.
+An idle key costs more than the ping because the event wakes an idle page (not tested). The burst rows are lower because the page is already awake (not tested). The timer starts inside the keydown listener, so the burst rows leave out the time a key waits in the parent queue. The added cost is under 1 ms in every sample. These numbers cover the path from the Experiment to the background. They do not cover the time Thunderbird spends on the key itself.
 
 ### Unread queries
 
@@ -199,7 +199,7 @@ The probe read the rows from the `about:3pane` view (`gDBView`), which the API d
 | `filter.set` unread | `{unread: true}` | 33 | 33 (from `messages.query`) |
 | `filter.set` starred | `{flagged: true}` | 3 | 3 |
 | `filter.set` tag | `{tags: {mode: "any", tags: {$label1: true}}}` | 3 | 3 (three messages tagged) |
-| `filter.set` attachment | `{attachment: true}` | 0 | 0 |
+| `filter.set` attachment | `{attachment: true}` | 0 | 0 (cannot fail: the fixture has no attachments) |
 | `search.threads` text | `{text: {text: "Single 1", subject: true}}` | 11 | 11 (from a subject query) |
 
 ### Native host manifests
