@@ -29,7 +29,7 @@ The parts map onto DesertFox like this:
 | `messageDisplayScripts` | `content.js` in a page | Keys and hints inside the message body, which runs in a content process the chrome listener cannot see |
 | `composeScripts` | `content.js` in a field | Insert mode, `<C-o>` and hints inside the compose body |
 | Overlay page in the chrome window | `cmdline.html` iframe and the `ui` bundle | Command line, completion, which-key, badge and toasts |
-| Native host | Native host | Config read, the editor bridge and Markdown conversion |
+| Native host | Native host | Config read (`read_config`) and the external editor (`editor_start`, `editor_collect`) |
 
 Registry changes from DesertFox:
 
@@ -69,16 +69,16 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.forward` | `g F` | Standard | `compose.beginForward` |
 | `msg.new` | `c` | Standard | `compose.beginNew` |
 | `msg.open` | `<C-l>` | Standard | `messageDisplay.open` |
-| `msg.yank {field: content, subject, sender, address, message_id}` | `y y`, `y s`, `y f`, `y a`, `y i` | Standard | `messages.get`, `messages.getFull`, clipboard |
+| `msg.yank {field: content, subject, sender, address, message_id}` | `y y`, `y s`, `y f`, `y a`, `y i` | Standard | `messages.get`, `messages.getFull`, `navigator.clipboard.writeText` with the `clipboardWrite` permission. The `browser.clipboard` API only sets images. |
 | `folder.open {folder, special}` | `o`, `g o`, `g i`, `g t`, `g d`, `g s`, `g p`, `:open`, `:inbox` | Standard | `folders.query` with `specialUse`, `mailTabs.update` |
 | `filter.set {state: unread, all, starred, tag, attachment}` | `F u`, `F a`, `F s`, `F f`, `:filter` | Standard | `mailTabs.setQuickFilter` |
 | `sort.set {by, order}` | `:sort` | Standard | `mailTabs.update` |
 | `pane.toggle {pane: message, folder}` | `t m`, `t f` | Standard | `mailTabs.update` |
-| `tab.switch`, `tab.next`, `tab.prev`, `tab.close` | `T`, `:tab`, `<C-j>`, `<C-k>`, `<C-x>`, `<C-c>`, `q`, `<C-h>` | Standard | `tabs.*` |
+| `tab.switch`, `tab.next`, `tab.prev`, `tab.close` | `T`, `:tab`, `<C-j>`, `<C-k>`, `<C-x>`, `<C-c>`, `q`, `<C-h>` | Standard | `tabs.*`. Phase 0 checks that `tabs.remove` closes the primary mail tab. If it does not, `tab.close` refuses there. |
 | `mark.set {slot}`, `mark.jump {slot}` | `M <key>`, `' <key>` | Standard | Folder marks in `storage.local`, `mailTabs.update` |
 | `jump.back`, `jump.forward` | `<C-o>`, `<C-i>` | Standard | Folder history in `storage.local`, `mailTabs.onDisplayedFolderChanged` |
 | `step.unread {scope: folder, all_folders}` | `] u`, `[ u`, `] U`, `[ U` | Standard, if fast enough | `mailTabs.getListedMessages`, `messages.query`, `mailTabs.setSelectedMessages` |
-| `step.starred`, `step.attachment` | `] s`, `[ s`, `] a`, `[ a` | Standard | Same as above |
+| `step.starred`, `step.attachment` | `] s`, `[ s`, `] a`, `[ a` | Standard | Same as above. Phase 0 checks how `setSelectedMessages` treats a message inside a collapsed thread. |
 | `search.threads {query}` | `/` in the thread list | Standard | `mailTabs.setQuickFilter` with text |
 | `search.message {query}` | `/` in the message pane, `n`, `N` | Standard | `messageDisplayScripts` find in the body |
 | `compose.edit_external` | `e`, `<C-e>`, `:edit` | Standard | `compose.getComposeDetails` and `setComposeDetails`, host `editor_start` and `editor_collect` |
@@ -101,6 +101,22 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 
 The table has 41 rows. 26 run without the Experiment (25 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.
 
+## Decisions
+
+- ESR floor: 153 ESR, so `strict_min_version` is 153.0. ESR 128 is end of life, Betterbird retired its 140 line, and each extra base costs a test run on the chrome verbs. Revisit when a user on an older ESR asks.
+- HTML compose conversion: a bundled `marked` (Markdown to HTML) and `turndown` (HTML to Markdown), both MIT. This needs no pandoc install and no host verb that spawns a process. The editor itself still needs the host. Revisit if the quote split (see build order 4) still loses structure.
+- Bridge socket: after the first listing. The first release ships the config host only, because the bridge adds an audit of every command's `bridge` flag and a socket test on two apps. The bridge is the DesertFox bridge host and socket. It is off by default behind the `bridge` setting and gives the mode in the bar, `run` from outside and the CLI verbs. Revisit when the bar needs the Thunderbird mode.
+- `nativeMessaging` is a required permission, because an add-on with an Experiment cannot use optional permissions. The host itself stays optional. A command that needs it refuses with a message when it is missing.
+
+## Store rules
+
+The rules of addons.thunderbird.net shape the build:
+
+- An add-on with an Experiment gets a manual review, so the split table stays the evidence that the Experiment does only what no standard API does.
+- Bundled libraries are exact, pinned releases from a trusted host, kept unmodified and listed in `VENDOR.md` or `package.json`.
+- A build that bundles our own code needs a source archive with build instructions and a lockfile, and `npm ci` must work.
+- The Experiment bundle stays unminified, so the reviewer reads what ships. It is built with esbuild because the chrome runtime reuses the core key matcher.
+
 ## Reuse from DesertFox
 
 These parts carry over with few changes:
@@ -113,15 +129,15 @@ These parts carry over with few changes:
 - The `commands.json` build and help generation.
 - The native host verbs `read_config`, `editor_start` and `editor_collect`.
 
-New work: the Thunderbird commands, the chrome runtime and verbs, a `thunderbird-behavior.md` of measured facts, and a Markdown conversion path for HTML compose.
+New work: the Thunderbird commands, the chrome runtime and verbs, a `thunderbird-behavior.md` of measured facts, and the HTML compose round trip.
 
 ## Build order
 
-0. Measure on the target Thunderbird ESR and on Betterbird, and write `thunderbird-behavior.md`. Capture plain keys in `about:3pane` from the Experiment, and cancel Thunderbird's own single-key shortcuts (`a`, `j`, `f` and others) in normal mode. Take keys in the message pane through `messageDisplayScripts`. Mount an extension page overlay in the chrome window. Time the round trip from the chrome runtime to the background and back. Check that each standard row in the table exists on the target ESR. This phase needs no shared core.
+0. Measure on the target Thunderbird ESR and on Betterbird, and write `thunderbird-behavior.md`. Capture plain keys in `about:3pane` from the Experiment, and cancel Thunderbird's own single-key shortcuts (`a`, `j`, `f` and others) in normal mode. Take keys in the message pane through `messageDisplayScripts`. Mount an extension page overlay in the chrome window. Time the round trip from the chrome runtime to the background and back. Check that each standard row in the table exists on the target ESR. Find the native host manifest folders for Thunderbird and Betterbird, which are unverified. Check that Betterbird is at 153.2.0 or later for `filter.set` and `search.threads`. This phase needs no shared core.
 1. Move the shared core into `packages/core` in the DesertFox repo and point DesertBird at it. Then set up the skeleton: the manifest, the Experiment with `keys.*` and `view.*`, and the registry with the motions and message actions.
 2. Port the standard commands, group by group, in table order.
 3. Command line, which-key and hints.
-4. Compose: insert mode, `<C-o>` and the editor bridge through the host.
+4. Compose: insert mode, `<C-o>` and the external editor through the host. HTML compose converts in both directions in the add-on, in the background page. Only the part the user wrote converts: the body above the first quote or signature node (`moz-cite-prefix`, `blockquote[type=cite]`, `moz-signature`). `turndown` turns that part into Markdown for `editor_start`. `marked` turns the edited Markdown back into HTML. The quote and signature nodes go back untouched, so cite quoting and tables survive. Both directions escape HTML, so tag text in a quoted message never becomes a live tag. `setComposeDetails` runs only when the Markdown changed. Parse with `DOMParser` and never set `innerHTML`. Test the round trip on a reply with a quote.
 5. Migration notes for users who load key files through an autoconfig file.
 6. Listing on addons.thunderbird.net, with the Experiment code open to a by-hand review.
 
@@ -135,8 +151,7 @@ New work: the Thunderbird commands, the chrome runtime and verbs, a `thunderbird
 
 ## Open questions
 
-- [ ] Which ESR is the floor? The current Thunderbird ESR and Betterbird on the same base is the default.
-- [ ] HTML compose: Markdown conversion through a new host verb that runs pandoc, or a converter bundled into the compose script? A host verb keeps the add-on small but makes the host a hard need for HTML mail.
-- [ ] Does the overlay mount as an iframe of an extension page inside `about:3pane`, or as a chrome panel? Phase 0 answers it.
+Phase 0 answers both.
+
+- [ ] Does the overlay mount as an iframe of an extension page inside `about:3pane`, or as a chrome panel?
 - [ ] Does `step.unread` across all folders stay fast enough with `messages.query` on a large account, or does it move to the Experiment?
-- [ ] Does DesertBird get the bridge socket and the `desertfox` CLI verbs at first, or only the config host? The bridge gives the mode in the bar and `run` from outside.
