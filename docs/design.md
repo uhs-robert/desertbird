@@ -26,7 +26,7 @@ The parts map onto DesertFox like this:
 | Background page | Background page | The registry, the handlers that use standard APIs, keymap compile, config, storage |
 | Chrome runtime (Experiment parent script) | `content.js` | The key listener in each mail and compose chrome window, the prefix tree matcher, modes, counts, and the `runs_in: "chrome"` handlers |
 | Chrome verbs (Experiment API schema) | None (new) | A fixed table of privileged operations that background handlers call |
-| `messageDisplayScripts` | `content.js` in a page | Keys and hints inside the message body, which runs in a content process the chrome listener cannot see |
+| `messageDisplayScripts` | `content.js` in a page | Keys and hints inside the message body, which runs in a content process the chrome listener cannot see. Measured: for local mail the message pane is not remote and a chrome listener sees its keys (see [`thunderbird-behavior.md`](thunderbird-behavior.md), Message pane process) |
 | `composeScripts` | `content.js` in a field | Insert mode, `<C-o>` and hints inside the compose body |
 | Overlay page in the chrome window | `cmdline.html` iframe and the `ui` bundle | Command line, completion, which-key, badge and toasts |
 | Native host | Native host | Config read (`read_config`) and the external editor (`editor_start`, `editor_collect`) |
@@ -74,10 +74,10 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `filter.set {state: unread, all, starred, tag, attachment}` | `F u`, `F a`, `F s`, `F f`, `:filter` | Standard | `mailTabs.setQuickFilter` |
 | `sort.set {by, order}` | `:sort` | Standard | `mailTabs.update` |
 | `pane.toggle {pane: message, folder}` | `t m`, `t f` | Standard | `mailTabs.update` |
-| `tab.switch`, `tab.next`, `tab.prev`, `tab.close` | `T`, `:tab`, `<C-j>`, `<C-k>`, `<C-x>`, `<C-c>`, `q`, `<C-h>` | Standard | `tabs.*`. Phase 0 checks that `tabs.remove` closes the primary mail tab. If it does not, `tab.close` refuses there. |
+| `tab.switch`, `tab.next`, `tab.prev`, `tab.close` | `T`, `:tab`, `<C-j>`, `<C-k>`, `<C-x>`, `<C-c>`, `q`, `<C-h>` | Standard | `tabs.*`. Phase 0 checks that `tabs.remove` closes the primary mail tab. If it does not, `tab.close` refuses there. Measured: it does not, so `tab.close` refuses there. |
 | `mark.set {slot}`, `mark.jump {slot}` | `M <key>`, `' <key>` | Standard | Folder marks in `storage.local`, `mailTabs.update` |
 | `jump.back`, `jump.forward` | `<C-o>`, `<C-i>` | Standard | Folder history in `storage.local`, `mailTabs.onDisplayedFolderChanged` |
-| `step.unread {scope: folder, all_folders}` | `] u`, `[ u`, `] U`, `[ U` | Standard, if fast enough | `mailTabs.getListedMessages`, `messages.query`, `mailTabs.setSelectedMessages` |
+| `step.unread {scope: folder, all_folders}` | `] u`, `[ u`, `] U`, `[ U` | Standard, if fast enough | `mailTabs.getListedMessages`, `messages.query`, `mailTabs.setSelectedMessages`. Measured slow: `messages.query` over 5,000 messages takes about 1.1 s and one folder of 10,000 about 2.2 s (see [`thunderbird-behavior.md`](thunderbird-behavior.md), Unread queries). |
 | `step.starred`, `step.attachment` | `] s`, `[ s`, `] a`, `[ a` | Standard | Same as above. Phase 0 checks how `setSelectedMessages` treats a message inside a collapsed thread. |
 | `search.threads {query}` | `/` in the thread list | Standard | `mailTabs.setQuickFilter` with text |
 | `search.message {query}` | `/` in the message pane, `n`, `N` | Standard | `messageDisplayScripts` find in the body |
@@ -149,9 +149,23 @@ New work: the Thunderbird commands, the chrome runtime and verbs, a `thunderbird
 - Thunderbird has single-key shortcuts of its own. A key the chrome runtime does not cancel runs both actions.
 - If the round trip from chrome to background is slow, held `j` lags. That is why the motions run in the chrome runtime.
 
-## Open questions
+## Phase 0 findings
 
-Phase 0 answers both.
+Phase 0 ran on Thunderbird 153.7.0 ESR and Betterbird 153.7.0, with the same result on both. The numbers and the method are in [`thunderbird-behavior.md`](thunderbird-behavior.md). The design decisions above stand. Where a measured fact differs from the text, the text carries a note and the fact is listed here.
 
-- [ ] Does the overlay mount as an iframe of an extension page inside `about:3pane`, or as a chrome panel?
-- [ ] Does `step.unread` across all folders stay fast enough with `messages.query` on a large account, or does it move to the Experiment?
+- Overlay mount: the overlay is a remote `browser` element that the Experiment creates in a chrome document, in the main window or inside `about:3pane`. It loads the extension page with the extension APIs and takes keys. An extension-page iframe in `about:3pane` never loads. The chrome runtime must skip keys that the overlay has focus for.
+- `step.unread` across folders: `messages.query({unread: true})` over all folders takes about 1.1 s on 5,000 messages, so it does not run per key. A command reads the unread counts with `folders.getFolderInfo` (about 21 ms for 50 folders), then queries one folder. A query on one folder of 10,000 messages takes about 2.2 s, and `mailTabs.getListedMessages` about 6.9 s. The row stays marked Standard, and a large folder misses a per-key budget. The decision to move it to the Experiment is open.
+- Collapsed threads: `mailTabs.setSelectedMessages` on a message inside a collapsed thread selects it and opens the thread.
+- `tabs.remove` on the primary mail tab is a no-op, also when it is the only tab. `tab.close` refuses there.
+- `messages.tags.list` needs the `messagesTagsList` permission. `commands`, `menus` and `addressBooks` calls need their own permission or key too. There is no `messenger.clipboard`.
+- Plain keys: a capture listener on the top window sees every key in every window type and cancels every Thunderbird single-key shortcut that acts (`m`, `s`, `j`, `a`, `f`, `b`, `n`, `p`, `1`, `Enter`). `r` and `R` do nothing by default. The first press after a focus change can be lost.
+- Message pane: for local mail the message body browser is not remote, so a chrome listener sees its keys. This differs from the Architecture row for `messageDisplayScripts`. The decision stands until feed, IMAP and remote content are measured.
+- Round trip: a key reaches the background in under 1 ms, so the chrome runtime can send finished invocations to the background. The motions stay in the chrome runtime by decision. Held keys were not timed.
+- Native host manifests: both apps read only `~/.mozilla/native-messaging-hosts/` in the user folders. The system folders were not tested.
+- Two traps: `compose.beginReply` crashes the app when the account has no identity, and `mailTabs.update` with a displayed folder throws on the first display of a folder though the folder displays.
+- Betterbird at 153.7.0 passes the `filter.set` and `search.threads` checks.
+
+Phase 0 answered both former open questions:
+
+- The overlay mounts as a remote `browser` element in a chrome document, not as an iframe of an extension page in `about:3pane` and not as a sized panel.
+- `step.unread` across all folders is not fast enough with `messages.query` alone. It reads `getFolderInfo` counts first and queries one folder. Whether a large folder moves to the Experiment is open.

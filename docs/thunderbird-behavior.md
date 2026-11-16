@@ -256,3 +256,36 @@ node tools/measure/run.mjs thunderbird
 ```
 
 See [`tools/measure/README.md`](../tools/measure/README.md). A full run takes about 35 minutes per app. Results are JSON files and screenshots in `$MEASURE_DIR/run/<app>/<job>/out/`.
+
+## Phase 1
+
+Facts measured while the end-to-end tests ran on Thunderbird 153.7 ESR and Betterbird, with the same result on both unless noted.
+
+### Focus chains
+
+The event target seen from the top window is not enough to tell where focus is. For the thread list and the folder pane, `composedPath()[0]` is the browser that holds `about:3pane`, a browser the parent process can read. A check for "the focus is in a browser" matches there, so a browser is not a text field.
+
+| Focus | `target` | `originalTarget` |
+| --- | --- | --- |
+| Thread list | `tbody` | `tbody` |
+| Folder pane | `ul#folderTree` | `ul#folderTree` |
+| Quick filter | `search-bar#qfb-qs-textbox` | `input` in its shadow tree |
+| Global search (`Ctrl+K`) | `global-search-bar` | `input` in its shadow tree, in the top document |
+| Message body | chain: `about:3pane` browser, `messageBrowser`, `messagepane` (type `content`, not remote), `body` | |
+
+- No unreadable browser showed up in any of these cases.
+- Five Tabs from the thread list end on the message header buttons and then a notification button. They never reach the body.
+- Betterbird: three Tabs from the folder pane end on `button#threadColButton`, not on the thread list.
+- A key press with a context menu open (opened with `Shift+F10`) still reaches the top window listener. The menu is `menupopup#mailContext` in `about:3pane`. Its `state` is `open` and its `open` attribute stays unset. With no check, `j` moved the thread selection under the open menu on Thunderbird.
+
+### F6 order
+
+`F6` cycles the panes in this order: folder pane, thread list, message body (when a message shows), spaces toolbar, global search. `Shift+F6` reverses it. Both apps agree. `F6` from the thread list puts focus in the message body.
+
+### Collapsed threads and the displayed messages
+
+`messageDisplay.getDisplayedMessages` returns an array. With a collapsed thread root selected, the pane shows the thread summary and the array holds every message of the thread (4 of 4 in the fixture). A handler that needs one message must choose one.
+
+### Selection after archive and delete
+
+Thunderbird keeps a row selected after `messages.archive` and `messages.delete` on the selected message. In the 60-message Inbox it selected the next row (archive of `Single 2` selected `Single 3`, delete of `Single 3` selected `Single 4`). With the last row removed it selected the new last row (`Single 18` after `Single 19`, `Single 17` after `Single 18`).

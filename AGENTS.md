@@ -19,6 +19,8 @@ Read the design for an area before you change it. Read a folder's README before 
 | Chrome runtime: Experiment parent, motions, view access | [`src/chrome/README.md`](src/chrome/README.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
 | Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |
+| Measured Thunderbird and Betterbird behavior the design rests on | [`docs/thunderbird-behavior.md`](docs/thunderbird-behavior.md) |
+| Phase 0 measurement probe and how to rerun it | [`tools/measure/README.md`](tools/measure/README.md) |
 
 Add a row for each new doc or source folder README in the same commit that creates it.
 
