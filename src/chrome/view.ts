@@ -45,8 +45,8 @@ export interface ViewRowData {
     unread: boolean;
 }
 
-// One call returns at most this many rows, so a verb cannot stall the window on a big mailbox.
-export const MAX_ROWS_PER_CALL = 2000;
+// A call asks for the whole list with a huge `last`, so the range clamps to the visible rows. A call returns at most this many rows, so a verb cannot stall the window on a big mailbox.
+export const MAX_ROWS_PER_CALL = 20000;
 
 export const MAIL_TAB_MODE = "mail3PaneTab";
 
@@ -76,10 +76,10 @@ export function create_view_port(about_3pane: About3PaneLike): ViewPort {
 export function read_rows(about_3pane: About3PaneLike, first: number, last: number, message_id_of: (header: MessageHeaderLike) => number): ViewRowData[] {
     const view = about_3pane.gDBView;
     if (!view) return [];
-    const end = Math.min(last, view.rowCount - 1);
-    if (end - first + 1 > MAX_ROWS_PER_CALL) throw new Error(`at most ${MAX_ROWS_PER_CALL} rows per call`);
+    const start = Math.max(first, 0);
+    const end = Math.min(last, view.rowCount - 1, start + MAX_ROWS_PER_CALL - 1);
     const rows: ViewRowData[] = [];
-    for (let index = Math.max(first, 0); index <= end; index++) {
+    for (let index = start; index <= end; index++) {
         const container = view.isContainer(index);
         rows.push({
             index,

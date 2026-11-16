@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_runtime } from "../src/chrome/runtime.ts";
 import type { Invocation, KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
 import type { ViewPort } from "../src/chrome/motions.ts";
-import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
+import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 
 class FakeWindow implements KeyTarget {

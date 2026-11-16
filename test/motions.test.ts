@@ -97,3 +97,11 @@ test("an unknown id runs nothing and reports false", () => {
     assert.equal(run_motion("motion.down", port, 1), true);
     assert.deepEqual(port.selects, [3]);
 });
+
+test("view.rows clamps a whole-list range to the visible rows", async () => {
+    const { read_rows } = await import("../src/chrome/view.ts");
+    const view = { rowCount: 3, getMsgHdrAt: () => ({ isRead: false }), getLevel: () => 0, isContainer: () => false, isContainerOpen: () => false };
+    const about_3pane = { gDBView: view, threadTree: { selectedIndex: 0, selectedIndices: [], currentIndex: 0 } };
+    assert.deepEqual(read_rows(about_3pane, 0, 2 ** 31 - 1, () => 5).map((row) => row.index), [0, 1, 2]);
+    assert.deepEqual(read_rows(about_3pane, 5, 9, () => 5), []);
+});
