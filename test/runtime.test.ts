@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_runtime } from "../src/chrome/runtime.ts";
 import type { KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
-import type { ViewPort } from "../src/chrome/motions.ts";
+import { create_list_port } from "../src/chrome/view.ts";
+import type { About3PaneLike, ListPort } from "../src/chrome/view.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import type { KeysInvocation } from "../src/shared/protocol.ts";
 import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
@@ -23,8 +24,8 @@ class FakeWindow implements KeyTarget {
     removeEventListener(_type: "keydown", listener: (event: KeydownEvent) => void) {
         this.listeners.delete(listener);
     }
-    port(): ViewPort {
-        return { row_count: () => this.rows, selected_index: () => this.selected, select: (index) => void (this.selected = index) };
+    port(): ListPort {
+        return { row_count: () => this.rows, selected_index: () => this.selected, select: (index) => void (this.selected = index), selected_message_ids: () => [100 + this.selected] };
     }
 }
 
@@ -67,7 +68,7 @@ const tree = () => ({
     },
 });
 
-function setup() {
+function setup(list_port_of?: (window: FakeWindow) => ListPort) {
     const windows = [new FakeWindow()];
     const emitted: KeysInvocation[] = [];
     let window_listener: WindowListener<FakeWindow> | null = null;
@@ -80,7 +81,7 @@ function setup() {
         },
         unregister_window_listener: () => void unregisters++,
         open_windows: () => windows,
-        view_port_of: (window) => (window.in_mail_tab ? window.port() : null),
+        list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
         is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
         menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
@@ -102,7 +103,33 @@ test("a background leaf is emitted with its window id and a count", () => {
     runtime.install(tree());
     press(windows[0]!, "3");
     press(windows[0]!, "x");
-    assert.deepEqual(emitted, [{ command: "msg.archive", args: {}, count: 3, windowId: 7 }]);
+    assert.deepEqual(emitted, [{ command: "msg.archive", args: {}, count: 3, windowId: 7, messageIds: [100] }]);
+});
+
+test("x then j at once: x carries the ids selected at its own key press", () => {
+    // The real adapter over a fake about:3pane, so the ids come from the thread list as it stands when each key runs.
+    const about_3pane: About3PaneLike & { selected: number } = {
+        selected: 0,
+        gDBView: { rowCount: 10, getSelectedMsgHdrs: () => [{ key: about_3pane.selected }] },
+        threadTree: {
+            get selectedIndex() { return about_3pane.selected; },
+            set selectedIndex(index: number) { about_3pane.selected = index; },
+            get currentIndex() { return about_3pane.selected; },
+        },
+    };
+    const { windows, emitted, runtime } = setup(() => create_list_port(about_3pane, (header) => 500 + (header as { key: number }).key));
+    runtime.install(tree());
+    press(windows[0]!, "x");
+    press(windows[0]!, "j");
+    assert.equal(about_3pane.selected, 1, "j moved the selection before the background could read it");
+    assert.deepEqual(emitted.map((invocation) => invocation.messageIds), [[500]]);
+});
+
+test("the list port drops a header the extension cannot name", () => {
+    const about_3pane: About3PaneLike = { gDBView: { rowCount: 3, getSelectedMsgHdrs: () => [{ key: 1 }, { key: 2 }, { key: 3 }] }, threadTree: { selectedIndex: 0, currentIndex: 0 } };
+    const port = create_list_port(about_3pane, (header) => ((header as { key: number }).key === 2 ? null : (header as { key: number }).key));
+    assert.deepEqual(port.selected_message_ids(), [1, 3]);
+    assert.deepEqual(create_list_port({ ...about_3pane, gDBView: null }, () => 1).selected_message_ids(), []);
 });
 
 test("a sequence waits, completes, and cancels each key", () => {
@@ -219,7 +246,7 @@ test("the parent removes the window listener on shutdown and every verb rethrows
     const window = new FakeWindow();
     const platform = stub_platform([window]);
     const keys_parent = await import("../src/chrome/parent_keys.ts");
-    const context = { extension: { windowManager: { getWrapper: () => ({ id: 1 }) } } };
+    const context = { extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } };
     const keys = keys_parent.get_keys_api(context).keys;
 
     await assert.rejects(keys.install({ tree: { version: 0 as never, root: {} }, settings: {} }), (error) => error instanceof StubExtensionError && /^keys\.install: keymap version 0/.test(error.message));

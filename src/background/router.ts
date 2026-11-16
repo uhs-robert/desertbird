@@ -1,17 +1,16 @@
-// Runs one invocation: look up, validate, check the Experiment, resolve the selection, call the handler. Each failure ends in a notification.
+// Runs one invocation: look up, validate, check the Experiment, call the handler on the messages the invocation names. Each failure ends in a notification.
 
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
 import type { KeysApi, KeysInvocation } from "../shared/protocol.ts";
-import type { MessageApi, MessageListPage, Selection } from "./handlers/message.ts";
+import type { MessageApi } from "./handlers/message.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 import type { ScopedContext } from "./registry.ts";
 
 export interface RouterApi extends MessageApi, NotificationsApi {
-    tabs: { query(query: { windowId: number; active: true }): Promise<{ id?: number }[]> };
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
 }
@@ -28,23 +27,6 @@ function missing_experiment_verb(api: RouterApi, needs: readonly string[]): stri
     });
 }
 
-// A selection larger than one page comes back in pages. Archive and delete act on all of it, so every page is read.
-async function all_messages(api: RouterApi, first_page: MessageListPage): Promise<MessageListPage["messages"]> {
-    const messages = [...first_page.messages];
-    for (let page = first_page; page.id; ) {
-        page = await api.messages.continueList(page.id);
-        messages.push(...page.messages);
-    }
-    return messages;
-}
-
-async function resolve_selection(api: RouterApi, window_id: number): Promise<Selection> {
-    const [tab] = await api.tabs.query({ windowId: window_id, active: true });
-    if (tab?.id === undefined) throw new RuntimeRefusal("No active tab in this window.");
-    const messages = await all_messages(api, await api.mailTabs.getSelectedMessages(tab.id));
-    return { tab_id: tab.id, messages: messages.map((message) => ({ id: message.id, account_id: message.folder?.accountId })) };
-}
-
 export function create_router(registry: Registry, api: RouterApi) {
     async function route(invocation: KeysInvocation): Promise<void> {
         const command = registry.get(invocation.command);
@@ -53,8 +35,8 @@ export function create_router(registry: Registry, api: RouterApi) {
         const checked = check_args(command, invocation.args);
         if (!checked.ok) throw new RuntimeRefusal(checked.error);
         if (missing_experiment_verb(api, command.needs ?? []) !== undefined) throw new RuntimeRefusal(`${command.label} needs the DesertBird Experiment, which is not loaded.`);
-        const selection = await resolve_selection(api, invocation.windowId);
-        const context: ScopedContext = { tab_id: selection.tab_id, window_id: invocation.windowId, frame_id: 0, mode: "normal", api, selection };
+        // The ids are the selection at the key press. A read of the selection now could see the row a later `j` moved to.
+        const context: ScopedContext = { tab_id: undefined, window_id: invocation.windowId, frame_id: 0, mode: "normal", api, message_ids: invocation.messageIds };
         await command.run(context, checked.args);
     }
 

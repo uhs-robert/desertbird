@@ -7,7 +7,7 @@ import { create_matcher } from "../../vendor/desertfox/keys/matcher.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
 import { run_motion } from "./motions.ts";
-import type { ViewPort } from "./motions.ts";
+import type { ListPort } from "./view.ts";
 
 export interface KeydownEvent extends KeyEventLike {
     target: unknown;
@@ -32,7 +32,7 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     unregister_window_listener(): void;
     open_windows(): Window[];
     /** The thread list of the window's front tab, or null when that tab is not the mail tab. Keys then pass through. */
-    view_port_of(window: Window): ViewPort | null;
+    list_port_of(window: Window): ListPort | null;
     /** Whether the key is meant for a text field. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
     /** Whether a menu or panel is open. Keys then belong to it, its access keys among them. */
@@ -72,20 +72,22 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
     let sequence_window: Window | null = null;
 
-    function run_leaf(leaf: TreeLeaf, port: ViewPort, window: Window, count: number | undefined): void {
+    function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count: number | undefined): void {
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
             if (step.runs_in === "chrome") {
                 run_motion(step.invocation.id, port, step_count);
             } else if (step.runs_in === "background") {
-                deps.emit({ command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count: step_count ?? 1, windowId: deps.window_id_of(window) });
+                // The selection is read here, inside the key's own handler, because the background answers later: by then a following `j` has moved the selection.
+                const args = (step.invocation.args ?? {}) as Record<string, JsonValue>;
+                deps.emit({ command: step.invocation.id, args, count: step_count ?? 1, windowId: deps.window_id_of(window), messageIds: port.selected_message_ids() });
             }
         }
     }
 
     /** The thread list a key acts on, or null when the key goes to a text field, an open menu or a tab that is not the mail tab. */
-    function list_port_for(window: Window, event: KeydownEvent): ViewPort | null {
-        return deps.is_typing_target(window, event) || deps.menu_is_open(window) ? null : deps.view_port_of(window);
+    function list_port_for(window: Window, event: KeydownEvent): ListPort | null {
+        return deps.is_typing_target(window, event) || deps.menu_is_open(window) ? null : deps.list_port_of(window);
     }
 
     function on_keydown(window: Window, event: KeydownEvent): void {

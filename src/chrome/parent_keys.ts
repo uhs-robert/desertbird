@@ -6,11 +6,11 @@ import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
 import type { KeysInstallArgs, KeysInvocation } from "../shared/protocol.ts";
 import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
-import { create_view_port, front_about_3pane } from "./view.ts";
+import { create_list_port, front_about_3pane } from "./view.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/keys";
-// A window the extension does not track has no id. The background then finds no active tab for it and refuses the command with a notification.
+// A window the extension does not track has no id. The background reads the window id for nothing but the command context, so the command still runs.
 const NO_WINDOW_ID = -1;
 
 // The invocation listeners belong to the event the background subscribes to.
@@ -18,6 +18,7 @@ const invocation_listeners = new Set<(invocation: KeysInvocation) => void>();
 let runtime: Runtime | null = null;
 
 function ensure_runtime(context: ExtensionContext): Runtime {
+    const mail_extension_id_of = (header: unknown): number | null => context.extension.messageManager.convert(header, { skipFolder: true })?.id ?? null;
     runtime ??= create_runtime<MainWindow>({
         register_window_listener(listener: WindowListener<MainWindow>) {
             load_platform().ExtensionSupport.registerWindowListener(WINDOW_LISTENER_ID, {
@@ -28,9 +29,9 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         },
         unregister_window_listener: () => load_platform().ExtensionSupport.unregisterWindowListener(WINDOW_LISTENER_ID),
         open_windows: open_main_windows,
-        view_port_of(window) {
+        list_port_of(window) {
             const about_3pane = front_about_3pane(tabmail_of(window));
-            return about_3pane && create_view_port(about_3pane);
+            return about_3pane && create_list_port(about_3pane, mail_extension_id_of);
         },
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
         menu_is_open: (window: MainWindow) => menu_is_open(window.document),

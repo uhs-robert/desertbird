@@ -38,7 +38,7 @@ const function_parameters = (): { path: string; node: SchemaNode }[] =>
 test("the schema functions and events equal the parent exports", async () => {
     const platform = stub_platform();
     const keys_parent = await import("../src/chrome/parent_keys.ts");
-    const context = { extension: { windowManager: { getWrapper: () => null } } };
+    const context = { extension: { windowManager: { getWrapper: () => null }, messageManager: { convert: () => null } } };
     const apis = keys_parent.get_keys_api(context) as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
@@ -84,4 +84,11 @@ test("only the tree is a loose object among the function parameters, and a comme
 test("the schema has no verb that runs a script, evaluates or opens a URL", () => {
     const text = JSON.stringify(schema, (key, value: unknown) => (key === "description" ? undefined : value)).toLowerCase();
     for (const word of ["eval", "script", "url", "uri", "exec"]) assert.equal(text.includes(word), false, word);
+});
+
+test("the invocation event sends the selection as an integer array, not a string", () => {
+    const invocation = namespace_named("keys").events?.find((event) => event.name === "onInvocation")?.parameters?.[0];
+    const message_ids = invocation?.properties?.["messageIds"];
+    assert.equal(message_ids?.type, "array");
+    assert.equal(message_ids?.items?.type, "integer");
 });

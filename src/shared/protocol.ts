@@ -27,6 +27,8 @@ export interface KeysInvocation {
     args: Record<string, JsonValue>;
     count: number;
     windowId: number;
+    /** The MailExtension ids of the messages selected when the key was pressed. The command acts on these, not on what is selected when it arrives. */
+    messageIds: number[];
 }
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */

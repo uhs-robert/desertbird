@@ -62,6 +62,13 @@
               },
               "windowId": {
                 "type": "integer"
+              },
+              "messageIds": {
+                "type": "array",
+                "description": "The MailExtension ids of the messages selected at the key press.",
+                "items": {
+                  "type": "integer"
+                }
               }
             }
           }

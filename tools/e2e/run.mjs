@@ -207,6 +207,17 @@ async function run_default(instance) {
   }
   check(app, kind, "x and d d ran four times without a refusal", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
 
+  // x and j in one wtype call reach the app back to back. j moves the selection before the background acts, and x must still archive the row it was pressed on.
+  state = await go_to_row(12);
+  const race_target = first_selected(state);
+  const race_next = live_rows()[row_of(race_target) + 1];
+  state = await key_and_state(instance, ["xj"], 2500);
+  const homes_of = (id) => Object.entries(state.folders).filter(([, ids]) => ids.includes(id)).map(([path]) => path);
+  const race_archived = homes_of(race_target).length === 1 && /Archive/i.test(homes_of(race_target)[0]);
+  check(app, kind, "x then j at once archives the row x was pressed on and leaves the next one", race_archived && same(homes_of(race_next), ["/Inbox"]), `${race_target} is in ${JSON.stringify(homes_of(race_target))}, ${race_next} is in ${JSON.stringify(homes_of(race_next))}`);
+  if (race_archived) gone.add(race_target);
+  await shot("after_x_then_j", "list after x and j typed back to back");
+
   // r on a collapsed thread root.
   await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
