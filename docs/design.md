@@ -99,7 +99,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime |
 | Command line, which-key, badge, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |
 
-26 of the 41 rows run without the Experiment. The Experiment carries key capture, the thread view and focus.
+The table has 41 rows. 26 run without the Experiment (25 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.
 
 ## Reuse from DesertFox
 
