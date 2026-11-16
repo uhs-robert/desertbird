@@ -29,17 +29,17 @@ test("for_each_message refuses an empty selection and stops at the first failure
     assert.deepEqual(seen, [1, 2]);
 });
 
-test("displayed_folder reads the active mail tab of the current window", async () => {
+test("displayed_folder reads the active mail tab of the given window", async () => {
     const folder: MailFolder = { accountId: "a1", path: "/Inbox" };
     const queries: unknown[] = [];
     const api = { mailTabs: { query: async (query: unknown) => (queries.push(query), [{ displayedFolder: folder }]) } };
-    assert.equal(await displayed_folder(api), folder);
-    assert.deepEqual(queries, [{ active: true, currentWindow: true }]);
+    assert.equal(await displayed_folder(api, 7), folder);
+    assert.deepEqual(queries, [{ windowId: 7, active: true }]);
 });
 
 test("displayed_folder refuses when no folder is displayed", async () => {
-    await assert.rejects(displayed_folder({ mailTabs: { query: async () => [{}] } }), RuntimeRefusal);
-    await assert.rejects(displayed_folder({ mailTabs: { query: async () => [] } }), RuntimeRefusal);
+    await assert.rejects(displayed_folder({ mailTabs: { query: async () => [{}] } }, 1), RuntimeRefusal);
+    await assert.rejects(displayed_folder({ mailTabs: { query: async () => [] } }, 1), RuntimeRefusal);
 });
 
 test("special_folder queries by special use, in one account when given", async () => {
