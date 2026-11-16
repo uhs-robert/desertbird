@@ -9,6 +9,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: strin
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.reply"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
+    tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -96,4 +97,23 @@ test("the view keys run the planned commands with the planned args", () => {
         tf: { id: "pane.toggle", args: { pane: "folder" } },
     };
     for (const [keys, binding] of Object.entries(planned)) assert.deepEqual(normal[keys], binding, keys);
+});
+
+test("the tab commands keep their keys and bridge values: moving between tabs is harmless, closing one is not", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    const bound = (keys: string) => (normal[keys] as { id: string } | undefined)?.id;
+    assert.equal(bound("<C-j>"), "tab.next");
+    assert.equal(bound("<C-k>"), "tab.prev");
+    assert.equal(bound("q"), "tab.close");
+    for (const id of ["tab.next", "tab.prev", "tab.switch"]) assert.equal(registry.get(id)?.bridge, true, id);
+    assert.equal(registry.get("tab.close")?.bridge, false);
+});
+
+test("tab.switch takes a typed value, so it has no default key and its validator needs one", () => {
+    const switch_tab = registry.get("tab.switch");
+    assert.ok(switch_tab);
+    assert.equal(Object.values(DEFAULT_KEYMAP.normal ?? {}).some((binding) => binding && !Array.isArray(binding) && binding.id === "tab.switch"), false);
+    assert.equal(check_args(switch_tab, { tab: "2" }).ok, true);
+    assert.equal(check_args(switch_tab, {}).ok, false);
+    assert.equal(check_args(switch_tab, { tab: "2", extra: "x" }).ok, false);
 });

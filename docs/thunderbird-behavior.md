@@ -315,3 +315,14 @@ The event target seen from the top window is not enough to tell where focus is. 
 ### Selection after archive and delete
 
 Thunderbird keeps a row selected after `messages.archive` and `messages.delete` on the selected message. In the 60-message Inbox it selected the next row (archive of `Single 2` selected `Single 3`, delete of `Single 3` selected `Single 4`). With the last row removed it selected the new last row (`Single 18` after `Single 19`, `Single 17` after `Single 18`).
+
+## Phase 2
+
+Facts measured while the end-to-end tab checks ran on Thunderbird 153.7 ESR and Betterbird. Both apps gave the same result.
+
+### Tabs
+
+- `tabs.update(id, {active: true})` selects a content tab, a message tab and the mail tab. `tabs.remove` closes a content tab and a message tab. Only the first tab ignores it (see above).
+- `tabmail.tabContainer` reads `undefined` from the Experiment. The tab strip is `#tabmail-tabs`, and it fires `TabSelect` for every change of the front tab, also one made through `tabs.update`.
+- A bound chord pressed in the mail tab runs its command and Thunderbird's own action does not happen. `<C-j>` switched tabs and opened no Saved Files tab.
+- A chord pressed in a content tab or a message tab reaches no DesertBird command. `<C-j>` in a content tab ran Thunderbird's own action and opened the Saved Files tab (type `special`). `<C-k>` in a message tab changed nothing. So the tab keys work from the mail tab only, and a switch to another tab by key has no way back by key.
