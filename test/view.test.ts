@@ -3,14 +3,16 @@ import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
+import { while_loading } from "../src/background/handlers/loading.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
 import type { RouterApi } from "../src/background/router.ts";
 
+const INBOX = { accountId: "a1", path: "/Inbox" };
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
 const invoke = (command: string, args: Record<string, string>) => ({ command, args, count: 1, windowId: 3, messageIds: [] });
 
 /** The router fake plus a mail tab fake that records every call. */
-function view_fake(tab: MailTab | null = { id: 9, messagePaneVisible: true, folderPaneVisible: false }) {
+function view_fake(tab: MailTab | null = { id: 9, messagePaneVisible: true, folderPaneVisible: false, displayedFolder: INBOX }) {
     const calls: string[] = [];
     const mailTabs = {
         query: async (query: unknown) => (calls.push(`mailTabs.query ${JSON.stringify(query)}`), tab === null ? [] : [tab]),
@@ -74,14 +76,14 @@ test("sort.set updates the sort of the tab", async () => {
 });
 
 test("pane.toggle reads the pane state first and then sets the opposite", async () => {
-    const shown = view_fake({ id: 9, messagePaneVisible: true, folderPaneVisible: false });
+    const shown = view_fake({ id: 9, messagePaneVisible: true, folderPaneVisible: false, displayedFolder: INBOX });
     await shown.run("pane.toggle", { pane: "message" });
     await shown.run("pane.toggle", { pane: "folder" });
     const kinds = shown.calls.filter((call) => call.startsWith("mailTabs")).map((call) => call.split(" ")[0]);
     assert.deepEqual(kinds, ["mailTabs.query", "mailTabs.update", "mailTabs.query", "mailTabs.update"]);
     assert.ok(shown.calls.includes('mailTabs.update 9 {"messagePaneVisible":false}'));
     assert.ok(shown.calls.includes('mailTabs.update 9 {"folderPaneVisible":true}'));
-    const hidden = view_fake({ id: 9, messagePaneVisible: false });
+    const hidden = view_fake({ id: 9, messagePaneVisible: false, displayedFolder: INBOX });
     await hidden.run("pane.toggle", { pane: "message" });
     assert.ok(hidden.calls.includes('mailTabs.update 9 {"messagePaneVisible":true}'));
 });
@@ -99,4 +101,56 @@ test("the view commands are bridge safe and only the fixed states and panes have
     assert.equal(bound.some((binding) => binding.id === "search.threads" || binding.id === "sort.set"), false);
     assert.equal(bound.some((binding) => binding.id === "filter.set" && binding.args?.["state"] === "tag"), false);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
+});
+
+const NO_LIST_TABS: [string, MailTab][] = [
+    ["Account Central", { id: 9 }],
+    ["an account root", { id: 9, displayedFolder: { accountId: "a1", path: "/" } }],
+];
+
+test("filter, search and sort refuse when no message list is shown", async () => {
+    for (const [name, tab] of NO_LIST_TABS) {
+        for (const [command, args] of [["filter.set", { state: "unread" }], ["search.threads", { query: "x" }], ["sort.set", { by: "date", order: "ascending" }]] as const) {
+            const { run, calls } = view_fake(tab);
+            await run(command, { ...args });
+            assert.equal(calls.some((call) => call.startsWith("mailTabs.update") || call.startsWith("mailTabs.setQuickFilter")), false, `${command} on ${name}`);
+            assert.deepEqual(calls.filter((call) => call.startsWith("notify")), ["notify No message list is shown."], `${command} on ${name}`);
+        }
+    }
+});
+
+test("sort by size or read state refuses in a view grouped by its sort column and passes elsewhere", async () => {
+    const grouped = { id: 9, displayedFolder: INBOX, viewType: "groupedBySortType" };
+    for (const by of ["size", "unread"]) {
+        const { run, calls } = view_fake(grouped);
+        await run("sort.set", { by, order: "ascending" });
+        assert.equal(calls.some((call) => call.startsWith("mailTabs.update")), false, by);
+        assert.equal(calls.filter((call) => call.startsWith("notify")).length, 1, by);
+    }
+    const date = view_fake(grouped);
+    await date.run("sort.set", { by: "date", order: "ascending" });
+    assert.ok(date.calls.includes('mailTabs.update 9 {"sortType":"date","sortOrder":"ascending"}'));
+    const flat = view_fake({ id: 9, displayedFolder: INBOX, viewType: "ungrouped" });
+    await flat.run("sort.set", { by: "size", order: "ascending" });
+    assert.ok(flat.calls.includes('mailTabs.update 9 {"sortType":"size","sortOrder":"ascending"}'));
+});
+
+test("every view handler queries the window of the invocation", async () => {
+    for (const [command, args] of [["filter.set", { state: "unread" }], ["search.threads", { query: "x" }], ["sort.set", { by: "date", order: "ascending" }], ["pane.toggle", { pane: "message" }]] as const) {
+        const { run, calls } = view_fake();
+        await run(command, { ...args });
+        assert.ok(calls.includes('mailTabs.query {"windowId":3,"active":true}'), command);
+    }
+});
+
+test("the first-display error becomes a still-loading refusal and other errors pass through", async () => {
+    await assert.rejects(while_loading(async () => Promise.reject(new Error("An unexpected error occurred."))), { message: /still loading/ });
+    await assert.rejects(while_loading(async () => Promise.reject(new Error("other"))), { message: "other" });
+});
+
+test("a view key during a first display notifies that the folder is loading", async () => {
+    const calls: string[] = [];
+    const api = { mailTabs: { query: async () => Promise.reject(new Error("An unexpected error occurred")) }, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(notification.message), "n1") }, keys: undefined } as unknown as RouterApi;
+    await create_router(registry, api).run(invoke("pane.toggle", { pane: "message" }));
+    assert.match(calls[0] ?? "", /still loading/);
 });
