@@ -1,0 +1,4 @@
+/.plans/
+/.logs/
+node_modules/
+dist/
