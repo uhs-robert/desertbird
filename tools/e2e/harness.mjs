@@ -28,6 +28,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   const { profile_dir, folder_dir } = build_profile(join(work_dir, "profile"), { kind });
   if (xpi_path) install_xpi(profile_dir, xpi_path);
   const out_dir = join(work_dir, "out");
+  // A reply left by an earlier run in the same directory carries a seq this run reuses, so the directory starts empty.
+  rmSync(out_dir, { recursive: true, force: true });
   mkdirSync(out_dir, { recursive: true });
   const session = await start_session(work_dir);
   let app_exit = null;
@@ -51,10 +53,12 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       });
     });
     await new Promise((resolve) => sink.listen(0, "127.0.0.1", resolve));
-    session.spawn_app([app_binary, "-profile", profile_dir, "-no-remote"], "app.log").on("exit", (code, signal) => { app_exit = { code, signal }; });
+    // The app finds add-ons in the profile only at startup, so the helper goes in before the app starts.
     if (xpi_path) install_helper(work_dir, profile_dir, sink.address().port);
+    session.spawn_app([app_binary, "-profile", profile_dir, "-no-remote"], "app.log").on("exit", (code, signal) => { app_exit = { code, signal }; });
     await sleep(startup_ms);
   } catch (error) {
+    sink?.close();
     session.stop();
     throw error;
   }

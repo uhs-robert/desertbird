@@ -1,6 +1,6 @@
 # End-to-end run
 
-Drives the built add-on in a real Thunderbird and a real Betterbird, headless. It reuses the session and fixture modules from [`tools/measure/`](../measure/README.md) unchanged. Needs `labwc`, `wtype`, `grim`, `unzip` and `node`.
+Drives the built add-on in a real Thunderbird and a real Betterbird, headless. It reuses the session and fixture modules from [`tools/measure/`](../measure/README.md) unchanged. Needs `labwc`, `wtype`, `grim`, `zip`, `unzip` and `node`.
 
 ```bash
 tools/measure/fetch_thunderbird.sh      # once: Thunderbird 153.7.0 ESR into $MEASURE_DIR

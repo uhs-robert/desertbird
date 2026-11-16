@@ -14,7 +14,13 @@ const binaries = {
 };
 
 const args = process.argv.slice(2);
-const option = (name) => { const at = args.indexOf(name); return at < 0 ? null : args.splice(at, 2)[1]; };
+const option = (name) => {
+  const at = args.indexOf(name);
+  if (at < 0) return null;
+  const [, value] = args.splice(at, 2);
+  if (!value || value.startsWith("--")) throw new Error(`${name} needs a value`);
+  return value;
+};
 const xpi_path = option("--xpi");
 for (let value; (value = option("--binary")); ) { const [name, path] = value.split("="); binaries[name] = path; }
 const apps = args.length ? args : ["thunderbird", "betterbird"];
@@ -110,6 +116,21 @@ async function run_default(instance) {
   await sleep(1200);
   const after = await instance.ask("state");
   check(app, kind, "m, s, a and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
+
+  // With the thread list's context menu open (Shift+F10), keys belong to the menu: j moves nothing and k is the menu's access key for Mark.
+  const before_menu = first_selected(await instance.ask("state"));
+  await instance.press(["-M", "shift", "-k", "F10", "-m", "shift"]);
+  await sleep(1000);
+  state = await key_and_state(instance, ["j"]);
+  const after_menu_j = first_selected(state);
+  state = await key_and_state(instance, ["k"]);
+  await shot("menu_access_key", "thread context menu open with its Mark submenu opened by k");
+  check(app, kind, "with the context menu open, j and k act on the menu, not the list", after_menu_j === before_menu && first_selected(state) === before_menu, `selected ${before_menu}, after j ${after_menu_j}, after k ${first_selected(state)}`);
+  await instance.press(["-k", "Escape"]);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  state = await key_and_state(instance, ["j"]);
+  check(app, kind, "after the menu closes, j moves the list again", first_selected(state) === rows[rows.indexOf(before_menu) + 1], `selected ${first_selected(state)}`);
 
   // Typing in the quick filter passes through.
   await instance.press(CTRL_SHIFT("k"));
