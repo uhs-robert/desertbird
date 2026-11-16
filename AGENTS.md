@@ -10,9 +10,9 @@ DesertBird is a keyboard-first Thunderbird add-on that also works in Betterbird.
 
 Read the design for an area before you change it. Read a folder's README before you change or research code in that folder.
 
-| Topic                                         | File                                       |
-| --------------------------------------------- | ------------------------------------------ |
-| Architecture, chrome verbs, split table, scope | [`docs/design.md`](docs/design.md)         |
+| Topic                                          | File                               |
+| ---------------------------------------------- | ---------------------------------- |
+| Architecture, chrome verbs, split table, scope | [`docs/design.md`](docs/design.md) |
 
 Add a row for each new doc or source folder README in the same commit that creates it.
 
@@ -27,7 +27,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Give the Experiment a fixed table of chrome verbs, each with typed args checked against its schema. Never add a verb that takes a free string to run, a script, or a URL. A new verb needs a reason in the commit message.
 - The chrome runtime follows the same admission rule as DesertFox `content.js`: code goes in only if it runs before the first key or decides what happens to a key, serves a key pressed in most windows (motions), is needed to load the other parts, or must work while the window changes state. Everything else goes in the background page or an on-demand bundle. The chrome runtime has its own size guard, set in the build.
 - Put no test hooks in `src/`. Tests drive the add-on through its public surface.
-- Keep no state only in memory. Store it. A copy of stored state may sit in memory when it refills from storage and drops on `storage.onChanged`.
+- Keep no state only in memory. Store it. A copy of stored state can sit in memory when it refills from storage and drops on `storage.onChanged`.
 - Write a migration for every change to stored data: extension storage, config files and exports. An installed copy keeps working after an update.
 - Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value.
 
