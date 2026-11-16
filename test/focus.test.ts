@@ -26,9 +26,33 @@ test("a textarea or an editable element is typing", () => {
     assert.equal(is_typing({ target: element("div", { isContentEditable: true }) }, document_of(null)), true);
 });
 
-test("the first composed target counts", () => {
-    assert.equal(is_typing({ target: element("div"), composedPath: () => [element("input")] }, document_of(null)), true);
+test("the original target counts", () => {
     assert.equal(is_typing({ target: element("div"), originalTarget: element("input") }, document_of(null)), true);
+});
+
+test("a key in the thread list is not typing, though the top window's composed path starts at the about:3pane browser", () => {
+    // Measured in Thunderbird 153.7 and Betterbird: target and originalTarget are the list's tbody, composedPath()[0] is the browser that holds about:3pane.
+    const tbody = element("tbody");
+    const three_pane = element("browser", { id: "mail3PaneTabBrowser1", contentDocument: { activeElement: tbody } });
+    const event = { target: tbody, originalTarget: tbody, composedPath: () => [three_pane] };
+    assert.equal(is_typing(event, document_of(three_pane)), false);
+});
+
+test("a key in the folder pane is not typing", () => {
+    const folder_tree = element("ul", { id: "folderTree" });
+    const three_pane = element("browser", { contentDocument: { activeElement: folder_tree } });
+    const event = { target: folder_tree, originalTarget: folder_tree, composedPath: () => [three_pane] };
+    assert.equal(is_typing(event, document_of(three_pane)), false);
+});
+
+test("a key in the quick filter or the global search is typing", () => {
+    const quick_filter_input = element("input");
+    const quick_filter = element("search-bar", { id: "qfb-qs-textbox", shadowRoot: { activeElement: quick_filter_input } });
+    const three_pane = element("browser", { contentDocument: { activeElement: quick_filter } });
+    assert.equal(is_typing({ target: quick_filter, originalTarget: quick_filter_input }, document_of(three_pane)), true);
+    const search_input = element("input");
+    const global_search = element("global-search-bar", { shadowRoot: { activeElement: search_input } });
+    assert.equal(is_typing({ target: global_search, originalTarget: search_input }, document_of(global_search)), true);
 });
 
 test("the thread list and the message body are not typing", () => {
@@ -41,10 +65,10 @@ test("the thread list and the message body are not typing", () => {
     assert.equal(is_typing({ target: element("tbody") }, document_of(element("tbody"))), false);
 });
 
-test("a browser whose document is out of reach counts as typing, so the overlay keeps its keys", () => {
-    const overlay = element("browser", { contentDocument: null });
-    assert.equal(innermost_focus(document_of(element("browser", { contentDocument: { activeElement: overlay } }))), overlay);
-    assert.equal(is_typing({ target: element("div") }, document_of(overlay)), true);
+test("a browser whose document is out of reach is not typing", () => {
+    const remote = element("browser", { contentDocument: null });
+    assert.equal(innermost_focus(document_of(element("browser", { contentDocument: { activeElement: remote } }))), remote);
+    assert.equal(is_typing({ target: element("div") }, document_of(remote)), false);
 });
 
 test("no focus at all is not typing", () => {

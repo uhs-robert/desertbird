@@ -11,7 +11,6 @@ import type { ViewPort } from "./motions.ts";
 export interface KeydownEvent extends KeyEventLike {
     target: unknown;
     originalTarget?: unknown;
-    composedPath?(): unknown[];
     preventDefault(): void;
     stopPropagation(): void;
 }

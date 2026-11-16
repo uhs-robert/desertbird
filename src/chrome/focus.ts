@@ -12,8 +12,8 @@ export interface FocusDocument {
     activeElement: FocusNode | null;
 }
 
-// Elements the user types text into, or that hold another page the add-on does not own (the overlay). A key there is not a command. The message body is a browser too, but its document is reachable, so the focus walk ends at its body and not at the browser.
-const TYPING_ELEMENTS = new Set(["input", "textarea", "select", "browser", "search-textbox", "menulist"]);
+// Elements the user types text into. A `browser` is not one: the walk enters every browser it can read, and one it cannot read (a remote page) holds no Thunderbird text field.
+const TYPING_ELEMENTS = new Set(["input", "textarea", "select", "search-textbox", "menulist"]);
 
 const MAX_DEPTH = 12;
 
@@ -43,11 +43,10 @@ export const in_reading_pane = (document: FocusDocument): boolean => focus_chain
 export interface KeyEventTargets {
     target: unknown;
     originalTarget?: unknown;
-    composedPath?(): unknown[];
 }
 
-/** A key is typing when the event target, its first composed target or the focused element is a text field. */
+/** A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside. */
 export function is_typing(event: KeyEventTargets, document: FocusDocument): boolean {
-    const candidates = [event.target, event.originalTarget, event.composedPath?.()[0], innermost_focus(document)];
+    const candidates = [event.target, event.originalTarget, innermost_focus(document)];
     return candidates.some((candidate) => is_typing_element(candidate as FocusNode | null));
 }
