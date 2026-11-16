@@ -7,7 +7,7 @@ import type { RouterApi } from "../src/background/router.ts";
 
 interface FakeOptions {
     selected?: { id: number; folder?: { accountId: string } }[];
-    displayed?: { id: number; folder?: { accountId: string } }[];
+    displayed?: { id: number; date?: Date; folder?: { accountId: string } }[];
     identities?: unknown[];
     experiment?: boolean;
     row_ids?: number[];
@@ -23,7 +23,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             getSelectedMessages: async (tab_id) => (calls.push(`mailTabs.getSelectedMessages ${tab_id}`), { messages: options.selected ?? [] }),
         },
         // A bare array, as Thunderbird 153 and Betterbird return it.
-        messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), options.displayed ?? options.selected ?? []) },
+        messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), (options.displayed ?? options.selected ?? []).map((message) => ({ date: new Date(0), ...message }))) },
         messages: {
             archive: async (ids) => void calls.push(`messages.archive ${ids.join(",")}`),
             delete: async (ids) => void calls.push(`messages.delete ${ids.join(",")}`),
@@ -60,19 +60,27 @@ test("r with an identity opens a reply to the sender", async () => {
     assert.deepEqual(notifications(calls), []);
 });
 
-test("r on a collapsed thread root replies to the one displayed message", async () => {
-    const thread = [5, 6, 7, 8].map((id) => ({ id, folder: { accountId: "a1" } }));
-    const { api, calls } = fake_api({ selected: thread, displayed: [{ id: 5, folder: { accountId: "a1" } }] });
+test("r on a collapsed thread root replies to the newest displayed message", async () => {
+    // A collapsed root displays the whole thread. The array order is not the date order here, so the date decides.
+    const at_minute = (minute: number) => new Date(Date.UTC(2026, 0, 1, 0, minute));
+    const thread = [
+        { id: 5, date: at_minute(1) },
+        { id: 8, date: at_minute(4) },
+        { id: 6, date: at_minute(2) },
+        { id: 7, date: at_minute(3) },
+    ].map((message) => ({ ...message, folder: { accountId: "a1" } }));
+    const { api, calls } = fake_api({ selected: thread, displayed: thread });
     await create_router(registry, api).run(invoke("msg.reply", { to: "sender" }));
-    assert.ok(calls.includes("compose.beginReply 5 replyToSender"));
+    assert.deepEqual(calls.filter((call) => call.startsWith("compose.")), ["compose.beginReply 8 replyToSender"]);
     assert.deepEqual(notifications(calls), []);
 });
 
-test("r with two displayed messages refuses", async () => {
+test("r with several displayed messages and no identity refuses and never calls beginReply", async () => {
     const two = [5, 6].map((id) => ({ id, folder: { accountId: "a1" } }));
-    const { api, calls } = fake_api({ selected: two, displayed: two });
+    const { api, calls } = fake_api({ selected: two, displayed: two, identities: [] });
     await create_router(registry, api).run(invoke("msg.reply", { to: "sender" }));
-    assert.equal(calls.some((call) => call.startsWith("compose.beginReply") || call.startsWith("identities.list")), false);
+    assert.ok(calls.includes("identities.list a1"));
+    assert.equal(calls.some((call) => call.startsWith("compose.beginReply")), false);
     assert.equal(notifications(calls).length, 1);
 });
 

@@ -14,11 +14,17 @@ export interface Selection {
     messages: SelectedMessage[];
 }
 
+export interface DisplayedMessage {
+    id: number;
+    date: Date;
+    folder?: { accountId: string };
+}
+
 export interface MessageApi extends IdentityApi {
     messages: { archive(ids: number[]): Promise<void>; delete(ids: number[]): Promise<void> };
     compose: { beginReply(id: number, type: "replyToSender"): Promise<unknown> };
     // An array, unlike `mailTabs.getSelectedMessages`, on Thunderbird 153 and Betterbird.
-    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number; folder?: { accountId: string } }[]> };
+    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<DisplayedMessage[]> };
     mailTabs: { getSelectedMessages(tab_id: number): Promise<{ messages: { id: number; folder?: { accountId: string } }[] }> };
 }
 
@@ -46,11 +52,13 @@ export function delete_messages(scope: HandlerScope): Promise<void> {
     return scope.api.messages.delete(require_messages(scope.selection));
 }
 
-// The selection of a collapsed thread root holds every message of the thread, while the pane shows one. Reply to what the pane shows.
+const newest = (messages: DisplayedMessage[]): DisplayedMessage | undefined =>
+    messages.reduce<DisplayedMessage | undefined>((latest, message) => (latest === undefined || new Date(message.date).getTime() > new Date(latest.date).getTime() ? message : latest), undefined);
+
+// A collapsed thread root displays the whole thread as a summary. The reply then goes to its newest message, the one the conversation continues from.
 export async function reply(scope: HandlerScope, args: CheckedArgs): Promise<void> {
-    const [message, ...others] = await scope.api.messageDisplay.getDisplayedMessages(scope.selection.tab_id);
+    const message = newest(await scope.api.messageDisplay.getDisplayedMessages(scope.selection.tab_id));
     if (message === undefined) throw new RuntimeRefusal("No message is displayed to reply to.");
-    if (others.length > 0) throw new RuntimeRefusal("More than one message is displayed. Select one message to reply to.");
     await require_identity(scope.api, message.folder?.accountId);
     await scope.api.compose.beginReply(message.id, REPLY_TYPE[args["to"] as keyof typeof REPLY_TYPE]);
 }

@@ -186,15 +186,19 @@ async function run_default(instance) {
   }
   check(app, kind, "x and d d ran four times without a refusal", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
 
-  // r on a collapsed thread root replies to the displayed message, the root.
+  // r on a collapsed thread root.
   await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
   const root_displayed = state.displayed;
   state = await key_and_state(instance, ["r"], 6000);
+  // A collapsed root displays the whole thread. r replies to its newest message. Thunderbird keeps a single "Re: " on the subject.
+  const newest = [...root_displayed].sort((left, right) => right.date - left.date)[0];
   const root_compose = state.windows.find((window) => window.type === "messageCompose");
-  const root_subject = root_compose?.tabs.map((tab) => tab.subject).find(Boolean);
-  check(app, kind, "r on a collapsed thread root opens one reply to the root", state.windows.filter((window) => window.type === "messageCompose").length === 1 && root_subject === "Re: Thread 0", `compose subject ${JSON.stringify(root_subject)}, the pane displayed ${root_displayed.length} message(s)`);
-  await shot("after_r_root", "compose window for the reply to the collapsed thread root");
+  const root_tab = root_compose?.tabs.find((tab) => tab.subject);
+  const expected_subject = `Re: ${newest?.subject.replace(/^Re: /, "")}`;
+  const quotes_newest = newest !== undefined && (root_tab?.body ?? "").includes(`Body of ${newest.header_id.replace("@fixture.invalid", "")}.`);
+  check(app, kind, "r on a collapsed thread root replies to the newest message of the thread", state.windows.filter((window) => window.type === "messageCompose").length === 1 && root_tab?.subject === expected_subject && quotes_newest, `displayed ${root_displayed.length}, newest ${newest?.header_id}, compose subject ${JSON.stringify(root_tab?.subject)}, expected ${JSON.stringify(expected_subject)}, quotes the newest: ${quotes_newest}`);
+  await shot("after_r_root", "compose window replying to the newest message of the collapsed thread");
   await instance.ask("close_compose");
   await sleep(1500);
 

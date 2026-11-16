@@ -36,7 +36,7 @@ async function collect() {
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true }).catch(() => []);
   state.mail_tab = mail_tab ? { id: mail_tab.id, folder: mail_tab.displayedFolder?.path ?? null, message_pane_visible: mail_tab.messagePaneVisible } : null;
   state.selected = mail_tab ? (await all_messages(await browser.mailTabs.getSelectedMessages(mail_tab.id))).map(describe_message) : [];
-  state.displayed = mail_tab ? (await browser.messageDisplay.getDisplayedMessages(mail_tab.id)).map((message) => message.headerMessageId) : [];
+  state.displayed = mail_tab ? (await browser.messageDisplay.getDisplayedMessages(mail_tab.id)).map((message) => ({ header_id: message.headerMessageId, subject: message.subject, date: new Date(message.date).getTime() })) : [];
   state.listed = mail_tab ? (await all_messages(await browser.mailTabs.getListedMessages(mail_tab.id))).map((message) => message.headerMessageId) : [];
   state.folders = {};
   state.flags = {};
@@ -47,7 +47,7 @@ async function collect() {
     const entry = { id: window.id, type: window.type, tabs: [] };
     for (const tab of window.tabs ?? []) {
       const detail = window.type === "messageCompose" ? await browser.compose.getComposeDetails(tab.id).catch(() => null) : null;
-      entry.tabs.push({ id: tab.id, type: tab.type, title: tab.title, subject: detail?.subject ?? null });
+      entry.tabs.push({ id: tab.id, type: tab.type, title: tab.title, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
     }
     state.windows.push(entry);
   }
