@@ -135,7 +135,7 @@ Two measurements, both with the clock stamped in the Experiment and in the backg
 | Key to the background, idle, 40 presses (median, p95, max) | 0.32 ms, 0.46 ms, 0.99 ms | 0.33 ms, 0.50 ms, 0.56 ms |
 | Key to the background, 8 bursts of 5 keys while an all-folder unread query runs (median, p95, max) | 0.12 ms, 0.30 ms, 0.40 ms | 0.13 ms, 0.54 ms, 0.74 ms |
 
-An idle key costs more than the ping because the event wakes an idle page (not tested). The burst rows are lower because the page is already awake (not tested). The timer starts inside the keydown listener, so the burst rows leave out the time a key waits in the parent queue. The added cost is under 1 ms in every sample. These numbers cover the path from the Experiment to the background. They do not cover the time Thunderbird spends on the key itself.
+An idle key costs more than the ping because the event wakes an idle page (not tested). The burst rows are lower because the page is already awake (not tested). The timer starts inside the keydown listener, so neither the idle row nor the burst row includes the time a key waits in the parent queue, because both use the same listener timestamp (`tools/measure/probe/experiment/parent.js:69`). The added cost is under 1 ms in every sample. These numbers cover the path from the Experiment to the background. They do not cover the time Thunderbird spends on the key itself.
 
 ### Unread queries
 
