@@ -104,8 +104,8 @@ test("the view commands are bridge safe and only the fixed states and panes have
 });
 
 const NO_LIST_TABS: [string, MailTab][] = [
-    ["Account Central", { id: 9 }],
-    ["an account root", { id: 9, displayedFolder: { accountId: "a1", path: "/" } }],
+    ["several folders selected", { id: 9, displayedFolder: null }],
+    ["Account Central", { id: 9, displayedFolder: { accountId: "a1", path: "/", isRoot: true } }],
 ];
 
 test("filter, search and sort refuse when no message list is shown", async () => {

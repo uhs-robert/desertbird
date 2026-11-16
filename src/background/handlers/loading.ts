@@ -1,9 +1,9 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 
-// Thunderbird raises this text when an API call converts a mail tab whose folder has no sort yet. The call reads `DBViewWrapper.primarySortType` before the first display finishes. The text is all the error carries, so the helper trusts it only around a call on a tab, where the loading state is the usual cause.
+// Thunderbird raises this text when the tab query converts a mail tab whose folder has no sort yet, during the first display. Only that query is wrapped: the same text from a later call is a real failure.
 const FIRST_DISPLAY_ERROR = /^An unexpected error occurred\.?$/;
 
-/** Runs a call on a mail tab and turns the first-display error into a refusal that names the cause. Any other error passes through. */
+/** Runs the mail tab query and turns the first-display error into a refusal that names the cause. Any other error passes through. */
 export async function while_loading<T>(call: () => Promise<T>): Promise<T> {
     try {
         return await call();

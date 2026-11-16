@@ -15,7 +15,7 @@ export interface QuickFilter {
 
 export interface MailTab {
     id: number;
-    displayedFolder?: MailFolder;
+    displayedFolder?: (MailFolder & { isRoot?: boolean }) | null;
     viewType?: string;
     folderPaneVisible?: boolean;
     messagePaneVisible?: boolean;
@@ -44,10 +44,10 @@ async function active_mail_tab(scope: ViewScope): Promise<MailTab> {
     return tab;
 }
 
-// Account Central and a selection of several folders have no message list. Thunderbird then ignores a filter without a word, and a sort call throws.
+// Account Central (a root folder) and a selection of several folders (no displayed folder) have no message list. Thunderbird then ignores a filter without a word, and a sort call throws.
 async function list_mail_tab(scope: ViewScope): Promise<MailTab> {
     const tab = await active_mail_tab(scope);
-    if (tab.displayedFolder === undefined || tab.displayedFolder.path === "/") throw new RuntimeRefusal("No message list is shown.");
+    if (!tab.displayedFolder || tab.displayedFolder.isRoot) throw new RuntimeRefusal("No message list is shown.");
     return tab;
 }
 
@@ -62,12 +62,12 @@ export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<v
     const state = args["state"] as string;
     const filter = state === "tag" ? { tags: { mode: "any" as const, tags: { [args["tag"] as string]: true as const } } } : FIXED_FILTERS[state]!;
     const tab = await list_mail_tab(scope);
-    await while_loading(() => scope.api.mailTabs.setQuickFilter(tab.id, filter));
+    await scope.api.mailTabs.setQuickFilter(tab.id, filter);
 }
 
 export async function search_threads(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    await while_loading(() => scope.api.mailTabs.setQuickFilter(tab.id, { text: { text: args["query"] as string, subject: true, author: true } }));
+    await scope.api.mailTabs.setQuickFilter(tab.id, { text: { text: args["query"] as string, subject: true, author: true } });
 }
 
 // A view grouped by its sort column cannot group by size or by read state. Thunderbird swaps in date without an error, so the handler refuses first.
@@ -77,7 +77,7 @@ export async function set_sort(scope: ViewScope, args: CheckedArgs): Promise<voi
     const tab = await list_mail_tab(scope);
     const by = args["by"] as string;
     if (tab.viewType === "groupedBySortType" && NOT_GROUPABLE_SORTS.includes(by)) throw new RuntimeRefusal(`This view is grouped by its sort column, which cannot group by ${by}.`);
-    await while_loading(() => scope.api.mailTabs.update(tab.id, { sortType: by, sortOrder: args["order"] as string }));
+    await scope.api.mailTabs.update(tab.id, { sortType: by, sortOrder: args["order"] as string });
 }
 
 // The pane state is read here, at the key press, because the user can also toggle a pane with the mouse and no stored flag would know.
