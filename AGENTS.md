@@ -15,6 +15,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Architecture, chrome verbs, split table, scope | [`docs/design.md`](docs/design.md) |
 | Messages and Experiment call shapes shared by the chrome and background sides | [`src/shared/protocol.ts`](src/shared/protocol.ts) |
 | Build entry points and bundling | [`tools/build.mjs`](tools/build.mjs) |
+| Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |
 
 Add a row for each new doc or source folder README in the same commit that creates it.
 
@@ -56,6 +57,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - `npm run lint`: typescript-eslint with `no-floating-promises` and `no-misused-promises` on `src/` and `tools/`.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
+- `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
 - `npm run build`: typecheck, then `tools/build.mjs`. The script is a no-op until the bundles are wired.
 
 ## Planning

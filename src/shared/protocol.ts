@@ -1,16 +1,20 @@
 // The contract between the Experiment (chrome side) and the background page. Both import this file and nothing else from each other.
 // Every value crosses the Experiment boundary as structured-clone data. No verb takes a script, a URL or a free string to run.
 
+import { COMPILED_KEYMAP_VERSION } from "../../vendor/desertfox/prefix_tree.ts";
+
+export { COMPILED_KEYMAP_VERSION };
+
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 /** Compiled keymap as data. Leaves name command ids; the parent looks them up in its fixed motion table and ignores unknown ids. */
 export interface KeymapTree {
-    version: number;
+    version: typeof COMPILED_KEYMAP_VERSION;
     root: JsonValue;
 }
 
-/** Only the settings the key matcher reads. */
-export type MatcherSettings = Record<string, JsonValue>;
+/** The key matcher reads no setting: it walks the tree alone. The object stays so a setting can join without a new verb shape. */
+export type MatcherSettings = Record<string, never>;
 
 export interface KeysInstallArgs {
     tree: KeymapTree;
