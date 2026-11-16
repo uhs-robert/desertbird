@@ -1,0 +1,35 @@
+{
+    "manifest_version": 2,
+    "name": "DesertBird",
+    "version": "0.0.0",
+    "description": "Keyboard-first mail commands for Thunderbird.",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "desertbird@uhs-robert",
+            "strict_min_version": "128.0"
+        }
+    },
+    "background": {
+        "scripts": ["background.js"],
+        "persistent": true
+    },
+    "permissions": ["accountsRead", "compose", "messagesDelete", "messagesMove", "messagesRead", "notifications", "storage"],
+    "experiment_apis": {
+        "keys": {
+            "schema": "experiment/schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["keys"]],
+                "script": "experiment/parent.js"
+            }
+        },
+        "view": {
+            "schema": "experiment/schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["view"]],
+                "script": "experiment/parent.js"
+            }
+        }
+    }
+}
