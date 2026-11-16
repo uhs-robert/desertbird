@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_matcher } from "../vendor/desertfox/keys/matcher.ts";
 import type { MatchResult } from "../vendor/desertfox/keys/matcher.ts";
-import { compile_keymap } from "../vendor/desertfox/keys/compiler.ts";
-import { compile_default_keymap, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, compile_default_keymap } from "../src/background/commands/index.ts";
 
 const { compiled, warnings } = compile_default_keymap();
 
@@ -75,15 +74,17 @@ test("the tree survives the structured clone the Experiment boundary applies", (
     assert.deepEqual(JSON.parse(JSON.stringify(root)), root);
 });
 
-// The phase 2 groups bind these chords. Until they land, a test keymap binds each one to a motion.
+// The phase 2 groups bind these chords. Until they land, the test adds each one to the default keymap as a motion, so the compile runs with the real command lookup.
 test("the keymap compile accepts the bound chords and the matcher reads each one as a first key", () => {
     const chords = ["<C-o>", "<C-i>", "<C-l>", "<C-j>", "<C-k>", "<C-x>", "<C-c>", "<C-h>"];
-    const keymap = { normal: Object.fromEntries(chords.map((chord) => [chord, { id: "motion.down" }])) };
-    const result = compile_keymap(keymap, {}, (command_id) => {
-        const command = registry.get(command_id);
-        return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore" };
-    });
-    assert.deepEqual(result.warnings, []);
-    const matcher = create_matcher(result.compiled);
-    for (const chord of chords) assert.equal(matcher.feed("normal", chord).kind_, "match", chord);
+    const default_normal = DEFAULT_KEYMAP.normal!;
+    DEFAULT_KEYMAP.normal = { ...default_normal, ...Object.fromEntries(chords.map((chord) => [chord, { id: "motion.down" }])) };
+    try {
+        const result = compile_default_keymap();
+        assert.deepEqual(result.warnings, []);
+        const matcher = create_matcher(result.compiled);
+        for (const chord of chords) assert.equal(matcher.feed("normal", chord).kind_, "match", chord);
+    } finally {
+        DEFAULT_KEYMAP.normal = default_normal;
+    }
 });

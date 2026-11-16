@@ -350,7 +350,11 @@ const chord_tree = () => {
     for (const letter of BOUND_CHORDS) Object.assign(with_chords.root.children, { [`<C-${letter}>`]: leaf(chord_id(letter), "background") });
     return with_chords;
 };
-const press_ctrl = (window: FakeWindow, letter: string, options: Partial<KeydownEvent> = {}) => press(window, letter, { ctrlKey: true, code: `Key${letter.toUpperCase()}`, ...options });
+// Real hardware sends a keydown for the bare Control before the letter, and that keydown must leave a half-typed sequence and a count alone.
+function press_ctrl(window: FakeWindow, letter: string, options: Partial<KeydownEvent> = {}): KeyResult {
+    press(window, "Control", { ctrlKey: true, code: "ControlLeft", ...options });
+    return press(window, letter, { ctrlKey: true, code: `Key${letter.toUpperCase()}`, ...options });
+}
 
 test("each bound chord runs its command and is cancelled, so the Thunderbird default does not fire", () => {
     for (const letter of BOUND_CHORDS) {
@@ -370,6 +374,7 @@ test("an unbound chord passes untouched and runs nothing", () => {
     assert.equal(press(window, "h", { altKey: true, code: "KeyH" }).cancelled, false, "alt chords stay unbound");
     assert.equal(press(window, "o", { metaKey: true, code: "KeyO" }).cancelled, false);
     assert.equal(press(window, "Tab", { ctrlKey: true }).cancelled, false);
+    assert.equal(press(window, "@", { ctrlKey: true, altKey: true, code: "KeyQ" }).cancelled, false, "an AltGr character arrives with ctrl and alt held");
     assert.deepEqual(emitted, []);
 });
 
