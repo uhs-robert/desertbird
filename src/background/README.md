@@ -13,6 +13,7 @@ The persistent background page. It owns the command registry, compiles the defau
 
 ## Rules
 
+- Every command states `bridge`. True only for a command that moves the view or selection harmlessly (`motion.*`). False for anything that changes mail, sends, discloses data or is hard to undo (`msg.*`).
 - `needs` lists the Experiment verbs a command depends on (`keys.install`). The router refuses the command when one of them is not loaded. No phase 1 command lists one.
 - Handlers act on the ids taken at the key press and never read the selection themselves. The selection can move between the key and the handler. `x` and `d d` act on every id. `r` replies to the newest of them by date.
 - A handler throws `RuntimeRefusal` for a state it cannot act on. It never checks an argument value, since the param schema does that.

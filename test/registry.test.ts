@@ -40,3 +40,7 @@ test("msg.reply checks its args in the one validator", () => {
     assert.ok(archive);
     assert.equal(check_args(archive, { to: "sender" }).ok, false);
 });
+
+test("every command states its bridge flag", () => {
+    for (const command of registry.list()) assert.equal(typeof command.bridge, "boolean", command.id);
+});
