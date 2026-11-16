@@ -6,6 +6,7 @@ import type { RouterApi } from "../src/background/router.ts";
 
 interface FakeOptions {
     selected?: { id: number; folder?: { accountId: string } }[];
+    displayed?: { id: number; folder?: { accountId: string } }[];
     selected_after?: { id: number }[];
     identities?: unknown[];
     experiment?: boolean;
@@ -26,6 +27,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 return { messages: selection_reads === 1 ? (options.selected ?? []) : (options.selected_after ?? options.selected ?? []) };
             },
         },
+        messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), { messages: options.displayed ?? options.selected ?? [] }) },
         messages: {
             archive: async (ids) => void calls.push(`messages.archive ${ids.join(",")}`),
             delete: async (ids) => void calls.push(`messages.delete ${ids.join(",")}`),
@@ -62,15 +64,24 @@ test("r with an identity opens a reply to the sender", async () => {
     assert.deepEqual(notifications(calls), []);
 });
 
-test("r with two selected messages refuses", async () => {
-    const { api, calls } = fake_api({ selected: [{ id: 5, folder: { accountId: "a1" } }, { id: 6, folder: { accountId: "a1" } }] });
+test("r on a collapsed thread root replies to the one displayed message", async () => {
+    const thread = [5, 6, 7, 8].map((id) => ({ id, folder: { accountId: "a1" } }));
+    const { api, calls } = fake_api({ selected: thread, displayed: [{ id: 5, folder: { accountId: "a1" } }] });
+    await create_router(registry, api).run(invoke("msg.reply", { to: "sender" }));
+    assert.ok(calls.includes("compose.beginReply 5 replyToSender"));
+    assert.deepEqual(notifications(calls), []);
+});
+
+test("r with two displayed messages refuses", async () => {
+    const two = [5, 6].map((id) => ({ id, folder: { accountId: "a1" } }));
+    const { api, calls } = fake_api({ selected: two, displayed: two });
     await create_router(registry, api).run(invoke("msg.reply", { to: "sender" }));
     assert.equal(calls.some((call) => call.startsWith("compose.beginReply") || call.startsWith("identities.list")), false);
     assert.equal(notifications(calls).length, 1);
 });
 
-test("r with no selection refuses", async () => {
-    const { api, calls } = fake_api({ selected: [] });
+test("r with no displayed message refuses", async () => {
+    const { api, calls } = fake_api({ selected: [], displayed: [] });
     await create_router(registry, api).run(invoke("msg.reply", { to: "sender" }));
     assert.equal(notifications(calls).length, 1);
 });
