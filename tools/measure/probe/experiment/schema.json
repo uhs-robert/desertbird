@@ -1,0 +1,26 @@
+[
+  {
+    "namespace": "probe",
+    "functions": [
+      { "name": "install_keys", "type": "function", "async": true, "description": "Starts key reports from every mail window. Keys in cancel_keys are cancelled in the capture phase of the top window.",
+        "parameters": [{ "name": "cancel_keys", "type": "array", "items": { "type": "string" } }] },
+      { "name": "set_cancel", "type": "function", "async": true, "parameters": [{ "name": "cancel_keys", "type": "array", "items": { "type": "string" } }] },
+      { "name": "windows", "type": "function", "async": true, "parameters": [] },
+      { "name": "focus", "type": "function", "async": true, "parameters": [{ "name": "target", "type": "string", "enum": ["folders", "threads", "message", "message_body"] }] },
+      { "name": "view_snapshot", "type": "function", "async": true, "parameters": [] },
+      { "name": "view_fold", "type": "function", "async": true, "parameters": [{ "name": "open", "type": "boolean" }] },
+      { "name": "view_select_row", "type": "function", "async": true, "parameters": [{ "name": "row", "type": "integer" }] },
+      { "name": "overlay_mount", "type": "function", "async": true, "parameters": [{ "name": "kind", "type": "string", "enum": ["iframe_3pane", "browser_top", "panel_top"] }] },
+      { "name": "overlay_focus", "type": "function", "async": true, "parameters": [] },
+      { "name": "overlay_unmount", "type": "function", "async": true, "parameters": [] },
+      { "name": "rtt", "type": "function", "async": true, "parameters": [{ "name": "count", "type": "integer" }] },
+      { "name": "pong", "type": "function", "parameters": [{ "name": "seq", "type": "integer" }] },
+      { "name": "console_tail", "type": "function", "async": true, "parameters": [] },
+      { "name": "noop", "type": "function", "async": true, "parameters": [] }
+    ],
+    "events": [
+      { "name": "onKey", "type": "function", "parameters": [{ "name": "info", "type": "object", "additionalProperties": { "type": "any" } }] },
+      { "name": "onPing", "type": "function", "parameters": [{ "name": "seq", "type": "integer" }] }
+    ]
+  }
+]
