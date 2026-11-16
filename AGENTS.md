@@ -15,7 +15,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Architecture, chrome verbs, split table, scope | [`docs/design.md`](docs/design.md) |
 | Messages and Experiment call shapes shared by the chrome and background sides | [`src/shared/protocol.ts`](src/shared/protocol.ts) |
 | Build entry points, bundling, the parent size guard | [`tools/build.mjs`](tools/build.mjs) |
-| Background page: registry, router, handlers | [`src/background/README.md`](src/background/README.md) |
+| Background page: command groups, router, handlers | [`src/background/README.md`](src/background/README.md) |
 | Chrome runtime: Experiment parent, motions, view access | [`src/chrome/README.md`](src/chrome/README.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
 | Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |

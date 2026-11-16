@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { registry } from "../src/background/registry.ts";
+import { registry } from "../src/background/commands/index.ts";
 import { MOTION_IDS } from "../src/chrome/motions.ts";
 
 const chrome_ids = () => registry.list().filter((command) => command.runs_in === "chrome").map((command) => command.id).sort();

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_matcher } from "../vendor/desertfox/keys/matcher.ts";
 import type { MatchResult } from "../vendor/desertfox/keys/matcher.ts";
-import { compile_default_keymap } from "../src/background/default_keymap.ts";
+import { compile_default_keymap } from "../src/background/commands/index.ts";
 
 const { compiled, warnings } = compile_default_keymap();
 

@@ -8,7 +8,7 @@ import type { KeysApi, KeysInvocation } from "../shared/protocol.ts";
 import type { MessageApi } from "./handlers/message.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
-import type { ScopedContext } from "./registry.ts";
+import type { ScopedContext } from "./commands/index.ts";
 
 export interface RouterApi extends MessageApi, NotificationsApi {
     /** Absent when the Experiment failed to load. */

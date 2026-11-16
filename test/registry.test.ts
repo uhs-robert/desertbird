@@ -2,27 +2,38 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { summary_problems } from "../vendor/desertfox/registry/summary.ts";
-import { registry } from "../src/background/registry.ts";
+import { DEFAULT_KEYMAP, GROUPS, registry } from "../src/background/commands/index.ts";
 
-const CHROME_IDS = ["motion.down", "motion.up", "motion.top", "motion.bottom"];
-const BACKGROUND_IDS = ["msg.archive", "msg.delete", "msg.reply"];
+/** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
+const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: string[] }> = {
+    motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
+    messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.reply"] },
+};
 
-test("the registry defines the seven phase 1 commands", () => {
-    assert.deepEqual(registry.list().map((command) => command.id).sort(), [...CHROME_IDS, ...BACKGROUND_IDS].sort());
+test("every group file has a table row and each row has a group", () => {
+    assert.deepEqual(Object.keys(GROUPS).sort(), Object.keys(GROUP_TABLE).sort());
 });
 
-test("runs_in and handlers follow the side", () => {
-    for (const id of CHROME_IDS) {
-        const command = registry.get(id);
-        assert.equal(command?.runs_in, "chrome");
-        assert.equal(command?.run, undefined);
-    }
-    for (const id of BACKGROUND_IDS) {
-        const command = registry.get(id);
-        assert.equal(command?.runs_in, "background");
-        assert.equal(typeof command?.run, "function");
-    }
+test("the registry holds exactly the commands of the groups", () => {
+    const expected = Object.values(GROUP_TABLE).flatMap((row) => row.ids);
+    assert.deepEqual(registry.list().map((command) => command.id).sort(), expected.sort());
 });
+
+for (const [name, row] of Object.entries(GROUP_TABLE)) {
+    test(`group ${name}: commands, runs_in and handlers follow the side`, () => {
+        assert.deepEqual(Object.keys(GROUPS[name]!.commands).sort(), [...row.ids].sort());
+        for (const id of row.ids) {
+            const command = registry.get(id);
+            assert.equal(command?.runs_in, row.runs_in, id);
+            assert.equal(typeof command?.run, row.runs_in === "background" ? "function" : "undefined", id);
+            assert.equal(typeof command?.bridge, "boolean", id);
+        }
+    });
+
+    test(`group ${name}: every default key names a command of the group`, () => {
+        for (const [keys, binding] of Object.entries(GROUPS[name]!.normal_keys)) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
+    });
+}
 
 test("every summary follows the summary rules", () => {
     const ids = registry.list().map((command) => command.id);
@@ -41,6 +52,26 @@ test("msg.reply checks its args in the one validator", () => {
     assert.equal(check_args(archive, { to: "sender" }).ok, false);
 });
 
-test("every command states its bridge flag", () => {
-    for (const command of registry.list()) assert.equal(typeof command.bridge, "boolean", command.id);
+/** The phase 1 commands as shipped: their default key, args, side and bridge value. A refactor of the table must keep every row. */
+const PHASE_1_COMMANDS = [
+    { id: "motion.down", keys: "j", args: undefined, runs_in: "chrome", bridge: true },
+    { id: "motion.up", keys: "k", args: undefined, runs_in: "chrome", bridge: true },
+    { id: "motion.top", keys: "gg", args: undefined, runs_in: "chrome", bridge: true },
+    { id: "motion.bottom", keys: "G", args: undefined, runs_in: "chrome", bridge: true },
+    { id: "msg.archive", keys: "x", args: undefined, runs_in: "background", bridge: false },
+    { id: "msg.delete", keys: "dd", args: undefined, runs_in: "background", bridge: false },
+    { id: "msg.reply", keys: "r", args: { to: "sender" }, runs_in: "background", bridge: false },
+];
+
+test("the phase 1 commands keep their keys, args, side and bridge value", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    assert.deepEqual(Object.keys(normal).sort(), PHASE_1_COMMANDS.map((row) => row.keys).sort());
+    for (const row of PHASE_1_COMMANDS) {
+        const binding = normal[row.keys];
+        assert.ok(binding && !Array.isArray(binding), row.id);
+        assert.equal(binding.id, row.id);
+        assert.deepEqual(binding.args, row.args, row.id);
+        assert.equal(registry.get(row.id)?.runs_in, row.runs_in, row.id);
+        assert.equal(registry.get(row.id)?.bridge, row.bridge, row.id);
+    }
 });

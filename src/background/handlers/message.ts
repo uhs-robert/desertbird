@@ -1,5 +1,6 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
+import { require_messages } from "./each_message.ts";
 import { require_identity } from "./identity.ts";
 import type { IdentityApi } from "./identity.ts";
 
@@ -22,11 +23,6 @@ export interface HandlerScope {
 }
 
 const REPLY_TYPE = { sender: "replyToSender" } as const;
-
-function require_messages(message_ids: number[]): number[] {
-    if (message_ids.length === 0) throw new RuntimeRefusal("No message is selected.");
-    return message_ids;
-}
 
 // Thunderbird itself keeps a row selected after an archive or a delete (the next message, or the previous one at the end of the list), so the add-on reselects nothing.
 export function archive(scope: HandlerScope): Promise<void> {

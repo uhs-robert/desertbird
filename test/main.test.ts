@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { DEFAULT_KEYMAP } from "../src/background/default_keymap.ts";
+import { DEFAULT_KEYMAP } from "../src/background/commands/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 
 interface StorageChange {
