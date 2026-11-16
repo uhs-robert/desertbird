@@ -22,121 +22,157 @@ Phase 0 answered these questions before design work:
 
 The floor is ESR 153. Both apps report `rv:153.0` and Thunderbird 153.7.0.
 
-**Every result below came out the same on both apps.** The default thread list layout differs (a table in Betterbird, cards in Thunderbird). Timings differ by noise.
+**Every result below came out the same on both apps.** The default thread list layout differs (a table in Betterbird, cards in Thunderbird). Timings differ by noise. Each scenario ran once per app in a fresh profile, so "the same" means the same in one run each. The key tests press each key 5 times.
 
 ### Setup
 
 - Linux, Wayland. A headless `labwc` display that nothing shows on a real screen. `wtype` sent real key presses through the compositor's virtual keyboard, so each key is a trusted event with a real `code`. `grim` took the screenshots. The window is 1280x720.
-- A new profile, a new `HOME` and no session bus for each run, started with `-profile <dir> -no-remote`. The profile holds Local Folders and generated mbox files. No mail account exists and nothing goes over the network. The account has one identity with no server, because compose fails without one (see Notes).
-- The fixture: an Inbox of 60 messages (10 threads of 4 and 20 single messages) and 50 folders of 100 messages each, 5,000 in all. 30 of every 100 bulk messages are unread. Every message has plain text and no attachment.
-- A throwaway probe add-on: a MailExtension plus one Experiment, installed unsigned (`xpinstall.signatures.required` false, `extensions.experiments.enabled` true). The Experiment has typed verbs only: no eval, no free-string command and no free URL. It reports every `keydown` from its listeners, cancels keys on request, moves focus, reads the thread view, mounts overlays and runs the round trip loop.
-- The probe runs its scenarios in order and asks a local server for each key press and screenshot. Each scenario waits for the effect of a key before it reads the state.
+- A new profile, a new `HOME` and no session bus for each scenario, started with `-profile <dir> -no-remote`. The profile holds Local Folders and generated mbox files. No mail account exists and nothing goes over the network. The account has one identity with no server, because compose fails without one (see Notes).
+- The fixture: an Inbox of 60 messages (10 threads of 4 and 20 single messages, 33 unread) and 50 folders of 100 messages each, 5,000 in all, with 30 unread in each. One extra folder of one HTML message (`Html`) serves the message pane test. The query test on a large folder adds a folder of 10,000 messages to its own profile only. Every message has no attachment.
+- A throwaway probe add-on: a MailExtension plus one Experiment, installed unsigned (`xpinstall.signatures.required` false, `extensions.experiments.enabled` true). The Experiment has typed verbs only: no eval, no free-string command and no free URL. It reports every `keydown` from its listeners, cancels keys on request, moves focus, reads the thread view and the process of the message pane, mounts overlays and runs the round trip loop.
+- Each scenario runs as its own job in a fresh profile, so no state leaks from one scenario into the next. The probe asks a local server for each key press and screenshot. After each focus change it presses a bare Shift until a listener sees it (the settle step), so no measured key is the first press after the change.
 - The probe profile sets `privacy.reduceTimerPrecision` to false and measures time with `ChromeUtils.now()` in the Experiment and `performance.now()` in the background page.
 
 ### Answers to the design's open questions
 
 | Question | Answer |
 | --- | --- |
-| Where does the overlay mount? | In a `browser` element that the Experiment creates in the main window document (`type=content`, `remote`, `remoteType=extension`), not in an iframe of `about:3pane`. See Overlay mount. |
-| Is `messages.query` for unread fast enough across 50 folders and 5,000 messages? | No for a key press: 1.1 to 1.3 s over all folders. Yes for one folder (15 to 16 ms). A count per folder from `folders.getFolderInfo` costs 13 to 17 ms for all 50 folders. See Unread queries. |
+| Where does the overlay mount? | In a remote `browser` element that the Experiment creates in a chrome document, in the main window or inside `about:3pane`. An extension-page iframe in `about:3pane` did not load. See Overlay mount. |
+| Is `messages.query` for unread fast enough across 50 folders and 5,000 messages? | Not for a key press. See Unread queries for the numbers on 5,000 messages in 50 folders and on one folder of 10,000. |
 | Does `tabs.remove` close the primary mail tab? | No. The call returns without an error and the tab stays, also when it is the only tab. |
 | What does `mailTabs.setSelectedMessages` do with a message inside a collapsed thread? | It selects the message and opens the thread. The thread list grows by the thread's hidden rows. |
 
-### Keys in the main window
+### Keys
 
-The Experiment listened in three places: the top window in the capture phase (`top_capture`), the top window in the bubble phase (`top_bubble`) and the capture phase of the `about:3pane` and `about:message` windows. Each row is one real key press. "Seen" means the listener got the `keydown`.
+The Experiment listened in three places: the top window in the capture phase (`top_capture`), the top window in the bubble phase (`top_bubble`) and the capture phase of the `about:3pane` and `about:message` windows. A scenario focuses a context, runs the settle step, resets the message, presses a key for real, then reads the message back through the API. "Acted" means the API showed a change in read state, flag, junk, tags, folder, selection, tab count or window count.
+
+#### Where each listener sees a key
 
 | Focus | `top_capture` | `about3pane_capture` | `top_bubble` | Content script |
 | --- | --- | --- | --- | --- |
 | Thread list (`about:3pane`, target `tbody`) | seen | seen | seen | none there |
 | Folder tree (`ul#folderTree`) | seen | seen | seen | none there |
 | Message pane document (`about:message` body) | seen | seen | seen | none there |
-| Message body (remote browser, `messagepane`) | seen, target `body` of the message document | seen | seen | seen (`messageDisplayScripts`) |
-| Message in a tab, and in its own window | seen | seen in the tab, not hooked in the window | seen | seen |
+| Message body (`messagepane`, in the parent process, see Message pane process) | seen | seen | seen | seen (`messageDisplayScripts`) |
+| Message in a tab | seen | seen | seen | seen |
+| Message in its own window | seen | not hooked | seen | seen |
 | Compose body (editor document `about:blank?compose`) | seen | not hooked | seen | seen (`composeScripts`) |
 | Compose To field (`input#toAddrInput`) | seen, target `input` | not hooked | seen | not hooked |
-| Overlay browser with focus (see below) | seen, target `browser` | not seen | seen | not applicable |
+| Overlay browser with focus (see Overlay mount) | seen, target `browser` | not seen | seen | not applicable |
 
-- The top window capture listener runs first for every window type and every focus, including a remote message body. It is the one place that sees all keys.
-- `top_bubble` ran after the `about:3pane` listener for every key that no listener cancelled. Thunderbird does not stop a key from reaching it. When the capture listener cancels a key, `top_bubble` and the `about:3pane` listener do not run. Whether Thunderbird has acted on the key by the time `top_bubble` runs was not measured.
-- The chrome runtime must skip a key when the target is an input (the To field, the quick filter) or the overlay's `browser`. The listener sees those keys too.
-- The first key press after the first focus change of a run was lost (on the folder tree in one run, on the thread list in the rerun). Every later press arrived. The cause was not investigated. It is likely a property of the test setup.
+- The order of the listeners in a press that no listener cancelled was `top_capture`, `about3pane_capture` (when hooked), `aboutmessage_capture` (when the focus was in the message pane), `top_bubble`. The order comes from the Experiment's own clock stamp on each event. In the compose window it was `top_capture`, then `top_bubble`.
+- The top window capture listener runs first for every window type and every focus. It is the one place that sees all keys.
+- The chrome runtime has to skip a key when the target is an input (the To field, the quick filter) or the overlay's `browser`. The listener sees those keys too.
+- Whether Thunderbird has acted on a key by the time `top_bubble` runs was not measured.
 
 #### Cancelling Thunderbird's single-key shortcuts
 
-17 keys were pressed in the thread list. Each ran once with no cancel and once with a top window capture listener that calls `preventDefault` and `stopPropagation` for all of them. Before each key the message `inbox-s1` was reset to unflagged and selected. The table shows what Thunderbird did, read back through the API:
+Each key was pressed 5 times with no cancel and 5 times with a top window capture listener that calls `preventDefault` and `stopPropagation` for that key. Cells are "acted out of 5". All 5 cancelled presses were seen by `top_capture` and flagged as cancelled. On the thread list, a cancelled press never reached the `about:3pane` listener or `top_bubble`.
 
-| Key | Without a cancel | With the cancel |
+| Key | Thread list, no cancel | Message pane | Message tab | Message window | Cancelled, in every context |
+| --- | --- | --- | --- | --- | --- |
+| `m` | 5 of 5: toggles read | 5 of 5 | 5 of 5 | 5 of 5 | 0 of 5 |
+| `s` | 5 of 5: stars | 5 of 5 | 5 of 5 | 5 of 5 | 0 of 5 |
+| `j` | 5 of 5: marks junk | 5 of 5 | 5 of 5 | 5 of 5 | 0 of 5 |
+| `a` | 5 of 5: archives to `Archives/2025` | 5 of 5 | 5 of 5 | 5 of 5 | 0 of 5 |
+| `r`, `R` | 0 of 5 | 0 of 5 | 0 of 5 | 0 of 5 | 0 of 5 |
+
+The thread list has these keys as well. Each ran 5 presses, with no cancel and with a cancel:
+
+| Key | No cancel | Cancelled |
 | --- | --- | --- |
-| `m` | Toggles read and unread | Nothing |
-| `s` | Stars the message | Nothing |
-| `j` | Marks the message as junk | Nothing |
-| `f` | Selects the next message | Nothing |
-| `b` | Selects the previous message | Nothing |
-| `n` | Selects the next unread message | Nothing |
-| `p` | Selects the previous unread message | Nothing |
-| `1` | Sets the tag `$label1` | Nothing |
-| `Enter` | Opens the message in a new tab and moves focus into it | Nothing |
-| `0`, `r`, `R`, `x`, `/`, `*`, `#`, `Space` | Nothing seen in read, flag, junk, tags, selection, tabs, windows or focus | Nothing |
+| `f`, `b`, `n`, `p` | 5 of 5: select the next, previous, next unread and previous unread message | 0 of 5 |
+| `1` | 5 of 5: sets the tag `$label1` | 0 of 5 |
+| `Enter` | 5 of 5: opens the message in a new tab | 0 of 5 |
+| `0`, `x`, `/`, `*`, `#`, `Space` | 0 of 5 | 0 of 5 |
 
-- The cancel stopped every key that did anything. The listener of `about:3pane` did not run for a cancelled key.
-- `a` archives: typed text that began with `a` in the thread list moved the selected message to a new `Archives` folder. It was not measured as its own case.
+- `a` archived without a dialog, and the first archive created `Archives` and `Archives/2025` in Local Folders.
+- `r` and `R` did nothing in any context. Reply is not a plain-key shortcut in the default setup, so a plain `r` is free for DesertBird.
+- A chrome cancel stopped every key that did anything, in all four contexts, and a cancelled key reached no content script.
 - Chords were not measured.
 
-### Keys in the message pane and in compose
+### Message pane process
 
-- `messageDisplayScripts.register` ran the content script in the message body of the three pane, of a message tab and of a message window. Real `x` and `j` presses with the focus in the body reached it. A content script ran again for each message that loaded (44 loads in one run).
-- A `pane.focus` verb for the message has to focus the `messagepane` browser. Focusing the `about:message` document puts the focus in a chrome document. There the content script gets no key and the top window listener does.
-- The top window listener saw the same keys first. Cancelling `x` there kept the key from the content script too.
+The message body browser (`messagepane`) and the `about:message` browser were `isRemoteBrowser` false, with a `contentDocument` that the parent process could read. This held for a plain text message and for an HTML message, on both apps. The overlay browser, which the probe made `remote` with `remoteType` `extension`, was remote and the parent could not read its document.
+
+This contradicts the design's statement that the message body "runs in a content process the chrome listener cannot see". For local mail, a chrome listener in the parent process sees keys in the message body (`top_capture` with target `body` in the table above). Open point for the design: does the message pane need a content script for keys at all, or only for hints, find and anything that reads the body? Content that is not local mail (a feed article, a web page, remote content) was not measured and can differ.
+
+### Keys in compose
+
 - `composeScripts.register` ran in the compose editor. A real `q` press with no cancel reached the content script and added one character to the body (`getComposeDetails`). With the top window cancel on `z`, the content script got nothing and the body did not change. A chrome cancel stops text entry in compose.
-- A first key pressed 3 s after `compose.beginReply` returned was lost when the compose window was not yet the active window. The probe now waits until it is active.
-- `tabs.create` with an extension page opened a content tab, but the focus stayed in the chrome document. A real key did not reach the page. A key in an extension page with focus was measured only through the overlay browser.
+- The compose window must be the active window before a key press counts. The probe waits for that and runs the settle step.
+- `tabs.create` called while the compose window was focused opened the tab in the main window (`windowId` of the `normal` window), not in the compose window. The compose window kept the focus.
+- `tabs.create` with an extension page opened a content tab, but the focus stayed in the chrome document. A real key did not reach the page.
 
 ### Overlay mount
 
-The Experiment mounted the same extension page three ways, in a red box over the thread pane. The page holds a text input and reports its keys to the background.
+The Experiment mounted the same extension page four ways, in a red box. The page holds a text input and reports its keys to the background. Each mount ran with the settle step before the typed `abc`.
 
 | Mount | Result |
 | --- | --- |
-| iframe in the `about:3pane` document, set through the `src` attribute, then through `location.href` | The page never loaded. The frame stayed `about:blank`, no `load` event fired in 3 s after each try and the console showed no error. Same on both apps. |
-| `browser` element in the main window document (`type=content`, `remote`, `remoteType=extension`, then `extension-browser-inserted`, `Extension:InitBrowser` and `fixupAndLoadURIString`, the sequence in `ExtensionPopups.sys.mjs`) | The page loaded with the extension APIs (`messenger` defined, `runtime.sendMessage` reached the background). It reported its load 17 ms (Betterbird) and 19 ms (Thunderbird) after the mount call. Typed `abc` filled the input, and `Escape` reached it. The screenshot shows the box with the typed text. |
-| The same `browser` inside a XUL `panel` opened with `openPopupAtScreen` | The page loaded and got the typed keys, 24 ms (Betterbird) and 28 ms (Thunderbird) after the call. It was `0x0` and the screenshot shows an empty panel, because the sizing code of `ExtensionPopups` was not copied. |
+| iframe in the `about:3pane` document, set through the `src` attribute, then through `location.href` | The page did not load. The frame stayed `about:blank`, no `load` event fired in 3 s after each try and the console showed no error. A second manifest with `web_accessible_resources` for the page gave the same result. Same on both apps. |
+| `browser` element in the `about:3pane` document (`type=content`, `remote`, `remoteType=extension`) | The page loaded and reported its load 20 ms (Betterbird) and 16 ms (Thunderbird) after the mount call. `abc` and `Escape` reached it. |
+| The same `browser` in the main window document | The page loaded with the extension APIs (`messenger` defined, `runtime.sendMessage` reached the background), 16 ms (Betterbird) and 14 ms (Thunderbird) after the call. `abc` and `Escape` reached it. |
+| The same `browser` inside a XUL `panel` opened with `openPopupAtScreen` | The page loaded and got the keys, 16 ms (Betterbird) and 28 ms (Thunderbird) after the call. It was `0x0` and the screenshot shows an empty panel, because the sizing code of `ExtensionPopups` was not copied. |
 
+- The iframe failure is most likely a process mismatch. The `browser` mounts are remote (`isRemoteBrowser` true, `remoteType` `extension`) and loaded the same URL with no `web_accessible_resources`. An extension page runs in the extension process, and an iframe in a chrome document of the parent process cannot change process. The `web_accessible_resources` run rules out a missing web-accessible entry. A load of the page through a system principal or another frame type was not tried.
 - The listener of the top window also saw each overlay key, with target `browser`. The chrome runtime has to ignore keys that the overlay has focus for.
-- Without focus on the overlay, typed text goes to the thread list and triggers shortcuts. Typing `abc` into an unfocused overlay archived messages.
+- Without focus on the overlay, typed text goes to the thread list and triggers shortcuts. The probe sets the focus first.
 - The frame loader of a remote `browser` can fire its creation event before a listener that code adds after `appendChild`. Add the listener first.
 - The look, the position and the return of focus were judged only from the screenshots.
 
-### Round trip, chrome to background and back
+### Time from a key to the background page
 
-The Experiment fired an event, the background page called a function in answer, and the Experiment timed the whole loop. A second loop timed a background call to an Experiment function that does nothing. 300 samples each, the first 10 dropped, the app idle:
+Two measurements, both with the clock stamped in the Experiment and in the background page.
 
-| Loop | Betterbird (median, p95) | Thunderbird (median, p95) |
+- **Event path only (lower bound).** The Experiment fires an event, the background answers with a function call and the Experiment times the loop. No key is involved, and the app was idle. 300 samples, the first 10 dropped. It is the cost of the event path alone, a lower bound for key to handler.
+- **Real key presses.** The background stamps `performance.now()` when `onKey` arrives. The Experiment stamps `ChromeUtils.now()` in its listener. The ping loop maps one clock onto the other (the offset spread was 0.02 ms). The time from `wtype`'s send to the listener is not included.
+
+| Measure | Betterbird | Thunderbird |
 | --- | --- | --- |
-| Chrome event to background and back | 0.08 ms, 0.13 ms | 0.10 ms, 0.18 ms |
-| Background call to a verb and back | 0.08 ms, 0.12 ms | 0.10 ms, 0.16 ms |
+| Event path, chrome event to background and back (median, p95, max) | 0.09 ms, 0.15 ms, 1.43 ms | 0.09 ms, 0.18 ms, 1.28 ms |
+| Background call to a verb and back (median, p95, max) | 0.10 ms, 0.16 ms, 1.64 ms | 0.10 ms, 0.16 ms, 0.24 ms |
+| Key to the background, idle, 40 presses (median, p95, max) | 0.32 ms, 0.46 ms, 0.99 ms | 0.33 ms, 0.50 ms, 0.56 ms |
+| Key to the background, 8 bursts of 5 keys while an all-folder unread query runs (median, p95, max) | 0.12 ms, 0.30 ms, 0.40 ms | 0.13 ms, 0.54 ms, 0.74 ms |
 
-The worst sample was 1.5 ms (Betterbird) and 3.9 ms (Thunderbird). The loops ran with nothing else busy. A thread list under load was not measured.
+An idle key costs more than the ping because the event wakes an idle page. The burst rows are lower because the page is already awake. The added cost is under 1 ms in every sample. These numbers cover the path from the Experiment to the background. They do not cover the time Thunderbird spends on the key itself.
 
 ### Unread queries
 
-50 folders of 100 messages (30 unread each) and the Inbox of 60. All numbers are medians of 14 timed runs after the first, on a warm cache.
+All numbers are medians (p95 and max beside them) of 30 timed runs after a first run, on a warm cache, in a fresh profile per scenario. With 30 samples, p95 is the 29th value. The first run of each is listed because it is what a user sees first.
+
+**50 folders of 100 messages (5,000) and the Inbox of 60.** Cells are median, p95, max, with the first run in brackets.
 
 | Call | Betterbird | Thunderbird |
 | --- | --- | --- |
-| `messages.query({unread: true})` over all folders, default paging, all pages collected | 1,151 ms (p95 1,243) | 1,112 ms (p95 1,298) |
-| The same with `messagesPerPage: 6000` and `autoPaginationTimeout: 60000` | 729 ms | 727 ms |
-| The same with `messagesPerPage: 1`, first page only | 6 ms | 6 ms |
-| 50 calls of `messages.query({folderId, unread: true})` | 878 ms | 867 ms |
-| One such call for one folder | 16 ms | 15 ms |
-| 50 calls of `folders.getFolderInfo(folderId)`, reading `unreadMessageCount` | 13 ms | 17 ms |
-| `messages.query({flagged: true})` over all folders | 193 ms | 195 ms |
-| `mailTabs.getListedMessages` for a displayed folder of 100 | 51 ms | 55 ms |
+| `messages.query({unread: true})` over all folders, default paging, all pages collected | 1111, 1211, 1237 ms (1192) | 1108, 1223, 1303 ms (1127) |
+| The same with `messagesPerPage: 6000` and `autoPaginationTimeout: 60000` | 722, 791, 794 ms (803) | 718, 781, 791 ms (711) |
+| The same with `messagesPerPage: 1`, first page only | 9.0, 18, 22 ms (3.7) | 9.7, 44, 104 ms (4.0) |
+| 50 calls of `messages.query({folderId, unread: true})` | 966, 1340, 1520 ms (884) | 969, 1273, 1297 ms (777) |
+| One such call for one folder of 100 | 16, 20, 26 ms (16) | 15, 18, 18 ms (15) |
+| 50 calls of `folders.getFolderInfo(folderId)`, reading `unreadMessageCount` | 21, 85, 255 ms (31) | 21, 158, 180 ms (9.5) |
+| `messages.query({flagged: true})` over all folders | 191, 210, 217 ms (200) | 190, 223, 230 ms (190) |
+| `mailTabs.getListedMessages` for a displayed folder of 100 (n=10) | 65, 75 ms (max of 10) | 63, 68 ms (max of 10) |
 
-- The first run of the all-folder unread query took 1.1 to 1.5 s. The counts matched: 1,500 unread bulk messages plus the Inbox's.
+**One folder of 10,000 messages (3,000 unread).** The folder was open in the thread list. Same cell format.
+
+| Call | Betterbird | Thunderbird |
+| --- | --- | --- |
+| `messages.query({folderId, unread: true})`, default paging, 3,000 results | 2153, 2236, 2460 ms (2310) | 2156, 2438, 2576 ms (2135) |
+| The same with `messagesPerPage: 12000` and `autoPaginationTimeout: 60000` | 1407, 1624, 1635 ms (1570) | 1396, 1432, 1433 ms (1385) |
+| The same with `messagesPerPage: 1`, first page only | 11, 196, 223 ms (21) | 11, 22, 23 ms (12) |
+| `folders.getFolderInfo(folderId)`, reading `unreadMessageCount` | 0.7, 5.2, 6.6 ms (4.6) | 0.6, 9.2, 11 ms (2.4) |
+| `mailTabs.getListedMessages`, 10,000 results collected | 6902, 7194, 7286 ms (7291) | 6900, 7129, 7134 ms (6895) |
+| `messages.list(folderId)`, 10,000 results collected | 6844, 7021, 7313 ms (7182) | 6822, 7193, 7241 ms (6703) |
+
+- First open of the 10,000-message folder, with parsing and until `messages.list` returned all of it: 7.7 s (Betterbird), 7.3 s (Thunderbird).
+
+- The unread total matched the live count: 1,500 unread bulk messages plus the Inbox's live unread count (33 in the fresh profile), 1,533 in all.
+- The costs grow with the folder size. For one folder, 100 to 10,000 messages (100 times more) took the unread query from about 16 ms to about 2,150 ms (135 times) and `getListedMessages` from about 65 ms to about 6,900 ms (106 times). `step.unread {scope: folder}` through either call misses a per-key budget on a large folder. Only `getFolderInfo` stays cheap (about 0.7 ms at 10,000 messages), and it returns counts, not message ids.
+- The all-folder query takes about 1.1 s warm and 1.2 s on the first run, so cold and warm agree. It is not fast enough per key press.
 - The `messagesPerPage: 1` call returns the first match in folder order. It does not return "the next unread after the current message", so it cannot serve `] u` alone.
-- To find the next unread across folders, a command can read the counts with `getFolderInfo` (13 to 17 ms for all 50) and then query one folder (about 16 ms). The sum was not run as one call.
-- A folder with no summary file (`.msf`) lists no messages and `getFolderInfo` throws `NS_MSG_ERROR_FOLDER_SUMMARY_OUT_OF_DATE`. Opening the folder in the thread list builds the summary. Opening and parsing 100 messages took 166 ms per folder (8.3 s for 50 in Betterbird, 8.5 s in Thunderbird, including the display). A normal profile has the summaries already.
+- To find the next unread across folders, a command can read the counts with `getFolderInfo` (21 ms median for all 50) and then query one folder. The sum was not run as one call.
+- A folder with no summary file (`.msf`) lists no messages and `getFolderInfo` throws `NS_MSG_ERROR_FOLDER_SUMMARY_OUT_OF_DATE`. Opening the folder in the thread list builds the summary. A normal profile has the summaries already.
 
 ### Thread view and `setSelectedMessages`
 
@@ -154,55 +190,69 @@ The probe read the rows from the `about:3pane` view (`gDBView`), which the API d
 
 `tabs.remove(mailTabId)` ran twice: with a second (content) tab open, and with the mail tab as the only tab. Both times the promise resolved with no value and gave no error. `tabs.query` still listed the mail tab and the window stayed open.
 
+### Quick filter rows
+
+`mailTabs.setQuickFilter` was applied to the Inbox in the ungrouped view and the visible row count was read from the view. Each filter was then cleared with `{}`, which restored 60 rows.
+
+| Row | Filter | Rows shown | Expected |
+| --- | --- | --- | --- |
+| `filter.set` unread | `{unread: true}` | 33 | 33 (from `messages.query`) |
+| `filter.set` starred | `{flagged: true}` | 3 | 3 |
+| `filter.set` tag | `{tags: {mode: "any", tags: {$label1: true}}}` | 3 | 3 (three messages tagged) |
+| `filter.set` attachment | `{attachment: true}` | 0 | 0 |
+| `search.threads` text | `{text: {text: "Single 1", subject: true}}` | 11 | 11 (from a subject query) |
+
+### Native host manifests
+
+A manifest for a stdio host and a script that records its start went into six folders under the job's `HOME`. Only `~/.mozilla/native-messaging-hosts/` was read, by both apps. `~/.thunderbird/`, `~/.betterbird/` and `~/.config/{mozilla,thunderbird,betterbird}/` under `native-messaging-hosts` gave "No such native application". The script ran for the `~/.mozilla` manifest. Both `libxul` files also contain the system path `/usr/lib/mozilla`. The system folders cannot be written, so they were not tested.
+
 ### Standard API rows
 
-The probe walked the `messenger` object for each row of the split table and checked its type. A function or event object means the row exists on the target. Rows below were present on both apps unless noted.
+The probe walked the `messenger` object for each row of the split table and checked its type. A function or event object means the row exists on the target. Both apps gave the same result. Two manifests ran: the full one, and a minimal one without `messagesTagsList`, `menus`, `addressBooks` and the `commands` key.
 
-- `messages`: `update`, `query`, `get`, `getFull`, `getRaw`, `list`, `continueList`, `move`, `archive`, `delete`, `onUpdated`, `onNewMailReceived`, and `listTags` (deprecated since 121).
-- `messages.tags.list` exists only with the permission `messagesTagsList`. It was absent without it. The manifest also needs `messagesTags`, `messagesRead`, `messagesUpdate`, `messagesMove` and `messagesDelete` for the rows that use them.
-- `folders`: `query` (the folder object has `specialUse`, for example `["inbox"]`), `getFolderInfo` and `markAsRead`. `accounts.list` is present.
-- `compose`: `beginNew`, `beginReply`, `beginForward`, `getComposeDetails`, `setComposeDetails`.
-- `messageDisplay`: `open`, `getDisplayedMessages`.
-- `mailTabs`: `update`, `query`, `setQuickFilter`, `getListedMessages`, `getSelectedMessages`, `setSelectedMessages`, `onDisplayedFolderChanged`, `onSelectedMessagesChanged`.
-- `tabs`: `create`, `remove`, `update`, `query`, `get`, `onActivated`, `onRemoved`. `windows`: `create`, `remove`, `getAll`.
-- `messageDisplayScripts.register` and `composeScripts.register`.
-- `commands.onCommand` and `commands.update` exist only when the manifest has a `commands` key. `menus.create` needs the `menus` permission and `addressBooks.openUI` the `addressBooks` permission.
-- There is no `messenger.clipboard`. `navigator.clipboard.writeText` and `readText` exist in the background page (with the permissions `clipboardWrite` and `clipboardRead`).
+- Present in both manifests: `messages` (`update`, `query`, `get`, `getFull`, `getRaw`, `list`, `continueList`, `move`, `archive`, `delete`, `onUpdated`, `onNewMailReceived`, `listTags`), `folders` (`query`, `getFolderInfo`, `markAsRead`), `accounts.list`, `compose` (`beginNew`, `beginReply`, `beginForward`, `getComposeDetails`, `setComposeDetails`), `messageDisplay` (`open`, `getDisplayedMessages`), `mailTabs` (`update`, `query`, `setQuickFilter`, `getListedMessages`, `getSelectedMessages`, `setSelectedMessages`, `onDisplayedFolderChanged`, `onSelectedMessagesChanged`), `tabs` and `windows`, both script registrations, and `spaces`. The folder object has `specialUse`, for example `["inbox"]`.
+- Present only with the full manifest: `messages.tags.list` (permission `messagesTagsList`), `commands.onCommand` and `commands.update` (the `commands` key), `menus.create` (permission `menus`) and `addressBooks.openUI` (permission `addressBooks`). All four were absent in the minimal manifest.
+- There is no `messenger.clipboard` in either. `navigator.clipboard.writeText` and `readText` exist in the background page.
 
 These calls ran for real:
 
 - `messages.update`, `messages.query`, `messages.list` and `continueList`.
 - `folders.query` and `getFolderInfo`.
-- `mailTabs.update`, `setSelectedMessages`, `getSelectedMessages` and `getListedMessages`.
+- `mailTabs.update`, `setQuickFilter`, `setSelectedMessages`, `getSelectedMessages` and `getListedMessages`.
 - `messageDisplay.open` (tab and window) and `getDisplayedMessages`.
 - `compose.beginNew`, `beginReply` and `getComposeDetails`.
+- `messages.archive` through the `a` key, not as an API call.
 - `tabs.create`, `tabs.update` and `tabs.remove`, and both script registrations.
 
 The other rows were checked for presence only.
 
 ### Notes for the build
 
-- `mailTabs.update({displayedFolder})` threw "An unexpected error occurred" 51 times in a run, though each folder displayed. The count equals the first display of the Inbox plus each of the 50 folders. The console held `can't access property 0, this._sort[0] is undefined` from `DBViewWrapper.sys.mjs` (`primarySortType`), raised while `ext-mailTabs.js` converted the updated tab. `folder.open` needs to treat that error as "the view is still loading".
-- `compose.beginReply` crashed both apps (a segmentation fault) when the Local Folders account had no identity. With an identity it worked. `compose.beginNew` worked in both cases.
+- `mailTabs.update({displayedFolder})` threw "An unexpected error occurred" on the first display of each folder (51 times in a 50-folder run), though each folder displayed. The console held `can't access property 0, this._sort[0] is undefined` from `DBViewWrapper.sys.mjs` (`primarySortType`), raised while `ext-mailTabs.js` converted the updated tab. `folder.open` needs to treat that error as "the view is still loading".
+- `compose.beginReply` crashed both apps (a segmentation fault: signal SIGSEGV on Betterbird, exit code 11 on Thunderbird) when the Local Folders account had no identity. The job `reply_no_identity` keeps the run, in `app_exit.json`. With an identity it worked.
 - An Experiment function that throws gives the background only "An unexpected error occurred". Wrapping each verb to rethrow `ExtensionError` with the message made the cause readable.
 - `performance` is not defined in an Experiment parent script. `ChromeUtils.now()` is.
-- On a fresh profile, `mailnews.default_view_flags` 1 made new folder views threaded. `mailTabs.update({viewType: "groupedByThread"})` did the same through the API.
+- The first key press after a focus change was lost once in each key scenario (the settle step counted one missed press per scenario). A real runtime cannot rely on the first press after a focus change.
+- The probe never removes its key listeners, its overlay or its console listener, because it never shuts down during a run. The real chrome runtime must remove its key listeners from every window and remove its overlay and its window and console listeners in `onShutdown`. Otherwise a disabled or updated add-on leaves old handlers on every open window, and a cancelled key stays cancelled until the window closes.
+- A fresh profile needs `mailnews.default_view_flags` 1 for threaded folder views. `mailTabs.update({viewType: "groupedByThread"})` did the same through the API.
 
 ### Not measured
 
-- Chords with modifiers, key repeat and the cost of a held key under a loaded thread list.
+- Chords with modifiers, key repeat, and a held key under a busy thread list. The burst test above ran 5 keys per burst.
 - Keys with focus in an extension page that is a content tab, the address book tab and the settings tab. `tabs.create` refused `about:addons` ("Loading URL not allowed").
 - A second window of the main type, and tabs other than the mail tab, the message tab and the content tab.
+- Message content that is not local mail, and whether it makes `messagepane` remote.
 - X11, other keyboard layouts and other platforms. Only Linux on Wayland with a US layout ran.
 - A signed add-on, and the review of Experiments on addons.thunderbird.net.
 - The look of the overlay panel beyond the empty box in the screenshot.
+- The system folders for native host manifests, and one run of each scenario per app only.
 
 ### Reproduce
 
 ```bash
 tools/measure/fetch_thunderbird.sh
-node tools/measure/run.mjs betterbird
+node tools/measure/run.mjs betterbird /path/to/betterbird
 node tools/measure/run.mjs thunderbird
 ```
 
-See [`tools/measure/README.md`](../tools/measure/README.md). A full run takes about 7 minutes per app. Results are JSON files and screenshots in `$MEASURE_DIR/run/<app>/out/`.
+See [`tools/measure/README.md`](../tools/measure/README.md). A full run takes about 35 minutes per app. Results are JSON files and screenshots in `$MEASURE_DIR/run/<app>/<job>/out/`.

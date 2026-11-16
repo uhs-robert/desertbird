@@ -1,5 +1,5 @@
-// An invisible Wayland session for the probe: headless labwc, with wtype as the keyboard. Nothing shows on the owner's screen.
-// Every process starts in its own process group and stops by that group, never by name, because the owner runs the same programs.
+// An invisible Wayland session for the probe: headless labwc, with wtype as the keyboard. Nothing shows on the user's screen.
+// Every process starts in its own process group and stops by that group, never by name, because the user may run the same programs.
 import { spawn, execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,10 +24,12 @@ export async function start_session(work_dir) {
     return child;
   }
 
+  // A failed start must not leave the compositor running.
+  const stop_on_failure = (error) => { stop(); throw error; };
   start_child(["labwc", "-C", labwc_config], { ...base_env, WLR_BACKENDS: "headless", WLR_HEADLESS_OUTPUTS: "1", WLR_LIBINPUT_NO_DEVICES: "1", LABWC_UPDATE_ACTIVATION_ENV: "0" }, "labwc.log");
   const socket = () => readdirSync(runtime_dir).find((entry) => /^wayland-\d+$/.test(entry));
   for (let waited = 0; !socket(); waited += 100) {
-    if (waited > 10000) throw new Error("labwc made no socket");
+    if (waited > 10000) stop_on_failure(new Error("labwc made no socket"));
     await sleep(100);
   }
   const env = { ...base_env, WAYLAND_DISPLAY: socket(), MOZ_ENABLE_WAYLAND: "1" };

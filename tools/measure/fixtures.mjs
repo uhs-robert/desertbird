@@ -8,10 +8,13 @@ export const BULK_MESSAGES_PER_FOLDER = 100;
 export const INBOX_THREADS = 10;
 export const THREAD_LENGTH = 4;
 export const INBOX_SINGLES = 20;
+export const BIG_MESSAGES = 10000;
+// Unread messages in the Inbox: 2 of every thread of 4 and 13 of the 20 singles.
+export const INBOX_UNREAD = INBOX_THREADS * 2 + 13;
 
 const BASE_TIME_S = Date.UTC(2026, 0, 1) / 1000;
 
-function mbox_entry({ id, subject, from, time_s, unread, starred, references, body }) {
+function mbox_entry({ id, subject, from, time_s, unread, starred, references, body, html = false }) {
   // 0001 read, 0004 flagged.
   const status = (unread ? 0 : 1) | (starred ? 4 : 0);
   const lines = [
@@ -25,7 +28,7 @@ function mbox_entry({ id, subject, from, time_s, unread, starred, references, bo
     `Subject: ${subject}`,
     ...(references.length ? [`In-Reply-To: <${references.at(-1)}@fixture.invalid>`, `References: ${references.map((ref) => `<${ref}@fixture.invalid>`).join(" ")}`] : []),
     "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
+    `Content-Type: text/${html ? "html" : "plain"}; charset=UTF-8`,
     "",
     body,
     "",
@@ -63,11 +66,23 @@ function bulk_text(folder) {
 // Unread messages in the bulk folders: 3 of every 10, so 30 per folder and 1500 in all.
 export const BULK_UNREAD_TOTAL = BULK_FOLDERS * BULK_MESSAGES_PER_FOLDER * 0.3;
 
-export function write_fixtures(profile_dir) {
+function big_text() {
+  const entries = [];
+  for (let index = 0; index < BIG_MESSAGES; index++) {
+    const id = `big-${index}`;
+    entries.push(mbox_entry({ id, subject: `Big ${index}`, from: "big@fixture.invalid", time_s: BASE_TIME_S + index * 60, unread: index % 10 < 3, starred: index % 25 === 0, references: [], body: `Body of ${id}.` }));
+  }
+  return entries.join("");
+}
+
+// big adds one folder of 10,000 messages. It stays out of the other runs so their counts stay at 5,000 in the 50 folders.
+export function write_fixtures(profile_dir, { big = false } = {}) {
   const folder_dir = join(profile_dir, "Mail", "Local Folders");
   mkdirSync(folder_dir, { recursive: true });
   writeFileSync(join(folder_dir, "Inbox"), inbox_text());
   writeFileSync(join(folder_dir, "Trash"), "");
+  writeFileSync(join(folder_dir, "Html"), mbox_entry({ id: "html-0", subject: "Html 0", from: "html@fixture.invalid", time_s: BASE_TIME_S, unread: false, starred: false, references: [], body: "<html><body><p>Body of <b>html-0</b>.</p></body></html>", html: true }));
   for (let folder = 0; folder < BULK_FOLDERS; folder++) writeFileSync(join(folder_dir, `Bulk${String(folder).padStart(2, "0")}`), bulk_text(folder));
+  if (big) writeFileSync(join(folder_dir, "Big"), big_text());
   return folder_dir;
 }

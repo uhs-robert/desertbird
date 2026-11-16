@@ -10,17 +10,18 @@
       { "name": "view_snapshot", "type": "function", "async": true, "parameters": [] },
       { "name": "view_fold", "type": "function", "async": true, "parameters": [{ "name": "open", "type": "boolean" }] },
       { "name": "view_select_row", "type": "function", "async": true, "parameters": [{ "name": "row", "type": "integer" }] },
-      { "name": "overlay_mount", "type": "function", "async": true, "parameters": [{ "name": "kind", "type": "string", "enum": ["iframe_3pane", "browser_top", "panel_top"] }] },
+      { "name": "overlay_mount", "type": "function", "async": true, "parameters": [{ "name": "kind", "type": "string", "enum": ["iframe_3pane", "browser_top", "panel_top", "browser_3pane"] }] },
       { "name": "overlay_focus", "type": "function", "async": true, "parameters": [] },
       { "name": "overlay_unmount", "type": "function", "async": true, "parameters": [] },
       { "name": "rtt", "type": "function", "async": true, "parameters": [{ "name": "count", "type": "integer" }] },
       { "name": "pong", "type": "function", "parameters": [{ "name": "seq", "type": "integer" }] },
       { "name": "console_tail", "type": "function", "async": true, "parameters": [] },
+      { "name": "process_info", "type": "function", "async": true, "parameters": [] },
       { "name": "noop", "type": "function", "async": true, "parameters": [] }
     ],
     "events": [
       { "name": "onKey", "type": "function", "parameters": [{ "name": "info", "type": "object", "additionalProperties": { "type": "any" } }] },
-      { "name": "onPing", "type": "function", "parameters": [{ "name": "seq", "type": "integer" }] }
+      { "name": "onPing", "type": "function", "parameters": [{ "name": "info", "type": "object", "additionalProperties": { "type": "any" } }] }
     ]
   }
 ]

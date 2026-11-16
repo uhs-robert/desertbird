@@ -6,7 +6,7 @@ const log = (...parts) => post("/log", parts.join(" "));
 const results = {};
 
 async function record(name, scenario) {
-  if (CONFIG.only && !CONFIG.only.includes(name)) return;
+  if (!CONFIG.only.includes(name)) return;
   const started = performance.now();
   try {
     results[name] = await scenario();
@@ -20,8 +20,13 @@ async function record(name, scenario) {
 const key_events = [];
 const content_events = [];
 const overlay_events = [];
-messenger.probe.onKey.addListener((info) => key_events.push(info));
-messenger.probe.onPing.addListener((seq) => messenger.probe.pong(seq));
+// recv is the background page's own clock at the moment the event arrives.
+messenger.probe.onKey.addListener((info) => key_events.push({ ...info, recv: performance.now() }));
+const ping_received = new Map();
+messenger.probe.onPing.addListener((info) => {
+  ping_received.set(info.seq, performance.now());
+  messenger.probe.pong(info.seq);
+});
 messenger.runtime.onMessage.addListener((message) => {
   if (message?.type === "content_key" || message?.type === "content_loaded") content_events.push(message);
   else if (message?.type === "overlay") overlay_events.push(message);
@@ -49,7 +54,22 @@ async function press_and_collect(args, wait_ms = 500) {
     chrome: summarize_chrome(key_events.slice(chrome_mark)),
     content: content_events.slice(content_mark).filter((event) => event.type === "content_key").map((event) => `${event.where}:${event.key}${event.defaultPrevented ? " (prevented)" : ""}`),
     overlay: overlay_events.slice(overlay_mark).map((event) => `${event.kind}:${event.key ?? ""}:${event.target ?? ""}:${event.value ?? ""}`),
+    // Listener levels in the order the Experiment's clock saw them run.
+    order: key_events.slice(chrome_mark).sort((a, b) => a.t - b.t).map((event) => event.level),
   };
+}
+
+// A key pressed right after a focus change can be lost. A bare Shift press is harmless and is repeated until some listener sees it.
+let settle_misses = 0;
+async function settle() {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const mark = key_events.length;
+    await post("/press", { args: ["-k", "Shift_L"] });
+    await sleep(250);
+    if (key_events.length > mark) return attempt;
+    settle_misses++;
+  }
+  throw new Error("no key reached any window after 10 tries");
 }
 
 async function collect(page) {
@@ -81,7 +101,7 @@ async function main_tab_id() {
   return tab.id;
 }
 
-async function show_folder(folder) {
+async function show_folder(folder, timeout_ms = 10000) {
   const tab_id = await main_tab_id();
   // On a fresh profile the first update shows the folder but then throws while it converts the tab (its view has no sort yet), so the error is kept and the view is checked instead.
   try {
@@ -89,7 +109,7 @@ async function show_folder(folder) {
   } catch (error) {
     await log("mailTabs.update threw", String(error));
   }
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < timeout_ms / 100; attempt++) {
     await sleep(100);
     const snapshot = await messenger.probe.view_snapshot();
     if (snapshot.row_count > 0) return tab_id;
@@ -127,16 +147,52 @@ async function scenario_env() {
   return { browser_info: await messenger.runtime.getBrowserInfo(), platform: await messenger.runtime.getPlatformInfo(), user_agent: navigator.userAgent, windows: await messenger.probe.windows() };
 }
 
+// Maps the Experiment's clock onto the background page's clock with the ping loop. Each sample puts the send time plus half the loop time against the background's receive time.
+async function clock_offset() {
+  const samples = await messenger.probe.rtt(300);
+  const offsets = samples.map((sample, seq) => ping_received.get(seq) - (sample.sent + sample.rtt / 2)).slice(10);
+  return { offset_ms: percentile(offsets, 0.5), offset_spread_ms: percentile(offsets, 0.95) - percentile(offsets, 0.05), rtt: stats(samples.map((sample) => sample.rtt).slice(10)) };
+}
+
+// This loop never involves a key. It is the cost of the event path alone, a lower bound for the time from a key to a handler.
 async function scenario_rtt() {
-  const chrome_to_background = await messenger.probe.rtt(300);
+  const { rtt } = await clock_offset();
   const background_to_chrome = [];
   for (let sample = 0; sample < 300; sample++) {
     const start = performance.now();
     await messenger.probe.noop();
     background_to_chrome.push(performance.now() - start);
   }
-  // Same loop while the thread list is busy, to show whether a held key adds cost.
-  return { chrome_to_background_to_chrome: stats(chrome_to_background.slice(10)), background_calls_verb: stats(background_to_chrome.slice(10)) };
+  return { label: "event path only, no key, app idle: a lower bound", chrome_to_background_to_chrome: rtt, background_calls_verb: stats(background_to_chrome.slice(10)) };
+}
+
+// Time from the Experiment's key listener to the moment the background page holds the event, for real key presses.
+async function scenario_key_latency() {
+  const { inbox } = await find_folders();
+  await show_folder(inbox);
+  await messenger.probe.focus("threads");
+  const out = { settle_attempts_missed: await settle() };
+  const clock = await clock_offset();
+  out.clock = clock;
+  const latencies = (events) => events.filter((event) => event.level === "top_capture" && event.key === "x").map((event) => event.recv - (event.t + clock.offset_ms));
+  const idle_mark = key_events.length;
+  for (let press = 0; press < 40; press++) {
+    await post("/press", { args: ["x"] });
+    await sleep(120);
+  }
+  out.idle = stats(latencies(key_events.slice(idle_mark)));
+  // Real work in the parent process while keys arrive: an all-folder query is in flight during each burst.
+  const busy_mark = key_events.length;
+  for (let round = 0; round < 8; round++) {
+    const query = (async () => collect(await messenger.messages.query({ unread: true })))();
+    await sleep(30);
+    await post("/press", { args: ["xxxxx"] });
+    await query;
+    await sleep(100);
+  }
+  out.during_unread_query = stats(latencies(key_events.slice(busy_mark)));
+  out.note = "Resolution of the clock mapping is the loop time (about 0.1 ms). The time from wtype's send to the listener is not included.";
+  return out;
 }
 
 async function scenario_query() {
@@ -172,9 +228,12 @@ async function scenario_query() {
     }
   }
   out.getFolderInfo_ready_after_ms = performance.now() - info_ready;
+  // Open the Inbox too, so the expected unread total can come from its live count.
+  await show_folder(inbox);
   await collect(await messenger.messages.list(inbox.id));
+  const inbox_unread = (await messenger.folders.getFolderInfo(inbox.id)).unreadMessageCount;
 
-  const runs = 15;
+  const runs = 31;
   const series = {};
   const add = (name, ms) => (series[name] ??= []).push(ms);
   let unread_total = 0;
@@ -207,6 +266,8 @@ async function scenario_query() {
     if (run === 0) out.counts = { per_folder_calls_total: per_folder.value, folder_info_total: info.value, one_folder: one.value.length, flagged: flagged.value.length };
   }
   out.unread_total = unread_total;
+  out.unread_expected = 1500 + inbox_unread;
+  out.inbox_unread_live = inbox_unread;
   out.unread_distinct_ids = unread_ids_distinct;
   out.series = Object.fromEntries(Object.entries(series).map(([name, values]) => [name, { first_run_ms: values[0], ...stats(values.slice(1)) }]));
   const tab_id = await show_folder(bulk[3]);
@@ -270,13 +331,20 @@ async function scenario_threads() {
   return out;
 }
 
-const SINGLE_KEYS = ["m", "s", "j", "f", "b", "n", "p", "r", "R", "1", "0", "x", "/", "*", "#", "Return", " "];
 // wtype names Enter "Return", and the DOM event calls it "Enter".
 const event_key_of = (key) => (key === "Return" ? "Enter" : key);
 
 async function message_state(header_id) {
   const message = await by_header_id(header_id);
   return { read: message.read, flagged: message.flagged, junk: message.junk, tags: message.tags.join(","), folder: message.folder.name };
+}
+
+async function close_extra_windows() {
+  for (const tab of await messenger.tabs.query({})) if (tab.type !== "mail") await messenger.tabs.remove(tab.id).catch(() => {});
+  for (const window of await messenger.windows.getAll({ windowTypes: ["messageCompose", "messageDisplay"] })) await messenger.windows.remove(window.id).catch(() => {});
+  const [main] = await messenger.tabs.query({ type: "mail" });
+  if (main) await messenger.tabs.update(main.id, { active: true }).catch(() => {});
+  await sleep(300);
 }
 
 async function reset_selection(tab_id, header_id) {
@@ -286,37 +354,96 @@ async function reset_selection(tab_id, header_id) {
   await sleep(300);
 }
 
-async function close_extra_windows() {
-  for (const tab of await messenger.tabs.query({})) if (tab.type !== "mail") await messenger.tabs.remove(tab.id).catch(() => {});
-  const [main] = await messenger.tabs.query({ type: "mail" });
-  if (main) await messenger.tabs.update(main.id, { active: true }).catch(() => {});
-  for (const window of await messenger.windows.getAll({ windowTypes: ["messageCompose", "messageDisplay"] })) await messenger.windows.remove(window.id).catch(() => {});
-  await sleep(300);
+const THREAD_KEYS = ["m", "s", "j", "f", "b", "n", "p", "a", "r", "R", "1", "0", "x", "/", "*", "#", "Return", " "];
+const OTHER_KEYS = ["m", "s", "j", "a", "r", "R"];
+const PRESSES_PER_CELL = 5;
+
+// One focus context of the shortcut test: the thread list, the message pane of the three pane, a message tab or a standalone message window.
+async function open_context(context, message, folder) {
+  const own = { tab_id: await show_folder(folder) };
+  if (context === "thread" || context === "pane") {
+    await messenger.mailTabs.setSelectedMessages(own.tab_id, [message.id]);
+    await sleep(600);
+    await messenger.probe.focus(context === "thread" ? "threads" : "message_body");
+    await sleep(300);
+  } else {
+    const opened = await messenger.messageDisplay.open({ location: context, messageId: message.id, active: true });
+    own.opened_id = opened.id;
+    own.window_id = opened.windowId;
+    await sleep(2000);
+  }
+  own.settle_misses = await settle();
+  return own;
 }
 
-async function scenario_keys(cancel) {
-  const { inbox } = await find_folders();
-  const tab_id = await show_folder(inbox);
-  await messenger.probe.view_fold(true);
-  await messenger.probe.set_cancel(cancel ? SINGLE_KEYS.map(event_key_of) : []);
-  const out = {};
-  for (const key of SINGLE_KEYS) {
-    await close_extra_windows();
-    await reset_selection(tab_id, "inbox-s1@fixture.invalid");
-    await messenger.probe.focus("threads");
-    await sleep(200);
-    const before = { state: await message_state("inbox-s1@fixture.invalid"), selected: (await collect(await messenger.mailTabs.getSelectedMessages(tab_id))).map((message) => message.headerMessageId), windows: (await messenger.windows.getAll()).length, tabs: (await messenger.tabs.query({})).length, view: (await messenger.probe.view_snapshot()).active };
-    const seen = await press_and_collect(key_args(key), key === "r" || key === "R" ? 1800 : 700);
-    const after = { state: await message_state("inbox-s1@fixture.invalid"), selected: (await collect(await messenger.mailTabs.getSelectedMessages(tab_id))).map((message) => message.headerMessageId), windows: (await messenger.windows.getAll()).length, tabs: (await messenger.tabs.query({})).length, view: (await messenger.probe.view_snapshot()).active };
-    const changes = [];
-    for (const field of Object.keys(before.state)) if (before.state[field] !== after.state[field]) changes.push(`${field}: ${before.state[field]} -> ${after.state[field]}`);
-    if (before.selected.join() !== after.selected.join()) changes.push(`selection: ${before.selected} -> ${after.selected}`);
-    if (before.tabs !== after.tabs) changes.push(`tabs: ${before.tabs} -> ${after.tabs}`);
-    if (before.windows !== after.windows) changes.push(`windows: ${before.windows} -> ${after.windows}`);
-    if (before.view !== after.view) changes.push(`focus: ${before.view} -> ${after.view}`);
-    out[key === " " ? "space" : key] = { thunderbird_action: changes, ...seen };
-  }
+async function close_context(context, own) {
+  if (context === "tab") await messenger.tabs.remove(own.opened_id).catch(() => {});
+  if (context === "window") await messenger.windows.remove(own.window_id).catch(() => {});
   await close_extra_windows();
+}
+
+async function scenario_keys_context(context) {
+  const folders = (await find_folders()).bulk;
+  const folder = folders.find((candidate) => candidate.name === "Bulk00");
+  // A new profile has no summary file for the folder, so it lists nothing until the folder is open.
+  await show_folder(folder);
+  for (let attempt = 0; attempt < 100 && (await collect(await messenger.messages.list(folder.id))).length !== 100; attempt++) await sleep(100);
+  const keys = context === "thread" ? THREAD_KEYS : OTHER_KEYS;
+  const out = { context, presses_per_cell: PRESSES_PER_CELL };
+  let archive_index = 30;
+  const snapshot = async (header_id, own) => ({
+    state: await message_state(header_id),
+    windows: (await messenger.windows.getAll()).length,
+    tabs: (await messenger.tabs.query({})).length,
+    selected: context === "thread" ? (await collect(await messenger.mailTabs.getSelectedMessages(own.tab_id))).map((message) => message.headerMessageId).join() : "",
+  });
+  for (const key of keys) {
+    for (const mode of ["no_cancel", "cancel"]) {
+      await messenger.probe.set_cancel(mode === "cancel" ? [event_key_of(key)] : []);
+      const cell = { acted: 0, chrome_top_capture_seen: 0, cancelled_flag: 0, top_bubble_seen: 0, about3pane_seen: 0, content_script_seen: 0, changes: new Set(), order_first_press: null, settle_misses: 0 };
+      let own = null;
+      let message = null;
+      for (let press = 0; press < PRESSES_PER_CELL; press++) {
+        // A key that moves the message away gets a new message and a new context for each press. Other keys reuse the context.
+        if (!own || key === "a") {
+          if (own) await close_context(context, own);
+          message = await by_header_id(`bulk-0-${key === "a" ? archive_index++ : 50}@fixture.invalid`);
+          await messenger.messages.update(message.id, { read: true, flagged: false, junk: false, tags: [] });
+          own = await open_context(context, message, folder);
+          cell.settle_misses += own.settle_misses;
+        } else {
+          await messenger.messages.update(message.id, { read: true, flagged: false, junk: false, tags: [] });
+          if (context === "thread" || context === "pane") {
+            await messenger.mailTabs.setSelectedMessages(own.tab_id, [message.id]);
+            await sleep(400);
+          }
+        }
+        const before = await snapshot(message.headerMessageId, own);
+        const seen = await press_and_collect(key_args(key), key === "r" || key === "R" ? 1800 : 1000);
+        const after = await snapshot(message.headerMessageId, own);
+        const changes = [];
+        for (const field of Object.keys(before.state)) if (before.state[field] !== after.state[field]) changes.push(`${field}: ${before.state[field]} -> ${after.state[field]}`);
+        if (before.selected !== after.selected) changes.push("selection moved");
+        if (before.tabs !== after.tabs) changes.push(`tabs: ${before.tabs} -> ${after.tabs}`);
+        if (before.windows !== after.windows) changes.push(`windows: ${before.windows} -> ${after.windows}`);
+        if (changes.length) cell.acted++;
+        for (const change of changes) cell.changes.add(change);
+        if (seen.chrome.some((label) => label.startsWith("top_capture"))) cell.chrome_top_capture_seen++;
+        if (seen.chrome.some((label) => label.includes("CANCELLED"))) cell.cancelled_flag++;
+        if (seen.order.includes("top_bubble")) cell.top_bubble_seen++;
+        if (seen.order.includes("about3pane_capture")) cell.about3pane_seen++;
+        if (seen.content.length) cell.content_script_seen++;
+        cell.order_first_press ??= seen.order;
+        // Extra tabs and windows that the key opened (Enter, r, R) go away. The context's own tab or window stays.
+        for (const tab of await messenger.tabs.query({})) if (tab.type !== "mail" && tab.id !== own.opened_id) await messenger.tabs.remove(tab.id).catch(() => {});
+        for (const window of await messenger.windows.getAll({ windowTypes: ["messageCompose"] })) await messenger.windows.remove(window.id).catch(() => {});
+        await sleep(300);
+      }
+      if (own) await close_context(context, own);
+      cell.changes = [...cell.changes];
+      out[`${key === " " ? "space" : key} ${mode}`] = cell;
+    }
+  }
   await messenger.probe.set_cancel([]);
   return out;
 }
@@ -331,8 +458,9 @@ async function scenario_focus_targets() {
   for (const [index, target] of targets.entries()) {
     const focus_chain = await messenger.probe.focus(target);
     await sleep(300);
+    const settled = await settle();
     const seen = await press_and_collect(["x"], 500);
-    out[`${index}_${target}`] = { focus_after_verb: focus_chain, windows_active: (await messenger.probe.windows()).find((window) => window.type === "mail:3pane")?.active, ...seen };
+    out[`${index}_${target}`] = { settle_attempts_missed: settled, focus_after_verb: focus_chain, windows_active: (await messenger.probe.windows()).find((window) => window.type === "mail:3pane")?.active, ...seen };
   }
   return out;
 }
@@ -346,6 +474,7 @@ async function scenario_message_pane() {
   const out = { displayed: displayed.map((message) => message.headerMessageId), content_loaded_events: content_events.filter((event) => event.type === "content_loaded").length };
   await messenger.probe.focus("message_body");
   await sleep(400);
+  out.settle_attempts_missed = await settle();
   out.focus_chain = (await messenger.probe.windows()).find((window) => window.type === "mail:3pane")?.active;
   out.keys_x_then_j = { x: await press_and_collect(["x"]), j: await press_and_collect(["j"]) };
   await messenger.probe.set_cancel(["x"]);
@@ -362,18 +491,21 @@ async function scenario_window_types() {
 
   const message_tab = await messenger.messageDisplay.open({ location: "tab", messageId: message.id, active: true });
   await sleep(1500);
+  await settle().catch(() => {});
   out.message_tab = { windows: (await messenger.probe.windows()).map((window) => window.active), ...(await press_and_collect(["x"])) };
   await messenger.tabs.remove(message_tab.id);
   await sleep(500);
 
   const message_window = await messenger.messageDisplay.open({ location: "window", messageId: message.id });
   await sleep(2000);
+  await settle().catch(() => {});
   out.message_window = { windows: (await messenger.probe.windows()).map((window) => `${window.type}:${window.focused}:${window.active}`), ...(await press_and_collect(["x"])) };
   await messenger.windows.remove((await messenger.windows.getAll({ windowTypes: ["messageDisplay"] }))[0].id).catch(() => {});
   await sleep(500);
 
   const content_tab = await messenger.tabs.create({ url: messenger.runtime.getURL("overlay.html") });
   await sleep(1500);
+  await settle().catch(() => {});
   out.extension_page_in_content_tab = { tab: `${content_tab.type}`, ...(await press_and_collect(["x"])) };
   await messenger.tabs.remove(content_tab.id);
   await sleep(500);
@@ -390,6 +522,7 @@ async function scenario_window_types() {
 
   await messenger.compose.beginNew();
   await sleep(2500);
+  await settle().catch(() => {});
   out.compose_window_new = { windows: (await messenger.probe.windows()).map((window) => `${window.type}:${window.focused}:${window.active}`), ...(await press_and_collect(["x"])) };
   await close_extra_windows();
   return out;
@@ -408,6 +541,7 @@ async function scenario_compose() {
   const compose_tab = await messenger.compose.beginReply(message.id, "replyToSender");
   await log("compose: opened");
   await sleep(3000);
+  await settle();
   for (let attempt = 0; attempt < 50 && !(await messenger.probe.windows()).some((window) => window.type === "msgcompose" && window.focused); attempt++) await sleep(100);
   const compose_id = compose_tab.id;
   const out = { windows: (await messenger.probe.windows()).map((window) => `${window.type}:${window.focused}:${window.active}`), content_loaded: [...new Set(content_events.filter((event) => event.type === "content_loaded").map((event) => event.where))] };
@@ -423,6 +557,12 @@ async function scenario_compose() {
   out.z_inserted_into_body_despite_cancel = after_cancel.length > before_cancel.length;
   out.body_length_delta_cancel = after_cancel.length - before_cancel.length;
   await messenger.probe.set_cancel([]);
+  // help.open needs a tab. Open one while the compose window is the active window and see where it goes.
+  const created = await messenger.tabs.create({ url: messenger.runtime.getURL("overlay.html") });
+  await sleep(800);
+  const windows = await messenger.windows.getAll({ windowTypes: ["normal", "messageCompose", "messageDisplay"] });
+  out.tabs_create_from_compose = { tab_type: created.type, tab_window_id: created.windowId, windows: windows.map((window) => `${window.id}:${window.type}:focused=${window.focused}`), tab_window_type: windows.find((window) => window.id === created.windowId)?.type ?? "unknown" };
+  await messenger.tabs.remove(created.id).catch(() => {});
   await close_extra_windows();
   return out;
 }
@@ -431,7 +571,7 @@ async function scenario_overlay() {
   const { inbox } = await find_folders();
   const tab_id = await show_folder(inbox);
   const out = {};
-  for (const kind of ["iframe_3pane", "browser_top", "panel_top"]) {
+  for (const kind of ["iframe_3pane", "browser_3pane", "browser_top", "panel_top"]) {
     const entry = {};
     try {
       await messenger.probe.console_tail();
@@ -444,8 +584,10 @@ async function scenario_overlay() {
       await sleep(1000);
       entry.console_after_mount = (await messenger.probe.console_tail()).filter((line) => !/fullScreen|tbkeys|Blocklist/.test(line));
       entry.events_after_mount = overlay_events.slice(overlay_mark).map((event) => JSON.stringify(event));
+      entry.process_info = await messenger.probe.process_info();
       entry.focus_after_verb = await messenger.probe.overlay_focus();
       await sleep(300);
+      entry.settle_attempts_missed = await settle().catch(() => "none");
       entry.typed_abc = await press_and_collect(["abc"], 600);
       entry.escape = await press_and_collect(["-k", "Escape"], 400);
       await post("/shot", { name: `overlay_${kind}` });
@@ -498,6 +640,125 @@ async function scenario_tabs_remove_only_tab() {
   return { before, error, after: (await messenger.tabs.query({})).map((tab) => `${tab.id}:${tab.type}`), windows_after: (await messenger.windows.getAll()).length };
 }
 
+async function scenario_query_large() {
+  const folders = await messenger.folders.query({});
+  const big = folders.find((folder) => folder.name === "Big");
+  const out = {};
+  const start = performance.now();
+  const tab_id = await show_folder(big, 240000);
+  let count = 0;
+  for (let attempt = 0; attempt < 600 && count !== 10000; attempt++) {
+    try { count = (await collect(await messenger.messages.list(big.id))).length; } catch { count = -1; }
+    if (count !== 10000) await sleep(500);
+  }
+  out.first_open_and_parse_ms = performance.now() - start;
+  out.messages = count;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    try { await messenger.folders.getFolderInfo(big.id); break; } catch { await sleep(100); }
+  }
+  const series = {};
+  const add = (name, ms) => (series[name] ??= []).push(ms);
+  const counts = {};
+  for (let run = 0; run < 31; run++) {
+    const unread = await timed(async () => collect(await messenger.messages.query({ folderId: big.id, unread: true })));
+    add("query_unread_one_folder_default_paging", unread.ms);
+    counts.unread = unread.value.length;
+    const unread_page = await timed(async () => collect(await messenger.messages.query({ folderId: big.id, unread: true, messagesPerPage: 12000, autoPaginationTimeout: 60000 })));
+    add("query_unread_one_folder_one_page", unread_page.ms);
+    const first = await timed(async () => (await messenger.messages.query({ folderId: big.id, unread: true, messagesPerPage: 1 })).messages.length);
+    add("query_unread_first_hit_only", first.ms);
+    const info = await timed(async () => (await messenger.folders.getFolderInfo(big.id)).unreadMessageCount);
+    add("getFolderInfo", info.ms);
+    counts.info_unread = info.value;
+    const listed = await timed(async () => collect(await messenger.mailTabs.getListedMessages(tab_id)));
+    add("getListedMessages", listed.ms);
+    counts.listed = listed.value.length;
+    const listed_all = await timed(async () => collect(await messenger.messages.list(big.id)));
+    add("messages_list", listed_all.ms);
+    counts.list = listed_all.value.length;
+  }
+  out.counts = counts;
+  out.series = Object.fromEntries(Object.entries(series).map(([name, values]) => [name, { first_run_ms: values[0], ...stats(values.slice(1)) }]));
+  return out;
+}
+
+async function scenario_message_process() {
+  const folders = await messenger.folders.query({});
+  const out = {};
+  for (const [label, folder_name, header_id] of [["plain_text_message", "Inbox", "inbox-s2@fixture.invalid"], ["html_message", "Html", "html-0@fixture.invalid"]]) {
+    const folder = folders.find((candidate) => candidate.name === folder_name);
+    const tab_id = await show_folder(folder);
+    const message = await by_header_id(header_id);
+    await messenger.mailTabs.setSelectedMessages(tab_id, [message.id]);
+    await sleep(1500);
+    out[label] = await messenger.probe.process_info();
+  }
+  out.content_script_loads = content_events.filter((event) => event.type === "content_loaded").length;
+  return out;
+}
+
+async function scenario_filter() {
+  const { inbox } = await find_folders();
+  const tab_id = await show_folder(inbox);
+  await messenger.mailTabs.update(tab_id, { viewType: "ungrouped" }).catch(() => {});
+  await sleep(600);
+  for (const header_id of ["inbox-s5", "inbox-s6", "inbox-s7"]) {
+    const message = await by_header_id(`${header_id}@fixture.invalid`);
+    await messenger.messages.update(message.id, { tags: ["$label1"] });
+  }
+  const rows = async () => (await messenger.probe.view_snapshot()).row_count;
+  const out = { rows_unfiltered: await rows() };
+  const expected = async (query) => (await collect(await messenger.messages.query({ folderId: inbox.id, ...query }))).length;
+  const cases = [
+    ["filter.set unread", { unread: true }, await expected({ unread: true })],
+    ["filter.set starred", { flagged: true }, await expected({ flagged: true })],
+    ["filter.set tag", { tags: { mode: "any", tags: { $label1: true } } }, 3],
+    ["filter.set attachment", { attachment: true }, 0],
+    ["search.threads text in subject", { text: { text: "Single 1", subject: true } }, await expected({ subject: "Single 1" })],
+  ];
+  for (const [name, filter, expected_rows] of cases) {
+    let error = null;
+    try { await messenger.mailTabs.setQuickFilter(tab_id, filter); } catch (caught) { error = String(caught); }
+    await sleep(1200);
+    out[name] = { filter: JSON.stringify(filter), rows: await rows(), expected_rows, error };
+    await messenger.mailTabs.setQuickFilter(tab_id, {}).catch(() => {});
+    await sleep(800);
+    out[name].rows_after_clear = await rows();
+  }
+  return out;
+}
+
+async function scenario_native_host() {
+  const names = ["probe_mozilla", "probe_thunderbird", "probe_betterbird", "probe_config_mozilla", "probe_config_thunderbird", "probe_config_betterbird"];
+  const out = {};
+  for (const name of names) {
+    out[name] = await new Promise((resolve) => {
+      let port;
+      try {
+        port = messenger.runtime.connectNative(name);
+      } catch (error) {
+        resolve({ thrown: String(error) });
+        return;
+      }
+      port.onDisconnect.addListener(() => resolve({ disconnected: true, error: port.error?.message ?? null }));
+      setTimeout(() => resolve({ still_connected_after_3s: true }), 3000);
+    });
+  }
+  return out;
+}
+
+// Runs in a profile whose account has no identity. The result file is written first because the app may crash in the call.
+async function scenario_reply_no_identity() {
+  const { inbox } = await find_folders();
+  const tab_id = await show_folder(inbox);
+  const message = await by_header_id("inbox-s2@fixture.invalid");
+  await messenger.mailTabs.setSelectedMessages(tab_id, [message.id]);
+  await post("/result", { name: "reply_no_identity", data: { status: "compose.beginReply called with no identity; if this stays, the app died in the call" } });
+  const compose_tab = await messenger.compose.beginReply(message.id, "replyToSender");
+  await sleep(3000);
+  return { status: "beginReply returned and the app stayed up", compose_tab_id: compose_tab.id };
+}
+
 async function start() {
   await log("background up");
   for (let attempt = 0; attempt < 300; attempt++) {
@@ -511,20 +772,31 @@ async function start() {
   await messenger.messageDisplayScripts.register({ js: [{ file: "msg_content.js" }] });
   await messenger.composeScripts.register({ js: [{ file: "compose_content.js" }] });
   await sleep(1000);
-  await record("env", scenario_env);
-  await record("api_presence", async () => api_presence());
-  await record("rtt", scenario_rtt);
-  await record("threads", scenario_threads);
-  await record("query", scenario_query);
-  await record("focus_targets", scenario_focus_targets);
-  await record("keys_no_cancel", () => scenario_keys(false));
-  await record("keys_cancelled_in_top_capture", () => scenario_keys(true));
-  await record("message_pane", scenario_message_pane);
-  await record("window_types", scenario_window_types);
-  await record("compose", scenario_compose);
-  await record("overlay", scenario_overlay);
-  await record("tabs_remove", scenario_tabs_remove);
-  await record("tabs_remove_only_tab", scenario_tabs_remove_only_tab);
+  const scenarios = {
+    env: scenario_env,
+    api_presence: async () => api_presence(),
+    rtt: scenario_rtt,
+    key_latency: scenario_key_latency,
+    threads: scenario_threads,
+    query: scenario_query,
+    query_large: scenario_query_large,
+    focus_targets: scenario_focus_targets,
+    keys_thread: () => scenario_keys_context("thread"),
+    keys_pane: () => scenario_keys_context("pane"),
+    keys_tab: () => scenario_keys_context("tab"),
+    keys_window: () => scenario_keys_context("window"),
+    message_pane: scenario_message_pane,
+    message_process: scenario_message_process,
+    window_types: scenario_window_types,
+    compose: scenario_compose,
+    overlay: scenario_overlay,
+    filter: scenario_filter,
+    native_host: scenario_native_host,
+    reply_no_identity: scenario_reply_no_identity,
+    tabs_remove: scenario_tabs_remove,
+    tabs_remove_only_tab: scenario_tabs_remove_only_tab,
+  };
+  for (const [name, scenario] of Object.entries(scenarios)) await record(name, scenario);
   await post("/done", {});
 }
 

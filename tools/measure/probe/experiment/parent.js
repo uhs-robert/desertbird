@@ -232,6 +232,16 @@ var probe = class extends ExtensionAPI {
               loaded = await Promise.race([new Promise((resolve) => node.addEventListener("load", () => resolve(node.contentWindow.location.href), { once: true })), new Promise((resolve) => setTimeout_(resolve, 3000, false))]);
             }
             details = { via, load_fired: loaded, href: node.contentWindow?.location?.href, ready_state: node.contentDocument?.readyState, box: JSON.stringify(node.getBoundingClientRect()) };
+          } else if (kind === "browser_3pane") {
+            const doc = three.document;
+            node = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+            node.id = "probe-overlay";
+            node.style.cssText = BOX_CSS;
+            const browser = make_browser(doc);
+            const created = new Promise((resolve) => browser.addEventListener("XULFrameLoaderCreated", resolve, { once: true }));
+            node.appendChild(browser);
+            doc.documentElement.appendChild(node);
+            details = { load_started: await Promise.race([load_in_browser(browser, created).then(() => true), new Promise((resolve) => setTimeout_(resolve, 4000, "timeout"))]), box: JSON.stringify(node.getBoundingClientRect()) };
           } else if (kind === "browser_top") {
             const doc = win.document;
             node = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
@@ -277,15 +287,25 @@ var probe = class extends ExtensionAPI {
             const start = ChromeUtils.now();
             await new Promise((resolve) => {
               pending_pongs.set(seq, resolve);
-              for (const listener of ping_listeners) listener(seq);
+              for (const listener of ping_listeners) listener({ seq, sent: start });
             });
-            samples.push(ChromeUtils.now() - start);
+            samples.push({ rtt: ChromeUtils.now() - start, sent: start });
           }
           return samples;
         },
         pong(seq) {
           pending_pongs.get(seq)?.();
           pending_pongs.delete(seq);
+        },
+        async process_info() {
+          const three = about3pane(main_windows()[0]);
+          const describe_browser = (browser) => (browser ? { remote: !!browser.isRemoteBrowser, remote_type: browser.remoteType ?? null, parent_can_read_document: !!browser.contentDocument, uri: browser.currentURI?.spec ?? "" } : null);
+          return {
+            about3pane_tab_browser: describe_browser(main_windows()[0].document.getElementById("tabmail").tabInfo[0].chromeBrowser),
+            message_browser_about_message: describe_browser(three.messageBrowser),
+            messagepane: describe_browser(three.messageBrowser.contentWindow?.document.getElementById("messagepane")),
+            overlay_browser: state.overlay ? describe_browser(state.overlay.querySelector?.("browser")) : null,
+          };
         },
         async noop() {},
         async console_tail() { return console_lines.splice(0); },
@@ -302,7 +322,7 @@ var probe = class extends ExtensionAPI {
           context,
           name: "probe.onPing",
           register: (fire) => {
-            const listener = (seq) => fire.async(seq);
+            const listener = (info) => fire.async(info);
             ping_listeners.add(listener);
             return () => ping_listeners.delete(listener);
           },
@@ -319,8 +339,8 @@ var probe = class extends ExtensionAPI {
     return api;
   }
 
+  // The probe never shuts down during a run, so it removes nothing here. A real runtime must remove its key listeners, its overlay and its console or window listeners.
   onShutdown() {
-    // The console listener dies with the process.
     ExtensionSupport.unregisterWindowListener("probe@desertbird.invalid");
   }
 };
