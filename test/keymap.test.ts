@@ -51,7 +51,7 @@ test("a count prefix reaches the matcher", () => {
     assert.equal(count, 3);
 });
 
-test("a lone g is pending, and a reset after the timeout forgets it", () => {
+test("a lone g is pending, and a reset forgets it", () => {
     const matcher = create_matcher(compiled);
     assert.equal(matcher.feed("normal", "g").kind_, "pending");
     matcher.reset();

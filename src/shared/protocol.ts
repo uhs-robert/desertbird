@@ -7,7 +7,7 @@ export { COMPILED_KEYMAP_VERSION };
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-/** Compiled keymap as data. Leaves name command ids; the parent looks them up in its fixed motion table and ignores unknown ids. */
+/** Compiled keymap as data. Leaves name command ids. The parent looks them up in its fixed motion table and ignores unknown ids. */
 export interface KeymapTree {
     version: typeof COMPILED_KEYMAP_VERSION;
     root: JsonValue;
@@ -29,37 +29,13 @@ export interface KeysInvocation {
     windowId: number;
 }
 
-export interface ViewRowsArgs {
-    first: number;
-    last: number;
-}
-
-export interface ViewRow {
-    index: number;
-    id: number;
-    depth: number;
-    collapsed: boolean;
-    unread: boolean;
-}
-
-export interface ViewSelectArgs {
-    anchor: number;
-    end: number;
-}
-
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
     keys: { functions: ["install"], events: ["onInvocation"] },
-    view: { functions: ["rows", "select"], events: [] },
 } as const;
 
-/** Call and event shapes as the background sees them on `browser.keys` and `browser.view`. */
+/** Call and event shapes as the background sees them on `browser.keys`. */
 export interface KeysApi {
     install(args: KeysInstallArgs): Promise<void>;
     onInvocation: { addListener(listener: (invocation: KeysInvocation) => void): void; removeListener(listener: (invocation: KeysInvocation) => void): void };
-}
-
-export interface ViewApi {
-    rows(args: ViewRowsArgs): Promise<ViewRow[]>;
-    select(args: ViewSelectArgs): Promise<void>;
 }

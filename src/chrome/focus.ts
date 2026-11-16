@@ -1,20 +1,23 @@
-// Finds out whether a key is meant for a text field. The top window sees keys from every document below it, so the event target alone can name the wrapping element and not the field.
+// Finds out where a key is going: a text field, the reading pane or an open menu. The top window sees keys from every document below it, so the event target alone can name the wrapping element and not the field.
 
 export interface FocusNode {
     localName?: string;
     id?: string;
     isContentEditable?: boolean;
     shadowRoot?: { activeElement: FocusNode | null } | null;
-    contentDocument?: { activeElement: FocusNode | null; body?: FocusNode | null } | null;
+    contentDocument?: FocusDocument | null;
 }
 
 export interface FocusDocument {
     activeElement: FocusNode | null;
+    body?: FocusNode | null;
+    querySelectorAll?(selectors: string): Iterable<{ state?: string }>;
 }
 
 // Elements the user types text into. A `browser` is not one: the walk enters every browser it can read, and one it cannot read (a remote page) holds no Thunderbird text field.
 const TYPING_ELEMENTS = new Set(["input", "textarea", "select", "search-textbox", "menulist"]);
 
+// The measured chains are four deep (main window, about:3pane, about:message, message body). The cap only stops a pathological nesting.
 const MAX_DEPTH = 12;
 
 export const is_typing_element = (node: FocusNode | null | undefined): boolean => node?.isContentEditable === true || TYPING_ELEMENTS.has(node?.localName ?? "");
@@ -34,11 +37,20 @@ export function focus_chain(document: FocusDocument): FocusNode[] {
 /** The element that has focus: the end of the chain. */
 export const innermost_focus = (document: FocusDocument): FocusNode | null => focus_chain(document).at(-1) ?? null;
 
-// The ids of the reading pane's browser elements in about:3pane.
+// `messageBrowser` holds about:message inside about:3pane, and `messagepane`, the message body, sits inside about:message.
 const READING_PANE_IDS = new Set(["messageBrowser", "messagepane"]);
 
 /** Whether focus sits in the reading pane, whatever the element inside it. */
 export const in_reading_pane = (document: FocusDocument): boolean => focus_chain(document).some((node) => READING_PANE_IDS.has(node.id ?? ""));
+
+// A menu or panel shows from the moment it opens until it closes. Its `open` attribute stays unset, so only `state` tells.
+const SHOWN_POPUP_STATES = new Set(["showing", "open"]);
+
+/** Whether a menu or panel is open in the window or in a document on the way to the focus, such as the thread list's context menu in about:3pane. Its access keys are its own then. */
+export function menu_is_open(document: FocusDocument): boolean {
+    const documents = [document, ...focus_chain(document).flatMap((node) => (node.contentDocument ? [node.contentDocument] : []))];
+    return documents.some((each) => [...(each.querySelectorAll?.("menupopup, panel") ?? [])].some((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "")));
+}
 
 export interface KeyEventTargets {
     target: unknown;

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PARENT_MAX_BYTES = Number(/PARENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
@@ -20,6 +21,10 @@ const PARENT_ALLOWED_INPUTS = [
 const BANNED_IN_PARENT: [string, RegExp][] = [
     ["eval", /\beval\b/],
     ["new Function", /new\s+Function\b/],
+    ["Function called without new", /(?<![\w.])Function\s*\(/],
+    ["evalInSandbox", /evalInSandbox/],
+    ["Cu.import", /\bCu\.import\(/],
+    ["Components.utils", /Components\.utils/],
     ["loadSubScript", /loadSubScript/],
     ["compileScript", /compileScript/],
     ["innerHTML", /innerHTML/],
@@ -28,7 +33,7 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-const PARENT_NAMES = ["keys", "view"];
+const PARENT_NAMES = ["keys"];
 const sources: Record<string, string> = {};
 const inputs: Record<string, string[]> = {};
 
@@ -58,11 +63,8 @@ test("no parent bundle uses a banned API", () => {
     for (const name of PARENT_NAMES) for (const [banned, pattern] of BANNED_IN_PARENT) assert.ok(!pattern.test(sources[name]!), `the ${name} bundle contains ${banned}`);
 });
 
-test("each parent bundle defines only its own API class", () => {
+test("the parent bundle defines its API class", () => {
     assert.match(sources["keys"]!, /^var keys = class extends ExtensionAPI/m);
-    assert.doesNotMatch(sources["keys"]!, /^var view = /m);
-    assert.match(sources["view"]!, /^var view = class extends ExtensionAPI/m);
-    assert.doesNotMatch(sources["view"]!, /^var keys = /m);
 });
 
 test("each parent bundle stays within the size guard", () => {
@@ -87,6 +89,17 @@ test("AGENTS.md records the size guard", () => {
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/view.schema.json", "experiment/view.js"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
+});
+
+test("--out with no value fails and empties nothing", () => {
+    // Run from a scratch directory: the bug this guards against emptied the working directory.
+    const scratch = mkdtempSync(join(tmpdir(), "desertbird-out-"));
+    try {
+        assert.throws(() => execFileSync("node", [join(root, "tools/build.mjs"), "--out"], { cwd: scratch, stdio: "pipe" }), /--out needs a directory/);
+        assert.ok(existsSync(scratch));
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
 });

@@ -1,26 +1,33 @@
-// Builds dist/: background.js, experiment/{keys,view}.{schema.json,js}, manifest.json and an unsigned desertbird.xpi.
+// Builds dist/: background.js, experiment/keys.{schema.json,js}, manifest.json and an unsigned desertbird.xpi.
 //   node tools/build.mjs [--out <dir>]
 // The esbuild metafiles go to <out>/meta/ and stay out of the xpi. test/build.test.ts reads them.
 
 import { build } from "esbuild";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out_index = process.argv.indexOf("--out");
-const out_dir = resolve(out_index === -1 ? join(root, "dist") : (process.argv[out_index + 1] ?? ""));
+const out_value = out_index === -1 ? join(root, "dist") : process.argv[out_index + 1];
+if (!out_value) {
+    console.error("build: --out needs a directory");
+    process.exit(1);
+}
+const out_dir = resolve(out_value);
+// The build empties the output directory first, so it must never be the checkout or a folder that holds it.
+if (relative(out_dir, root).split(sep)[0] !== "..") {
+    console.error(`build: refusing to empty ${out_dir}, which holds the checkout`);
+    process.exit(1);
+}
 
-// The chrome runtime size guard, applied to each parent bundle: the first measured size of the larger one plus 20 percent. AGENTS.md records the same number.
-const PARENT_MAX_BYTES = 19100;
+// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. AGENTS.md records the same number.
+const PARENT_MAX_BYTES = 18004;
 
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
-// Each API has its own script and schema: two entries that shared one script left `view` unloaded.
-const PARENTS = [
-    { name: "keys", entry: "src/chrome/parent_keys.ts" },
-    { name: "view", entry: "src/chrome/parent_view.ts" },
-].map((parent) => ({
+// Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
+const PARENTS = [{ name: "keys", entry: "src/chrome/parent_keys.ts" }].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,
     footer: `

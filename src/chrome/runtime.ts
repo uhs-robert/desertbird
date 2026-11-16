@@ -1,5 +1,6 @@
 // Key handling in the main mail window. It holds no Thunderbird global: the parent hands in a `RuntimeDeps`, so node tests drive every path with fakes.
 
+import type { JsonValue, KeysInvocation } from "../shared/protocol.ts";
 import { COMPILED_KEYMAP_VERSION } from "../../vendor/desertfox/prefix_tree.ts";
 import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../../vendor/desertfox/prefix_tree.ts";
 import { create_matcher } from "../../vendor/desertfox/keys/matcher.ts";
@@ -20,14 +21,6 @@ export interface KeyTarget {
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
 }
 
-/** The invocation that leaves for the background. Plain data only. */
-export interface Invocation {
-    command: string;
-    args: Record<string, unknown>;
-    count: number;
-    windowId: number;
-}
-
 export interface WindowListener<Window> {
     on_load_window(window: Window): void;
     on_unload_window(window: Window): void;
@@ -42,10 +35,12 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     view_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for a text field. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
+    /** Whether a menu or panel is open. Keys then belong to it, its access keys among them. */
+    menu_is_open(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
     window_id_of(window: Window): number;
-    emit(invocation: Invocation): void;
+    emit(invocation: KeysInvocation): void;
 }
 
 export interface Runtime {
@@ -71,10 +66,11 @@ function read_root(tree: { version: number; root: unknown }): TreeBranch {
 const keymap_of = (root: TreeBranch): CompiledKeymap => ({ format_version: COMPILED_KEYMAP_VERSION, modes: { [NORMAL_MODE]: root } }) as CompiledKeymap;
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
-    // The cancel state lives in the matcher (a half-typed sequence) and in this map. Shutdown drops both.
     const hooked = new Map<Window, (event: KeydownEvent) => void>();
     let matcher: ReturnType<typeof create_matcher> | null = null;
     let listening = false;
+    // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
+    let sequence_window: Window | null = null;
 
     function run_leaf(leaf: TreeLeaf, port: ViewPort, window: Window, count: number | undefined): void {
         for (const step of leaf.steps) {
@@ -82,23 +78,32 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             if (step.runs_in === "chrome") {
                 run_motion(step.invocation.id, port, step_count);
             } else if (step.runs_in === "background") {
-                deps.emit({ command: step.invocation.id, args: step.invocation.args ?? {}, count: step_count ?? 1, windowId: deps.window_id_of(window) });
+                deps.emit({ command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count: step_count ?? 1, windowId: deps.window_id_of(window) });
             }
         }
     }
 
+    /** The thread list a key acts on, or null when the key goes to a text field, an open menu or a tab that is not the mail tab. */
+    function list_port_for(window: Window, event: KeydownEvent): ViewPort | null {
+        return deps.is_typing_target(window, event) || deps.menu_is_open(window) ? null : deps.view_port_of(window);
+    }
+
     function on_keydown(window: Window, event: KeydownEvent): void {
-        if (!matcher || event.ctrlKey || event.altKey || event.metaKey || deps.is_typing_target(window, event)) return;
-        const port = deps.view_port_of(window);
+        if (!matcher || event.ctrlKey || event.altKey || event.metaKey) return;
         const token = event_to_token(event);
-        if (!port || token === null) return;
-        if (deps.in_reading_pane(window)) {
-            if (is_plain_printable(token)) {
+        if (token === null) return;
+        const port = list_port_for(window, event);
+        // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
+        if (!port || deps.in_reading_pane(window)) {
+            matcher.reset();
+            if (port && is_plain_printable(token)) {
                 event.preventDefault();
                 event.stopPropagation();
             }
             return;
         }
+        if (sequence_window !== window) matcher.reset();
+        sequence_window = window;
         const result = matcher.feed(NORMAL_MODE, token);
         if (result.kind_ === "no_match" && !is_plain_printable(token)) return;
         // Thunderbird binds single keys such as `j` and `a`, so the key stops here whether or not it matched.
@@ -119,6 +124,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (!handler) return;
         window.removeEventListener("keydown", handler, true);
         hooked.delete(window);
+        if (sequence_window === window) sequence_window = null;
     }
 
     return {
@@ -136,6 +142,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             if (listening) deps.unregister_window_listener();
             listening = false;
             matcher = null;
+            sequence_window = null;
         },
     };
 }

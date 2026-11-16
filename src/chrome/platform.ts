@@ -1,20 +1,20 @@
-// What both Experiment parents share: the Thunderbird globals they read and the verb guard. Each parent bundle holds its own copy of this file and of view.ts, so no state lives here.
+// The Thunderbird globals the Experiment parent reads, and the guard every verb runs through. Nothing here keeps state.
 // Platform modules load through `ChromeUtils.importESModule` inside functions, never at the top, so node tests load the parents with stub globals.
 
 import type { KeyTarget } from "./runtime.ts";
-import type { MessageHeaderLike, TabmailLike } from "./view.ts";
+import type { FocusDocument } from "./focus.ts";
+import type { TabmailLike } from "./view.ts";
 
-declare const ChromeUtils: { importESModule(url: string): Record<string, any>; now(): number };
-declare const Services: { wm: { getEnumerator(type: string | null): Iterable<MainWindow>; getMostRecentWindow(type: string): MainWindow | null } };
+declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
+declare const Services: { wm: { getEnumerator(type: string | null): Iterable<MainWindow> } };
 
 export interface MainWindow extends KeyTarget {
-    document: { getElementById(id: string): unknown; activeElement: unknown };
+    document: FocusDocument & { getElementById(id: string): unknown };
 }
 
 export interface ExtensionContext {
     extension: {
-        messageManager: { convert(header: MessageHeaderLike): { id: number } };
-        windowManager?: { getWrapper(window: MainWindow): { id: number } | null };
+        windowManager: { getWrapper(window: MainWindow): { id: number } | null };
     };
 }
 
@@ -35,8 +35,6 @@ export function load_platform(): Platform {
 }
 
 export const open_main_windows = (): MainWindow[] => Array.from(Services.wm.getEnumerator(MAIN_WINDOW_TYPE));
-
-export const most_recent_main_window = (): MainWindow | null => Services.wm.getMostRecentWindow(MAIN_WINDOW_TYPE);
 
 export const tabmail_of = (window: MainWindow): TabmailLike | null => window.document.getElementById("tabmail") as TabmailLike | null;
 

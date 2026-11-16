@@ -10,34 +10,32 @@ interface FakeOptions {
     displayed?: { id: number; date?: Date; folder?: { accountId: string } }[];
     identities?: unknown[];
     experiment?: boolean;
-    row_ids?: number[];
+    page_size?: number;
 }
 
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
 export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[] } {
     const calls: string[] = [];
-    const row_ids = options.row_ids ?? [10, 11, 12];
+    // The selection comes back in pages of `page_size`, as Thunderbird pages a long message list.
+    const page_size = options.page_size ?? Infinity;
+    const selected = options.selected ?? [];
+    const page_at = (start: number) => ({ id: start + page_size < selected.length ? `page-${start + page_size}` : null, messages: selected.slice(start, start + page_size) });
     const api: RouterApi = {
         tabs: { query: async (query) => (calls.push(`tabs.query ${query.windowId}`), [{ id: 7 }]) },
         mailTabs: {
-            getSelectedMessages: async (tab_id) => (calls.push(`mailTabs.getSelectedMessages ${tab_id}`), { messages: options.selected ?? [] }),
+            getSelectedMessages: async (tab_id) => (calls.push(`mailTabs.getSelectedMessages ${tab_id}`), page_at(0)),
         },
         // A bare array, as Thunderbird 153 and Betterbird return it.
         messageDisplay: { getDisplayedMessages: async (tab_id) => (calls.push(`messageDisplay.getDisplayedMessages ${tab_id}`), (options.displayed ?? options.selected ?? []).map((message) => ({ date: new Date(0), ...message }))) },
         messages: {
             archive: async (ids) => void calls.push(`messages.archive ${ids.join(",")}`),
             delete: async (ids) => void calls.push(`messages.delete ${ids.join(",")}`),
+            continueList: async (list_id) => (calls.push(`messages.continueList ${list_id}`), page_at(Number(list_id.slice("page-".length)))),
         },
         compose: { beginReply: async (id, type) => (calls.push(`compose.beginReply ${id} ${type}`), undefined) },
         identities: { list: async (account_id) => (calls.push(`identities.list ${account_id}`), options.identities ?? [{ id: "i1" }]) },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
-        view:
-            options.experiment === false
-                ? undefined
-                : {
-                      rows: async (range) => (calls.push(`view.rows ${range.first}`), row_ids.map((id, index) => ({ index, id, depth: 0, collapsed: false, unread: false }))),
-                      select: async (range) => void calls.push(`view.select ${range.anchor},${range.end}`),
-                  },
+        keys: options.experiment === false ? undefined : { install: async () => {}, onInvocation: { addListener: () => {}, removeListener: () => {} } },
     };
     return { api, calls };
 }
@@ -92,9 +90,9 @@ test("r with no displayed message refuses", async () => {
 
 test("a missing Experiment refuses a command that needs it, before any selection read", async () => {
     const local = create_registry();
-    local.define("test.needs_rows", { runs_in: "background", label: "Probe", intent: "Probe the Experiment check.", needs: ["view.rows"], run: async () => {} });
+    local.define("test.needs_keys", { runs_in: "background", label: "Probe", intent: "Probe the Experiment check.", needs: ["keys.install"], run: async () => {} });
     const { api, calls } = fake_api({ selected: [{ id: 5 }], experiment: false });
-    await create_router(local, api).run(invoke("test.needs_rows"));
+    await create_router(local, api).run(invoke("test.needs_keys"));
     assert.deepEqual(calls.map((call) => call.split(" ")[0]), ["notify"]);
     assert.match(notifications(calls)[0] ?? "", /Experiment/);
 });
@@ -116,11 +114,12 @@ test("x and d d pass every selected id", async () => {
     }
 });
 
-test("x and d d leave the selection to Thunderbird", async () => {
-    for (const command of ["msg.archive", "msg.delete"]) {
-        const { api, calls } = fake_api({ selected: [{ id: 12 }] });
+test("x and d d act on every page of a long selection", async () => {
+    for (const [command, call] of [["msg.archive", "messages.archive 1,2,3,4,5"], ["msg.delete", "messages.delete 1,2,3,4,5"]] as const) {
+        const { api, calls } = fake_api({ selected: [1, 2, 3, 4, 5].map((id) => ({ id })), page_size: 2 });
         await create_router(registry, api).run(invoke(command));
-        assert.equal(calls.some((call) => call.startsWith("view.")), false, command);
+        assert.deepEqual(calls.filter((entry) => entry.startsWith("messages.continueList")), ["messages.continueList page-2", "messages.continueList page-4"], command);
+        assert.ok(calls.includes(call), command);
     }
 });
 

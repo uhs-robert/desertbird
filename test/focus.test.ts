@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { in_reading_pane, innermost_focus, is_typing } from "../src/chrome/focus.ts";
+import { in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 
 const element = (localName: string, extra: Partial<FocusNode> = {}): FocusNode => ({ localName, ...extra });
@@ -84,4 +84,15 @@ test("focus in the message browser or the message pane is the reading pane", () 
     const list = element("browser", { contentDocument: { activeElement: element("tbody", { id: "threadTree" }) } });
     assert.equal(in_reading_pane(document_of(list)), false);
     assert.equal(in_reading_pane(document_of(null)), false);
+});
+
+test("a menu open in the window or in a document on the way to the focus counts, a closed one does not", () => {
+    const popups = (...states: string[]) => () => states.map((state) => ({ state }));
+    const list = element("tbody");
+    const three_pane = (states: string[]) => element("browser", { contentDocument: { activeElement: list, querySelectorAll: popups(...states) } });
+    // Measured: the thread list's context menu is a menupopup in about:3pane with state "open" and no `open` attribute.
+    assert.equal(menu_is_open({ activeElement: three_pane(["closed", "open"]), querySelectorAll: popups("closed") }), true);
+    assert.equal(menu_is_open({ activeElement: three_pane(["closed"]), querySelectorAll: popups("showing") }), true);
+    assert.equal(menu_is_open({ activeElement: three_pane(["closed"]), querySelectorAll: popups("closed", "hiding") }), false);
+    assert.equal(menu_is_open(document_of(null)), false);
 });

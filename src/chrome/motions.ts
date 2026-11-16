@@ -44,7 +44,7 @@ export const MOTION_IDS = Object.keys(MOTIONS) as MotionId[];
 
 const is_motion_id = (id: string): id is MotionId => Object.hasOwn(MOTIONS, id);
 
-/** Runs the motion the id names. An unknown id does nothing and returns false, so a newer keymap cannot make an older runtime run a stranger. */
+/** Runs the motion the id names. An unknown id does nothing and returns false, so a newer keymap cannot make an older runtime run a motion it does not have. */
 export function run_motion(id: string, port: ViewPort, count: Count): boolean {
     if (!is_motion_id(id)) return false;
     MOTIONS[id](port, count);

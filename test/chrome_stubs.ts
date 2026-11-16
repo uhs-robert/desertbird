@@ -38,8 +38,8 @@ export function stub_platform(main_windows: unknown[] = []): PlatformStub {
     };
     const globals = globalThis as Record<string, unknown>;
     const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"] };
-    globals["ChromeUtils"] = { importESModule: (url: string) => modules[url], now: () => 0 };
-    globals["Services"] = { wm: { getEnumerator: () => main_windows, getMostRecentWindow: () => main_windows[0] ?? null } };
+    globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] };
+    globals["Services"] = { wm: { getEnumerator: () => main_windows } };
     stub.restore = () => {
         globals["ChromeUtils"] = before.ChromeUtils;
         globals["Services"] = before.Services;

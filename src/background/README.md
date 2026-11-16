@@ -6,14 +6,14 @@ The persistent background page. It owns the command registry, compiles the defau
 
 - `registry.ts`: the one table of commands. `motion.*` run in the chrome runtime and carry no handler. `msg.*` run here.
 - `default_keymap.ts`: the default bindings and their compile through the vendored compiler.
-- `main.ts`: stores the compiled keymap under `desertbird_compiled_keymap`, calls `keys.install` on every start and again when storage changes, and routes `keys.onInvocation` to the router.
-- `router.ts`: look up, `check_args`, check `needs`, resolve the selection, call the handler. Any failure ends in a notification.
+- `main.ts`: stores the compiled keymap under `desertbird_compiled_keymap` with a hash of the default bindings, calls `keys.install` on every start and again when storage changes, and routes `keys.onInvocation` to the router.
+- `router.ts`: look up, `check_args`, check `needs`, resolve the selection (every page of it), call the handler. Any failure ends in a notification.
 - `notify.ts`: shows a refusal. A key never fails silently.
 - `handlers/message.ts`, `handlers/identity.ts`: archive, delete and reply. They take the API subset in a scope object and never read a global.
 
 ## Rules
 
-- `needs` lists the Experiment verbs a handler calls (`view.rows`). The router hands the handler a `view` limited to those verbs and refuses the command when the Experiment is missing.
+- `needs` lists the Experiment verbs a command depends on (`keys.install`). The router refuses the command when one of them is not loaded. No phase 1 command lists one.
 - A handler throws `RuntimeRefusal` for a state it cannot act on. It never checks an argument value, since the param schema does that.
 - `msg.reply` checks `identities.list` before `compose.beginReply`. `beginReply` crashes the whole app when the account has no identity.
 

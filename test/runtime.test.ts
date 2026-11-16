@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_runtime } from "../src/chrome/runtime.ts";
-import type { Invocation, KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
+import type { KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
 import type { ViewPort } from "../src/chrome/motions.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
+import type { KeysInvocation } from "../src/shared/protocol.ts";
 import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 
 class FakeWindow implements KeyTarget {
@@ -11,6 +12,7 @@ class FakeWindow implements KeyTarget {
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
+    menu_open = false;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }) };
     selected = 0;
     rows = 10;
@@ -57,16 +59,17 @@ const tree = () => ({
         children: {
             j: leaf("motion.down", "chrome"),
             k: leaf("motion.up", "chrome"),
-            x: leaf("message.archive", "background"),
+            x: leaf("msg.archive", "background"),
             q: leaf("motion.sideways", "chrome"),
             g: { kind: "branch", children: { g: leaf("motion.top", "chrome") } },
+            d: { kind: "branch", children: { d: leaf("msg.delete", "background") } },
         },
     },
 });
 
 function setup() {
     const windows = [new FakeWindow()];
-    const emitted: Invocation[] = [];
+    const emitted: KeysInvocation[] = [];
     let window_listener: WindowListener<FakeWindow> | null = null;
     let registers = 0;
     let unregisters = 0;
@@ -79,6 +82,7 @@ function setup() {
         open_windows: () => windows,
         view_port_of: (window) => (window.in_mail_tab ? window.port() : null),
         is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
+        menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
         window_id_of: () => 7,
         emit: (invocation) => void emitted.push(invocation),
@@ -98,7 +102,7 @@ test("a background leaf is emitted with its window id and a count", () => {
     runtime.install(tree());
     press(windows[0]!, "3");
     press(windows[0]!, "x");
-    assert.deepEqual(emitted, [{ command: "message.archive", args: {}, count: 3, windowId: 7 }]);
+    assert.deepEqual(emitted, [{ command: "msg.archive", args: {}, count: 3, windowId: 7 }]);
 });
 
 test("a sequence waits, completes, and cancels each key", () => {
@@ -215,14 +219,10 @@ test("the parent removes the window listener on shutdown and every verb rethrows
     const window = new FakeWindow();
     const platform = stub_platform([window]);
     const keys_parent = await import("../src/chrome/parent_keys.ts");
-    const view_parent = await import("../src/chrome/parent_view.ts");
-    const context = { extension: { messageManager: { convert: () => ({ id: 1 }) } } };
+    const context = { extension: { windowManager: { getWrapper: () => ({ id: 1 }) } } };
     const keys = keys_parent.get_keys_api(context).keys;
-    const view = view_parent.get_view_api(context).view;
 
     await assert.rejects(keys.install({ tree: { version: 0 as never, root: {} }, settings: {} }), (error) => error instanceof StubExtensionError && /^keys\.install: keymap version 0/.test(error.message));
-    await assert.rejects(view.rows({ first: 0, last: 3 }), (error) => error instanceof StubExtensionError && /^view\.rows: no mail window/.test(error.message));
-    await assert.rejects(view.select({ anchor: 0, end: 1 }), (error) => error instanceof StubExtensionError && /^view\.select: no mail window/.test(error.message));
 
     await keys.install({ tree: tree(), settings: {} });
     await keys.install({ tree: tree(), settings: {} });
@@ -249,4 +249,68 @@ test("in the reading pane plain printable keys are swallowed and run nothing, na
     for (const key of ["Enter", "Escape", "ArrowDown", "Tab", " "]) assert.equal(press(window, key).cancelled, false, key);
     assert.equal(press(window, "j", { ctrlKey: true }).cancelled, false);
     assert.equal(press(window, "j", { target: { localName: "input" } }).cancelled, false);
+});
+
+test("a count reaches a chrome motion", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "3");
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 3);
+});
+
+test("a key that leaves the list ends a half-typed sequence", () => {
+    const leave: [string, (window: FakeWindow) => KeyResult, (window: FakeWindow) => void][] = [
+        ["a key typed into an input", (window) => press(window, "o", { target: { localName: "input" } }), () => {}],
+        ["a key in the reading pane", (window) => ((window.in_reading_pane = true), press(window, "o")), (window) => void (window.in_reading_pane = false)],
+        ["a key in an open menu", (window) => ((window.menu_open = true), press(window, "o")), (window) => void (window.menu_open = false)],
+        ["a key in another tab", (window) => ((window.in_mail_tab = false), press(window, "o")), (window) => void (window.in_mail_tab = true)],
+    ];
+    for (const [name, step_away, come_back] of leave) {
+        const { windows, emitted, runtime } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        press(window, "d");
+        step_away(window);
+        come_back(window);
+        press(window, "d");
+        assert.deepEqual(emitted, [], name);
+        press(window, "d");
+        assert.equal(emitted.length, 1, `${name}: a fresh d d still deletes`);
+    }
+});
+
+test("a sequence never spans two windows", () => {
+    const { windows, runtime, load } = setup();
+    runtime.install(tree());
+    const other = new FakeWindow();
+    load(other);
+    windows[0]!.selected = 4;
+    other.selected = 4;
+    press(windows[0]!, "g");
+    press(other, "g");
+    assert.equal(windows[0]!.selected, 4);
+    assert.equal(other.selected, 4);
+    press(other, "g");
+    assert.equal(other.selected, 0);
+});
+
+test("only the mail tab in front gives keys a thread list", async () => {
+    const { front_about_3pane } = await import("../src/chrome/view.ts");
+    const about_3pane = { gDBView: null, threadTree: { selectedIndex: 0, currentIndex: 0 } };
+    const tab = (name: string) => ({ mode: { name }, chromeBrowser: { contentWindow: about_3pane } });
+    assert.equal(front_about_3pane({ currentTabInfo: tab("mail3PaneTab") }), about_3pane);
+    for (const name of ["mailMessageTab", "contentTab", "calendar"]) assert.equal(front_about_3pane({ currentTabInfo: tab(name) }), null, name);
+    assert.equal(front_about_3pane({ currentTabInfo: null }), null);
+    assert.equal(front_about_3pane(null), null);
+});
+
+test("with a menu open every key passes to the menu and runs nothing", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.menu_open = true;
+    for (const key of ["j", "k", "x", "m"]) assert.equal(press(window, key).cancelled, false, key);
+    assert.equal(window.selected, 0);
+    assert.deepEqual(emitted, []);
 });

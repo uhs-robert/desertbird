@@ -1,20 +1,20 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
-// The `view` API has its own bundle (`parent_view.ts`): two entries that share one script left `view` unloaded.
 
-import type { KeysInstallArgs } from "../shared/protocol.ts";
-import { in_reading_pane, is_typing } from "./focus.ts";
+import { in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
-import type { Invocation, KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
+import type { KeysInstallArgs, KeysInvocation } from "../shared/protocol.ts";
+import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
 import { create_view_port, front_about_3pane } from "./view.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/keys";
+// A window the extension does not track has no id. The background then finds no active tab for it and refuses the command with a notification.
 const NO_WINDOW_ID = -1;
 
 // The invocation listeners belong to the event the background subscribes to.
-const invocation_listeners = new Set<(invocation: Invocation) => void>();
+const invocation_listeners = new Set<(invocation: KeysInvocation) => void>();
 let runtime: Runtime | null = null;
 
 function ensure_runtime(context: ExtensionContext): Runtime {
@@ -32,9 +32,10 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             const about_3pane = front_about_3pane(tabmail_of(window));
             return about_3pane && create_view_port(about_3pane);
         },
-        is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document as Parameters<typeof is_typing>[1]),
-        in_reading_pane: (window: MainWindow) => in_reading_pane(window.document as Parameters<typeof is_typing>[1]),
-        window_id_of: (window) => context.extension.windowManager?.getWrapper(window)?.id ?? NO_WINDOW_ID,
+        is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
+        menu_is_open: (window: MainWindow) => menu_is_open(window.document),
+        in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
+        window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {
             for (const listener of invocation_listeners) listener(invocation);
         },
@@ -50,7 +51,7 @@ export function get_keys_api(context: ExtensionContext) {
                 context,
                 name: "keys.onInvocation",
                 register: (fire) => {
-                    const listener = (invocation: Invocation) => fire.async(invocation);
+                    const listener = (invocation: KeysInvocation) => fire.async(invocation);
                     invocation_listeners.add(listener);
                     return () => invocation_listeners.delete(listener);
                 },

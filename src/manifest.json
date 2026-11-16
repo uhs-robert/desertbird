@@ -6,7 +6,7 @@
     "browser_specific_settings": {
         "gecko": {
             "id": "desertbird@uhs-robert",
-            "strict_min_version": "128.0"
+            "strict_min_version": "153.0"
         }
     },
     "background": {
@@ -21,14 +21,6 @@
                 "scopes": ["addon_parent"],
                 "paths": [["keys"]],
                 "script": "experiment/keys.js"
-            }
-        },
-        "view": {
-            "schema": "experiment/view.schema.json",
-            "parent": {
-                "scopes": ["addon_parent"],
-                "paths": [["view"]],
-                "script": "experiment/view.js"
             }
         }
     }

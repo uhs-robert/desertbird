@@ -1,6 +1,6 @@
 # Vendored DesertFox code
 
-This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension by the same author. DesertFox is the source of the key matcher, the key notation, the keymap compiler and the command registry validator. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
+This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension. DesertFox is the source of the key matcher, the key notation, the keymap compiler and the command registry validator. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
 
 - Source: the DesertFox repository, folder `src/shared/`
 - Tag: `v1.0.0`

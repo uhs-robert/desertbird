@@ -1,6 +1,5 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
-import type { ViewApi } from "../../shared/protocol.ts";
 import { require_identity } from "./identity.ts";
 import type { IdentityApi } from "./identity.ts";
 
@@ -20,18 +19,23 @@ export interface DisplayedMessage {
     folder?: { accountId: string };
 }
 
-export interface MessageApi extends IdentityApi {
-    messages: { archive(ids: number[]): Promise<void>; delete(ids: number[]): Promise<void> };
-    compose: { beginReply(id: number, type: "replyToSender"): Promise<unknown> };
-    // An array, unlike `mailTabs.getSelectedMessages`, on Thunderbird 153 and Betterbird.
-    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<DisplayedMessage[]> };
-    mailTabs: { getSelectedMessages(tab_id: number): Promise<{ messages: { id: number; folder?: { accountId: string } }[] }> };
+/** One page of a message list. A non-empty `id` means more pages follow through `messages.continueList`. */
+export interface MessageListPage {
+    id?: string | null;
+    messages: { id: number; folder?: { accountId: string } }[];
 }
 
-/** What the router hands a handler: the API subset, the selection of the window's active tab and the view verbs the command listed in `needs`. */
+export interface MessageApi extends IdentityApi {
+    messages: { archive(ids: number[]): Promise<void>; delete(ids: number[]): Promise<void>; continueList(list_id: string): Promise<MessageListPage> };
+    compose: { beginReply(id: number, type: "replyToSender"): Promise<unknown> };
+    // An array, not a page, on Thunderbird 153 and Betterbird.
+    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<DisplayedMessage[]> };
+    mailTabs: { getSelectedMessages(tab_id: number): Promise<MessageListPage> };
+}
+
+/** What the router hands a handler: the API subset and the selection of the window's active tab. */
 export interface HandlerScope {
     api: MessageApi;
-    view: ViewApi;
     selection: Selection;
 }
 
