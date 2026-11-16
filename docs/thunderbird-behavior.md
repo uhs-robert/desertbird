@@ -89,7 +89,30 @@ The thread list has these keys as well. Each ran 5 presses, with no cancel and w
 - `a` archived without a dialog, and the first archive created `Archives` and `Archives/2025` in Local Folders.
 - `r` and `R` did nothing in any context. Reply is not a plain-key shortcut in the default setup, so a plain `r` is free for DesertBird.
 - A chrome cancel stopped every key that did anything, in all four contexts, and a cancelled key reached no content script.
-- Chords were not measured.
+
+#### Cancelling Thunderbird's chords
+
+Each chord was pressed 5 times with no cancel and 5 times with a cancel. The cancel is a top window capture listener that calls `preventDefault` and `stopPropagation` for that chord (`ctrlKey` set and the same `key`). `wtype` sent a real Control press around the letter. Each context ran as its own job in a fresh profile, on both apps. Before each press the probe closed extra tabs and windows and reset and selected the message. It then refocused the context, set the clipboard to a marker and ran the settle step. "Acted" means a change in message state (read, flag, junk, tags, folder) or selection. A change in the tab list, window list, active window, focus, quick filter text or clipboard also counts. In the message pane, the probe selected the whole body text before each press, so `<C-c>` and `<C-x>` had a selection to act on. In the quick filter box, it set the text to `hello world` and selected all of it. Cells are "acted out of 5". The command name is the XUL `<key>` that fired its `command` event.
+
+| Chord | Thread list, no cancel | Message pane | Quick filter text box | Cancelled, in every context |
+| --- | --- | --- | --- | --- |
+| `<C-o>` | 5 of 5: opens the message in a new tab (`key_openMessage`) | 5 of 5, the same | 5 of 5, the same | 0 of 5 |
+| `<C-i>` | 0 of 5 | 0 of 5 | 0 of 5 | 0 of 5 |
+| `<C-l>` | 5 of 5: forwards, a compose window opens and takes focus (`key_forward`) | 5 of 5, the same | 5 of 5, the same | 0 of 5 |
+| `<C-j>` | 5 of 5: opens the Saved Files tab (`key_savedFiles`) | 5 of 5, the same | 5 of 5, the same | 0 of 5 |
+| `<C-k>` | 5 of 5: moves focus to the global search bar (`key_quickSearchFocus`) | 5 of 5, the same | 5 of 5, the same | 0 of 5 |
+| `<C-x>` | 0 of 5 | 0 of 5 | 5 of 5: cuts the text to the clipboard | 0 of 5 |
+| `<C-c>` | 0 of 5 | 5 of 5: copies the selected body text | 5 of 5: copies the text | 0 of 5 |
+| `<C-h>` | 0 of 5 | 0 of 5 | 0 of 5 | 0 of 5 |
+
+- `top_capture` saw all 240 presses per app (8 chords, 3 contexts, 2 modes, 5 presses). No press arrived with `defaultPrevented` already set, so Thunderbird handles none of these chords before the top window capture phase.
+- With no cancel, `about3pane_capture` and `top_bubble` saw every press. With the cancel, neither saw any press, in every context.
+- No chord is reserved. The four menu key bindings (`<C-o>`, `<C-l>`, `<C-j>`, `<C-k>`) fire from the main window's key set and a capture cancel stops all of them.
+- The menu chords also fire when the quick filter text box has focus. The text box itself handles only `<C-x>` and `<C-c>`. `<C-h>` does not delete a character there.
+- A cancel in the text box also stops cut and copy. The chrome runtime has to skip chords when the target is a text input, as it does for plain keys.
+- `<C-o>` opens a tab, not a window, under the default "open messages in" setting.
+- `<C-i>` maps to `calendar-new-event-key` in the main window's key set, but nothing opened in the mail tab.
+- Every result came out the same on Thunderbird 153.7.0esr and Betterbird 153.7.0. The screenshots of the first press of each chord with no cancel, in the thread list and the message pane, show the same effects.
 
 ### Message pane process
 
@@ -238,7 +261,7 @@ The other rows were checked for presence only.
 
 ### Not measured
 
-- Chords with modifiers, key repeat, and a held key under a busy thread list. The burst test above ran 5 keys per burst.
+- Key repeat, and a held key under a busy thread list. The burst test above ran 5 keys per burst.
 - Keys with focus in an extension page that is a content tab, the address book tab and the settings tab. `tabs.create` refused `about:addons` ("Loading URL not allowed").
 - A second window of the main type, and tabs other than the mail tab, the message tab and the content tab.
 - Message content that is not local mail, and whether it makes `messagepane` remote.
