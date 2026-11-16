@@ -76,19 +76,18 @@ async function run_default(instance) {
   await shot("inbox_opened");
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
+  let state;
+  const rows = COLLAPSED_ROWS;
   await instance.press(["g"]);
-  let state = await key_and_state(instance, ["g"]);
-  let rows = FLAT_ROWS;
+  state = await key_and_state(instance, ["g"]);
   check(app, kind, "g g selects the first row", first_selected(state) === FLAT_ROWS[0], `selected ${JSON.stringify(state.selected.map((m) => m.header_id))}`);
   note(app, kind, "selection of a collapsed or flat thread root", `${state.selected.length} message(s) selected at row 0, listed ${state.listed.length} messages`);
-
   state = await key_and_state(instance, ["j"]);
   const after_j = first_selected(state);
   const collapsed = after_j === COLLAPSED_ROWS[1];
-  rows = collapsed ? COLLAPSED_ROWS : FLAT_ROWS;
+  // The Inbox opens with its threads collapsed, so the row list stays the collapsed one even when j failed.
   check(app, kind, "j moves exactly one row and skips collapsed children", collapsed, `after j: ${after_j}, expected ${COLLAPSED_ROWS[1]}`);
   check(app, kind, "keys API answers (j moved the selection)", after_j !== null && after_j !== FLAT_ROWS[0]);
-
   state = await key_and_state(instance, ["k"]);
   check(app, kind, "k moves back one row", first_selected(state) === rows[0], `selected ${first_selected(state)}`);
   state = await key_and_state(instance, ["G"]);
@@ -154,43 +153,57 @@ async function run_default(instance) {
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "after reload, g g reaches the top and one j moves exactly one row", top_after_reload === rows[0] && first_selected(state) === rows[1], `top ${top_after_reload}, after j ${first_selected(state)}, expected ${rows[1]}`);
 
-  // x archives. A single message (the last row) is selected, so the thread-selection rule does not mix in.
-  state = await key_and_state(instance, ["G"]);
-  const to_archive = first_selected(state);
-  const rows_index_of = (id) => rows.indexOf(id);
-  state = await key_and_state(instance, ["x"], 2500);
-  const archived_in = Object.entries(state.folders).filter(([, ids]) => ids.includes(to_archive)).map(([path]) => path);
-  const archived = archived_in.length === 1 && /Archive/i.test(archived_in[0]);
-  check(app, kind, "x archives the selected message", archived, `${to_archive} is in ${JSON.stringify(archived_in)}`);
-  check(app, kind, "view.rows answers (x ran act_and_keep_selection)", archived, "x needs view.rows; a failure here means the call was refused");
-  note(app, kind, "selection after x", `selected ${JSON.stringify(state.selected.map((m) => m.header_id))} (row ${state.selected.length ? rows_index_of(state.selected[0].header_id) : "none"}); key run, archived row was ${rows_index_of(to_archive)}`);
-  await shot("after_x", "list after x");
-  if (!archived) {
-    // The key failed, so measure what Thunderbird itself leaves selected after an API archive of the same message.
-    await instance.ask("api_archive");
-    await sleep(2500);
-    state = await instance.ask("state");
-    note(app, kind, "selection after an API archive (messages.archive, no key)", `selected ${JSON.stringify(state.selected.map((m) => m.header_id))} (row ${state.selected.length ? rows_index_of(state.selected[0].header_id) : "none"}), archived row was ${rows_index_of(to_archive)}`);
-    await shot("after_api_archive", "list after archiving through the API");
+  // x and d d at two places: the middle of the list and the last row. The note says which row Thunderbird leaves selected.
+  const gone = new Set();
+  const live_rows = () => rows.filter((id) => !gone.has(id));
+  const row_of = (id) => (id === null || id === undefined ? "none" : live_rows().indexOf(id));
+  const go_to_row = async (row) => {
+    await key_and_state(instance, ["g"]);
+    await key_and_state(instance, ["g"]);
+    for (const digit of String(row)) await instance.press([digit]);
+    return key_and_state(instance, ["j"]);
+  };
+  for (const where of ["middle", "last"]) {
+    for (const command of ["x", "dd"]) {
+      state = where === "middle" ? await go_to_row(12) : await key_and_state(instance, ["G"]);
+      const target = first_selected(state);
+      const target_row = row_of(target);
+      const rows_total = live_rows().length;
+      if (command === "x") state = await key_and_state(instance, ["x"], 2500);
+      else {
+        await instance.press(["d"]);
+        await sleep(150);
+        state = await key_and_state(instance, ["d"], 2500);
+      }
+      const homes = Object.entries(state.folders).filter(([, ids]) => ids.includes(target)).map(([path]) => path);
+      const done = command === "x" ? homes.length === 1 && /Archive/i.test(homes[0]) : same(homes, ["/Trash"]);
+      check(app, kind, `${command === "x" ? "x archives" : "d d trashes"} the ${where} row's message`, done, `${target} is in ${JSON.stringify(homes)}`);
+      if (done) gone.add(target);
+      const after = state.selected.map((m) => m.header_id);
+      note(app, kind, `selection after ${command} on the ${where} row`, `removed row ${target_row} of ${rows_total}; now selected ${JSON.stringify(after)} at row ${row_of(after[0])} of ${live_rows().length}${done ? "" : " (the key did nothing)"}`);
+      await shot(`after_${command}_${where}`, `list after ${command} on the ${where} row, see the selection note`);
+      if (!done) {
+        // The key failed, so measure what Thunderbird itself leaves selected after an API call on the same message.
+        await instance.ask(command === "x" ? "api_archive" : "api_delete");
+        await sleep(2500);
+        state = await instance.ask("state");
+        gone.add(target);
+        note(app, kind, `selection after an API ${command === "x" ? "archive" : "delete"} on the ${where} row, no key`, `now selected ${JSON.stringify(state.selected.map((m) => m.header_id))} at row ${row_of(state.selected[0]?.header_id)}`);
+      }
+    }
   }
+  check(app, kind, "view.rows and view.select answer (x and d d ran the reselect code without a refusal)", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
 
-  // d d moves to Trash.
-  state = await key_and_state(instance, ["G"]);
-  const to_delete = first_selected(state);
-  await instance.press(["d"]);
-  await sleep(150);
-  state = await key_and_state(instance, ["d"], 2500);
-  const in_trash = () => Object.entries(state.folders).filter(([, ids]) => to_delete && ids.includes(to_delete)).map(([path]) => path);
-  check(app, kind, "d d moves the selected message to Trash", to_delete !== null && same(in_trash(), ["/Trash"]), `${to_delete} is in ${JSON.stringify(in_trash())}`);
-  note(app, kind, "selection after d d", `selected ${JSON.stringify(state.selected.map((m) => m.header_id))} (row ${state.selected.length ? rows_index_of(state.selected[0].header_id) : "none"}); key run, deleted row was ${rows_index_of(to_delete)}`);
-  await shot("after_dd", "list after d d");
-  if (!same(in_trash(), ["/Trash"])) {
-    await instance.ask("api_delete");
-    await sleep(2500);
-    state = await instance.ask("state");
-    note(app, kind, "selection after an API delete (messages.delete, no key)", `selected ${JSON.stringify(state.selected.map((m) => m.header_id))} (row ${state.selected.length ? rows_index_of(state.selected[0].header_id) : "none"}), deleted row was ${rows_index_of(to_delete)}; in ${JSON.stringify(in_trash())}`);
-    await shot("after_api_delete", "list after deleting through the API");
-  }
+  // r on a collapsed thread root replies to the displayed message, the root.
+  await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["r"], 6000);
+  const root_compose = state.windows.find((window) => window.type === "messageCompose");
+  const root_subject = root_compose?.tabs.map((tab) => tab.subject).find(Boolean);
+  check(app, kind, "r on a collapsed thread root opens one reply to the root", state.windows.filter((window) => window.type === "messageCompose").length === 1 && root_subject === "Re: Thread 0", `compose subject ${JSON.stringify(root_subject)}`);
+  await shot("after_r_root", "compose window for the reply to the collapsed thread root");
+  await instance.ask("close_compose");
+  await sleep(1500);
 
   // r opens a reply.
   state = await key_and_state(instance, ["G"]);
@@ -221,7 +234,7 @@ async function run_default(instance) {
   const junk_before = Object.values((await instance.ask("state")).flags).filter((flags) => flags.junk).length;
   state = await key_and_state(instance, ["j"], 2500);
   const junked = Object.entries(state.flags).filter(([, flags]) => flags.junk).map(([id]) => id);
-  note(app, kind, "j with focus in the reading pane", `list focus confirmed before: ${pane_list_focus}; message ${pane_message}; junk flags before ${junk_before}, after ${junked.length} ${JSON.stringify(junked)}; selected after ${JSON.stringify(state.selected.map((m) => m.header_id))}; Inbox ${state.folders["/Inbox"]?.length}, Junk-like folders ${JSON.stringify(Object.keys(state.folders))}`);
+  check(app, kind, "j with focus in the reading pane does nothing (no junk, selection unchanged)", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}; list focus confirmed before: ${pane_list_focus}`);
   await shot("after_reading_pane_j", "state after j with focus in the reading pane");
 }
 
