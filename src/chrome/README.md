@@ -19,7 +19,7 @@ The privileged part of the add-on. It runs as the parent script of an Experiment
 - `keys.install` takes the keymap as data. `root` is the branch of the normal mode. A leaf runs in the chrome only when its id is in the motion table. Any other id does nothing.
 - A leaf with `runs_in: "background"` leaves as a `keys.onInvocation` event. Nothing else crosses the boundary.
 - The first `keys.install` registers one `ExtensionSupport` window listener. Later calls replace the tree and add no listener. `shutdown` removes every key listener and the window listener, and drops the tree and the half-typed sequence.
-- Keys run only in the mail tab of the main window. A key passes through when its target is an input or a `browser` (the overlay, the message body), or when it carries ctrl, alt or meta. In normal mode an unbound plain printable key is swallowed. Named keys (Enter, Escape, arrows, Tab, Space) pass.
+- Keys run only in the mail tab of the main window. A key passes through when its target is an input or a `browser` (the overlay, the message body), or when it carries ctrl, alt or meta. In normal mode an unbound plain printable key is swallowed. Named keys (Enter, Escape, arrows, Tab, Space) pass. With focus in the reading pane, every plain printable key is swallowed and none runs a motion, so Thunderbird's single-key shortcuts do not fire there either.
 
 ## Not yet measured
 

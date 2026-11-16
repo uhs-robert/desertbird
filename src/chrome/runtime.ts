@@ -43,6 +43,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     view_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for a text field. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
+    /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
+    in_reading_pane(window: Window): boolean;
     window_id_of(window: Window): number;
     emit(invocation: Invocation): void;
 }
@@ -91,6 +93,13 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         const port = deps.view_port_of(window);
         const token = event_to_token(event);
         if (!port || token === null) return;
+        if (deps.in_reading_pane(window)) {
+            if (is_plain_printable(token)) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            return;
+        }
         const result = matcher.feed(NORMAL_MODE, token);
         if (result.kind_ === "no_match" && !is_plain_printable(token)) return;
         // Thunderbird binds single keys such as `j` and `a`, so the key stops here whether or not it matched.

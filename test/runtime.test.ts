@@ -10,6 +10,7 @@ class FakeWindow implements KeyTarget {
     listeners = new Set<(event: KeydownEvent) => void>();
     adds = 0;
     in_mail_tab = true;
+    in_reading_pane = false;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }) };
     selected = 0;
     rows = 10;
@@ -78,6 +79,7 @@ function setup() {
         open_windows: () => windows,
         view_port_of: (window) => (window.in_mail_tab ? window.port() : null),
         is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
+        in_reading_pane: (window) => window.in_reading_pane,
         window_id_of: () => 7,
         emit: (invocation) => void emitted.push(invocation),
     };
@@ -232,4 +234,19 @@ test("the parent removes the window listener on shutdown and every verb rethrows
     assert.equal(platform.window_listeners.size, 0);
     assert.equal(window.listeners.size, 0);
     platform.restore();
+});
+
+test("in the reading pane plain printable keys are swallowed and run nothing, named and modified keys pass", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.in_reading_pane = true;
+    assert.equal(press(window, "j").cancelled, true);
+    assert.equal(press(window, "x").cancelled, true);
+    assert.equal(press(window, "m").cancelled, true);
+    assert.equal(window.selected, 0);
+    assert.deepEqual(emitted, []);
+    for (const key of ["Enter", "Escape", "ArrowDown", "Tab", " "]) assert.equal(press(window, key).cancelled, false, key);
+    assert.equal(press(window, "j", { ctrlKey: true }).cancelled, false);
+    assert.equal(press(window, "j", { target: { localName: "input" } }).cancelled, false);
 });

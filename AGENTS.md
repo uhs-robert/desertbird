@@ -31,7 +31,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Give the Experiment a fixed table of chrome verbs, each with typed args checked against its schema. Never add a verb that takes a free string to run, a script, or a URL. A new verb needs a reason in the commit message.
-- The chrome runtime follows the same admission rule as DesertFox `content.js`: code goes in only if it runs before the first key or decides what happens to a key, serves a key pressed in most windows (motions), is needed to load the other parts, or must work while the window changes state. Everything else goes in the background page or an on-demand bundle. The chrome runtime has its own size guard, set in the build: `experiment/parent.js` stays within 19100 bytes (the first measured size, 15912 bytes, plus 20 percent). Raise it only with a reason in the commit message.
+- The chrome runtime follows the same admission rule as DesertFox `content.js`: code goes in only if it runs before the first key or decides what happens to a key, serves a key pressed in most windows (motions), is needed to load the other parts, or must work while the window changes state. Everything else goes in the background page or an on-demand bundle. The chrome runtime has its own size guard, set in the build: each of `experiment/keys.js` and `experiment/view.js` stays within 19100 bytes (the first measured size of the single script, 15912 bytes, plus 20 percent). Raise it only with a reason in the commit message.
 - Put no test hooks in `src/`. Tests drive the add-on through its public surface.
 - Keep no state only in memory. Store it. A copy of stored state can sit in memory when it refills from storage and drops on `storage.onChanged`.
 - Write a migration for every change to stored data: extension storage, config files and exports. An installed copy keeps working after an update.
@@ -61,7 +61,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
-- `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `experiment/parent.js`, `experiment/schema.json`, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when the parent bundle passes the size budget.
+- `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `experiment/keys.js`, `experiment/view.js`, `experiment/keys.schema.json`, `experiment/view.schema.json`, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes the size budget.
 - `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, grim, zip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
 
 ## Planning

@@ -2,6 +2,7 @@
 
 export interface FocusNode {
     localName?: string;
+    id?: string;
     isContentEditable?: boolean;
     shadowRoot?: { activeElement: FocusNode | null } | null;
     contentDocument?: { activeElement: FocusNode | null; body?: FocusNode | null } | null;
@@ -18,17 +19,26 @@ const MAX_DEPTH = 12;
 
 export const is_typing_element = (node: FocusNode | null | undefined): boolean => node?.isContentEditable === true || TYPING_ELEMENTS.has(node?.localName ?? "");
 
-/** The element that has focus, followed through shadow roots and into the documents of browsers and frames. A browser whose document is out of reach (another process) stays the answer. */
-export function innermost_focus(document: FocusDocument): FocusNode | null {
+/** The focused element and every element it sits in, outermost first. The walk follows shadow roots and the documents of browsers and frames. A browser whose document is out of reach ends it. */
+export function focus_chain(document: FocusDocument): FocusNode[] {
+    const chain: FocusNode[] = [];
     let node = document.activeElement;
     for (let depth = 0; node && depth < MAX_DEPTH; depth++) {
+        chain.push(node);
         const content = node.contentDocument;
-        const inner = node.shadowRoot?.activeElement ?? (content ? (content.activeElement ?? content.body ?? null) : null);
-        if (!inner) return node;
-        node = inner;
+        node = node.shadowRoot?.activeElement ?? (content ? (content.activeElement ?? content.body ?? null) : null);
     }
-    return node;
+    return chain;
 }
+
+/** The element that has focus: the end of the chain. */
+export const innermost_focus = (document: FocusDocument): FocusNode | null => focus_chain(document).at(-1) ?? null;
+
+// The ids of the reading pane's browser elements in about:3pane.
+const READING_PANE_IDS = new Set(["messageBrowser", "messagepane"]);
+
+/** Whether focus sits in the reading pane, whatever the element inside it. */
+export const in_reading_pane = (document: FocusDocument): boolean => focus_chain(document).some((node) => READING_PANE_IDS.has(node.id ?? ""));
 
 export interface KeyEventTargets {
     target: unknown;

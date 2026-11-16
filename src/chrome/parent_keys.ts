@@ -2,7 +2,7 @@
 // The `view` API has its own bundle (`parent_view.ts`): two entries that share one script left `view` unloaded.
 
 import type { KeysInstallArgs } from "../shared/protocol.ts";
-import { is_typing } from "./focus.ts";
+import { in_reading_pane, is_typing } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
@@ -33,6 +33,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             return about_3pane && create_view_port(about_3pane);
         },
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document as Parameters<typeof is_typing>[1]),
+        in_reading_pane: (window: MainWindow) => in_reading_pane(window.document as Parameters<typeof is_typing>[1]),
         window_id_of: (window) => context.extension.windowManager?.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {
             for (const listener of invocation_listeners) listener(invocation);
