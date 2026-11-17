@@ -25,6 +25,8 @@ export const BODY_SCRIPT_LIVE_ATTRIBUTE = "data-desertbird-keys";
 
 /** The storage key of the settings the user changed. The body script reads its scroll step from here. */
 export const SETTINGS_STORAGE_KEY = "desertbird_settings";
+/** The command line history: a list of lines, oldest first. The background writes it and the command line page reads it. */
+export const CMDLINE_HISTORY_STORAGE_KEY = "desertbird_cmdline_history";
 
 /** The default of the `message_scroll_step_px` setting: one `j` or `k` in a message. */
 export const MESSAGE_SCROLL_STEP_PX = 40;

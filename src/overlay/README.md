@@ -13,8 +13,8 @@ The command line page and the hud page. The `overlay` Experiment mounts it as a 
 
 - Enter runs the line. A line that is not a command stays open with the reason in the status line.
 - Escape closes the line from any element. The background asks the Experiment to unmount, which returns the focus to the thread list.
-- Tab puts the highlighted row (or the first) into the line. <C-n> and <C-p> move the highlight.
-- Up and Down walk the history while the line is fresh (nothing typed and no completion key used), then move the highlight, as in DesertFox. The history is the list `desertbird_cmdline_history` in `storage.local` (newest last, 100 entries, a repeat moves to the newest place). The page writes it before it sends the line.
+- Tab puts the highlighted row (or the first) into the line. <C-n> and <C-p> put the next or the previous row in, the same way, and the page keeps them from Thunderbird's new message and print. Down and Up move the highlight and stop at the ends.
+- Up and Down walk the history while the line is fresh (nothing typed and no completion key used) or has no rows, as in DesertFox. The history is the list `desertbird_cmdline_history` in `storage.local`. The background writes it when a line runs (`src/background/cmdline/history.ts`). The page keeps a copy that refills on `storage.onChanged`. The cursor is `vendor/desertfox/history_cursor.ts`.
 
 ## Rules
 

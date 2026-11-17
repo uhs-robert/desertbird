@@ -7,7 +7,7 @@ This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox
 - Commit: `33a68a009791563e5ba57999e43b5c8d45c8ca6d` (use the commit, since a tag can move)
 - License: MPL-2.0, the same as DesertBird (see `LICENSE` at the repository root). The copied files keep their text unchanged apart from the edits listed below.
 
-The folder mirrors `src/shared/`, except `completion/tokenize.ts`, which comes from `src/cmdline/completion/tokenize.ts`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
+The folder mirrors `src/shared/`, except `completion/tokenize.ts` and `history_cursor.ts`, which come from `src/cmdline/`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
 
 ## Commands
 
@@ -54,6 +54,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `d7ef6258d1c3b1f8d791212f4af4875c5a48f538c4b8ae42fccec57c8fe2497a` |
 | `default_settings.ts` | stub | `-` | `edc74287069f1b13134282a5456d56669128c3ad031b0e1ffd00a4c020a10cfa` |
+| `history_cursor.ts` | copy | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` |
 | `invocation.ts` | copy | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` |
 | `keymap.ts` | copy | `ff1bf49115316cbd304862586a00cad756c6ebcfa9fc60b71e06b84dfd8f26d4` | `ff1bf49115316cbd304862586a00cad756c6ebcfa9fc60b71e06b84dfd8f26d4` |
 | `keys/compiler.ts` | copy | `24f0f77dda27af768b8f9f5b7788bd22281f454888565ba1ba1f397f91fbb601` | `24f0f77dda27af768b8f9f5b7788bd22281f454888565ba1ba1f397f91fbb601` |

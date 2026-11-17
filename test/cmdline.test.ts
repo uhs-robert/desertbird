@@ -119,11 +119,13 @@ test("a long folder list ranks in full and keeps the best rows only", async () =
 function service_setup(options: { experiment?: boolean } = {}) {
     const { api, calls } = fake_api({ experiment: options.experiment ?? true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [{ id: "f1", accountId: "a1", path: "/Archive" }] });
     const ran: KeysInvocation[] = [];
+    const recorded: string[] = [];
     const router = create_router(registry, api);
     const service = create_cmdline_service({
         registry,
         sources,
         overlay: api.overlay,
+        history: { record: async (line) => void recorded.push(line) },
         run: async (invocation) => {
             ran.push(invocation);
             await router.run(invocation);
@@ -132,7 +134,7 @@ function service_setup(options: { experiment?: boolean } = {}) {
     // The router stores sessions through this wrapper, which records the call and then reaches the real service.
     const recording = { begin: (window_id: number, session: Parameters<typeof service.begin>[1]) => (api.cmdline.begin(window_id, session), service.begin(window_id, session)), end: (window_id: number) => (api.cmdline.end(window_id), service.end(window_id)) };
     const api_with_service = { ...api, cmdline: recording };
-    return { api: api_with_service, calls, ran, service, router: create_router(registry, api_with_service) };
+    return { api: api_with_service, calls, ran, recorded, service, router: create_router(registry, api_with_service) };
 }
 
 const ask = <Answer>(service: ReturnType<typeof service_setup>["service"], message: unknown) => service.handle(message) as Promise<Answer>;
@@ -274,5 +276,31 @@ test("a second run before the page closes runs nothing: Enter twice runs the com
     assert.deepEqual(first, { ok: true });
     assert.equal(second.ok, false);
     await settle();
+    assert.equal(ran.length, 1);
+});
+
+test("a line that runs is recorded, and a failing history write does not stop the command", async () => {
+    const { calls, ran, recorded, service, router } = service_setup();
+    await router.run({ command: "cmdline.open", args: {}, count: 1, windowId: 3, messageIds: [5] });
+    calls.length = 0;
+    assert.deepEqual(await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text: "tag Important" }), { ok: true });
+    await settle();
+    assert.deepEqual(recorded, ["tag Important"]);
+    assert.equal(ran.length, 1);
+});
+
+test("a failing history write still runs the command", async () => {
+    const { api } = fake_api({ experiment: true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [] });
+    const ran: KeysInvocation[] = [];
+    const service = create_cmdline_service({ registry, sources, overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, run: async (invocation) => void ran.push(invocation) });
+    service.begin(3, { message_ids: [5], text: "" });
+    const errors = console.error;
+    console.error = () => undefined;
+    try {
+        assert.deepEqual(await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text: "tag Important" }), { ok: true });
+        await settle();
+    } finally {
+        console.error = errors;
+    }
     assert.equal(ran.length, 1);
 });
