@@ -49,6 +49,8 @@ const BASE_PREFS = {
 
 // The Views folder serves the view setting checks. Six single messages: 3 unread (v0 to v2), 2 starred (v0, v1), 1 with an attachment (v0). The helper add-on tags v4 and v5.
 const VIEWS_COUNT = 6;
+// The sender names sort in an order that matches neither the date order nor its reverse, so a sort by author shows in the rows.
+const VIEWS_SENDER_RANK = [2, 5, 0, 3, 1, 4];
 function views_text() {
   const entries = [];
   for (let index = 0; index < VIEWS_COUNT; index++) {
@@ -61,7 +63,7 @@ function views_text() {
       "X-Mozilla-Status2: 00000000",
       `Message-ID: <views-${index}@fixture.invalid>`,
       `Date: ${time.replace("GMT", "+0000")}`,
-      `From: Views Sender <v${index}@fixture.invalid>`,
+      `From: Views Sender ${VIEWS_SENDER_RANK[index]} <v${index}@fixture.invalid>`,
       "To: Local <local@fixture.invalid>",
       `Subject: Views ${index}`,
       "MIME-Version: 1.0",
