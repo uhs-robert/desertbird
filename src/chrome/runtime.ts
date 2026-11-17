@@ -75,6 +75,16 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         was = keys.length;
     };
 
+    // The window the background last heard visual mode start in, or null. The anchor is shared by all windows, so another window can end the mode, and the end goes to the window that heard the start. Only a change is sent.
+    let visual_told: Window | null = null;
+    const tell_visual = (w: Window) => {
+        const on = visual_anchor >= 0;
+        if (on === (visual_told !== null)) return;
+        const told = visual_told ?? w;
+        visual_told = on ? w : null;
+        deps.emit({ command: "mode", mode: on ? "visual" : "normal", windowId: deps.window_id_of(told) });
+    };
+
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
     let visual_anchor = -1;
     // Where the mode last put the current row, and the view and message keys at both ends of the range then. A key that finds anything else means the list changed under the mode (a click, new mail, a row inserted or removed inside the range, a sort or folder change), so the mode ends and the old anchor never reaches into the new list.
@@ -163,11 +173,12 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     function hook(window: Window): void {
         if (hooked.has(window)) return;
-        const handler = (event: KeydownEvent) => on_keydown(window, event);
+        const handler = (event: KeydownEvent) => (on_keydown(window, event), tell_visual(window));
         const reset_typing = () => {
             matcher?.reset();
             hold_until = 0;
             visual_anchor = -1;
+            tell_visual(window);
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);

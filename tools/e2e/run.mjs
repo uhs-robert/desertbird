@@ -124,7 +124,7 @@ async function run_threads(instance, { app, kind, shot }) {
   await keys(["g", "g"]);
 }
 
-// A hash of the bottom 80 px of the window, where the panel, the toasts and the badge draw, without the scrollbar strip. Higher up a message pane can still be loading.
+// A hash of the bottom 80 px of the window, where the panel and the toasts draw, without the scrollbar strip. The mode label sits in it too and stays the same while the mode does. Higher up a message pane can still be loading.
 async function hud_pixels(instance, name) {
   const { createHash } = await import("node:crypto");
   const { readFileSync } = await import("node:fs");
@@ -158,6 +158,8 @@ async function run_default(instance) {
   await shot("inbox_opened");
   // E2E_ONLY=hud runs the which-key, toast and help checks alone, for a quick run of that part.
   if (process.env.E2E_ONLY === "hud") return run_hud(instance, { app, kind, shot });
+  if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
+  await run_mode_label(instance, { app, kind, shot });
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
   let state;
@@ -893,6 +895,65 @@ async function run_scale(instance) {
   await timed("[ U back across folders", ["[", "U"]);
 }
 
+// The mode label at the start of the status bar. It is an element in the window and not a page, so a check reads its pixels: the strip at the start of the bar draws the same twice when the label did not change. The default kind (classic style, shown in every mode) leaves its strips in `label_reference`, and the style kinds compare against them. The strip stops short of the status text, which shows "Loading Message..." after a selection moves.
+const LABEL_STRIP = "50,692 100x24";
+// The strip is 100 px wide so the status text, which the badge style leaves closer, stays out of it. The second main window opens 64 px to the right.
+const LABEL_PIECE = LABEL_STRIP;
+const SECOND_WINDOW_PIECE = "114,692 100x24";
+const label_reference = {};
+const MODE_LABEL_KINDS = { mode_label_badge: { desertbird_settings: { mode_indicator_style: "badge" } }, mode_label_off: { desertbird_settings: { mode_indicator: "off" } } };
+async function run_mode_label(instance, { app, kind, shot }) {
+  const { createHash } = await import("node:crypto");
+  const { readFileSync } = await import("node:fs");
+  const strip_of = async (name, region = LABEL_STRIP) => createHash("sha256").update(readFileSync(await instance.shot_region(`${app}_${kind}_label_${name}`, region))).digest("hex");
+  const settle = () => sleep(900);
+  await sleep(1500);
+  const normal = await strip_of("normal");
+  await shot(`label_${kind}_normal`, `the label in normal mode (${kind})`);
+  // v starts visual mode, Escape ends it.
+  await instance.press(["v"]);
+  await settle();
+  const visual = await strip_of("visual");
+  await shot(`label_${kind}_visual`, `the label in visual mode (${kind})`);
+  await instance.press(["v"]);
+  await settle();
+  const after_v = await strip_of("after_v");
+  await instance.press(["v"]);
+  await instance.press(["-k", "Escape"]);
+  await settle();
+  const after_escape = await strip_of("after_escape");
+  // The quick filter is a text field: focus moving in is insert mode, and Escape in the empty filter returns focus to the list.
+  await instance.press(CTRL_SHIFT("k"));
+  await settle();
+  const insert = await strip_of("insert");
+  await shot(`label_${kind}_insert`, `the label with focus in the quick filter (${kind})`);
+  await instance.press(["-k", "Escape"]);
+  await settle();
+  const after_insert = await strip_of("after_insert");
+  // A main window that opens after the add-on started gets its own label.
+  const piece = await strip_of("piece", LABEL_PIECE);
+  const second = (await instance.ask("open_normal_window", 45000)).opened;
+  await sleep(4000);
+  const in_second_window = await strip_of("second_window", SECOND_WINDOW_PIECE);
+  await shot(`label_${kind}_second_window`, `a second main window opened after the add-on started (${kind})`);
+  await instance.ask("close_normal_window", 10000, { id: second });
+  await sleep(2000);
+  const after_second_window = await strip_of("after_second_window", LABEL_PIECE);
+  const shows = kind !== "mode_label_off";
+  check(app, kind, "v changes the label, and v again and Escape each bring it back", shows ? visual !== normal && after_v === normal && after_escape === normal : visual === normal && after_escape === normal, `normal ${normal.slice(0, 8)}, visual ${visual.slice(0, 8)}, after v ${after_v.slice(0, 8)}, after Escape ${after_escape.slice(0, 8)}`);
+  check(app, kind, "focus in a text field changes the label to insert and back", shows ? insert !== normal && insert !== visual && after_insert === normal : insert === normal && after_insert === normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}, after ${after_insert.slice(0, 8)}`);
+  // With the label off the strip holds only the bar, which the offset window does not draw the same, so only the first window's strip is compared.
+  check(app, kind, "a window opened after the add-on started has the label, and the first window keeps its one", (!shows || in_second_window === piece) && after_second_window === piece, `first window ${piece.slice(0, 8)}, second window ${in_second_window.slice(0, 8)}, first after ${after_second_window.slice(0, 8)}`);
+  if (kind === "default") Object.assign(label_reference, { [app]: { normal, visual, insert } });
+  else {
+    const reference = label_reference[app];
+    if (reference === undefined) return note(app, kind, "no default strips to compare with", "the default kind did not run first");
+    if (kind === "mode_label_off") check(app, kind, "the off indicator draws no label", normal !== reference.normal && insert === normal, `reference ${reference.normal.slice(0, 8)}, now ${normal.slice(0, 8)}`);
+    else check(app, kind, "the badge style draws a label unlike the classic one in every mode", normal !== reference.normal && visual !== reference.visual && insert !== reference.insert, "strips compared with the default kind");
+  }
+  check(app, kind, "the app survived the mode label checks", instance.exited() === null);
+}
+
 // The which-key panel, a toast and the help page, in the Inbox with the thread list focused. The screenshots carry the E2E_THEME name. A panel is shown or gone when the window's pixels differ or match: the same selection and no panel draws the same window.
 async function run_hud(instance, { app, kind, shot }) {
   const theme = process.env.E2E_THEME ?? "default";
@@ -1349,16 +1410,16 @@ async function run_mail_account(instance) {
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
-// Quick replies. The seeded slots are in the xpi this kind installs (see `seed_quick_replies`). g r 1 opens a reply with the slot text. The run checks that the quote survives and records where the text, the quote and the signature land.
+// Quick replies. The seeded slots are in the xpi this kind installs (see `seed_storage`). g r 1 opens a reply with the slot text. The run checks that the quote survives and records where the text, the quote and the signature land.
 const QUICK_REPLY_SEED = ["Quick reply one.\nSecond & <b>line</b>.", "", "", "", "", "", "", "", ""];
 
-function seed_quick_replies(xpi, work_dir) {
+// A copy of the xpi whose background page writes the given records to `storage.local` at start, since the helper add-on cannot write another add-on's storage.
+function seed_storage(xpi, work_dir, records) {
   const stage = join(work_dir, "seed_stage");
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage, { recursive: true });
   execFileSync("unzip", ["-q", xpi, "-d", stage]);
-  const record = { record_version: 1, slots: QUICK_REPLY_SEED };
-  appendFileSync(join(stage, "background.js"), `\nmessenger.storage.local.set({ desertbird_quick_replies: ${JSON.stringify(record)} });\n`);
+  appendFileSync(join(stage, "background.js"), `\nmessenger.storage.local.set(${JSON.stringify(records)});\n`);
   const seeded = join(work_dir, "desertbird_seeded.xpi");
   rmSync(seeded, { force: true });
   execFileSync("zip", ["-qr", seeded, "."], { cwd: stage });
@@ -1610,22 +1671,32 @@ async function run_message_scripts(instance) {
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
+// The style kinds open the Inbox with keys and run the mode label checks alone.
+async function run_mode_label_kind(instance) {
+  const { app, kind } = instance;
+  const opened = await open_inbox(instance);
+  check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
+  await run_mode_label(instance, { app, kind, shot: async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; } });
+}
+
 async function run_assertions(instance) {
   if (process.env.E2E_SCALE === "1") return run_scale(instance);
   if (instance.kind === "default") await run_default(instance);
   else if (instance.kind === "message" || instance.kind === "message_remote") await run_message_scripts(instance);
   else if (instance.kind === "mail_account") await run_mail_account(instance);
   else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
+  else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
   else await run_no_identity(instance);
 }
 
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
-    const kind_xpi = xpi_path && kind.startsWith("quick_reply") ? seed_quick_replies(xpi_path, work_dir) : xpi_path;
+    const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : MODE_LABEL_KINDS[kind];
+    const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path;
     const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
     try {
       if (xpi_path) await run_assertions({ ...instance, kind });

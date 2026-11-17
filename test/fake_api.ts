@@ -171,6 +171,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 : {
                       mount: async (args) => void calls.push(`overlay.mount ${args.windowId} ${args.surface}`),
                       unmount: async (args) => void calls.push(`overlay.unmount ${args.windowId}`),
+                      setModeLabel: async () => {},
                       onClosed: { addListener: () => {}, removeListener: () => {} },
                   },
         cmdline: {

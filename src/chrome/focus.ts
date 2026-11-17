@@ -75,6 +75,9 @@ export interface KeyEventTargets {
     originalTarget?: unknown;
 }
 
+/** Whether focus sits in a text field of the window: insert mode. The body script counts as typing for a key and not here, since it runs commands of its own. */
+export const in_text_field = (document: FocusDocument): boolean => is_typing_element(innermost_focus(document));
+
 /** A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside. */
 export function is_typing(event: KeyEventTargets, document: FocusDocument): boolean {
     const candidates = [event.target, event.originalTarget, innermost_focus(document)];

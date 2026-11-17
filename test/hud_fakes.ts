@@ -1,7 +1,7 @@
 // Fakes the hud tests share: timers that move only when a test advances them, and a settings source that a test changes.
 
-import { DEFAULT_SETTINGS } from "../vendor/desertfox/config.ts";
-import type { Settings } from "../vendor/desertfox/config.ts";
+import { SETTING_DEFAULTS } from "../src/background/config/settings.ts";
+import type { Settings } from "../src/background/config/settings.ts";
 import type { TreeBranch, TreeLeaf } from "../vendor/desertfox/prefix_tree.ts";
 import type { Timers } from "../src/background/hud/toasts.ts";
 
@@ -31,7 +31,7 @@ export function fake_timers(): Timers & { advance(ms: number): void; pending(): 
     };
 }
 
-export const settings_with = (overrides: Partial<Settings>): Settings => ({ ...DEFAULT_SETTINGS, ...overrides });
+export const settings_with = (overrides: Partial<Settings>): Settings => ({ ...SETTING_DEFAULTS, ...overrides });
 
 const leaf = (id: string, label: string): TreeLeaf => ({ kind: "leaf", label, steps: [{ invocation: { id }, runs_in: "background", count_rule: "repeat" }] });
 

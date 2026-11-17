@@ -20,6 +20,7 @@ test("leading dots, trailing dots and spaces go", () => {
 test("control and direction characters are replaced", () => {
     assert.equal(safe("a\u0000b\nc\u0007d"), "a_b_c_d");
     assert.equal(safe("photo\u202Egpj.exe"), "photo_gpj.exe");
+    assert.equal(safe("a\u00ADb\u2060c\u{E0041}d"), "a_b_c_d");
 });
 
 test("reserved device names get a prefix", () => {
