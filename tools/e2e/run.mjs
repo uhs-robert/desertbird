@@ -472,12 +472,12 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, ": sort --date --ascending runs the command", state.mail_tab?.sort_type === "date" && state.mail_tab?.sort_order === "ascending", `sort ${state.mail_tab?.sort_type} ${state.mail_tab?.sort_order}`);
-  await instance.press(["-k", "Up"]);
-  await sleep(800);
+  // The ascending date sort leaves the selection on the first row, where Up cannot move it, so the key is Down.
   const after_run = selection_of(await instance.ask("state"));
-  await instance.press(["-k", "Up"]);
+  await instance.press(["-k", "Down"]);
   await sleep(800);
-  check(app, kind, "after a command ran the list has focus again", selection_of(await instance.ask("state")) !== after_run);
+  const after_down = selection_of(await instance.ask("state"));
+  check(app, kind, "after a command ran the list has focus again", after_down !== after_run, `selected ${after_run} then ${after_down}`);
 
   // The key m t opens the line with the command started, and the command acts on the message selected when the key was pressed.
   const target = (await instance.ask("state")).selected[0]?.header_id;
