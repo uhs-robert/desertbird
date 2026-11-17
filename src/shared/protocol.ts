@@ -91,7 +91,7 @@ export interface OverlayClosed {
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
-    keys: { functions: ["install"], events: ["onInvocation"] },
+    keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount"], events: ["onClosed"] },
 } as const;
 
@@ -120,7 +120,7 @@ export interface KeysViewRowsArgs {
     last: number;
 }
 
-/** `current` is the current row, or -1. `rows` holds the rows from `first` to `last` that exist, at most 500. */
+/** `current` is the current row, or -1. `rows` holds the rows from `first` to `last` that exist,. */
 export interface KeysViewRowsResult {
     current: number;
     rows: ViewRow[];

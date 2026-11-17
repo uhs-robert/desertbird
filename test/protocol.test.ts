@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, EXPERIMENT_VERBS, KEYMAP_STORAGE_KEY, type KeysInvocation } from "../src/shared/protocol.ts";
 
 test("the Experiment exposes the fixed verb table", () => {
-    assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install"]);
+    assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll"]);
     assert.deepEqual(EXPERIMENT_VERBS.overlay.functions, ["mount", "unmount"]);
     assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay"]);
 });

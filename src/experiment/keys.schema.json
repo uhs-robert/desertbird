@@ -44,6 +44,104 @@
             }
           }
         ]
+      },
+      {
+        "name": "viewRows",
+        "type": "function",
+        "async": true,
+        "description": "Reads the thread list rows from first to last: index, message id, depth, collapsed and unread, and the current row.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "first": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "last": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "viewThread",
+        "type": "function",
+        "async": true,
+        "description": "Opens or closes the thread at a row.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "row": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "open": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "viewAllThreads",
+        "type": "function",
+        "async": true,
+        "description": "Opens or closes every thread.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "open": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "viewScroll",
+        "type": "function",
+        "async": true,
+        "description": "Scrolls a row to the middle, the top or the bottom of the list.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "row": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "position": {
+                "type": "string",
+                "enum": [
+                  "center",
+                  "top",
+                  "bottom"
+                ]
+              }
+            }
+          }
+        ]
       }
     ],
     "events": [
