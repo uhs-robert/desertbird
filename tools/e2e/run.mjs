@@ -716,6 +716,87 @@ async function run_panes(instance, { app, kind, shot }) {
   state = await down();
   check(app, kind, "l in the folder pane opens the selected row, so Down reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
 
+  // j, k, g g and G move the folder selection while the folder pane has the focus. The account row is the first row and the Inbox the second.
+  state = await keys(["j"]);
+  const below_inbox = folder_of(state);
+  check(app, kind, "j in the folder pane moves the folder selection down", ![null, "/Inbox", account_folder].includes(below_inbox), `folder ${below_inbox}`);
+  state = await keys(["k"]);
+  check(app, kind, "k in the folder pane moves the folder selection up", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
+  state = await keys(["G"]);
+  check(app, kind, "G in the folder pane selects the last folder", ![null, "/Inbox", account_folder].includes(folder_of(state)), `folder ${folder_of(state)}`);
+  await shot("panes_folder_G", "the last folder selected by G in the folder pane");
+  state = await keys(["g", "g"]);
+  check(app, kind, "g g in the folder pane selects the account row", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
+  state = await keys(["j"], 2000);
+  check(app, kind, "the folder pane keeps the focus after the motions, so j reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
+
+  // The pane chords name a pane. Native Down tells which pane has the focus: it moves the folder or the list selection, and in the message it moves no row.
+  const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
+  const list_moved = async (name, row_before) => {
+    const after = first_selected(await down());
+    check(app, kind, name, after !== row_before && after !== null, `selected ${row_before} then ${after}`);
+  };
+  await keys(["L"]);
+  await list_moved("L in the folder pane focuses the thread list: Down moves the selection", first_selected(await keys(["g", "g"])));
+  await keys(["H"]);
+  state = await down();
+  check(app, kind, "H in the thread list focuses the folder pane: Down moves the folder", ![null, "/Inbox"].includes(folder_of(state)), `folder ${folder_of(state)}`);
+  await up();
+  await list_moved("A-h in the folder pane focuses the thread list: Down moves the selection", first_selected(await press_state(ALT("h"))));
+  // The message pane takes the focus only with one message shown: the Inbox threads open collapsed and show a summary, so each entry starts on the second last row, a single message. Down in the message moves no row, which proves A-l reached it.
+  const enter_message = async () => {
+    await keys(["G"]);
+    const row = first_selected(await keys(["k"], 1500));
+    await press_state(ALT("l"), 1500);
+    return { row, in_message: first_selected(await down()) === row };
+  };
+  let entered = await enter_message();
+  check(app, kind, "A-l in the thread list focuses the message pane: Down leaves the selection alone", entered.in_message, `selected ${entered.row}`);
+  await shot("panes_alt_l", "the message pane focused by A-l");
+  // The body script takes the keys in the message, so the chords are bound there too.
+  await list_moved("A-h in the message pane focuses the thread list: Down moves the selection", first_selected(await press_state(ALT("h"), 1500)));
+  entered = await enter_message();
+  await keys(["L"], 1500);
+  state = await down();
+  check(app, kind, "L in the message pane focuses the thread list: Down moves the selection", entered.in_message && first_selected(state) !== entered.row, `in the message ${entered.in_message}, selected ${entered.row} then ${first_selected(state)}`);
+  entered = await enter_message();
+  await keys(["H"], 1500);
+  state = await down();
+  check(app, kind, "H in the message pane focuses the folder pane: Down moves the folder", entered.in_message && ![null, "/Inbox"].includes(folder_of(state)), `in the message ${entered.in_message}, folder ${folder_of(state)}`);
+  await up();
+  await keys(["L"]);
+
+  // A hidden pane takes no focus: the keys stay in the thread list, so Down moves the selection. Each check starts on the first row, so Down has a row to reach.
+  await keys(["g", "g"]);
+  state = await keys(["t", "f"], 1500);
+  const folder_pane_hidden = state.mail_tab?.folder_pane_visible === false;
+  let list_row = first_selected(await keys(["H"], 1500));
+  state = await down();
+  check(app, kind, "H with the folder pane hidden leaves the focus in the thread list", folder_pane_hidden && first_selected(state) !== list_row && folder_of(state) === "/Inbox", `hidden ${folder_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
+  await shot("panes_hidden_folder_H", "H with the folder pane hidden: a toast refuses it");
+  await keys(["t", "f"], 1500);
+  await keys(["g", "g"]);
+  state = await keys(["t", "m"], 1500);
+  const message_pane_hidden = state.mail_tab?.message_pane_visible === false;
+  list_row = first_selected(await press_state(ALT("l"), 1500));
+  await shot("panes_hidden_message_alt_l", "A-l with the message pane hidden: a toast refuses it");
+  state = await down();
+  check(app, kind, "A-l with the message pane hidden leaves the focus in the thread list", message_pane_hidden && first_selected(state) !== list_row, `hidden ${message_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
+  await keys(["t", "m"], 1500);
+
+  // A chord typed into a text field passes through to it: H types into the quick filter, and neither key moves the focus to another pane.
+  const listed_before = (await keys(["g", "g"])).listed.length;
+  await instance.press(CTRL_SHIFT("k"));
+  await sleep(800);
+  await press_state(["H"], 1500);
+  state = await press_state(ALT("l"), 1500);
+  check(app, kind, "H and A-l in the quick filter pass through: H filters the list and the folder stays", state.listed.length < listed_before && folder_of(state) === "/Inbox", `listed ${listed_before} then ${state.listed.length}, folder ${folder_of(state)}`);
+  await shot("panes_quick_filter_H", "H typed into the quick filter");
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+
   const list_before = first_selected(await keys(["g", "e"]));
   state = await down();
   check(app, kind, "g e puts the focus in the thread list: Down moves the selection and not the folder", first_selected(state) !== list_before && folder_of(state) === "/Inbox", `selected ${list_before} then ${first_selected(state)}, folder ${folder_of(state)}`);

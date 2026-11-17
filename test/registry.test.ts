@@ -24,7 +24,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"] },
     step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment"] },
     help: { runs_in: "background", ids: ["help.open"] },
-    app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus"] },
+    app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -180,7 +180,7 @@ test("tab.switch takes a typed value, so it has no default key and its validator
 test("the reading keys bind in the message keymap only, so j and k keep scrolling there and moving the list in the mail tab", () => {
     assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
     const ids = Object.fromEntries(Object.entries(MESSAGE_KEYMAP.normal ?? {}).map(([keys, binding]) => [keys, binding && !Array.isArray(binding) ? binding.id : ""]));
-    assert.deepEqual(ids, { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus" });
+    assert.deepEqual(ids, { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" });
     assert.deepEqual((MESSAGE_KEYMAP.normal?.["/"] as { args: unknown }).args, { text: "find " });
     assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");
 });

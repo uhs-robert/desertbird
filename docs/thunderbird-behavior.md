@@ -524,6 +524,9 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, w
 
 - `about:3pane` has the globals `folderTree` (the folder pane, `ul#folderTree`) and `messageBrowser`. The tree has `selectedRow`, `expandRow(row)` and `collapseRow(row)`, which do nothing on a row without children or in the state asked for. `folderTree.focus()` and `threadTree.table.body.focus()` give the focus to the folder pane and the thread list. `messageBrowser.contentWindow.getMessagePaneBrowser().focus()` gives it to the message body of a single shown message.
 - A collapsed thread root shows the thread summary and no message body, so focusing the message pane on it leaves the focus where it was. The check selects a single message first.
+- `paneLayout.folderPaneVisible` and `paneLayout.messagePaneVisible` in `about:3pane` give the same answer as the `mailTabs` fields after `t f` and `t m`. With either pane hidden, `H` and `<A-l>` left the focus in the thread list and showed the refusal toast.
+- `folderTree.rowCount` counts the visible rows. Setting `folderTree.selectedIndex` selects the row, scrolls it into view and opens the folder, and the focus stays in the folder pane. `j`, `k`, `g g` and `G` there moved the folder selection.
+- `H` and `<A-l>` typed into the quick filter reach the field: `H` filtered the list and no pane took the focus.
 - `h` on the account row of Local Folders closes it, and Down then stays on the account row. `l` opens it, and Down reaches the Inbox.
 - The focus is in the folder pane when the focus chain of the main window holds an element with the id `folderTree`.
 - The body script takes every key while the message pane has the focus, so `g e` and `g f` there run through its own keymap and the background. Both moved the focus out.

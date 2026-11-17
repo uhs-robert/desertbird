@@ -49,8 +49,11 @@ export const innermost_focus = (document: FocusDocument): FocusNode | null => fo
 // `messageBrowser` holds about:message inside about:3pane, and `messagepane`, the message body, sits inside about:message.
 const READING_PANE_IDS = new Set(["messageBrowser", "messagepane"]);
 
+/** The pane that holds the focus, as its place on screen: 0 the folder pane, 1 the thread list, 2 the reading pane. Anything else in the mail tab, such as a column header, counts as the thread list. Plain numbers and not named constants, because each name costs bytes in the size-guarded parent bundle. */
+export const focused_pane = (document: FocusDocument): number => focus_chain(document).reduce((pane, node) => (node.id === "folderTree" ? 0 : READING_PANE_IDS.has(node.id ?? "") ? 2 : pane), 1);
+
 /** Whether focus sits in the reading pane, whatever the element inside it. */
-export const in_reading_pane = (document: FocusDocument): boolean => focus_chain(document).some((node) => READING_PANE_IDS.has(node.id ?? ""));
+export const in_reading_pane = (document: FocusDocument): boolean => focused_pane(document) === 2;
 
 /** Whether the document that holds the focus is a message body that runs the body script. Only the innermost document counts: the script runs in the top frame only, so a key from a frame in the mail never reaches it. Focus in the message header or the thread list is in another document. */
 export const body_script_is_live = (document: FocusDocument): boolean => focus_chain(document).findLast((node) => node.contentDocument)?.contentDocument?.documentElement?.hasAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE) === true;

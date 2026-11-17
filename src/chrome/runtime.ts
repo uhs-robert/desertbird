@@ -6,6 +6,7 @@ import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { run_motion } from "./motions.ts";
+import type { ViewPort } from "./motions.ts";
 import type { ListPort } from "./view.ts";
 
 export interface KeydownEvent extends KeyEventLike {
@@ -32,6 +33,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     open_windows(): Window[];
     /** The thread list of the window's front tab, or null when that tab is not the mail tab. Keys then pass through. */
     list_port_of(window: Window): ListPort | null;
+    /** The folder tree while the folder pane has the focus, or null. The motions then move the folder selection instead of the thread list. */
+    folder_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for someone else: a text field, or a message body that runs the body script. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
     /** Whether a menu or panel is open. Keys then belong to it, its access keys among them. */
@@ -95,7 +98,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
             if (step.runs_in === "chrome") {
                 const anchor = visual_anchor;
-                run_motion(step.invocation.id, anchor < 0 ? port : { ...port, select: (index) => void (port.select_range(anchor, (visual_end = index)), (visual_marks = port.marks(anchor, index))) }, step_count);
+                run_motion(step.invocation.id, deps.folder_port_of(window) ?? (anchor < 0 ? port : { ...port, select: (index) => void (port.select_range(anchor, (visual_end = index)), (visual_marks = port.marks(anchor, index))) }), step_count);
             } else if (step.runs_in === "background") {
                 // The selection is read here, inside the key's own handler, because the background answers later: by then a following `j` has moved the selection.
                 const args = (step.invocation.args ?? {}) as Record<string, JsonValue>;

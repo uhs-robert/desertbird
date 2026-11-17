@@ -17,6 +17,8 @@ class FakeWindow implements KeyTarget {
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
+    /** The folder tree rows and selection while the folder pane has the focus, or null. */
+    folder: { rows: number; selected: number } | null = null;
     body_script_live = false;
     menu_open = false;
     has_focus = true;
@@ -130,6 +132,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         unregister_window_listener: () => void unregisters++,
         open_windows: () => windows,
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
+        folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
         is_typing_target: (window, event) => (event.target as { localName: string }).localName === "input" || window.body_script_live,
         menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
@@ -363,6 +366,26 @@ test("a half-typed sequence in the list does not finish after a visit to a live 
     window.body_script_live = false;
     press(window, "d");
     assert.deepEqual(emitted, []);
+});
+
+test("with the folder pane focused the motions move the folder, while a background command still reads the thread list", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.folder = { rows: 5, selected: 2 };
+    press(window, "j");
+    assert.deepEqual([window.folder.selected, window.selected], [3, 0]);
+    press(window, "k");
+    press(window, "k");
+    assert.equal(window.folder.selected, 1);
+    press(window, "g");
+    press(window, "g");
+    assert.equal(window.folder.selected, 0);
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [100]);
+    window.folder = null;
+    press(window, "j");
+    assert.equal(window.selected, 1);
 });
 
 test("a count reaches a chrome motion", () => {

@@ -1,9 +1,17 @@
-import { focus_pane, open_conversation, open_page, undo } from "../handlers/app.ts";
+import { focus_pane, focus_pane_beside, open_conversation, open_page, undo } from "../handlers/app.ts";
 import type { AppApi } from "../handlers/app.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.undo` has no default key: Thunderbird undoes only the steps it recorded itself (a native Delete key, a drag), so a key could restore an older step while the newest `msg.delete` of DesertBird stays in Trash. It is typed as `:undo`. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. `pane.focus` only moves the focus.
+// `msg.undo` has no default key: Thunderbird undoes only the steps it recorded itself (a native Delete key, a drag), so a key could restore an older step while the newest `msg.delete` of DesertBird stays in Trash. It is typed as `:undo`. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
+// Each names a pane, not a direction: `<A-h>` and `L` both reach the thread list from any pane. `pane.left` and `pane.right` are the relative pair, unbound by default.
+const PANE_CHORDS = {
+    H: { id: "pane.focus", args: { pane: "folders" } },
+    "<A-h>": { id: "pane.focus", args: { pane: "threads" } },
+    L: { id: "pane.focus", args: { pane: "threads" } },
+    "<A-l>": { id: "pane.focus", args: { pane: "message" } },
+};
+
 export const app: CommandGroup = {
     commands: {
         "msg.undo": {
@@ -37,10 +45,26 @@ export const app: CommandGroup = {
             bridge: true,
             runs_in: "background",
             label: "Focus a pane",
-            intent: "Move the focus to a pane.",
+            intent: "Move the focus to a pane. A hidden pane, or a message pane that shows no single message, is refused.",
             needs: ["keys.paneFocus"],
             params: [{ name: "pane", type: "enum", values: ["folders", "threads", "message"], description: { folders: "Focus the folder pane.", threads: "Focus the thread list.", message: "Focus the message pane." } }],
             run: scoped<AppApi>(focus_pane),
+        },
+        "pane.left": {
+            bridge: true,
+            runs_in: "background",
+            label: "Focus the pane to the left",
+            intent: "Move the focus to the pane left of the focused one. From the message pane it goes to the thread list, from the thread list to the folder pane. It stops at the folder pane, and a hidden folder pane counts as the end.",
+            needs: ["keys.paneFocus"],
+            run: scoped<AppApi>(focus_pane_beside("left")),
+        },
+        "pane.right": {
+            bridge: true,
+            runs_in: "background",
+            label: "Focus the pane to the right",
+            intent: "Move the focus to the pane right of the focused one. From the folder pane it goes to the thread list, from the thread list to the message pane. It stops at the message pane, and a hidden message pane or one with no message counts as the end.",
+            needs: ["keys.paneFocus"],
+            run: scoped<AppApi>(focus_pane_beside("right")),
         },
     },
     normal_keys: {
@@ -51,10 +75,12 @@ export const app: CommandGroup = {
         gf: { id: "pane.focus", args: { pane: "folders" } },
         ge: { id: "pane.focus", args: { pane: "threads" } },
         gm: { id: "pane.focus", args: { pane: "message" } },
+        ...PANE_CHORDS,
     },
     // The body script takes every key while the message pane has the focus, so the way out of it is bound there too.
     message_keys: {
         gf: { id: "pane.focus", args: { pane: "folders" } },
         ge: { id: "pane.focus", args: { pane: "threads" } },
+        ...PANE_CHORDS,
     },
 };

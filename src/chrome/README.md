@@ -6,20 +6,20 @@ The privileged part of the add-on. It runs as the parent script of the `keys` Ex
 | --- | --- |
 | `parent_keys.ts` | The entry of the `keys` API: `get_keys_api` and `shutdown`. Holds the one runtime and the event subscribers |
 | `platform.ts` | The Thunderbird globals the parent reads, and the guard that rethrows `ExtensionError(message)` from each verb |
-| `focus.ts` | Where a key is going: a text field, the reading pane (and whether the body script is live in it) or an open menu. Follows the focused element through shadow roots and into browser documents |
+| `focus.ts` | Where a key is going: a text field, the pane that holds the focus, the reading pane (and whether the body script is live in it) or an open menu. Follows the focused element through shadow roots and into browser documents |
 | `runtime.ts` | Key handling. Takes its Thunderbird access as `RuntimeDeps`, so tests use fakes |
 | `parent_overlay.ts` | The entry of the `overlay` API (`mount`, `unmount`, `onClosed`). Builds the remote `browser` element and loads the command line page into it |
 | `overlay.ts` | Mount, replace and remove logic per window over `OverlayDeps`, so tests use fakes. A second mount replaces the first. A tab change or a closing window removes the overlay and fires `onClosed` |
 | `overlay_id.ts` | The element ids shared by the overlay parent and the key runtime. The hud has ids of its own |
 | `motions.ts` | The fixed motion table: `motion.down`, `motion.up`, `motion.top`, `motion.bottom`. Pure functions over a `ViewPort` |
-| `app_verbs.ts` | The verbs `folderTreeExpand`, `paneFocus`, `appCommand` and `appOpenPage` of the `keys` API. Each reads its target from a fixed table (pane focus targets, the two allowed command names with their controller, the three pages with their addresses), so no caller passes a function name or an address. `folderTreeExpand` acts only while the folder pane has the focus and answers whether it did |
+| `app_verbs.ts` | The verbs `folderTreeExpand`, `paneFocus`, `appCommand` and `appOpenPage` of the `keys` API. Each reads its target from a fixed table (pane focus targets, the two allowed command names with their controller, the three pages with their addresses), so no caller passes a function name or an address. `folderTreeExpand` acts only while the folder pane has the focus and answers whether it did. `paneFocus` also takes `left` and `right`, counted from the pane `focused_pane` names, and refuses a collapsed pane or a message pane with no live body script |
 | `view.ts` | The thread list of `about:3pane` (`gDBView`, `threadTree`) behind a `ListPort`: the rows for the motions and the selected message ids for background commands. Also the check that the front tab is the mail tab, and `mail_pane_of`, which names a window by id and returns the `about:3pane` of its front mail tab, and `view_verbs`: the verbs `viewRows`, `viewThread`, `viewAllThreads` and `viewScroll` of the `keys` API, which read and move the list for background commands. `viewRows` also returns the message flags word of each row, which the step commands read. `ListPort.select_range` sets a range for visual mode |
 
 Four files know Thunderbird's own markup, so a Thunderbird rename lands in one of them:
 - `view.ts`: `gDBView`, `getSelectedMsgHdrs`, `threadTree` and the tab mode `mail3PaneTab`.
-- `app_verbs.ts`: `folderTree` (`selectedRow`, `expandRow`, `collapseRow`), `messageBrowser`, `commandController`, `DefaultController`, `openAddonsMgr`, `openContentTab` and `browsingContext.topChromeWindow`.
-- `focus.ts`: the element ids `messageBrowser` and `messagepane`, the element names `search-textbox` and `menulist`, and the popup `state`.
-- `platform.ts` and `parent_keys.ts`: `#tabmail`, the `messenger.xhtml` URL and the window type `mail:3pane`.
+- `app_verbs.ts`: `folderTree` (`selectedRow`, `expandRow`, `collapseRow`), `paneLayout` (`folderPaneVisible`, `messagePaneVisible`), `messageBrowser`, `commandController`, `DefaultController`, `openAddonsMgr`, `openContentTab` and `browsingContext.topChromeWindow`.
+- `focus.ts`: the element ids `folderTree`, `messageBrowser` and `messagepane`, the element names `search-textbox` and `menulist`, and the popup `state`.
+- `platform.ts` and `parent_keys.ts`: `#tabmail`, the `messenger.xhtml` URL and the window type `mail:3pane`. `parent_keys.ts` also reads `folderTree` (`rowCount`, `selectedIndex`) for the motions in the folder pane.
 
 ## Rules
 
@@ -28,6 +28,7 @@ Four files know Thunderbird's own markup, so a Thunderbird rename lands in one o
 - Each Experiment API needs its own bundle, script and schema. Two manifest entries that shared one script left the second API unloaded.
 - Import only the matcher side of `vendor/desertfox`: `keys/matcher`, `keys/token`, `prefix_tree` and `register_names`. Never import `registry/*`. Import `../shared/protocol.ts` for types and the body handoff attribute only, and `../shared/keymap_tree.ts` for the tree reader.
 - `keys.install` takes the keymap as data. `root` is the branch of the normal mode. A leaf runs in the chrome only when its id is in the motion table. Any other id does nothing.
+- With the folder pane focused, the motions move the folder selection (`folderTree.selectedIndex`, which also opens the folder) and not the thread list. Visual mode does not apply there. A background command still reads the thread list selection.
 - A leaf with `runs_in: "background"` leaves as a `keys.onInvocation` event. Nothing else crosses the boundary, but the typed prefix: a `pending` event rides the same event with the typed key tokens (counts left out) and no keys when the sequence ends, so the background can list the keys that may follow. A tab change or a window blur is not reported, because `keys.js` is at its size budget: the background hears those itself. The event carries the MailExtension ids of the messages selected at the key press (`messageIds`), read in the same key handler, so a `j` typed right after `x` cannot change what `x` archives.
 - The ids come from `gDBView.getSelectedMsgHdrs()` (a collapsed thread counts as all its messages) and `messageManager.convert`, which builds a whole message header for each one. The cost grows with the selection: a select-all over a very large folder stalls the key press for that long. Motions never read the selection and stay fast.
 - The first `keys.install` registers one `ExtensionSupport` window listener. Later calls replace the tree and add no listener. `shutdown` removes every key listener and the window listener, and drops the tree and the half-typed sequence.
