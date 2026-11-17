@@ -18,7 +18,7 @@ export type ThreadScope = HandlerScope<ThreadViewApi>;
 const BLOCK = 50;
 
 /** Whether the folder pane had the focus and took the fold. A script that fails to load counts as not taking it, so the thread list keys still work. */
-async function folded_in_folder_pane(scope: ThreadScope, open: boolean, extent: "row" | "all"): Promise<boolean> {
+async function folded_in_folder_pane(scope: ThreadScope, open: boolean, extent: "row" | "all" | "parent"): Promise<boolean> {
     try {
         return (await scope.api.folderpane?.fold({ windowId: scope.window_id, open, extent })) === true;
     } catch (error) {
@@ -77,9 +77,9 @@ export async function step_thread_root(scope: ThreadScope, args: CheckedArgs): P
     await select_row(scope, row);
 }
 
-// In the folder pane `h` and `l` close and open the selected folder row. Elsewhere `h` on a reply goes to its root and on a root closes the thread. Thunderbird ignores the close on a message with no replies.
+// In the folder pane `h` acts as `H` does: it closes an open folder, or closes the parent of a child and selects it. `l` opens the selected folder row. Elsewhere `h` on a reply goes to its root and on a root closes the thread. Thunderbird ignores the close on a message with no replies.
 export async function move_left(scope: ThreadScope): Promise<void> {
-    if (await folded_in_folder_pane(scope, false, "row")) return;
+    if (await folded_in_folder_pane(scope, false, "parent")) return;
     const row = await current_row(scope);
     if (row.depth === 0) return void (await scope.api.keys.viewThread({ windowId: scope.window_id, row: row.index, open: false }));
     const root = await root_at_or_before(scope, row.index);
