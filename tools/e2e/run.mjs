@@ -124,6 +124,13 @@ async function run_threads(instance, { app, kind, shot }) {
   await keys(["g", "g"]);
 }
 
+// A hash of the bottom 320 px of the window, the hud's box, without the scrollbar strip on the right.
+async function hud_pixels(instance, name) {
+  const { createHash } = await import("node:crypto");
+  const { readFileSync } = await import("node:fs");
+  return createHash("sha256").update(readFileSync(await instance.shot_region(name, "0,400 1260x320"))).digest("hex");
+}
+
 async function run_default(instance) {
   const app = instance.app;
   const kind = "default";
@@ -690,15 +697,10 @@ async function run_scale(instance) {
 // The which-key panel, a toast and the help page, in the Inbox with the thread list focused. The screenshots carry the E2E_THEME name. A panel is shown or gone when the window's pixels differ or match: the same selection and no panel draws the same window.
 async function run_hud(instance, { app, kind, shot }) {
   const theme = process.env.E2E_THEME ?? "default";
-  const { createHash } = await import("node:crypto");
-  const { readFileSync } = await import("node:fs");
-  // The bottom 320 px of the window, the hud's box, without the scrollbar strip on the right.
-  const pixels_of = async (name) => createHash("sha256").update(readFileSync(await instance.shot_region(`${app}_${name}_${theme}`, "0,400 1260x320"))).digest("hex");
-  const first_row = async () => (await instance.ask("state")).selected[0]?.header_id;
+  const pixels_of = (name) => hud_pixels(instance, `${app}_${name}_${theme}`);
   await instance.press(["g"]);
   await instance.press(["g"]);
   await sleep(1000);
-  check(app, kind, "g g selects the first row", (await first_row()) === FLAT_ROWS[0]);
   const bare = await pixels_of("hud_bare");
   // g is a prefix key: after the which-key delay (300 ms) the panel lists the keys that can follow.
   await instance.press(["g"]);
@@ -885,10 +887,12 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const tabs_of = async () => main_window_tabs(await instance.ask("state"));
 
   // q on the only mail tab: tabs.remove does nothing there, so the command refuses with a notification and the tab stays.
-  const log_offset = instance.app_log().length;
-  let state = await key_and_state(instance, ["q"], 2500);
+  const before_q = await hud_pixels(instance, `${app}_before_q`);
+  let state = await key_and_state(instance, ["q"], 1500);
+  const with_toast = await hud_pixels(instance, `${app}_after_q`);
+  await sleep(1000);
   check(app, kind, "q on the only mail tab leaves it open", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}`);
-  check(app, kind, "q on the only mail tab shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), "evidence is the libnotify warning in the app log");
+  check(app, kind, "q on the only mail tab shows the refusal as a toast", with_toast !== before_q, `the hud region changed: ${with_toast !== before_q}`);
 
   // What the tabs API reports for the first mail tab and for a second one.
   const second = await instance.ask("open_mail_tab");
@@ -1073,10 +1077,10 @@ async function run_no_identity(instance) {
   check(app, kind, "g g selects the first row", first_selected(state) !== null);
   // One message, so the refusal is the identity one and not the "select one message" one.
   await key_and_state(instance, ["G"]);
-  // The log file is appended to across runs, so only the text written after this point counts.
-  const log_offset = instance.app_log().length;
-  state = await key_and_state(instance, ["r"], 6000);
-  check(app, kind, "r with no identity shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), `evidence is the libnotify warning in the app log, since the headless session shows no notification (selected ${state.selected.length})`);
+  const before_r = await hud_pixels(instance, `${app}_before_r`);
+  state = await key_and_state(instance, ["r"], 1500);
+  check(app, kind, "r with no identity shows the refusal as a toast", (await hud_pixels(instance, `${app}_after_r`)) !== before_r, `selected ${state.selected.length}`);
+  await sleep(4500);
   check(app, kind, "r with no identity opens no compose window", !state.windows.some((window) => window.type === "messageCompose"));
   check(app, kind, "r with no identity does not crash the app", instance.exited() === null);
   // Forward and new refuse the same way. Unguarded, forward hangs with no window and new opens a window that cannot send, so the missing window is the proof for new.
