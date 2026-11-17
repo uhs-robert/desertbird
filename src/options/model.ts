@@ -3,6 +3,7 @@
 import type { Settings } from "../../vendor/desertfox/config.ts";
 import type { KeyBinding } from "../../vendor/desertfox/invocation.ts";
 import { DEFAULT_KEYMAP } from "../background/commands/index.ts";
+import { parse_sequence } from "../../vendor/desertfox/keys/notation.ts";
 import { compile_effective_keymap } from "../background/config/keymap.ts";
 import type { UserKeymap } from "../background/config/keymap.ts";
 import { SETTING_KINDS, setting_problem } from "../background/config/settings.ts";
@@ -72,9 +73,17 @@ export function edits_from_user_keymap(user: UserKeymap): BindingEdits {
     };
 }
 
+/** Whether the compiled tree runs the row's command on the row's keys. The tree says it, so no compiler message is parsed. */
+function binding_is_active(root: unknown, row: BindingRow): boolean {
+    const { tokens } = parse_sequence(row.keys.trim());
+    let node = root as { kind?: string; children?: Record<string, unknown>; steps?: { invocation: { id: string } }[] } | undefined;
+    for (const token of tokens ?? []) node = node?.children?.[token] as typeof node;
+    return node?.kind === "leaf" && node.steps?.[0]?.invocation.id === row.command.trim();
+}
+
 export type KeymapBuild = { user_keymap: UserKeymap; messages: string[]; blocked: boolean } | { error: string };
 
-/** Builds the user keymap from the edits and runs it through the compiler. A binding the compiler skips blocks the save, so a typo never reaches storage. Other compiler messages are shown and do not block. */
+/** Builds the user keymap from the edits and runs it through the compiler. A user binding the compiled tree does not run blocks the save, so a typo never reaches storage. Other compiler messages, such as a default key skipped because of a user key, are shown and do not block. */
 export function build_user_keymap(edits: BindingEdits, settings: Partial<Settings> = {}): KeymapBuild {
     const normal: NonNullable<UserKeymap["normal"]> = {};
     for (const keys of edits.removed) normal[keys] = null;
@@ -92,6 +101,7 @@ export function build_user_keymap(edits: BindingEdits, settings: Partial<Setting
         normal[row.keys.trim()] = { id: row.command.trim(), ...(args === undefined ? {} : { args: args as Record<string, unknown> }) };
     }
     const user_keymap: UserKeymap = { normal };
-    const { warnings } = compile_effective_keymap(user_keymap, settings);
-    return { user_keymap, messages: warnings, blocked: warnings.some((message) => message.includes("skipped")) };
+    const { compiled, warnings } = compile_effective_keymap(user_keymap, settings);
+    const skipped_row = edits.rows.find((row) => !binding_is_active(compiled.modes.normal, row));
+    return { user_keymap, messages: warnings, blocked: skipped_row !== undefined };
 }

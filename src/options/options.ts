@@ -3,6 +3,7 @@
 import { DEFAULT_SETTINGS } from "../../vendor/desertfox/config.ts";
 import { SETTING_KINDS } from "../background/config/settings.ts";
 import type { SettingName } from "../background/config/settings.ts";
+import { CONFIG_VERSION } from "../background/config/migrations.ts";
 import { create_config_store } from "../background/config/store.ts";
 import type { ConfigStorage } from "../background/config/store.ts";
 import { build_user_keymap, default_rows, edits_from_user_keymap, overrides_from_texts, setting_to_text } from "./model.ts";
@@ -93,6 +94,11 @@ async function start(): Promise<void> {
     user_rows = edits.rows;
     render_settings(config.setting_overrides);
     render_bindings();
+    if (config.stored_version > CONFIG_VERSION) {
+        // Saving would rewrite newer data in the old shape under the newer stamp, so the page only shows it.
+        Array.from(document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>("input, select, button")).forEach((control) => void (control.disabled = true));
+        say("These settings were saved by a newer DesertBird. This version shows them and cannot save.", true);
+    }
 }
 
 element("add_binding").onclick = () => {
