@@ -179,8 +179,22 @@ test("tab.switch takes a typed value, so it has no default key and its validator
 
 test("the reading keys bind in the message keymap only, so j and k keep scrolling there and moving the list in the mail tab", () => {
     assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
-    const ids = Object.fromEntries(Object.entries(MESSAGE_KEYMAP.normal ?? {}).map(([keys, binding]) => [keys, binding && !Array.isArray(binding) ? binding.id : ""]));
-    assert.deepEqual(ids, { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" });
-    assert.deepEqual((MESSAGE_KEYMAP.normal?.["/"] as { args: unknown }).args, { text: "find " });
+    const message = MESSAGE_KEYMAP.normal ?? {};
+    const ids = (keys: string) => (message[keys] && !Array.isArray(message[keys]) ? message[keys].id : undefined);
+    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" };
+    for (const [keys, id] of Object.entries(reading_ids)) assert.equal(ids(keys), id, keys);
+    assert.deepEqual((message["/"] as { args: unknown }).args, { text: "find " });
     assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");
+});
+
+test("the message keymap carries the mail keys of the message-capable groups with the ids of the mail tab, and none that need the list", () => {
+    const message = MESSAGE_KEYMAP.normal ?? {};
+    for (const keys of ["x", "dd", "r", "R", "gF", "c", "yy", "ys", "<C-l>", "mr", "ms", "mj", "mfd", "mzt", ":", "mt", "<C-j>", "<C-k>", "q"]) assert.deepEqual(message[keys], DEFAULT_KEYMAP.normal?.[keys], keys);
+    const excluded = /^(motion|thread|step|view|folder|jump|mark)\.|^(repeat\.last|visual\.toggle|app\.open_page|filter\.set)$/;
+    for (const [keys, binding] of Object.entries(message)) {
+        const id = binding && !Array.isArray(binding) ? binding.id : "";
+        assert.equal(excluded.test(id), false, keys);
+        assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? ""), keys);
+    }
+    for (const keys of ["mR", "Ft", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
 });

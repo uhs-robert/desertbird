@@ -223,7 +223,7 @@ test("Escape ends a half-typed sequence and a count, and is not cancelled", asyn
 
 test("an unbound plain key is swallowed so Thunderbird's single-key shortcuts do not fire, and runs nothing", async () => {
     const { window } = await started();
-    for (const key of ["a", "r", "#", "x"]) assert.deepEqual(window.press(key), { cancelled: true, stopped: true }, key);
+    for (const key of ["a", "#", "z", "i"]) assert.deepEqual(window.press(key), { cancelled: true, stopped: true }, key);
     assert.deepEqual(window.scrolls, []);
 });
 
@@ -231,7 +231,7 @@ test("named keys and unbound chords pass, a bound chord is cancelled", async () 
     const { window } = await started();
     for (const key of ["Enter", "ArrowDown", "Tab", " ", "PageDown"]) assert.equal(window.press(key).cancelled, false, key);
     assert.equal(window.press("c", { ctrlKey: true }).cancelled, false);
-    assert.equal(window.press("j", { ctrlKey: true }).cancelled, false);
+    assert.equal(window.press("n", { ctrlKey: true }).cancelled, false);
     assert.deepEqual(window.scrolls, []);
 });
 
@@ -354,6 +354,44 @@ test("slash sends the command line command to the background with the find text,
     assert.equal(window.press("/").cancelled, true);
     assert.deepEqual(sent, [{ type: "body.invoke", command: "cmdline.open", args: { text: "find " }, count: 1 }]);
     assert.deepEqual(window.scrolls, []);
+});
+
+const invoked = (command: string, args: Record<string, unknown> = {}) => ({ type: "body.invoke", command, args, count: 1 });
+
+test("the mail keys send their command to the background, are cancelled and scroll nothing", async () => {
+    const cases: [string[], unknown][] = [
+        [["r"], invoked("msg.reply", { to: "sender" })],
+        [["x"], invoked("msg.archive")],
+        [["d", "d"], invoked("msg.delete")],
+        [["y", "y"], invoked("msg.yank", { field: "content" })],
+        [["q"], invoked("tab.close")],
+    ];
+    for (const [keys, expected] of cases) {
+        const { window, sent } = await started();
+        for (const key of keys) assert.equal(window.press(key).cancelled, true, keys.join());
+        assert.deepEqual(sent, [expected], keys.join());
+        assert.deepEqual(window.scrolls, []);
+    }
+    const { window, sent } = await started();
+    assert.equal(window.press("j", { ctrlKey: true }).cancelled, true);
+    assert.equal(window.press("k", { ctrlKey: true }).cancelled, true);
+    assert.deepEqual(sent, [invoked("tab.next"), invoked("tab.prev")]);
+});
+
+test("keys that need the thread list send nothing from a message", async () => {
+    const { window, sent } = await started();
+    for (const keys of [["z", "z"], ["]", "u"], ["F", "t"], ["t", "m"]]) for (const key of keys) window.press(key);
+    assert.deepEqual(sent, []);
+});
+
+test("a half-typed d does not survive the window losing the focus", async () => {
+    const { window, sent } = await started();
+    window.press("d");
+    window.fire("blur");
+    window.press("d");
+    assert.deepEqual(sent, []);
+    window.press("d");
+    assert.deepEqual(sent, [invoked("msg.delete")]);
 });
 
 test("f labels the links on screen and the typed label focuses the link", async () => {
