@@ -44,7 +44,7 @@ export interface MessageApi extends IdentityApi, SpecialFolderApi {
     compose: {
         beginReply(id: number, type: ReplyType, details: { identityId: string }): Promise<unknown>;
         beginForward(id: number, forward_type: undefined, details: { identityId: string }): Promise<unknown>;
-        beginNew(message_id?: undefined, details?: { to: string[]; subject: string; body: string; identityId: string }): Promise<unknown>;
+        beginNew(message_id?: undefined, details?: { to: string[]; subject: string; plainTextBody: string; isPlainText: true; identityId: string }): Promise<unknown>;
     };
     folders: SpecialFolderApi["folders"] & { markAsRead(folder_id: string): Promise<void> };
 }

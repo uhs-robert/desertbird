@@ -45,10 +45,24 @@ async function read_pending(api: UnsubscribeApi): Promise<PendingRecord | undefi
 async function act(scope: UnsubscribeScope, target: UnsubscribeTarget, message: MessageHeader): Promise<void> {
     if (target.kind === "https") return scope.api.windows.openDefaultBrowser(target.url);
     const identity = await resolve_identity(scope.api, message);
-    await scope.api.compose.beginNew(undefined, { to: target.to, subject: target.subject, body: target.body, identityId: identity.id });
+    // `body` would be taken as HTML, so the list text could load remote content. `plainTextBody` makes a plain text draft.
+    await scope.api.compose.beginNew(undefined, { to: target.to, subject: target.subject, plainTextBody: target.body, isPlainText: true, identityId: identity.id });
 }
 
-export async function unsubscribe(scope: UnsubscribeScope, _args: unknown, now: () => number = Date.now): Promise<void> {
+// A press that arrives while another is running is dropped. The router does not queue commands, and two presses that both read the armed record would both act.
+let press_running = false;
+
+export async function unsubscribe(scope: UnsubscribeScope, args: unknown, now: () => number = Date.now): Promise<void> {
+    if (press_running) return;
+    press_running = true;
+    try {
+        await handle_press(scope, args, now);
+    } finally {
+        press_running = false;
+    }
+}
+
+async function handle_press(scope: UnsubscribeScope, _args: unknown, now: () => number): Promise<void> {
     const ids = require_messages(scope.message_ids);
     if (ids.length > 1) throw new RuntimeRefusal("Select one message to unsubscribe from.");
     const message = await scope.api.messages.get(ids[0]!);

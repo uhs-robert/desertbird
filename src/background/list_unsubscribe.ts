@@ -23,6 +23,8 @@ const MAX_URI_LENGTH = 2048;
 const ADDRESS = /^[^\s@<>,;()"\\]+@[^\s@<>,;()"\\]+$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+// Format characters (bidi overrides, zero-width marks), line and paragraph separators and C1 controls: none belongs in an address, and each can make a preview read differently from the real text.
+const UNSAFE_ADDRESS_CHARACTER = /[\p{Cf}\u2028\u2029\u0080-\u009f]/u;
 
 /** The text of each `<...>` entry, in order. A comment in parentheses between entries is skipped. An unclosed bracket makes the whole header malformed, so the result is empty. */
 function angle_entries(header: string): string[] {
@@ -72,7 +74,7 @@ function mailto_target(uri: string): MailtoTarget | undefined {
     const fields = new Map<string, string>();
     for (const pair of query === "" ? [] : query.split("&")) {
         const [name = "", value = ""] = pair.split(/=(.*)/s);
-        const decoded = decode(value.replace(/\+/g, "%20"));
+        const decoded = decode(value);
         if (decoded === undefined) return undefined;
         const key = name.toLowerCase();
         if (!fields.has(key)) fields.set(key, decoded);
@@ -81,11 +83,18 @@ function mailto_target(uri: string): MailtoTarget | undefined {
     if (path_decoded === undefined) return undefined;
     const to_text = [path_decoded, fields.get("to") ?? ""].join(",");
     // A decoded line break would split a recipient into two header lines.
-    if (CONTROL_CHARACTER.test(to_text)) return undefined;
-    const to = to_text.split(",").map((address) => address.trim()).filter((address) => address !== "");
-    if (to.length === 0 || !to.every((address) => ADDRESS.test(address))) return undefined;
+    if (CONTROL_CHARACTER.test(to_text) || UNSAFE_ADDRESS_CHARACTER.test(to_text)) return undefined;
+    const listed = to_text.split(",").map((address) => address.trim()).filter((address) => address !== "");
+    if (listed.length === 0 || !listed.every((address) => ADDRESS.test(address))) return undefined;
+    // The domain goes through the URL parser, so a look-alike name shows (and is addressed) in its punycode form.
+    const to = listed.map((address) => {
+        const at = address.lastIndexOf("@");
+        const domain = URL.canParse(`http://${address.slice(at + 1)}`) ? new URL(`http://${address.slice(at + 1)}`).hostname : "";
+        return domain === "" ? "" : `${address.slice(0, at)}@${domain}`;
+    });
+    if (to.includes("")) return undefined;
     const subject = (fields.get("subject") ?? "").replace(/[\r\n]+/g, " ");
-    return { kind: "mailto", to, subject, body: fields.get("body") ?? "", host: to[0]!.slice(to[0]!.lastIndexOf("@") + 1).toLowerCase() };
+    return { kind: "mailto", to, subject, body: fields.get("body") ?? "", host: to[0]!.slice(to[0]!.lastIndexOf("@") + 1) };
 }
 
 /** Every https and mailto target of the header, in header order. Other schemes (http, javascript, data, file), malformed URIs and unsafe characters are dropped. */
