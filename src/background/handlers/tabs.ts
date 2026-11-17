@@ -68,7 +68,7 @@ export async function close_tab(scope: TabsScope): Promise<void> {
     if (scope.window_id >= 0 && (await scope.api.windows.get(scope.window_id)).type === "messageDisplay") return scope.api.windows.remove(scope.window_id);
     const active = (await tabs_of_window(scope)).find((tab) => tab.active);
     if (active === undefined) throw new RuntimeRefusal("No tab is active.");
-    if (active.index === 0) return scope.api.keys.paneFocus({ windowId: scope.window_id, pane: "threads" });
+    if (active.index === 0) return void (await scope.api.keys.paneFocus({ windowId: scope.window_id, pane: "threads" }));
     if (active.id === undefined) throw new RuntimeRefusal("The tab has no id, so it cannot be closed.");
     await scope.api.tabs.remove(active.id);
 }

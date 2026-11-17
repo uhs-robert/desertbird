@@ -167,7 +167,7 @@
         "name": "paneFocus",
         "type": "function",
         "async": true,
-        "description": "Moves the focus to the folder pane, the thread list or the message pane.",
+        "description": "Moves the focus to the folder pane, the thread list or the message pane, or to the pane left or right of the focused one. Answers false, with the focus left where it was, when that pane is hidden, shows no message, or lies past the end.",
         "parameters": [
           {
             "name": "args",
@@ -181,7 +181,9 @@
                 "enum": [
                   "folders",
                   "threads",
-                  "message"
+                  "message",
+                  "left",
+                  "right"
                 ]
               }
             }

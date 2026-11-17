@@ -24,7 +24,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"] },
     step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment"] },
     help: { runs_in: "background", ids: ["help.open"] },
-    app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus"] },
+    app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -181,7 +181,7 @@ test("the reading keys bind in the message keymap only, so j and k keep scrollin
     assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
     const message = MESSAGE_KEYMAP.normal ?? {};
     const ids = (keys: string) => (message[keys] && !Array.isArray(message[keys]) ? message[keys].id : undefined);
-    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus" };
+    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" };
     for (const [keys, id] of Object.entries(reading_ids)) assert.equal(ids(keys), id, keys);
     assert.deepEqual((message["/"] as { args: unknown }).args, { text: "find " });
     assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");

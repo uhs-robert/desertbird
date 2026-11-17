@@ -161,7 +161,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                       viewAllThreads: async () => {},
                       viewScroll: async () => {},
                       folderTreeExpand: async () => false,
-                      paneFocus: async () => {},
+                      paneFocus: async () => true,
                       appCommand: async () => true,
                       appOpenPage: async () => {},
                   },

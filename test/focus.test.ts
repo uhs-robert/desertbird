@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { body_script_is_live, capture_focus, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
+import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
@@ -169,4 +169,14 @@ test("capture_focus answers false for no focus, the page body and the overlay's 
     const focus = () => {};
     assert.equal(capture_focus(document_of(element("body", { isConnected: true, focus } as Partial<FocusNode>)))(), false);
     assert.equal(capture_focus(document_of(element("browser", { id: OVERLAY_BROWSER_ID, isConnected: true, focus } as Partial<FocusNode>)))(), false);
+});
+
+test("an element of the mail with the id folderTree stays in the reading pane", () => {
+    const mail_link = { localName: "a", id: "folderTree" };
+    const body = { localName: "browser", id: "messagepane", contentDocument: { activeElement: mail_link } };
+    const about_message = { localName: "browser", id: "messageBrowser", contentDocument: { activeElement: body } };
+    const document = { activeElement: { localName: "browser", contentDocument: { activeElement: about_message } } };
+    assert.equal(focused_pane(document), 2);
+    assert.equal(focused_pane({ activeElement: { localName: "browser", contentDocument: { activeElement: { localName: "ul", id: "folderTree" } } } }), 0);
+    assert.equal(focused_pane({ activeElement: { localName: "browser", contentDocument: { activeElement: { localName: "tbody" } } } }), 1);
 });

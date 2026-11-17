@@ -1,13 +1,15 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
 import { app_verbs } from "./app_verbs.ts";
-import { in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
+import type { FolderTreeLike } from "./app_verbs.ts";
+import { focused_pane, in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
 import type { KeysInstallArgs, KeysEvent } from "../shared/protocol.ts";
 import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
 import { create_list_port, front_about_3pane, view_verbs } from "./view.ts";
+import type { About3PaneLike } from "./view.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/keys";
@@ -33,6 +35,11 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         list_port_of(window) {
             const about_3pane = front_about_3pane(tabmail_of(window));
             return about_3pane && create_list_port(about_3pane, mail_extension_id_of);
+        },
+        folder_port_of(window) {
+            const tree = focused_pane(window.document) === 0 ? front_about_3pane<About3PaneLike & { folderTree: FolderTreeLike }>(tabmail_of(window))?.folderTree : null;
+            // The setter selects the row, scrolls it into view and opens the folder, as Thunderbird's own Down key does.
+            return tree ? { row_count: () => tree.rowCount, selected_index: () => tree.selectedIndex, select: (index) => void (tree.selectedIndex = index) } : null;
         },
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
         menu_is_open: (window: MainWindow) => menu_is_open(window.document),

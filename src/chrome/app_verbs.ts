@@ -1,10 +1,11 @@
 // The `keys` verbs that move the focus between panes, open or close a folder row, run a Thunderbird command and open a fixed page. Each table below is the whole set a verb can reach: the schema enum names the keys, and no caller passes a function name or an address.
 
-import { focus_chain } from "./focus.ts";
+import { focused_pane } from "./focus.ts";
 import type { MainWindow, ExtensionContext } from "./platform.ts";
 import { guard } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
 import type { ThreadVerbPane } from "./view.ts";
+import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 import type { KeysAppCommandArgs, KeysAppOpenPageArgs, KeysFolderTreeExpandArgs, KeysPaneFocusArgs } from "../shared/protocol.ts";
 
 interface Controller {
@@ -12,7 +13,9 @@ interface Controller {
     doCommand(name: string): void;
 }
 
-interface FolderTreeLike {
+export interface FolderTreeLike {
+    rowCount: number;
+    selectedIndex: number;
     selectedRow: unknown;
     expandRow(row: unknown): void;
     collapseRow(row: unknown): void;
@@ -25,10 +28,16 @@ interface AppWindow extends MainWindow {
     openContentTab(url: string): void;
 }
 
+interface MessageBodyBrowser {
+    focus(): void;
+    contentDocument?: { documentElement?: { hasAttribute(name: string): boolean } | null } | null;
+}
+
 /** The members of `about:3pane` these verbs read. Its main window is `browsingContext.topChromeWindow`. */
 interface AppPane extends ThreadVerbPane {
     folderTree: FolderTreeLike;
-    messageBrowser: { contentWindow?: { getMessagePaneBrowser?(): { focus(): void } } | null };
+    messageBrowser: { contentWindow?: { getMessagePaneBrowser?(): MessageBodyBrowser } | null };
+    paneLayout: { folderPaneVisible: boolean; messagePaneVisible: boolean };
     browsingContext: { topChromeWindow: AppWindow };
 }
 
@@ -40,22 +49,35 @@ const PAGES = {
     config: (window: AppWindow) => window.openContentTab("about:config"),
 };
 
-const PANES = {
-    folders: (pane: AppPane) => pane.folderTree,
-    threads: (pane: AppPane) => pane.threadTree.table?.body,
-    message: (pane: AppPane) => pane.messageBrowser.contentWindow?.getMessagePaneBrowser?.(),
-};
+// The panes in their order on screen, which `focused_pane` counts by, each giving the element to focus. A pane gives none where keys would reach nothing: a collapsed pane hides its focus, and a message pane with no body script (no message, a thread summary) swallows every plain key.
+const PANES = [
+    (pane: AppPane) => pane.paneLayout.folderPaneVisible && pane.folderTree,
+    (pane: AppPane) => pane.threadTree.table?.body,
+    (pane: AppPane) => {
+        const body = pane.messageBrowser.contentWindow?.getMessagePaneBrowser?.();
+        return pane.paneLayout.messagePaneVisible && body?.contentDocument?.documentElement?.hasAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE) && body;
+    },
+];
+
+const PANE_NAMES = ["folders", "threads", "message"];
 
 export function app_verbs(context: ExtensionContext) {
     const pane_of = (window_id: number) => mail_pane_of(context, window_id) as AppPane;
     return {
         folderTreeExpand: guard("keys.folderTreeExpand", ({ windowId, open }: KeysFolderTreeExpandArgs): boolean => {
             const pane = pane_of(windowId);
-            const in_folder_pane = focus_chain(pane.browsingContext.topChromeWindow.document).some((node) => node.id === "folderTree");
+            const in_folder_pane = focused_pane(pane.browsingContext.topChromeWindow.document) === 0;
             if (in_folder_pane && pane.folderTree.selectedRow) pane.folderTree[open ? "expandRow" : "collapseRow"](pane.folderTree.selectedRow);
             return in_folder_pane;
         }),
-        paneFocus: guard("keys.paneFocus", ({ windowId, pane }: KeysPaneFocusArgs): void => PANES[pane](pane_of(windowId))?.focus?.()),
+        paneFocus: guard("keys.paneFocus", ({ windowId, pane }: KeysPaneFocusArgs): boolean => {
+            const about_3pane = pane_of(windowId);
+            const focused = focused_pane(about_3pane.browsingContext.topChromeWindow.document);
+            // Past either end the index finds no pane, so the focus stays.
+            const element = PANES[pane === "left" ? focused - 1 : pane === "right" ? focused + 1 : PANE_NAMES.indexOf(pane)]?.(about_3pane);
+            element && element.focus?.();
+            return !!element;
+        }),
         appCommand: guard("keys.appCommand", ({ windowId, name }: KeysAppCommandArgs): boolean => {
             const controller = CONTROLLERS[name](pane_of(windowId));
             const enabled = controller.isCommandEnabled(name);

@@ -140,7 +140,7 @@ export interface KeysApi {
     viewAllThreads(args: KeysViewAllThreadsArgs): Promise<void>;
     viewScroll(args: KeysViewScrollArgs): Promise<void>;
     folderTreeExpand(args: KeysFolderTreeExpandArgs): Promise<boolean>;
-    paneFocus(args: KeysPaneFocusArgs): Promise<void>;
+    paneFocus(args: KeysPaneFocusArgs): Promise<boolean>;
     appCommand(args: KeysAppCommandArgs): Promise<boolean>;
     appOpenPage(args: KeysAppOpenPageArgs): Promise<void>;
 }
@@ -192,9 +192,10 @@ export interface KeysFolderTreeExpandArgs {
 
 export type Pane = "folders" | "threads" | "message";
 
+/** `left` and `right` name the pane beside the focused one, in the order folders, threads, message. The answer is false, with the focus left where it was, when the target pane is hidden, shows no message, or lies past the end. */
 export interface KeysPaneFocusArgs {
     windowId: number;
-    pane: Pane;
+    pane: Pane | "left" | "right";
 }
 
 /** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. */
