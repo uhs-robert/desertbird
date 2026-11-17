@@ -737,9 +737,10 @@ async function run_folders(instance) {
   await instance.restart();
   const start_folder = (await instance.ask("state")).mail_tab?.folder;
   note(app, kind, "folder shown after the restart", String(start_folder));
-  // Betterbird starts on the Inbox while the stored cursor sits on Trash, so only the start record lets C-o return to Trash there.
   check(app, kind, "g i after the restart shows the Inbox", (await shown_folder(["g", "i"], 2500)) === "/Inbox");
-  check(app, kind, "C-o after the restart walks back to Trash", (await shown_folder([CTRL("o")], 2500)) === "/Trash");
+  // The app restores the folder it last showed, or another. C-o goes back to the folder shown at the start, and from a start on the Inbox it goes back to Trash.
+  const back_to = start_folder && start_folder.length > 1 && start_folder !== "/Inbox" ? start_folder : "/Trash";
+  check(app, kind, `C-o after the restart walks back to ${back_to}`, (await shown_folder([CTRL("o")], 2500)) === back_to);
   await shown_folder(["g", "i"], 2000);
   check(app, kind, "the mark set before the restart survives it", (await shown_folder(["'", "b"], 2500)) === "/Trash");
   // A special folder this account lacks changes nothing and the app stays up.

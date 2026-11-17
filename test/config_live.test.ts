@@ -37,6 +37,7 @@ function stub_messenger(hold_first_get = false) {
         runtime: { onMessage: { addListener: () => {} } },
         notifications: { create: async () => "n" },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
+        mailTabs: { query: async () => [], onDisplayedFolderChanged: { addListener: () => {} } },
     };
     const outside_write = (items: Record<string, unknown>) => {
         Object.assign(stored, items);
