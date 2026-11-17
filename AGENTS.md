@@ -21,7 +21,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Options page: settings form and key bindings editor | [`src/options/README.md`](src/options/README.md) |
 | Command line: overlay page, key handling, drawing | [`src/overlay/README.md`](src/overlay/README.md) |
 | Command line in the background: completion, sessions, running a typed command | [`src/background/cmdline/README.md`](src/background/cmdline/README.md) |
-| Body script: keys in a message document (pane, tab, window) | [`src/content/README.md`](src/content/README.md) |
+| Body script: keys in a message document (pane, tab, window) and on the options and help pages | [`src/content/README.md`](src/content/README.md) |
 | Hud in the background: which-key panel, toasts, mode label | [`src/background/hud/README.md`](src/background/hud/README.md) |
 | Theme: the `theme` setting, role colors for pages, mode label colors | [`src/background/theme/README.md`](src/background/theme/README.md) |
 | Help page generated from the registry | [`src/help/README.md`](src/help/README.md) |
@@ -71,7 +71,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
-- `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `experiment/keys.js`, `experiment/overlay.js`, `experiment/folderpane.js`, `experiment/hints.js`, their schemas, `overlay/`, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes its size budget.
+- `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `content/page_keys.js`, `experiment/keys.js`, `experiment/overlay.js`, `experiment/folderpane.js`, `experiment/hints.js`, their schemas, `overlay/`, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes its size budget.
 - `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, wlrctl, grim, zip, unzip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
 
 ## Planning

@@ -82,6 +82,11 @@ const message_display = await build({ ...shared_options, entryPoints: ["src/cont
 writeFileSync(join(out_dir, "meta", "message_display.json"), JSON.stringify(message_display.metafile));
 const message_display_bytes = statSync(message_display_file).size;
 
+// The own pages (options, help) run the message key script from one shared bundle, since a content tab gets no script from the manifest.
+const page_keys_file = join(out_dir, "content", "page_keys.js");
+await build({ ...shared_options, entryPoints: ["src/content/page_keys.ts"], outfile: page_keys_file });
+const page_keys_bytes = statSync(page_keys_file).size;
+
 // The options page is an extension page: it bundles the settings code and the command table, and stays out of the parent bundle.
 mkdirSync(join(out_dir, "options"), { recursive: true });
 await build({ ...shared_options, entryPoints: ["src/options/options.ts"], outfile: join(out_dir, "options", "options.js") });
@@ -116,4 +121,4 @@ if (message_display_bytes > CONTENT_MAX_BYTES) {
 }
 
 execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help"], { cwd: out_dir });
-console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`].join(", ")})`);
+console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`].join(", ")})`);

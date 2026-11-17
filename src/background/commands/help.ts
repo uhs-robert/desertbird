@@ -8,4 +8,5 @@ export const help: CommandGroup = {
         "help.open": { bridge: false, runs_in: "background", label: "Help", intent: "Open the help page: every command with its keys and usage.", run: scoped<HelpApi>(open_help) },
     },
     normal_keys: { "?": { id: "help.open" } },
+    message_keys: { "?": { id: "help.open" } },
 };

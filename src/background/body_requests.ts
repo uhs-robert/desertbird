@@ -44,7 +44,8 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
             await notify_refusal(deps.api, "The command line is not available in a message window. Open the message in a tab to use it.");
             return {};
         }
-        const message_ids = (await deps.api.messageDisplay.getDisplayedMessages(tab_id)).map((message) => message.id);
+        // A page of the add-on is a tab with no message. The call may refuse for it, and the key then runs with no messages.
+        const message_ids = (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch(() => [])).map((message) => message.id);
         await deps.run({ command: request.command, args: request.args, count: request.count, windowId: window_id, messageIds: message_ids });
         return {};
     }
