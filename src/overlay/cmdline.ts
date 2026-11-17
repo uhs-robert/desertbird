@@ -4,12 +4,15 @@ import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult,
 import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
+import { follow_theme } from "../shared/follow_theme.ts";
 import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
     storage: { local: { get(key: string): Promise<Record<string, unknown>> }; onChanged: { addListener(listener: (changes: Record<string, unknown>, area: string) => void): void } };
 };
+
+follow_theme();
 
 const window_id = Number(new URLSearchParams(location.search).get("window"));
 const input = document.getElementById("input") as HTMLInputElement;

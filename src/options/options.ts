@@ -8,11 +8,14 @@ import { create_config_store } from "../background/config/store.ts";
 import type { ConfigStorage } from "../background/config/store.ts";
 import type { RecordStorageApi } from "../background/record_store.ts";
 import { create_quick_reply_store } from "../background/quick_reply_store.ts";
+import { follow_theme } from "../shared/follow_theme.ts";
 import { build_user_keymap, default_rows, edits_from_user_keymap, overrides_from_texts, setting_to_text } from "./model.ts";
 import type { BindingRow } from "./model.ts";
 
 // Both stores read `storage.local`. Their `get` types differ only in the argument shape, so the page holds the intersection.
 declare const messenger: ConfigStorage & RecordStorageApi;
+
+follow_theme();
 
 const store = create_config_store(messenger);
 const quick_reply_store = create_quick_reply_store(messenger);

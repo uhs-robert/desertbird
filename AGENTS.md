@@ -24,6 +24,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Body script: keys in a message document (pane, tab, window) | [`src/content/README.md`](src/content/README.md) |
 | Search in the background: live Quick Filter search, the `/` register, `n` and `N` | [`src/background/search/README.md`](src/background/search/README.md) |
 | Hud in the background: which-key panel, toasts, mode label | [`src/background/hud/README.md`](src/background/hud/README.md) |
+| Theme: the `theme` setting, role colors for pages, mode label colors | [`src/background/theme/README.md`](src/background/theme/README.md) |
 | Help page generated from the registry | [`src/help/README.md`](src/help/README.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
 | Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |

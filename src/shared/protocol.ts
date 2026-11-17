@@ -103,12 +103,27 @@ export type ModeIndicator = (typeof MODE_INDICATORS)[number];
 export const MODE_LABEL_STYLES = ["classic", "badge"] as const;
 export type ModeLabelStyle = (typeof MODE_LABEL_STYLES)[number];
 
-/** What the status bar label of a window shows. `mode` is the mode the key runtime reports. The parent turns it into insert while a text field has the focus, and applies `indicator` to the result, which is why the setting travels with it. The parent maps mode and style to text and colors, so a caller never supplies either. */
+/** The label colors of one color scheme, each as `#rrggbb`: one per mode, and the text on a badge. */
+export interface ModeLabelScheme {
+    normal: string;
+    visual: string;
+    insert: string;
+    on_badge: string;
+}
+
+/** Both schemes cross, and the parent picks the one Thunderbird itself uses. The background page sees the OS scheme, which Thunderbird can differ from. */
+export interface ModeLabelColors {
+    dark: ModeLabelScheme;
+    light: ModeLabelScheme;
+}
+
+/** What the status bar label of a window shows. `mode` is the mode the key runtime reports. The parent turns it into insert while a text field has the focus, and applies `indicator` to the result, which is why the setting travels with it. The parent maps mode and style to the text, and takes the colors from `colors`. */
 export interface OverlaySetModeLabelArgs {
     windowId: number;
     mode: "normal" | "visual";
     indicator: ModeIndicator;
     style: ModeLabelStyle;
+    colors: ModeLabelColors;
 }
 
 /** The pages the overlay can show. The parent maps each name to a page of the extension, so a caller never names a path or an address. `cmdline` takes the keyboard. `hud` (the which-key panel and the toasts) never does and lets clicks through. */

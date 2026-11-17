@@ -262,7 +262,7 @@ test("n after Escape narrows the list to the register again", async () => {
     await apply_filter(api.mailTabs, tab_id, { show: false });
     assert.equal(state.filter.text, undefined);
     await service.step(3, "same");
-    assert.equal(state.filter.text?.text, "invoice");
+    assert.equal((state.filter as QuickFilter).text?.text, "invoice");
     // The selection stayed on the first row, so n moves to the second.
     assert.equal(state.selected, 1);
 });

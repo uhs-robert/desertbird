@@ -17,6 +17,7 @@ export interface MainWindow extends KeyTarget {
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     removeEventListener(type: "unload", listener: () => void): void;
     removeEventListener(type: "blur" | "focusin" | "focusout", listener: () => void, capture: boolean): void;
+    matchMedia(query: string): { matches: boolean; addEventListener(type: "change", listener: () => void): void; removeEventListener(type: "change", listener: () => void): void };
     document: FocusDocument & { getElementById(id: string): unknown; hasFocus(): boolean; readyState: string };
 }
 

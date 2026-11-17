@@ -1,23 +1,13 @@
+/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. The fallbacks hold until the background has published one. Muted text mixes the text color into the surface, so it stays readable on every theme. */
 :root {
     color-scheme: light dark;
-    --surface: #f8f9fb;
-    --selected: #d5e3fb;
-    --text: #1f2328;
-    --muted: #4a5159;
-    --accent: #0a4db3;
-    --edge: #8c959f;
-    --error_text: #b3261e;
-}
-@media (prefers-color-scheme: dark) {
-    :root {
-        --surface: #23262b;
-        --selected: #34507d;
-        --text: #e8eaed;
-        --muted: #b4bac2;
-        --accent: #8ab4f8;
-        --edge: #6b7480;
-        --error_text: #f28b82;
-    }
+    --surface: var(--desertfox-bg-mantle, Canvas);
+    --selected: var(--desertfox-selection, color-mix(in srgb, CanvasText 15%, Canvas));
+    --text: var(--desertfox-fg-core, CanvasText);
+    --muted: color-mix(in srgb, var(--text) 72%, var(--surface));
+    --accent: color-mix(in srgb, var(--desertfox-primary, CanvasText) 85%, var(--text));
+    --edge: var(--desertfox-border, GrayText);
+    --error_text: var(--desertfox-error, #b3261e);
 }
 /* The box is 280 px high and the body fills it, so the height never follows the number of rows. */
 html, body { margin: 0; width: 100%; height: 100%; background: var(--surface); color: var(--text); overflow: hidden; }
@@ -25,6 +15,8 @@ body { display: flex; flex-direction: column; font: 14px sans-serif; border-top:
 #rows { flex: 1; min-height: 0; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
 #rows li { display: flex; gap: 12px; padding: 2px 8px; white-space: nowrap; }
 #rows li.selected { background: var(--selected); }
+/* The selection color is not the surface, so the muted mix would fall under 4.5 to 1 on some themes. */
+#rows li.selected .args, #rows li.selected .description { color: var(--text); }
 #rows .name { width: 12em; flex: none; }
 #rows .name b { font-weight: 700; text-decoration: underline; }
 #rows .args { width: 24em; flex: none; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }

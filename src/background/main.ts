@@ -9,6 +9,7 @@ import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
+import { publish_theme } from "./theme/publish.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -237,8 +238,16 @@ messenger.storage.onChanged.addListener((changes, area) => {
 
 // Registered after the config store's own listener, so the settings are refilled by the time the hud reads them.
 messenger.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && SETTINGS_KEY in changes) hud.settings_changed().catch(console.error);
+    if (area !== "local" || !(SETTINGS_KEY in changes)) return;
+    hud.settings_changed().catch(console.error);
+    publish_current_theme();
 });
+
+// The pages read the theme from storage, so it is published at every start and again when the setting changes.
+function publish_current_theme(): void {
+    config_store.read().then(({ settings }) => publish_theme(messenger.storage.local, settings.theme)).catch(console.error);
+}
+publish_current_theme();
 
 queue_install(false);
 
