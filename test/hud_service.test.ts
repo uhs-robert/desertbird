@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { badge_for, create_hud_service } from "../src/background/hud/service.ts";
+import { badge_for, create_hud_service, lifting_toasts } from "../src/background/hud/service.ts";
 import type { Settings } from "../vendor/desertfox/config.ts";
 import type { HudState, KeysEvent } from "../src/shared/protocol.ts";
 import { fake_timers, sample_root, settings_with, settle } from "./hud_fakes.ts";
@@ -22,7 +22,7 @@ function setup(overrides: Partial<Settings> = {}) {
         mode_of: () => mode,
         timers,
     });
-    const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "keys.pending", keys, windowId: window_id });
+    const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id });
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
     return { hud, log, timers, pending, state, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }), set_mode: (next: string) => void (mode = next) };
 }
@@ -239,7 +239,7 @@ test("a window that goes away drops its toasts and timers and mounts nothing aft
     hud.forget(1);
     await settle();
     assert.equal(timers.pending(), 0);
-    assert.deepEqual(log, ["mount hud@1"]);
+    assert.deepEqual(log.filter((line) => line.startsWith("mount") || line.startsWith("unmount")), ["mount hud@1"]);
 });
 
 test("the which-key panel, a toast and the command line page can show together: the hud keeps its own page", async () => {
@@ -266,5 +266,66 @@ test("events that are commands are ignored", async () => {
     const { hud, log } = setup();
     const invocation: KeysEvent = { command: "msg.archive", args: {}, count: 1, windowId: 1, messageIds: [] };
     await hud.on_keys_event(invocation);
+    assert.deepEqual(log, []);
+});
+
+function failing_mount() {
+    const log: string[] = [];
+    const hud = create_hud_service({
+        overlay: { mount: async () => Promise.reject(new Error("no such window")), unmount: async () => void log.push("unmount"), onClosed: { addListener: () => {}, removeListener: () => {} } },
+        read_settings: async () => settings_with({ mode_indicator: "off" }),
+        read_root: async () => sample_root(),
+        send_changed: () => {},
+        mode_of: () => "normal",
+        timers: fake_timers(),
+    });
+    return { hud, log };
+}
+
+test("a toast whose page cannot mount reports false, so the caller sends a notification, and leaves no toast behind", async () => {
+    const { hud } = failing_mount();
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+        assert.equal(await hud.toast(1, "failed", true), false);
+    } finally {
+        console.error = quiet;
+    }
+    assert.deepEqual((await hud.handle({ type: "hud.state", windowId: 1 }))?.toasts, []);
+});
+
+test("a toast whose page is already mounted reports true", async () => {
+    const { hud } = setup({ mode_indicator: "always" });
+    await hud.track(1);
+    assert.equal(await hud.toast(1, "failed", true), true);
+});
+
+test("the toasts lift while the command line is open in the window and drop when it closes", async () => {
+    const { hud, state } = setup();
+    assert.equal((await state()).lifted, false);
+    hud.set_lifted(1, true);
+    assert.equal((await state()).lifted, true);
+    hud.set_lifted(1, false);
+    assert.equal((await state()).lifted, false);
+});
+
+test("mounting the command line through the lifting wrapper lifts the toasts, and a failed mount undoes it", async () => {
+    const lifted: string[] = [];
+    const base = { mount: async () => {}, unmount: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } };
+    const wrapped = lifting_toasts(base, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) });
+    await wrapped.mount({ windowId: 1, surface: "cmdline" });
+    await wrapped.mount({ windowId: 1, surface: "hud" });
+    await wrapped.unmount({ windowId: 1, surface: "cmdline" });
+    assert.deepEqual(lifted, ["1:true", "1:false"]);
+    const refusing = lifting_toasts({ ...base, mount: async () => Promise.reject(new Error("no")) }, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) });
+    await assert.rejects(refusing.mount({ windowId: 2, surface: "cmdline" }));
+    assert.deepEqual(lifted.slice(2), ["2:true", "2:false"]);
+});
+
+test("keys from a window with no id show no panel", async () => {
+    const { log, timers, pending } = setup();
+    await pending(["g"], -1);
+    timers.advance(1000);
+    await settle();
     assert.deepEqual(log, []);
 });

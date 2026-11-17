@@ -35,12 +35,13 @@ function draw_which_key(panel: HudState["which_key"]): void {
         rows.append(line);
     }
     if (panel.rows.length > MAX_ROWS) rows.append(make("div", "row group", `... ${panel.rows.length - MAX_ROWS} more`));
-    which_key_element.replaceChildren(make("div", "title", panel.title), rows);
+    which_key_element.replaceChildren(make("div", "title", `after ${panel.title}`), rows);
 }
 
 function draw(state: HudState): void {
     draw_which_key(state.which_key);
     toasts_element.replaceChildren(...state.toasts.map((toast) => make("div", toast.is_error ? "error" : "info", toast.text)));
+    document.body.classList.toggle("lifted", state.lifted);
     badge_element.hidden = state.badge === null;
     badge_element.textContent = state.badge ?? "";
 }

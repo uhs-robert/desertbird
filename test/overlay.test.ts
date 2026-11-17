@@ -7,6 +7,8 @@ class FakeWindow {
     unload_listeners = new Set<() => void>();
     escape_listeners = new Set<() => void>();
     boxes: string[] = [];
+    /** What has the focus when a surface mounts, or null for nothing that can be given back. */
+    held_focus: string | null = null;
 }
 
 function setup() {
@@ -22,6 +24,10 @@ function setup() {
                 window.boxes.splice(window.boxes.indexOf(box), 1);
                 log.push(`remove ${box}`);
             };
+        },
+        capture_focus: (window) => {
+            const held = window.held_focus;
+            return () => (held === null ? false : (log.push(`restore ${held}`), true));
         },
         focus_thread_list: (window) => void log.push(`focus list of ${[...windows].find(([, each]) => each === window)?.[0]}`),
         on_tab_select(window, listener) {
@@ -168,4 +174,24 @@ test("a closing window removes both and reports each with its surface", () => {
 test("unmount names a surface from the fixed list", () => {
     const { host } = setup();
     assert.throws(() => host.unmount({ windowId: 1, surface: "elsewhere" as never }), /unknown surface/);
+});
+
+test("closing the command line gives the focus back to what had it, such as the reading pane", () => {
+    const { windows, log, host } = setup();
+    windows.get(1)!.held_focus = "message browser";
+    host.mount({ windowId: 1, surface: "cmdline" });
+    host.unmount({ windowId: 1, surface: "cmdline" });
+    assert.deepEqual(log, ["create cmdline@1", "remove cmdline@1", "restore message browser"]);
+});
+
+test("Escape from outside the page restores the same element, and a gone element falls back to the thread list", () => {
+    const { windows, log, host } = setup();
+    windows.get(1)!.held_focus = "message browser";
+    host.mount({ windowId: 1, surface: "cmdline" });
+    for (const listener of windows.get(1)!.escape_listeners) listener();
+    assert.deepEqual(log.slice(-2), ["restore message browser", "closed 1"]);
+    windows.get(2)!.held_focus = null;
+    host.mount({ windowId: 2, surface: "cmdline" });
+    host.unmount({ windowId: 2, surface: "cmdline" });
+    assert.equal(log.at(-1), "focus list of 2");
 });

@@ -74,3 +74,19 @@ export function is_typing(event: KeyEventTargets, document: FocusDocument): bool
     const candidates = [event.target, event.originalTarget, innermost_focus(document)];
     return candidates.some((candidate) => is_typing_element(candidate as FocusNode | null)) || body_script_is_live(document);
 }
+
+interface RestorableNode extends FocusNode {
+    isConnected?: boolean;
+    focus?(): void;
+}
+
+/** Notes the deepest focused element now. The returned function focuses it again and answers false when that is not possible: the element left the document, the focus sat on no element but the page body, or the element is the overlay's own browser. */
+export function capture_focus(document: FocusDocument): () => boolean {
+    const target = focus_chain(document).at(-1) as RestorableNode | undefined;
+    return () => {
+        if (target === undefined || target.isConnected !== true || typeof target.focus !== "function") return false;
+        if (target.localName === "body" || target.id === OVERLAY_BROWSER_ID) return false;
+        target.focus();
+        return true;
+    };
+}

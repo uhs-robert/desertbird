@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, MESSAGE_KEYMAP, registry } from "../src/background/commands/index.ts";
 import { effective_keymap } from "../src/background/config/keymap.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
@@ -22,7 +22,7 @@ test("an entry carries the label, the intent, the usage line and every key bound
     const archive = all_entries().find((entry) => entry.id === "msg.archive");
     assert.equal(archive?.label, registry.get("msg.archive")?.label);
     assert.equal(archive?.intent, registry.get("msg.archive")?.intent);
-    assert.deepEqual(archive?.keys, [{ keys: "x", args: "" }]);
+    assert.deepEqual(archive?.keys, [{ keys: "x", args: "", where: "" }]);
     const sort = all_entries().find((entry) => entry.id === "sort.set");
     assert.match(sort?.usage ?? "", /^sort /);
     assert.ok((sort?.keys.length ?? 0) > 1);
@@ -32,7 +32,7 @@ test("an entry carries the label, the intent, the usage line and every key bound
 test("a key that sets args shows them", () => {
     const open = all_entries().find((entry) => entry.id === "cmdline.open");
     assert.ok(open?.keys.some((key) => key.keys === ":" && key.args === ""));
-    assert.ok(open?.keys.some((key) => key.keys === "mt" && key.args === 'text="tag "'));
+    assert.ok(open?.keys.some((key) => key.keys === "mt" && key.args === "text: tag"));
 });
 
 test("a command with no key lists none, and the page can still show its usage", () => {
@@ -48,7 +48,7 @@ test("the user's bindings change the listed keys: a rebound key moves and an unb
 });
 
 test("help.open is bound to ? and opens the page in the key's window", async () => {
-    assert.deepEqual(all_entries().find((entry) => entry.id === "help.open")?.keys, [{ keys: "?", args: "" }]);
+    assert.deepEqual(all_entries().find((entry) => entry.id === "help.open")?.keys, [{ keys: "?", args: "", where: "" }]);
     const calls: string[] = [];
     const api = {
         runtime: { getURL: (path: string) => `moz-extension://x/${path}` },
@@ -74,4 +74,18 @@ test("help.open shows the tab that already holds the page", async () => {
     };
     await create_router(registry, api as unknown as RouterApi).run({ command: "help.open", args: {}, count: 1, windowId: 4, messageIds: [] });
     assert.deepEqual(calls, ["update 9"]);
+});
+
+test("the keys of a message document list under the reading commands, marked as in a message", () => {
+    const scroll = help_groups(registry, DEFAULT_KEYMAP, MESSAGE_KEYMAP).flatMap((group) => group.entries).find((entry) => entry.id === "message.scroll_down");
+    assert.ok(scroll !== undefined && scroll.keys.length > 0);
+    assert.ok(scroll.keys.every((key) => key.where === "message"));
+    assert.deepEqual(help_groups(registry, DEFAULT_KEYMAP).flatMap((group) => group.entries).find((entry) => entry.id === "message.scroll_down")?.keys, []);
+});
+
+test("a binding that runs several steps lists its key under each command it runs", () => {
+    const keymap = { normal: { Q: [{ id: "msg.archive" }, { id: "motion.down" }] } };
+    const entries = help_groups(registry, keymap).flatMap((group) => group.entries);
+    assert.deepEqual(entries.find((entry) => entry.id === "msg.archive")?.keys, [{ keys: "Q", args: "", where: "" }]);
+    assert.deepEqual(entries.find((entry) => entry.id === "motion.down")?.keys, [{ keys: "Q", args: "", where: "" }]);
 });

@@ -2,6 +2,7 @@
 // The overlay is a remote `browser` element in the window document, not an iframe: see "Overlay mount" in docs/thunderbird-behavior.md.
 
 import { HUD_BOX_ID, HUD_BROWSER_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+import { capture_focus } from "./focus.ts";
 import { create_overlay_host } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
@@ -33,7 +34,7 @@ const PINNED = "position: fixed; left: 0; right: 0; bottom: 0;";
 // The command line draws the completion list above its input line inside its box. The hud sits one z-index step below it, transparent and deaf to the mouse, so a click on the list under it still lands.
 const SURFACES: Record<OverlaySurface, SurfaceSpec> = {
     cmdline: { page: "overlay/cmdline.html", box_id: OVERLAY_BOX_ID, browser_id: OVERLAY_BROWSER_ID, box_style: `${PINNED} height: 280px; z-index: 100000; background: Canvas;`, max_width: 800, max_height: 280, takes_keyboard: true },
-    hud: { page: "overlay/hud.html", box_id: HUD_BOX_ID, browser_id: HUD_BROWSER_ID, box_style: `${PINNED} height: 320px; z-index: 99999; pointer-events: none;`, max_width: 0, max_height: 0, takes_keyboard: false },
+    hud: { page: "overlay/hud.html", box_id: HUD_BOX_ID, browser_id: HUD_BROWSER_ID, box_style: `${PINNED} height: 520px; z-index: 99999; pointer-events: none;`, max_width: 0, max_height: 0, takes_keyboard: false },
 };
 
 const closed_listeners = new Set<(closed: OverlayClosed) => void>();
@@ -109,6 +110,7 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
     host ??= create_overlay_host<MainWindow>({
         window_with_id: (window_id) => open_main_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
         create: (window, surface, window_id) => create_overlay_element(window, context.extension, surface, window_id),
+        capture_focus: (window) => capture_focus(window.document),
         focus_thread_list(window) {
             const tree = front_about_3pane(tabmail_of(window))?.threadTree;
             // The tree has focus in its table body. The tree element itself is the fallback.

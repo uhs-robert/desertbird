@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { body_script_is_live, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
+import { body_script_is_live, capture_focus, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
@@ -149,4 +149,24 @@ test("a key is not typing but is left alone when the focused message body runs t
     assert.equal(is_typing({ target: element("a") }, document_of(three_pane)), true);
     mail_document.activeElement = frame;
     assert.equal(is_typing({ target: element("a") }, document_of(three_pane)), false);
+});
+
+test("capture_focus gives the focus back to the deepest element it saw, in a nested document", () => {
+    const calls: string[] = [];
+    const row = element("tbody", { isConnected: true, focus: () => void calls.push("row") } as Partial<FocusNode>);
+    const three_pane = element("browser", { contentDocument: { activeElement: row } });
+    assert.equal(capture_focus(document_of(three_pane))(), true);
+    assert.deepEqual(calls, ["row"]);
+});
+
+test("capture_focus answers false when the element left the document, so the caller falls back to the thread list", () => {
+    const row = element("tbody", { isConnected: false, focus: () => {} } as Partial<FocusNode>);
+    assert.equal(capture_focus(document_of(row))(), false);
+});
+
+test("capture_focus answers false for no focus, the page body and the overlay's own browser", () => {
+    assert.equal(capture_focus(document_of(null))(), false);
+    const focus = () => {};
+    assert.equal(capture_focus(document_of(element("body", { isConnected: true, focus } as Partial<FocusNode>)))(), false);
+    assert.equal(capture_focus(document_of(element("browser", { id: OVERLAY_BROWSER_ID, isConnected: true, focus } as Partial<FocusNode>)))(), false);
 });

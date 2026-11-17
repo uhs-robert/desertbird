@@ -10,6 +10,8 @@ export interface OverlayDeps<Window> {
     create(window: Window, surface: OverlaySurface, window_id: number): () => void;
     /** Focuses the thread list of the front tab. Does nothing when that tab is not the mail tab. */
     focus_thread_list(window: Window): void;
+    /** Notes what has the focus now. The returned function gives it back and answers false when that element is gone or cannot take the focus, so the host falls back to the thread list. */
+    capture_focus(window: Window): () => boolean;
     /** Calls `listener` when the front tab of the window changes. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window closes. Returns the way to stop listening. */
@@ -28,6 +30,8 @@ export interface OverlayHost {
 interface Mounted {
     window_id: number;
     surface: OverlaySurface;
+    /** Gives the focus back to what had it when the surface mounted. */
+    restore_focus(): void;
     remove(): void;
     stop_listening(): void;
 }
@@ -58,7 +62,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
     function close_by_itself(window: Window, entry: Mounted, window_is_closing: boolean): void {
         if (mounted.get(window)?.get(entry.surface) !== entry) return;
         take_down(window, entry);
-        if (!window_is_closing && takes_keyboard(entry.surface)) deps.focus_thread_list(window);
+        if (!window_is_closing && takes_keyboard(entry.surface)) entry.restore_focus();
         deps.emit_closed(entry.window_id, entry.surface);
     }
 
@@ -72,8 +76,13 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             const earlier = mounted.get(window)?.get(args.surface);
             if (earlier) take_down(window, earlier);
             const surface = args.surface;
+            // Read before the mount moves the focus to the surface.
+            const give_back = takes_keyboard(surface) ? deps.capture_focus(window) : () => true;
             const remove = deps.create(window, surface, window_id);
-            const entry: Mounted = { window_id, surface, remove, stop_listening: () => {} };
+            const restore_focus = () => {
+                if (!give_back()) deps.focus_thread_list(window);
+            };
+            const entry: Mounted = { window_id, surface, remove, restore_focus, stop_listening: () => {} };
             const stops = [deps.on_window_unload(window, () => close_by_itself(window, entry, true))];
             if (takes_keyboard(surface)) {
                 stops.push(deps.on_tab_select(window, () => close_by_itself(window, entry, false)));
@@ -91,7 +100,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
                 const entry = of_window.get(args.surface);
                 if (entry?.window_id !== window_id) continue;
                 take_down(window, entry);
-                if (takes_keyboard(entry.surface)) deps.focus_thread_list(window);
+                if (takes_keyboard(entry.surface)) entry.restore_focus();
             }
         },
         shutdown() {

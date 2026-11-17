@@ -64,8 +64,13 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let sequence_window: Window | null = null;
     let hold_commands = new Set<string>();
     let hold_until = 0;
-    // Tells the background the keys typed so far, so it can list the keys that may follow. No keys means the sequence ended. A tab change or a window blur is not reported here: the background watches those. The background drops repeats.
-    const pend = (window: Window, keys: string[] = []) => deps.emit({ command: "keys.pending", keys, windowId: deps.window_id_of(window) });
+    // How many keys the last report held. Plain keys then report nothing, and an end is reported once.
+    let was = 0;
+    // Tells the background the keys typed so far, so it can list the keys that may follow. No keys means the sequence ended. A tab change or a window blur is not reported here: the background watches those.
+    const pend = (w: Window, keys: string[]) => {
+        if (keys.length || was) deps.emit({ command: "pending", keys, windowId: deps.window_id_of(w) });
+        was = keys.length;
+    };
 
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
     let visual_anchor = -1;
@@ -125,7 +130,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
             visual_anchor = -1;
-            pend(window);
+            pend(window, []);
             if (port && is_plain_printable(token)) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -136,7 +141,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // Escape belongs to visual mode only while it is active, so the command line overlay and Thunderbird keep it otherwise.
         if (visual_anchor >= 0 && token === "<Escape>") {
             matcher.reset();
-            pend(window);
+            pend(window, []);
             end_visual(port);
             event.preventDefault();
             event.stopPropagation();
