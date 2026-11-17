@@ -65,21 +65,32 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let hold_commands = new Set<string>();
     let hold_until = 0;
 
+    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
+    let visual_anchor = -1;
+
+    function end_visual(port: ListPort): void {
+        visual_anchor = -1;
+        port.select(port.selected_index());
+    }
+
     // For `.`. An unrepeatable leaf clears it.
     let last: { leaf: TreeLeaf; count: number | undefined } | null = null;
 
     function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count?: number): void | null {
         if (leaf.steps[0]?.invocation.id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
+        if (leaf.steps[0]?.invocation.id === "visual.toggle") return visual_anchor < 0 ? void (visual_anchor = port.selected_index()) : end_visual(port);
         last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
             if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
             if (step.runs_in === "chrome") {
-                run_motion(step.invocation.id, port, step_count);
+                const anchor = visual_anchor;
+                run_motion(step.invocation.id, anchor < 0 ? port : { ...port, select: (index) => port.select_range(anchor, index) }, step_count);
             } else if (step.runs_in === "background") {
                 // The selection is read here, inside the key's own handler, because the background answers later: by then a following `j` has moved the selection.
                 const args = (step.invocation.args ?? {}) as Record<string, JsonValue>;
                 deps.emit({ command: step.invocation.id, args, count: step_count ?? 1, windowId: deps.window_id_of(window), messageIds: port.selected_message_ids() });
+                visual_anchor = -1;
             }
         }
     }
@@ -113,6 +124,14 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             }
             return;
         }
+        // Escape belongs to visual mode only while it is active, so the command line overlay and Thunderbird keep it otherwise.
+        if (visual_anchor >= 0 && token === "<Escape>") {
+            matcher.reset();
+            end_visual(port);
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
         if (sequence_window !== window) matcher.reset();
         sequence_window = window;
         const result = matcher.feed(NORMAL_MODE, token);
@@ -129,6 +148,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         const reset_typing = () => {
             matcher?.reset();
             hold_until = 0;
+            visual_anchor = -1;
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);
@@ -163,6 +183,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             if (listening) deps.unregister_window_listener();
             listening = false;
             matcher = null;
+            visual_anchor = -1;
             hold_until = 0;
             sequence_window = null;
         },

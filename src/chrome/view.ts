@@ -14,6 +14,7 @@ export interface DbViewLike {
 
 export interface ThreadTreeLike {
     selectedIndex: number;
+    selectedIndices?: number[];
     currentIndex: number;
     scrollToIndex?(index: number, instant?: boolean): void;
     /** The focusable body of the list. The overlay returns the focus here. */
@@ -61,6 +62,8 @@ export interface TabmailLike {
 /** The thread list a key acts on: the rows the motions move over, and the selection a background command acts on. */
 export interface ListPort extends ViewPort {
     selected_message_ids(): number[];
+    /** Selects every row from `anchor` to `end` and makes `end` the current row, so a motion goes on from there. */
+    select_range(anchor: number, end: number): void;
 }
 
 /** The MailExtension id of a message header, or null when the extension cannot name it. */
@@ -83,6 +86,11 @@ export function create_list_port(about_3pane: About3PaneLike, message_id_of: Mes
         select(index) {
             tree.selectedIndex = index;
             tree.scrollToIndex?.(index);
+        },
+        select_range(anchor, end) {
+            const first = Math.min(anchor, end);
+            tree.selectedIndices = Array.from({ length: Math.abs(end - anchor) + 1 }, (_, offset) => first + offset);
+            tree.currentIndex = end;
         },
         selected_message_ids() {
             const headers = about_3pane.gDBView?.getSelectedMsgHdrs() ?? [];

@@ -49,8 +49,16 @@ class FakeWindow implements KeyTarget {
         this.has_focus = !window_lost_focus;
         for (const listener of [...this.blur_listeners]) listener();
     }
+    /** The rows `select_range` selected, or null when one row is selected. */
+    range: [number, number] | null = null;
     port(): ListPort {
-        return { row_count: () => this.rows, selected_index: () => this.selected, select: (index) => void (this.selected = index), selected_message_ids: () => [100 + this.selected] };
+        return {
+            row_count: () => this.rows,
+            selected_index: () => this.selected,
+            select: (index) => void ((this.selected = index), (this.range = null)),
+            select_range: (anchor, end) => void ((this.selected = end), (this.range = [Math.min(anchor, end), Math.max(anchor, end)])),
+            selected_message_ids: () => (this.range ? Array.from({ length: this.range[1] - this.range[0] + 1 }, (_, offset) => 100 + this.range![0] + offset) : [100 + this.selected]),
+        };
     }
 }
 
@@ -90,6 +98,7 @@ const tree = () => ({
             q: leaf("motion.sideways", "chrome"),
             ":": leaf("cmdline.open", "background"),
             ".": leaf("repeat.last", "chrome"),
+            v: leaf("visual.toggle", "chrome"),
             r: leaf("msg.read", "background"),
             D: unrepeatable("msg.delete"),
             g: { kind: "branch", children: { g: leaf("motion.top", "chrome") } },
@@ -739,4 +748,81 @@ test("a dot after dd, x or m z t runs nothing, even after a repeatable command",
         press(windows[0]!, ".");
         assert.equal(emitted.length, before, `a dot after ${keys.join(" ")}`);
     }
+});
+
+test("visual mode: motions extend the range and a background command acts on it once", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, "v");
+    press(window, "j");
+    press(window, "j");
+    assert.deepEqual(window.range, [2, 4]);
+    press(window, "k");
+    assert.deepEqual(window.range, [2, 3], "k shrinks the range back toward the anchor");
+    press(window, "x");
+    assert.deepEqual(emitted.map((invocation) => invocation.messageIds), [[102, 103]]);
+    press(window, "j");
+    assert.equal(window.range, null, "the command ended visual mode, so j moves one row again");
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [104]);
+});
+
+test("visual mode: a range runs through the anchor when it extends upward, and v again ends it on the current row", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 5;
+    press(window, "v");
+    press(window, "k");
+    press(window, "k");
+    assert.deepEqual(window.range, [3, 5]);
+    press(window, "v");
+    assert.equal(window.range, null);
+    assert.equal(window.selected, 3);
+});
+
+test("visual mode: Escape ends it only while it is active", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 1;
+    assert.equal(press(window, "Escape").cancelled, false, "Escape passes when visual mode is off");
+    press(window, "v");
+    press(window, "j");
+    assert.equal(press(window, "Escape").cancelled, true);
+    assert.equal(window.range, null);
+    assert.equal(window.selected, 2);
+    assert.equal(press(window, "Escape").cancelled, false, "and passes again afterwards");
+});
+
+test("visual mode: Escape in a text field passes and a tab change ends the mode", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "v");
+    assert.equal(press(window, "Escape", { target: { localName: "input" } }).cancelled, false);
+    window.select_tab();
+    press(window, "j");
+    assert.equal(window.range, null, "the tab change dropped visual mode");
+});
+
+test("visual mode is not a command that `.` replays", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "j");
+    press(window, "v");
+    press(window, ".");
+    assert.equal(window.selected, 2, ". repeated j and not v");
+    assert.deepEqual(window.range, [1, 2]);
+});
+
+test("the list port selects a range and makes its end the current row", () => {
+    const tree_fake = { selectedIndex: 0, selectedIndices: [] as number[], currentIndex: 0 };
+    const port = create_list_port({ gDBView: { rowCount: 9, getSelectedMsgHdrs: () => [] }, threadTree: tree_fake }, () => 1);
+    port.select_range(5, 3);
+    assert.deepEqual(tree_fake.selectedIndices, [3, 4, 5]);
+    assert.equal(tree_fake.currentIndex, 3);
 });
