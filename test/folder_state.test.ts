@@ -21,6 +21,9 @@ const notifications = (calls: string[]) => calls.filter((call) => call.startsWit
 const updates = (calls: string[]) => calls.filter((call) => call.startsWith("mailTabs.update")).map((call) => call.split(" ")[2]);
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
+/** Starts the history and waits for it to record the folder shown at the start. */
+const start = async (api: RouterApi) => (start_jump_history(api), settle());
+
 /** Shows the folders in order the way a click would: through the API, with the history listening. */
 async function visit(api: RouterApi, ...folders: MailFolder[]) {
     for (const shown of folders) await api.mailTabs.update(1, { displayedFolder: shown });
@@ -54,7 +57,6 @@ test("the next command reads what an outside write left in storage", async () =>
     const { api, calls } = fake_api({ folders: ALL, displayed: A, storage });
     assert.deepEqual((await read_folder_state(api)).marks, {});
     storage[FOLDER_STATE_KEY] = { ...empty_folder_state(), marks: { b: { account_id: "a1", path: "/B" } } };
-    await run(api, "mark.jump", 1);
     await create_router(registry, api).run({ command: "mark.jump", args: { slot: "b" }, count: 1, windowId: 3, messageIds: [] });
     assert.deepEqual(updates(calls), ["a1:/B"]);
 });
@@ -62,50 +64,64 @@ test("the next command reads what an outside write left in storage", async () =>
 test("a visit adds an entry, a repeat adds none and a new visit after a jump back drops the entries ahead", async () => {
     const storage: Record<string, unknown> = {};
     const { api } = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(api);
+    await start(api);
     await visit(api, B, B, C);
-    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/B", "/C"]);
+    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/A", "/B", "/C"]);
     await run(api, "jump.back");
     await visit(api, D);
-    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/B", "/D"]);
-    assert.equal(stored(storage).history.cursor, 1);
+    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/A", "/B", "/D"]);
+    assert.equal(stored(storage).history.cursor, 2);
 });
 
 test("a jump records nothing of its own: back then forward walks the same entries", async () => {
     const storage: Record<string, unknown> = {};
     const { api, calls, displayed } = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(api);
+    await start(api);
     await visit(api, B, C, D);
     await run(api, "jump.back");
     await settle();
     assert.equal(displayed()?.path, "/C");
-    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/B", "/C", "/D"]);
-    assert.equal(stored(storage).history.cursor, 1);
+    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/A", "/B", "/C", "/D"]);
+    assert.equal(stored(storage).history.cursor, 2);
     await run(api, "jump.forward");
     await settle();
     assert.equal(displayed()?.path, "/D");
-    assert.equal(stored(storage).history.cursor, 2);
+    assert.equal(stored(storage).history.cursor, 3);
     assert.deepEqual(notifications(calls), []);
 });
 
 test("a held <C-o> walks back one entry per press, in order, with no entry lost to the display events", async () => {
     const storage: Record<string, unknown> = {};
     const { api, displayed } = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(api);
+    await start(api);
     await visit(api, B, C, D);
     await Promise.all([run(api, "jump.back"), run(api, "jump.back")]);
     await settle();
     assert.equal(displayed()?.path, "/B");
-    assert.equal(stored(storage).history.entries.length, 3);
+    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/A", "/B", "/C", "/D"]);
+    assert.equal(stored(storage).history.cursor, 1);
+});
+
+test("a fresh start shows folder A, g t records Trash, and C-o returns to A", async () => {
+    const storage: Record<string, unknown> = {};
+    const { api, displayed } = fake_api({ folders: ALL, displayed: A, storage });
+    await start(api);
+    await api.mailTabs.update(1, { displayedFolder: B });
+    await settle();
+    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/A", "/B"]);
+    await run(api, "jump.back");
+    assert.equal(displayed()?.path, "/A");
 });
 
 test("a count goes that many entries back and stops at the end of the history", async () => {
     const storage: Record<string, unknown> = {};
     const { api, calls, displayed } = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(api);
+    await start(api);
     await visit(api, B, C, D);
     await run(api, "jump.back", 2);
     assert.equal(displayed()?.path, "/B");
+    await run(api, "jump.back");
+    assert.equal(displayed()?.path, "/A");
     await run(api, "jump.back", 5);
     assert.deepEqual(notifications(calls), ["There is no earlier folder in the history."]);
     await run(api, "jump.forward", 9);
@@ -117,7 +133,7 @@ test("a count goes that many entries back and stops at the end of the history", 
 test("a jump skips an entry whose folder is gone", async () => {
     const storage: Record<string, unknown> = {};
     const first = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(first.api);
+    await start(first.api);
     await visit(first.api, B, C, D);
     const later = fake_api({ folders: [A, B, D], displayed: D, storage });
     await run(later.api, "jump.back");
@@ -127,7 +143,7 @@ test("a jump skips an entry whose folder is gone", async () => {
 test("the history survives a background restart and holds at most 100 entries", async () => {
     const storage: Record<string, unknown> = {};
     const first = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(first.api);
+    await start(first.api);
     for (let round = 0; round < 60; round++) await visit(first.api, B, C);
     assert.equal(stored(storage).history.entries.length, 100);
     const restarted = fake_api({ folders: ALL, displayed: C, storage });
@@ -140,22 +156,23 @@ test("an account root or a missing folder in the display event is not recorded",
     const { api } = fake_api({ folders: ALL, displayed: A, storage });
     const listeners: ((tab: { id: number }, folder?: MailFolder) => void)[] = [];
     api.mailTabs.onDisplayedFolderChanged = { addListener: (listener) => void listeners.push(listener) };
-    start_jump_history(api);
+    await start(api);
     listeners[0]?.({ id: 1 }, { ...B, isRoot: true } as MailFolder);
     listeners[0]?.({ id: 1 });
     await settle();
-    assert.equal(storage[FOLDER_STATE_KEY], undefined);
+    // Only the folder shown at the start is recorded.
+    assert.deepEqual(stored(storage).history.entries.map((entry) => entry.path), ["/A"]);
 });
 
 test("a jump whose display fails keeps the cursor where it was", async () => {
     const storage: Record<string, unknown> = {};
     const { api, calls } = fake_api({ folders: ALL, displayed: A, storage });
-    start_jump_history(api);
+    await start(api);
     await visit(api, B, C);
     api.mailTabs.update = (async () => {
         throw new Error("The folder is locked");
     }) as typeof api.mailTabs.update;
     await run(api, "jump.back");
     assert.match(notifications(calls)[0] as string, /locked/);
-    assert.equal(stored(storage).history.cursor, 1);
+    assert.equal(stored(storage).history.cursor, 2);
 });

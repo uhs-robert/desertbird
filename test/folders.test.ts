@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compile_default_keymap, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import type { MailFolder } from "../src/background/handlers/displayed_folder.ts";
+import { read_folder_state } from "../src/background/handlers/folder_state.ts";
 import { start_jump_history } from "../src/background/handlers/jump_history.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
@@ -21,7 +22,7 @@ test("the keymap binds 21 mark leaves and 21 jump leaves with a fixed slot, and 
     const normal = JSON.stringify(compiled.modes.normal);
     for (const key of ["M", "'"]) assert.ok(normal.includes(`"${key}"`), `prefix ${key} is bound`);
     const marks = ["a", "b", "c", "e", "h", "i", "j", "k", "l", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y"];
-    for (const slot of marks) for (const [command, key] of [["mark.set", "M"], ["mark.jump", "'"]] as const) assert.ok(normal.includes(`"id":"${command}","args":{"slot":"${slot}"}`) || normal.includes(`"${command}"`), `${key}${slot}`);
+    for (const slot of marks) for (const [command, key] of [["mark.set", "M"], ["mark.jump", "'"]] as const) assert.deepEqual(DEFAULT_KEYMAP.normal?.[`${key}${slot}`], { id: command, args: { slot } }, `${key}${slot}`);
     assert.equal((normal.match(/"mark\.set"/g) ?? []).length, 21);
     assert.equal((normal.match(/"mark\.jump"/g) ?? []).length, 21);
 });
@@ -78,8 +79,11 @@ test("folder.open takes a path in the shown account first, refuses a missing pat
 test("the first-display error is a success when the tab shows the folder, and the history records it once", async () => {
     const { api, calls } = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder, first_display_error: "An unexpected error occurred" });
     start_jump_history(api);
+    await new Promise((resolve) => setTimeout(resolve, 20));
     await run(api, "folder.open", { special: "trash" });
     assert.deepEqual(notifications(calls), []);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual((await read_folder_state(api)).history.entries.map((entry) => entry.path), ["/Inbox", "/Trash"]);
 });
 
 test("the first-display error is a success when the re-query hits the same error", async () => {

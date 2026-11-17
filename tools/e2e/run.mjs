@@ -742,6 +742,12 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "onDisplayedFolderChanged fires once for a folder the API shows for the first time", events.length === 1 && events[0].path === "/Views", `events ${JSON.stringify(events.map((event) => event.path))}`);
   note(app, kind, "first display of /Views through the API", `update error ${first_display.update_error}, query right after ${first_display.query_error ?? first_display.shown_right_after}`);
   check(app, kind, "g i after the API display shows the Inbox again", (await shown_folder(["g", "i"], 2000)) === "/Inbox");
+  // DesertBird starts on Trash, a folder its stored history never saw. g i then C-o must come back to it: no display event announces the folder shown at the start.
+  await instance.ask("reload_desertbird", 30000, { path: "/Trash" });
+  await sleep(4000);
+  check(app, kind, "the helper left Trash shown while DesertBird restarted", (await instance.ask("state")).mail_tab?.folder === "/Trash");
+  check(app, kind, "g i after a start on Trash shows the Inbox", (await shown_folder(["g", "i"], 2500)) === "/Inbox");
+  check(app, kind, "C-o returns to the folder shown at the start", (await shown_folder([CTRL("o")], 2500)) === "/Trash");
   check(app, kind, "the app survived the folder keys", instance.exited() === null);
 }
 
