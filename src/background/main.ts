@@ -2,7 +2,7 @@
 
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
-import { MESSAGE_KEYMAP, compile_message_keymap, registry } from "./commands/index.ts";
+import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
@@ -84,7 +84,7 @@ let installed_tree_json: string | undefined;
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: MESSAGE_KEYMAP, settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: MESSAGE_KEYMAP, unrepeatable: [...UNREPEATABLE_IDS], settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);
