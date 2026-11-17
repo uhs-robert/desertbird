@@ -150,7 +150,7 @@ test("reply absent: the due item notifies with the anchor id, tags the anchor, c
     box.add("<other@x>", { date: new Date(2026, 10, 18, 9, 30), headers: { references: ["<unrelated@x>"] } });
     await box.store.add(item_of("<a@x>"));
     await fire_due(box, NOW.getTime() + DAY);
-    assert.deepEqual(box.notices, [{ id: `desertbird-followup:${JSON.stringify(["imap", "<a@x>"])}`, message: "No reply yet: Subject of <a@x>" }]);
+    assert.deepEqual(box.notices, [{ id: `desertbird-followup:${JSON.stringify(["imap", "<a@x>"])}`, message: "No reply yet to a message you set a reminder for. Click to open it." }]);
     assert.deepEqual(box.messages.find((message) => message.id === anchor.id)!.tags, ["$label1", "desertbirdfollowup"]);
     assert.deepEqual(box.created_tags, ["desertbirdfollowup"]);
     assert.deepEqual(await box.store.list(), []);
@@ -230,6 +230,14 @@ test("anchor deleted: the item is dropped with no notice", async () => {
     await fire_due(box, NOW.getTime() + DAY);
     assert.deepEqual(box.notices, []);
     assert.deepEqual(await box.store.list(), []);
+});
+
+test("the due notice names the subject only when the setting is on", async () => {
+    const box = mailbox();
+    box.add("<a@x>");
+    await box.store.add(item_of("<a@x>"));
+    await fire_due(box, NOW.getTime() + DAY, { ...box.api, show_subject: async () => true });
+    assert.equal(box.notices.at(-1)?.message, "No reply yet: Subject of <a@x>");
 });
 
 test("a failed tag still notifies, and a failed notification keeps the item", async () => {
