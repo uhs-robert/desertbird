@@ -78,8 +78,6 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
 /** Starts the keys of one message document. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
 export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
-    // After a hint pick the picked link has the focus. The next Enter is not ours: Thunderbird takes it as a click on the link, with its own external open and its check for a link that lies about its address.
-    let pass_next_enter = false;
     const root_element = window.document.documentElement;
     const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window) };
 
@@ -97,15 +95,12 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         event.preventDefault();
         event.stopPropagation();
         if (MODIFIER_KEYS.has(event.key)) return;
-        pass_next_enter = context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
+        context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
     }
 
     function on_keydown(event: BodyKeyEvent): void {
         if (context.hints.active()) return on_hint_key(event);
         if (!matcher) return;
-        const enter_for_thunderbird = pass_next_enter && event.key === "Enter";
-        if (!MODIFIER_KEYS.has(event.key)) pass_next_enter = false;
-        if (enter_for_thunderbird) return;
         if (is_typing_element(event.target as FocusNode | null)) return void matcher.reset();
         const token = event_to_token(event);
         if (token === null) return;

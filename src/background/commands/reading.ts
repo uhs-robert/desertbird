@@ -14,7 +14,7 @@ export const reading: CommandGroup = {
         "message.bottom": { runs_in: "message", bridge: true, label: "Go to bottom", intent: "Scroll to the bottom of the message." },
         "message.find_next": { runs_in: "message", bridge: true, label: "Next match", intent: "Go to the next match of the last find, wrapping.", count: "ignore" },
         "message.find_prev": { runs_in: "message", bridge: true, label: "Previous match", intent: "Go to the previous match of the last find, wrapping.", count: "ignore" },
-        "hint.pick": { runs_in: "message", bridge: true, label: "Pick a link", intent: "Label the links on screen, then click the typed one.", count: "ignore" },
+        "hint.pick": { runs_in: "message", bridge: true, label: "Pick a link", intent: "Label the links on screen, then focus the typed one.", count: "ignore" },
         "search.message": {
             bridge: true,
             runs_in: "background",
