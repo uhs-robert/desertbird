@@ -1,5 +1,7 @@
 import { create_snooze_store } from "../src/background/snooze_store.ts";
 import type { SnoozeStore } from "../src/background/snooze_store.ts";
+import { create_quick_reply_store } from "../src/background/quick_reply_store.ts";
+import type { QuickReplyStore } from "../src/background/quick_reply_store.ts";
 import type { RouterApi } from "../src/background/router.ts";
 import type { MailFolder } from "../src/background/handlers/displayed_folder.ts";
 import type { Identity } from "../src/background/handlers/identity.ts";
@@ -27,6 +29,10 @@ interface FakeOptions {
     download_error?: string;
     /** `getAttachmentFile` rejects for these part names. */
     unreadable_parts?: string[];
+    /** The nine quick reply texts, slot 1 first. */
+    quick_replies?: string[];
+    /** What `compose.getComposeDetails` returns for the reply tab. */
+    compose_details?: { isPlainText?: boolean; body?: string; plainTextBody?: string };
     /** The time `snooze.now` returns. */
     now?: Date;
     /** The `storage.local` contents. Pass the same object to a second fake to model a background restart. */
@@ -36,12 +42,14 @@ interface FakeOptions {
 }
 
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
-export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore; end_held_downloads: () => void; displayed: () => MailFolder | undefined } {
+export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore; quick_replies: QuickReplyStore; end_held_downloads: () => void; displayed: () => MailFolder | undefined } {
     const calls: string[] = [];
     let download_count = 0;
     const held_downloads: number[] = [];
     const download_listeners = new Set<Parameters<RouterApi["downloads"]["onChanged"]["addListener"]>[0]>();
     const snoozes = create_snooze_store({ storage: fake_storage().api });
+    const quick_replies = create_quick_reply_store({ storage: fake_storage().api });
+    void quick_replies.write_all(options.quick_replies ?? []);
     const storage = options.storage ?? {};
     let displayed = options.displayed;
     const folder_listeners: ((tab: { id: number }, folder: MailFolder) => void)[] = [];
@@ -70,7 +78,9 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             tags: { list: async () => (calls.push("messages.tags.list"), options.tags ?? []) },
         },
         compose: {
-            beginReply: async (id, type, details) => (calls.push(`compose.beginReply ${id} ${type} ${details.identityId}`), undefined),
+            beginReply: async (id, type, details) => (calls.push(`compose.beginReply ${id} ${type} ${details.identityId}`), { id: 7 }),
+            getComposeDetails: async (tab_id) => (calls.push(`compose.getComposeDetails ${tab_id}`), options.compose_details ?? { isPlainText: true, plainTextBody: "\n\nOn x wrote:\n> quoted" }),
+            setComposeDetails: async (tab_id, details) => void calls.push(`compose.setComposeDetails ${tab_id} ${JSON.stringify(details)}`),
             beginForward: async (id, _type, details) => (calls.push(`compose.beginForward ${id} ${details.identityId}`), undefined),
             beginNew: async (_id, details) => (calls.push(details === undefined ? "compose.beginNew" : `compose.beginNew ${JSON.stringify(details)}`), undefined),
         },
@@ -84,6 +94,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             getDefault: async () => (calls.push("accounts.getDefault"), options.default_account === undefined ? { id: "a1" } : options.default_account),
             list: async () => (calls.push("accounts.list"), options.accounts ?? [{ id: "a1", type: "imap" }]),
         },
+        quick_replies,
         snooze: { items: snoozes, now: () => options.now ?? new Date(2026, 10, 18, 10, 15), create_timeout_ms: 50 },
         folders: {
             query: async (query) => {
@@ -156,7 +167,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             end: (window_id) => void calls.push(`cmdline.end ${window_id}`),
         },
     };
-    return { api, calls, snoozes, end_held_downloads: () => held_downloads.splice(0).forEach((id) => download_listeners.forEach((listener) => listener({ id, state: { current: "complete" } }))), displayed: () => displayed };
+    return { api, calls, snoozes, quick_replies, end_held_downloads: () => held_downloads.splice(0).forEach((id) => download_listeners.forEach((listener) => listener({ id, state: { current: "complete" } }))), displayed: () => displayed };
 }
 
 /** A fake of `alarms` that dies with the page: `restart()` clears every alarm and listener, as a Firefox restart does. `fire` runs the listeners like an alarm going off. */

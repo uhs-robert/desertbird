@@ -67,6 +67,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.archive` | `x`, `:archive` | Standard | `messages.archive` |
 | `msg.delete` | `d d`, `:delete` | Standard | `messages.delete` |
 | `msg.reply {to: sender, all, list}` | `r`, `R` | Standard | `compose.beginReply` |
+| `msg.reply_with {slot: 1 to 9}` | `g r 1` to `g r 9` | Standard | `compose.beginReply`, `compose.getComposeDetails`, `compose.setComposeDetails` |
 | `msg.forward` | `g F` | Standard | `compose.beginForward` |
 | `msg.new` | `c` | Standard | `compose.beginNew` |
 | `msg.unsubscribe` | `g u` | Standard | `messages.getFull`, `windows.openDefaultBrowser`, `compose.beginNew`, `storage.local`. Two presses: a preview notification, then the action within 15 seconds. https opens in the browser, mailto opens a draft. It sends nothing and has no new permission |

@@ -18,6 +18,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     folders: { runs_in: "background", ids: ["folder.open", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
     unsubscribe: { runs_in: "background", ids: ["msg.unsubscribe"] },
     attachments: { runs_in: "background", ids: ["msg.save_attachments"] },
+    quick_reply: { runs_in: "background", ids: ["msg.reply_with"] },
     new_mail: { runs_in: "background", ids: ["notify.toggle"] },
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"] },
 };

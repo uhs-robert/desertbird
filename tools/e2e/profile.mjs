@@ -14,6 +14,9 @@ const IDENTITY_PREFS = {
   "mail.identity.id1.compose_html": false,
 };
 
+// The quick reply kinds give the identity a signature, in plain or HTML compose, so the run can see whether a draft keeps it.
+const QUICK_REPLY_SIGNATURE = { "mail.identity.id1.htmlSigText": "E2E signature line", "mail.identity.id1.htmlSigFormat": false, "mail.identity.id1.attach_signature": false };
+
 const BASE_PREFS = {
   "mail.accountmanager.accounts": "account1",
   "mail.accountmanager.defaultaccount": "account1",
@@ -107,7 +110,7 @@ const mail_account_inbox = () =>
     .map(([id, subject, to], index) => [`From sender@fixture.invalid ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString()}`, "X-Mozilla-Status: 0000", "X-Mozilla-Status2: 00000000", `Message-ID: <${id}@fixture.invalid>`, `Date: ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString().replace("GMT", "+0000")}`, "From: Fixture Sender <sender@fixture.invalid>", `To: Someone <${to}>`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", `Body of ${id}.`, ""].join("\n") + "\n")
     .join("");
 
-// kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
+// kinds "quick_reply_plain" and "quick_reply_html" have an identity with a signature. kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
   rmSync(profile_dir, { recursive: true, force: true });
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
@@ -121,7 +124,8 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
     mkdirSync(mail_dir, { recursive: true });
     writeFileSync(join(mail_dir, "Inbox"), mail_account_inbox());
   }
-  const identity_prefs = kind === "reply_no_identity" || kind === "mail_account" ? {} : IDENTITY_PREFS;
+  const quick_reply_prefs = kind === "quick_reply_plain" ? QUICK_REPLY_SIGNATURE : kind === "quick_reply_html" ? { ...QUICK_REPLY_SIGNATURE, "mail.identity.id1.compose_html": true } : {};
+  const identity_prefs = kind === "reply_no_identity" || kind === "mail_account" ? {} : { ...IDENTITY_PREFS, ...quick_reply_prefs };
   const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
   const remote_prefs = kind === "message_remote" ? { "mailnews.message_display.disable_remote_image": false } : {};
