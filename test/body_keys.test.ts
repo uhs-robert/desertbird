@@ -403,19 +403,13 @@ test("Escape cancels the labels and is cancelled itself, and f with nothing to l
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "j scrolls, so no hint mode swallowed it");
 });
 
-test("after a pick the next Enter goes to Thunderbird, once, and any other key ends that", async () => {
+test("after a pick the picked link has the focus and Enter is not cancelled, since no message key binds it", async () => {
     const { window } = await started();
     window.elements = [new StubElement()];
     window.press("f");
     window.press("a");
     assert.equal(window.elements[0]!.focuses, 1, "the picked link has the focus");
     assert.deepEqual(window.press("Enter"), { cancelled: false, stopped: false });
-    assert.equal(window.press("Enter").cancelled, false, "Enter is a named key, so it passes in any case");
-    window.press("f");
-    window.press("a");
-    window.press("j");
-    assert.equal(window.press("Enter").cancelled, false);
-    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
 });
 
 test("a hidden, faded, stacked, disabled-by-selector or off-screen link gets no label", async () => {

@@ -1,4 +1,4 @@
-// Hint labels in the message: `f` labels the links and buttons on screen, the typed label clicks one. The labels come from `../shared/hint_labels.ts`.
+// Hint labels in the message: `f` labels the links and buttons on screen, the typed label focuses one, and Enter opens a link. The labels come from `../shared/hint_labels.ts`.
 
 import { hint_labels, labels_matching } from "../shared/hint_labels.ts";
 
@@ -51,8 +51,8 @@ export interface HintSession {
     begin(): number;
     /** Removes the labels with no pick. The page moved or the focus left, so they no longer sit on their targets. */
     cancel(): void;
-    /** One key while active. A label that is unique among those that start with what was typed focuses its element and returns true. */
-    feed(key: HintKey): boolean;
+    /** One key while active. A label that is unique among those that start with what was typed focuses its element. */
+    feed(key: HintKey): void;
 }
 
 export function create_hint_session(window: HintWindow): HintSession {
@@ -101,15 +101,13 @@ export function create_hint_session(window: HintWindow): HintSession {
         feed(key) {
             const candidates = key.kind === "typed" ? labels_matching(targets.map((target) => target.label), typed + key.letter) : [];
             if (key.kind === "cancel" || candidates.length === 0) {
-                end();
-                return false;
+                return end();
             }
             typed += key.letter;
             const picked = targets.find((target) => target.label === typed);
-            if (picked === undefined) return false;
+            if (picked === undefined) return;
             end();
             picked.element.focus();
-            return true;
         },
     };
 }
