@@ -39,6 +39,8 @@ export interface SnoozeApi extends MessageQueryApi {
 
 /** What the wake needs. */
 export interface WakeApi extends MessageQueryApi, SpecialFolderApi, NotificationsApi {
+    /** Reads the `notice_show_subject` setting. Absent means the subject stays out. */
+    show_subject?: () => Promise<boolean>;
     messages: MessageQueryApi["messages"] & { move(ids: number[], folder_id: string): Promise<void>; update(id: number, properties: { read: boolean }): Promise<void> };
 }
 
@@ -160,7 +162,7 @@ async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there
     return (await query_all(api, item.header_message_id)).filter((message) => !message.folder?.specialUse?.some((use) => NOT_WAITING_USES.includes(use)));
 }
 
-// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_TICKS` ticks. The notices leave out the subject: they can reach the desktop, and the user has not agreed to that.
+// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_TICKS` ticks. The notice names the subject only when `notice_show_subject` is on, since the notice can reach the desktop.
 export async function wake_snoozed(api: WakeApi, item: SnoozeItem): Promise<void> {
     const snoozed_folder_still_there = (await folder_by_id(api, item.folder_id)) !== undefined;
     // The Inbox of the origin account, or the folder the message came from when the account has no Inbox (Local Folders can lack one).
@@ -188,5 +190,6 @@ export async function wake_snoozed(api: WakeApi, item: SnoozeItem): Promise<void
     }
     missing_ticks.delete(key);
     for (const message of returned) await api.messages.update(message.id, { read: false });
-    await notify_refusal(api, "A snoozed message returned.");
+    const subject = returned[0]?.subject;
+    await notify_refusal(api, subject !== undefined && (await api.show_subject?.()) === true ? `Snoozed message returned: ${subject}` : "A snoozed message returned.");
 }

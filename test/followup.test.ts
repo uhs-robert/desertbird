@@ -232,6 +232,14 @@ test("anchor deleted: the item is dropped with no notice", async () => {
     assert.deepEqual(await box.store.list(), []);
 });
 
+test("the due notice names the subject only when the setting is on", async () => {
+    const box = mailbox();
+    box.add("<a@x>");
+    await box.store.add(item_of("<a@x>"));
+    await fire_due(box, NOW.getTime() + DAY, { ...box.api, show_subject: async () => true });
+    assert.equal(box.notices.at(-1)?.message, "No reply yet: Subject of <a@x>");
+});
+
 test("a failed tag still notifies, and a failed notification keeps the item", async () => {
     const box = mailbox();
     box.add("<a@x>");

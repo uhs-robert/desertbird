@@ -86,7 +86,7 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
                     throw new Error("the folder tree is not loaded yet");
                 }
                 // The real API throws for a folder id it does not know.
-                if (query.folderId !== undefined && !folders.some((folder) => folder.id === query.folderId)) throw new Error(`Folder not found: ${query.folderId}.`);
+                if (query.folderId !== undefined && !folders.some((folder) => folder.id === query.folderId)) throw new Error(`Folder not found: ${query.folderId}`);
                 return folders.filter((folder) => (query.folderId === undefined || folder.id === query.folderId) && (query.canAddSubfolders === undefined || !options.cannot_create_in?.includes(folder.accountId) === query.canAddSubfolders) && !(query.specialUse?.includes("inbox") && options.no_inbox_in?.includes(folder.accountId)) && (query.accountId === undefined || folder.accountId === query.accountId) && (query.path === undefined || folder.path === query.path) && (query.isRoot === undefined || folder.isRoot === query.isRoot) && (query.specialUse === undefined || query.specialUse.some((use) => folder.specialUse?.includes(use))));
             },
             create: async (parent_id: string, name: string) => {
@@ -239,6 +239,16 @@ test("a message that shows up in the Snoozed folder after a missed tick still re
     await box.store.wake_due(tomorrow_8 + MINUTE, (item) => wake_snoozed(box.api, item));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
+});
+
+test("the wake notice names the subject only when the setting is on", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    const [item] = await box.store.list();
+    box.notices.length = 0;
+    await wake_snoozed({ ...box.api, show_subject: async () => true }, item!);
+    assert.deepEqual(box.notices, ["Snoozed message returned: Subject of <a@x>"]);
 });
 
 test("every copy that shares a Message-ID returns on one wake", async () => {

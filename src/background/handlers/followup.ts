@@ -58,6 +58,8 @@ export interface FollowupApi {
 
 /** What the due run and the notification click need. */
 export interface FollowupFireApi extends NotificationsApi, SpecialFolderApi {
+    /** Reads the `notice_show_subject` setting. Absent means the subject stays out. */
+    show_subject?: () => Promise<boolean>;
     messages: FollowupMessagesApi;
 }
 
@@ -162,7 +164,7 @@ export async function fire_followup(api: FollowupFireApi, item: FollowupItem, st
         await api.messages.update(anchor.id, { tags: tags.filter((key) => key !== FOLLOWUP_TAG_KEY) });
         return;
     }
-    await raise_notification(api, NOTIFICATION_PREFIX + JSON.stringify([item.account_id, item.header_message_id]), "No reply yet to a message you set a reminder for. Click to open it.");
+    await raise_notification(api, NOTIFICATION_PREFIX + JSON.stringify([item.account_id, item.header_message_id]), (await api.show_subject?.()) === true ? `No reply yet: ${anchor.subject ?? item.header_message_id}` : "No reply yet to a message you set a reminder for. Click to open it.");
 }
 
 /** Opens the anchor of a clicked follow-up notification. Any other notification is ignored. */
