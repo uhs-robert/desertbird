@@ -53,7 +53,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `command.ts` | edited | `413d108780e94db8094856820a36ebc0a00105c3aa00b530a5348b66ef90eca3` | `e44c1fc11de62c27b31044b2a36bf9be8e38eb2ca5ef78376bf21d535529c641` |
 | `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `d7ef6258d1c3b1f8d791212f4af4875c5a48f538c4b8ae42fccec57c8fe2497a` |
-| `default_settings.ts` | stub | `-` | `c053a2a8cf518e95b72f0cccd60102c25909eccd5c6729f74e634351e6967827` |
+| `default_settings.ts` | stub | `-` | `edc74287069f1b13134282a5456d56669128c3ad031b0e1ffd00a4c020a10cfa` |
 | `invocation.ts` | copy | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` |
 | `keymap.ts` | copy | `ff1bf49115316cbd304862586a00cad756c6ebcfa9fc60b71e06b84dfd8f26d4` | `ff1bf49115316cbd304862586a00cad756c6ebcfa9fc60b71e06b84dfd8f26d4` |
 | `keys/compiler.ts` | copy | `24f0f77dda27af768b8f9f5b7788bd22281f454888565ba1ba1f397f91fbb601` | `24f0f77dda27af768b8f9f5b7788bd22281f454888565ba1ba1f397f91fbb601` |

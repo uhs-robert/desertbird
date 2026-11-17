@@ -5,7 +5,7 @@ import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
-import { NORMAL_MODE, create_hud_service } from "./hud/service.ts";
+import { NORMAL_MODE, create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -125,6 +125,8 @@ async function install_keymap(): Promise<void> {
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
     installed_tree_json = tree_json;
+    // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
+    hud.close_which_key();
 }
 
 function report_failure(error: unknown): void {
@@ -167,6 +169,9 @@ const hud = create_hud_service({
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });
 
+// The command line and the commands that open it mount through this, so a toast sits above the command line box while it is open.
+const command_line_overlay = messenger.overlay && lifting_toasts(messenger.overlay, hud);
+
 // The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
 const cmdline = create_cmdline_service({
     registry,
@@ -174,16 +179,16 @@ const cmdline = create_cmdline_service({
         folders: async () => [...new Set((await messenger.folders.query({})).map((folder) => folder.path))].sort(),
         tags: async () => (await messenger.messages.tags.list()).map((entry) => entry.tag),
     },
-    overlay: messenger.overlay,
+    overlay: command_line_overlay,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
 
 messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
-messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? cmdline.end(windowId) : hud.forget(windowId)));
+messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? (cmdline.end(windowId), hud.set_lifted(windowId, false)) : hud.forget(windowId)));
 
 start_jump_history(messenger);
 

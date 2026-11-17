@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   which_key_border: "square",
   which_key_skip: [],
   layout_fallback: true,
-  mode_indicator: "always",
+  mode_indicator: "not_normal",
   search_prefixes: { here: "s", tab: "S" },
   container_prefixes: { reopen: "c", tab: "C" },
   default_engine: "duck",

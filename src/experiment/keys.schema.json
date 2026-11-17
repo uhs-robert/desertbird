@@ -156,7 +156,7 @@
             "properties": {
               "command": {
                 "type": "string",
-                "description": "A command id, or \"keys.pending\" for a change of the half-typed sequence. That event carries `keys` and `windowId` only."
+                "description": "A command id, or \"pending\" for a change of the half-typed sequence. That event carries `keys` and `windowId` only."
               },
               "keys": {
                 "type": "array",

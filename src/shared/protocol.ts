@@ -73,7 +73,7 @@ export interface KeysInvocation {
 
 /** The other thing `keys.onInvocation` carries: the keys typed so far in a half-typed sequence, counts left out. No keys means no sequence is pending. It rides the invocation event to keep the key runtime small. */
 export interface KeysPending {
-    command: "keys.pending";
+    command: "pending";
     keys: string[];
     windowId: number;
 }
@@ -204,6 +204,8 @@ export interface HudState {
     toasts: ToastView[];
     /** The mode name to show, or null for no badge. */
     badge: string | null;
+    /** The command line is open in this window, so the toasts sit above its box. */
+    lifted: boolean;
 }
 
 /** Sent by the background to every extension page when the state of a window's hud changed. */

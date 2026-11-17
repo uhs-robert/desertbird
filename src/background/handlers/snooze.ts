@@ -3,7 +3,7 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { for_each_message } from "./each_message.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import type { HandlerScope, MessageHeader } from "./message.ts";
-import { notify_refusal } from "../notify.ts";
+import { notify_refusal, notify_result } from "../notify.ts";
 import type { NotificationsApi } from "../notify.ts";
 import { preset_due_ms } from "../snooze_presets.ts";
 import type { SnoozePreset } from "../snooze_presets.ts";
@@ -132,7 +132,7 @@ export async function snooze_messages(scope: HandlerScope<SnoozeApi & Notificati
         await api.snooze.items.add({ header_message_id, origin_account_id: account_id, folder_id: target.id, origin_folder_id, due_ms });
     });
     const count = scope.message_ids.length;
-    await notify_refusal(api, `Snoozed ${count} message${count === 1 ? "" : "s"} until ${new Date(due_ms).toLocaleString()}.`);
+    await notify_result(api, `Snoozed ${count} message${count === 1 ? "" : "s"} until ${new Date(due_ms).toLocaleString()}.`, scope.window_id);
 }
 
 // Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to.

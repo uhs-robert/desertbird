@@ -23,10 +23,12 @@ export interface HudDeps {
 export interface HudService {
     /** Answers the page's `hud.state`, or returns undefined for a message that is not one. */
     handle(message: unknown): Promise<HudState> | undefined;
-    /** Feeds the `keys.pending` events of the key runtime. Other events are ignored. */
+    /** Feeds the `pending` events of the key runtime. Other events are ignored. */
     on_keys_event(event: KeysEvent): Promise<void>;
-    /** Shows a toast in the window. Resolves to false when no toast can show (no window id, no Experiment, or a zero time), so the caller falls back to a system notification. */
+    /** Shows a toast in the window. Resolves to false when no toast can show (no window id, no Experiment, a zero time, or the page could not mount), so the caller falls back to a system notification. */
     toast(window_id: number, text: string, is_error: boolean): Promise<boolean>;
+    /** The command line opened or closed in the window. Its box covers the bottom of the window, so the toasts move above it. */
+    set_lifted(window_id: number, lifted: boolean): void;
     /** Closes the which-key panel of every window, or of every window but one. A tab change or a window losing focus calls this. */
     close_which_key(except_window_id?: number): void;
     /** A main window exists. The badge may need to show in it. */
@@ -43,6 +45,7 @@ interface WindowHud {
     which_key_keys: string[] | null;
     /** Counts each key event. A slower answer from an earlier event finds a newer number and stops. */
     sequence: number;
+    lifted: boolean;
     delay_timer: unknown;
     mounted: boolean;
     /** Mount and unmount calls run one after another, so a quick show and hide cannot leave the page mounted. */
@@ -65,7 +68,7 @@ export function create_hud_service(deps: HudDeps): HudService {
     function hud_of(window_id: number): WindowHud {
         let hud = windows.get(window_id);
         if (hud === undefined) {
-            hud = { toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, sequence: 0, delay_timer: undefined, mounted: false, queue: Promise.resolve() };
+            hud = { toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, sequence: 0, lifted: false, delay_timer: undefined, mounted: false, queue: Promise.resolve() };
             windows.set(window_id, hud);
         }
         return hud;
@@ -109,6 +112,8 @@ export function create_hud_service(deps: HudDeps): HudService {
     }
 
     async function on_pending(window_id: number, keys: string[]): Promise<void> {
+        // A window with no id has no hud to mount.
+        if (window_id < 0) return;
         // The sequence moved to this window, so another window's panel is stale.
         for (const [other_id, other] of windows) if (other_id !== window_id) void end_which_key(other_id, other);
         const hud = hud_of(window_id);
@@ -137,7 +142,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         const settings = await deps.read_settings();
         const keys = hud.which_key_keys;
         const which_key = keys === null ? null : which_key_panel(await deps.read_root(), keys, settings);
-        return { which_key, toasts: hud.toasts.list(), badge: badge_for(settings.mode_indicator, deps.mode_of(window_id)) };
+        return { which_key, toasts: hud.toasts.list(), badge: badge_for(settings.mode_indicator, deps.mode_of(window_id)), lifted: hud.lifted };
     }
 
     function read_request(message: unknown): HudRequest | undefined {
@@ -151,7 +156,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             return request === undefined ? undefined : state_of(request.windowId);
         },
         async on_keys_event(event) {
-            if (event.command !== "keys.pending" || !("keys" in event)) return;
+            if (event.command !== "pending" || !("keys" in event)) return;
             await on_pending(event.windowId, event.keys);
         },
         async toast(window_id, text, is_error) {
@@ -159,8 +164,18 @@ export function create_hud_service(deps: HudDeps): HudService {
             const settings = await deps.read_settings();
             const ms = is_error ? settings.toast_error_ms : settings.toast_ms;
             if (ms <= 0) return false;
-            hud_of(window_id).toasts.show(text, is_error, ms);
-            return true;
+            const hud = hud_of(window_id);
+            const id = hud.toasts.show(text, is_error, ms);
+            // The toast counts as shown only when the page is up to draw it. A failed mount hands the message back to the caller.
+            await changed(window_id);
+            if (hud.mounted) return true;
+            hud.toasts.dismiss(id);
+            return false;
+        },
+        set_lifted(window_id, lifted) {
+            const hud = hud_of(window_id);
+            hud.lifted = lifted;
+            void changed(window_id);
         },
         close_which_key(except_window_id) {
             for (const [window_id, hud] of windows) if (window_id !== except_window_id) void end_which_key(window_id, hud);
@@ -179,6 +194,26 @@ export function create_hud_service(deps: HudDeps): HudService {
         },
         async settings_changed() {
             await Promise.all([...windows.keys()].map((window_id) => changed(window_id)));
+        },
+    };
+}
+
+/** The overlay API with a window's toasts lifted above the command line box while the command line is mounted. Wraps the calls that open and close it, so the commands that use the overlay need no knowledge of the hud. */
+export function lifting_toasts(overlay: OverlayApi, hud: Pick<HudService, "set_lifted">): OverlayApi {
+    return {
+        ...overlay,
+        async mount(args) {
+            if (args.surface === "cmdline") hud.set_lifted(args.windowId, true);
+            try {
+                await overlay.mount(args);
+            } catch (error) {
+                if (args.surface === "cmdline") hud.set_lifted(args.windowId, false);
+                throw error;
+            }
+        },
+        async unmount(args) {
+            if (args.surface === "cmdline") hud.set_lifted(args.windowId, false);
+            await overlay.unmount(args);
         },
     };
 }

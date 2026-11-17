@@ -49,3 +49,12 @@ test("clear drops every toast and its timer", () => {
     assert.deepEqual(toasts.list(), []);
     assert.equal(timers.pending(), 0);
 });
+
+test("a toast can be dismissed before its time and its timer goes with it", () => {
+    const { timers, toasts } = setup();
+    const id = toasts.show("a", false, 1000);
+    toasts.dismiss(id);
+    toasts.dismiss(id);
+    assert.deepEqual(toasts.list(), []);
+    assert.equal(timers.pending(), 0);
+});

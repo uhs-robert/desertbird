@@ -11,7 +11,10 @@ export interface Timers {
 export const MAX_TOASTS = 4;
 
 export interface Toasts {
-    show(text: string, is_error: boolean, ms: number): void;
+    /** Returns the id of the toast. */
+    show(text: string, is_error: boolean, ms: number): number;
+    /** Removes a toast before its time. Does nothing for an id that is gone. */
+    dismiss(id: number): void;
     list(): ToastView[];
     /** Drops every toast and its timer. */
     clear(): void;
@@ -35,7 +38,9 @@ export function create_toasts(timers: Timers, on_change: () => void): Toasts {
             shown.push({ id, text, is_error, timer: timers.set(() => remove(id), ms) });
             while (shown.length > MAX_TOASTS) remove(shown[0]!.id);
             on_change();
+            return id;
         },
+        dismiss: remove,
         list: () => shown.map(({ id, text, is_error }) => ({ id, text, is_error })),
         clear() {
             for (const toast of shown.splice(0)) timers.clear(toast.timer);

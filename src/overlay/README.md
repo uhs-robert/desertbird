@@ -17,7 +17,7 @@ The command line page and the hud page. The `overlay` Experiment mounts it as a 
 
 ## Rules
 
-- The hud browser is told no size limit (`max_width` and `max_height` of 0). A browser that is told one resizes to its content, and a page of absolutely placed pieces has none, so the browser shrank to 0 by 0 (measured). The box is 320 px high and as wide as the window. The browser carries `transparent="true"`: without it Thunderbird paints the page canvas white.
+- The hud browser is told no size limit (`max_width` and `max_height` of 0). A browser that is told one resizes to its content, and a page of absolutely placed pieces has none, so the browser shrank to 0 by 0 (measured). The box is 520 px high and as wide as the window. The browser carries `transparent="true"`: without it Thunderbird paints the page canvas white.
 - Colors come from CSS variables with a `prefers-color-scheme` block. The text and the border stay at a contrast of at least 7 to 1 against the panel in both themes. The panel and the badge sit 32 px above the window bottom, clear of the status bar.
 - A panel of more than 24 keys is cut and ends in a count of the rest.
 

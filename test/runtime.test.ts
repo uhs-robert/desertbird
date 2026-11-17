@@ -116,7 +116,7 @@ const tree = () => ({
 function setup(list_port_of?: (window: FakeWindow) => ListPort) {
     const windows = [new FakeWindow()];
     const emitted: KeysInvocation[] = [];
-    // The `keys.pending` events, kept apart so a test of a command reads only the commands.
+    // The `pending` events, kept apart so a test of a command reads only the commands.
     const pending: KeysPending[] = [];
     let time = 0;
     let window_listener: WindowListener<FakeWindow> | null = null;
@@ -940,17 +940,18 @@ test("a prefix key reports the typed keys, and finishing the sequence reports th
     const { windows, pending, runtime } = setup();
     runtime.install(tree());
     press(windows[0]!, "d");
-    assert.deepEqual(pending, [{ command: "keys.pending", keys: ["d"], windowId: 7 }]);
+    assert.deepEqual(pending, [{ command: "pending", keys: ["d"], windowId: 7 }]);
     press(windows[0]!, "d");
     assert.deepEqual(pending_keys(pending), ["d", ""]);
 });
 
-test("keys that start no sequence report no pending keys, and a count alone reports none either", () => {
+test("keys that start no sequence report nothing, and a count alone reports nothing either", () => {
     const { windows, pending, runtime } = setup();
     runtime.install(tree());
     press(windows[0]!, "j");
     press(windows[0]!, "3");
-    assert.deepEqual(pending_keys(pending), ["", ""]);
+    press(windows[0]!, "x");
+    assert.deepEqual(pending, []);
 });
 
 test("a stray key cancels the sequence and reports the end once", () => {
@@ -959,7 +960,7 @@ test("a stray key cancels the sequence and reports the end once", () => {
     press(windows[0]!, "g");
     press(windows[0]!, "z");
     press(windows[0]!, "z");
-    assert.deepEqual(pending_keys(pending), ["g", "", ""]);
+    assert.deepEqual(pending_keys(pending), ["g", ""]);
 });
 
 test("a count before a prefix key is left out of the typed keys", () => {
@@ -967,7 +968,7 @@ test("a count before a prefix key is left out of the typed keys", () => {
     runtime.install(tree());
     press(windows[0]!, "3");
     press(windows[0]!, "g");
-    assert.deepEqual(pending_keys(pending), ["", "g"]);
+    assert.deepEqual(pending_keys(pending), ["g"]);
 });
 
 test("a key that goes to a text field ends the sequence", () => {
@@ -976,4 +977,25 @@ test("a key that goes to a text field ends the sequence", () => {
     press(windows[0]!, "d");
     press(windows[0]!, "d", { target: { localName: "input" } });
     assert.deepEqual(pending_keys(pending), ["d", ""]);
+});
+
+test("a dot replays a command and reports no pending keys", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    press(windows[0]!, ".");
+    assert.deepEqual(pending, []);
+});
+
+test("Escape in visual mode ends a half-typed sequence and reports the end", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, "v");
+    press(window, "d");
+    assert.deepEqual(pending_keys(pending).at(-1), "d");
+    assert.equal(press(window, "Escape").cancelled, true);
+    assert.deepEqual(pending_keys(pending).at(-1), "");
+    assert.equal(window.range, null);
 });

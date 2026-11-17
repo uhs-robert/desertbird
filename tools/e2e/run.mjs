@@ -131,6 +131,17 @@ async function hud_pixels(instance, name) {
   return createHash("sha256").update(readFileSync(await instance.shot_region(name, "0,640 1260x80"))).digest("hex");
 }
 
+// Waits out earlier toasts, presses the key, then reads the toast strip while a toast shows and again after it expired. A toast is proven by the strip differing while it shows and matching the strip from before once the toast time is over.
+async function toast_cycle(instance, name, press_args) {
+  await sleep(7000);
+  const before = await hud_pixels(instance, `${name}_before`);
+  const state = await key_and_state(instance, press_args, 1500);
+  const during = await hud_pixels(instance, `${name}_during`);
+  await sleep(6000);
+  const after = await hud_pixels(instance, `${name}_after`);
+  return { state, shown: during !== before, gone: after === before };
+}
+
 async function run_default(instance) {
   const app = instance.app;
   const kind = "default";
@@ -729,6 +740,29 @@ async function run_hud(instance, { app, kind, shot }) {
   check(app, kind, "a refused command shows a toast", (await pixels_of("hud_toast_pixels")) !== bare);
   await sleep(7000);
   check(app, kind, "the toast is gone after toast_error_ms", (await pixels_of("hud_toast_gone")) === bare);
+  // The hud lets keys and clicks through. With a toast up, j still moves the list. With the which-key panel up, a key that is no continuation still runs as a first key.
+  const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
+  await instance.press(["q"]);
+  await sleep(800);
+  const before_j = selection_of(await instance.ask("state"));
+  await instance.press(["j"]);
+  await sleep(600);
+  check(app, kind, "j moves the list while a toast shows", selection_of(await instance.ask("state")) !== before_j);
+  await sleep(7000);
+  const before_g_j = selection_of(await instance.ask("state"));
+  await instance.press(["g"]);
+  await sleep(1200);
+  await instance.press(["j"]);
+  await sleep(600);
+  check(app, kind, "j moves the list while the which-key panel shows", selection_of(await instance.ask("state")) !== before_g_j);
+  // A click on a folder row, which sits under the hud box, reaches the folder pane while a toast shows. The Views folder is the one shown at this point of a full run, so another folder is the target.
+  const displayed = (await instance.ask("state")).mail_tab?.folder;
+  await instance.press(["q"]);
+  await sleep(800);
+  await instance.click(130, displayed === "/Views" ? 224 : 252);
+  await sleep(1500);
+  check(app, kind, "a click under the toast reaches the folder pane", (await instance.ask("state")).mail_tab?.folder !== displayed, `displayed folder was ${displayed}`);
+  await sleep(6000);
   // ? opens the help page in a tab.
   await instance.press(["?"]);
   await sleep(2500);
@@ -888,12 +922,11 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const tabs_of = async () => main_window_tabs(await instance.ask("state"));
 
   // q on the only mail tab: tabs.remove does nothing there, so the command refuses with a notification and the tab stays.
-  const before_q = await hud_pixels(instance, `${app}_before_q`);
-  let state = await key_and_state(instance, ["q"], 1500);
-  const with_toast = await hud_pixels(instance, `${app}_after_q`);
-  await sleep(1000);
+  const refused_q = await toast_cycle(instance, `${app}_q`, ["q"]);
+  let state = refused_q.state;
   check(app, kind, "q on the only mail tab leaves it open", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}`);
-  check(app, kind, "q on the only mail tab shows the refusal as a toast", with_toast !== before_q, `the hud region changed: ${with_toast !== before_q}`);
+  check(app, kind, "q on the only mail tab shows the refusal as a toast", refused_q.shown, "the toast strip differs while the toast shows");
+  check(app, kind, "the toast of q is gone after toast_error_ms", refused_q.gone, "the toast strip matches the strip from before");
 
   // What the tabs API reports for the first mail tab and for a second one.
   const second = await instance.ask("open_mail_tab");
@@ -1078,10 +1111,10 @@ async function run_no_identity(instance) {
   check(app, kind, "g g selects the first row", first_selected(state) !== null);
   // One message, so the refusal is the identity one and not the "select one message" one.
   await key_and_state(instance, ["G"]);
-  const before_r = await hud_pixels(instance, `${app}_before_r`);
-  state = await key_and_state(instance, ["r"], 1500);
-  check(app, kind, "r with no identity shows the refusal as a toast", (await hud_pixels(instance, `${app}_after_r`)) !== before_r, `selected ${state.selected.length}`);
-  await sleep(4500);
+  const refused_r = await toast_cycle(instance, `${app}_r`, ["r"]);
+  state = refused_r.state;
+  check(app, kind, "r with no identity shows the refusal as a toast", refused_r.shown, `selected ${state.selected.length}`);
+  check(app, kind, "the toast of r is gone after toast_error_ms", refused_r.gone);
   check(app, kind, "r with no identity opens no compose window", !state.windows.some((window) => window.type === "messageCompose"));
   check(app, kind, "r with no identity does not crash the app", instance.exited() === null);
   // Forward and new refuse the same way. Unguarded, forward hangs with no window and new opens a window that cannot send, so the missing window is the proof for new.

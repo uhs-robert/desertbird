@@ -106,6 +106,13 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     // wtype arguments, for example ["j"] or ["-M", "shift", "g", "-m", "shift"]. Each call settles first.
     press: async (args) => { await session.press(["-k", "Shift_L"]); await session.press(args); },
     shot: async (name) => { const path = join(out_dir, `${name}.png`); await session.shot(path); return path; },
+    // A left click at a point of the 1280x720 output. The pointer first goes to the corner, because wlrctl moves it by an offset.
+    click: async (x, y) => {
+      const pointer = (...args) => execFileSync("wlrctl", ["pointer", ...args], { env: session.env });
+      pointer("move", "-3000", "-3000");
+      pointer("move", String(x), String(y));
+      pointer("click", "left");
+    },
     // A screenshot of a region, "x,y WxH" as grim reads it. A region that leaves out the scrollbar draws the same twice when nothing in it changed.
     shot_region: async (name, region) => { const path = join(out_dir, `${name}.png`); execFileSync("grim", ["-g", region, path], { env: session.env }); return path; },
     read_state: (name) => { const path = join(out_dir, `state_${name}.json`); return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null; },
