@@ -106,6 +106,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     // wtype arguments, for example ["j"] or ["-M", "shift", "g", "-m", "shift"]. Each call settles first.
     press: async (args) => { await session.press(["-k", "Shift_L"]); await session.press(args); },
     shot: async (name) => { const path = join(out_dir, `${name}.png`); await session.shot(path); return path; },
+    // A screenshot of a region, "x,y WxH" as grim reads it. A region that leaves out the scrollbar draws the same twice when nothing in it changed.
+    shot_region: async (name, region) => { const path = join(out_dir, `${name}.png`); execFileSync("grim", ["-g", region, path], { env: session.env }); return path; },
     read_state: (name) => { const path = join(out_dir, `state_${name}.json`); return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null; },
     // Message-ID of every message in a Local Folders mbox, so a test sees where x and d d moved mail.
     folder_message_ids: (folder) => { const path = join(folder_dir, folder); return existsSync(path) ? [...readFileSync(path, "utf8").matchAll(/^Message-ID: <(.+?)>$/gm)].map((match) => match[1]) : []; },

@@ -135,6 +135,8 @@ async function run_default(instance) {
   const start = await instance.ask("state");
   check(app, kind, "helper add-on and DesertBird both enabled", start.desertbird_enabled === true);
   await shot("inbox_opened");
+  // E2E_ONLY=hud runs the which-key, toast and help checks alone, for a quick run of that part.
+  if (process.env.E2E_ONLY === "hud") return run_hud(instance, { app, kind, shot });
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
   let state;
@@ -490,6 +492,7 @@ async function run_default(instance) {
   await shot("after_view_settings", "Views folder after the view setting keys");
   await run_cmdline(instance, { app, kind, shot });
   await run_folders(instance);
+  await run_hud(instance, { app, kind, shot });
   await run_followup(instance);
   await run_steps(instance, { app, kind, shot });
   await run_visual(instance, { app, kind, shot });
@@ -682,6 +685,59 @@ async function run_scale(instance) {
   await timed("G", ["G"]);
   await timed("] U from the last row (no unread ahead: folder counts, then one query)", ["]", "U"]);
   await timed("[ U back across folders", ["[", "U"]);
+}
+
+// The which-key panel, a toast and the help page, in the Inbox with the thread list focused. The screenshots carry the E2E_THEME name. A panel is shown or gone when the window's pixels differ or match: the same selection and no panel draws the same window.
+async function run_hud(instance, { app, kind, shot }) {
+  const theme = process.env.E2E_THEME ?? "default";
+  const { createHash } = await import("node:crypto");
+  const { readFileSync } = await import("node:fs");
+  // The bottom 320 px of the window, the hud's box, without the scrollbar strip on the right.
+  const pixels_of = async (name) => createHash("sha256").update(readFileSync(await instance.shot_region(`${app}_${name}_${theme}`, "0,400 1260x320"))).digest("hex");
+  const first_row = async () => (await instance.ask("state")).selected[0]?.header_id;
+  await instance.press(["g"]);
+  await instance.press(["g"]);
+  await sleep(1000);
+  check(app, kind, "g g selects the first row", (await first_row()) === FLAT_ROWS[0]);
+  const bare = await pixels_of("hud_bare");
+  // g is a prefix key: after the which-key delay (300 ms) the panel lists the keys that can follow.
+  await instance.press(["g"]);
+  await sleep(1500);
+  await shot(`hud_which_key_${theme}`, "the which-key panel after g: the keys that can follow");
+  check(app, kind, "after g and the delay the which-key panel shows", (await pixels_of("hud_which_key_pixels")) !== bare);
+  await instance.press(["-k", "Escape"]);
+  await sleep(1200);
+  check(app, kind, "Escape after g closes the panel", (await pixels_of("hud_after_escape")) === bare);
+  // The sequence completes while the panel shows: the panel goes and the command runs.
+  await instance.press(["g"]);
+  await sleep(1500);
+  await instance.press(["g"]);
+  await sleep(1200);
+  check(app, kind, "g then g with the panel up closes it", (await pixels_of("hud_after_complete")) === bare);
+  // A key that leads nowhere cancels the sequence before the delay: no panel ever shows.
+  await instance.press(["g"]);
+  await instance.press(["z"]);
+  await sleep(1500);
+  check(app, kind, "g z before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
+  // q on the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
+  await instance.press(["q"]);
+  await sleep(1000);
+  await shot(`hud_toast_${theme}`, "a toast: q on the main mail tab is refused");
+  check(app, kind, "a refused command shows a toast", (await pixels_of("hud_toast_pixels")) !== bare);
+  await sleep(7000);
+  check(app, kind, "the toast is gone after toast_error_ms", (await pixels_of("hud_toast_gone")) === bare);
+  // ? opens the help page in a tab.
+  await instance.press(["?"]);
+  await sleep(2500);
+  await shot(`hud_help_${theme}`, "the help page");
+  check(app, kind, "the app survived the hud keys", instance.exited() === null);
+  // The help page is a tab no key runs in, so the helper closes it and the steps after this one run in the mail tab again.
+  await instance.ask("reset_tabs");
+  await sleep(1500);
+  // The click above moved the shown folder, and the steps after this one start in the Inbox.
+  await instance.press(["g"]);
+  await instance.press(["i"]);
+  await sleep(1500);
 }
 
 // The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.

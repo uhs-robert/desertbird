@@ -105,6 +105,15 @@ const MAIL_ACCOUNT_PREFS = {
   "mail.server.server2.login_at_startup": false,
 };
 
+// E2E_THEME=dark or light starts the app with that built-in theme, for the screenshots of the themed surfaces.
+const THEME_PREFS = {
+  dark: { "extensions.activeThemeID": "thunderbird-compact-dark@mozilla.org", "ui.systemUsesDarkTheme": 1 },
+  light: { "extensions.activeThemeID": "thunderbird-compact-light@mozilla.org", "ui.systemUsesDarkTheme": 0 },
+};
+
+// E2E_CONSOLE=1 prints the app and add-on console to app.log.
+const CONSOLE_PREFS = { "devtools.console.stdout.chrome": true, "devtools.console.stdout.content": true };
+
 const mail_account_inbox = () =>
   [["mail-plain", "Mail plain", "main@fixture.invalid"], ["mail-alias", "Mail alias", "list@fixture.invalid"]]
     .map(([id, subject, to], index) => [`From sender@fixture.invalid ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString()}`, "X-Mozilla-Status: 0000", "X-Mozilla-Status2: 00000000", `Message-ID: <${id}@fixture.invalid>`, `Date: ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString().replace("GMT", "+0000")}`, "From: Fixture Sender <sender@fixture.invalid>", `To: Someone <${to}>`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", `Body of ${id}.`, ""].join("\n") + "\n")
@@ -131,7 +140,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
   const remote_prefs = kind === "message_remote" ? { "mailnews.message_display.disable_remote_image": false } : {};
-  const prefs = { ...BASE_PREFS, ...identity_prefs, ...mail_prefs, ...remote_prefs, "mail.server.server1.directory": folder_dir };
+  const prefs = { ...BASE_PREFS, ...identity_prefs, ...mail_prefs, ...remote_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   return { profile_dir, folder_dir };
 }
