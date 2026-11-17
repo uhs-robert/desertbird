@@ -53,9 +53,10 @@ function note(app, kind, name, detail) {
 // With no identity the New Message button is disabled and skipped by Tab, so the folder row is one Tab sooner.
 // F6 cycles the panes: folder pane, thread list, message body (when a message shows), spaces toolbar, global search. Measured on both apps through the focus chain.
 // Counted Tabs from the folder pane are not used: on Betterbird three Tabs end on a column header.
-async function open_inbox(instance, folder_row_tabs = 7) {
+// After a restart Local Folders is already expanded, and Right would step into the Inbox row, so `expanded` skips it.
+async function open_inbox(instance, folder_row_tabs = 7, { expanded = false } = {}) {
   for (let count = 0; count < folder_row_tabs; count++) await instance.press(["-k", "Tab"]);
-  await instance.press(["-k", "Right"]);
+  if (!expanded) await instance.press(["-k", "Right"]);
   await sleep(300);
   await instance.press(["-k", "Down"]);
   await sleep(1500);
@@ -68,6 +69,15 @@ async function key_and_state(instance, args, wait_ms = 700) {
   await instance.press(args);
   await sleep(wait_ms);
   return instance.ask("state");
+}
+
+// Restarts the app and records a check that the process changed, so a skipped restart fails the run.
+async function restart_app(instance, app, kind, label) {
+  const pid_before = instance.app_pid();
+  await instance.restart();
+  const pid_after = instance.app_pid();
+  const alive = instance.exited() === null;
+  check(app, kind, `the app really restarted for the ${label}`, alive && pid_after !== pid_before, `pid ${pid_before} then ${pid_after}, exited ${JSON.stringify(instance.exited())}`);
 }
 
 const first_selected = (state) => state.selected[0]?.header_id ?? null;
@@ -199,11 +209,9 @@ async function run_default(instance) {
   check(app, kind, "after the quick filter, focus is back in the list and g g reaches the top", first_selected(state) === rows[0] && state.listed.length === start.listed.length, `selected ${first_selected(state)}, listed ${state.listed.length}`);
   await shot("after_filter_cleared", "Inbox after the quick filter was cleared");
 
-  // runtime.reload(): the helper switches DesertBird off and on, which tears down and restarts the add-on.
-  const reload_started = Date.now();
-  await instance.ask("reload_desertbird", 30000);
-  await sleep(6000);
-  note(app, kind, "reload", `off and on took ${Date.now() - reload_started} ms including the wait`);
+  // management.setEnabled is refused for an add-on in the profile folder, so the only real restart of DesertBird is a restart of the app.
+  await restart_app(instance, app, kind, "reload");
+  check(app, kind, "after the restart, the Inbox opens with keys", (await open_inbox(instance, 7, { expanded: true })) === "/Inbox");
   state = await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
   const top_after_reload = first_selected(state);
@@ -777,10 +785,10 @@ async function run_folders(instance) {
   check(app, kind, "a second C-o walks back to the Inbox", (await shown_folder([CTRL("o")])) === "/Inbox");
   check(app, kind, "C-i walks forward to Trash", (await shown_folder([CTRL("i")])) === "/Trash");
   check(app, kind, "a second C-i walks forward to the Inbox", (await shown_folder([CTRL("i")])) === "/Inbox");
-  // Marks and the history live in storage. The helper's reload (management.setEnabled) is refused here, so this restarts the whole app on the same profile.
+  // Marks and the history live in storage, so the restart is of the whole app on the same profile.
   await shown_folder(["g", "t"]);
   await shown_folder(["M", "b"], 700);
-  await instance.restart();
+  await restart_app(instance, app, kind, "restart");
   const start_folder = (await instance.ask("state")).mail_tab?.folder;
   note(app, kind, "folder shown after the restart", String(start_folder));
   check(app, kind, "g i after the restart shows the Inbox", (await shown_folder(["g", "i"], 2500)) === "/Inbox");

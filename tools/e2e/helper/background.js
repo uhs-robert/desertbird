@@ -1,6 +1,5 @@
 // Test-only add-on. It polls the e2e sink for a command and answers with state read through standard MailExtension APIs.
-// config.js (written by the harness) defines SINK_URL. The command "reload_desertbird" switches DesertBird off and on, which is the
-// outside way to restart an add-on: runtime.reload() itself only works from inside the add-on, and src/ takes no test hook.
+// config.js (written by the harness) defines SINK_URL.
 const DESERTBIRD_ID = "desertbird@uhs-robert";
 
 async function all_messages(first_page) {
@@ -55,11 +54,6 @@ async function collect() {
   state.body = latest_body;
   state.desertbird_enabled = desertbird?.enabled ?? null;
   return state;
-}
-
-async function reload_desertbird() {
-  await browser.management.setEnabled(DESERTBIRD_ID, false);
-  await browser.management.setEnabled(DESERTBIRD_ID, true);
 }
 
 async function close_compose_windows() {
@@ -255,9 +249,6 @@ async function poll_forever() {
         await post({ seq: command.seq, ...(await show_folder(command.args.path)) });
       } else if (command.name === "query_folder") {
         await post({ seq: command.seq, ...(await query_folder(command.args)) });
-      } else if (command.name === "reload_desertbird") {
-        await reload_desertbird();
-        await post({ seq: command.seq, reloaded: true });
       }
     } catch (error) {
       await post({ seq: command.seq, error: String(error) }).catch(() => {});
