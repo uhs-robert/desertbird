@@ -71,3 +71,29 @@ test("publish_theme writes the resolved theme, and writes again only when it cha
     assert.equal(storage.writes.length, 2);
     assert.deepEqual(storage.data[THEME_STORAGE_KEY], resolve_theme("oasis_sol"));
 });
+
+// The page aliases in hud.css and cmdline.css, rebuilt here: `color-mix(in srgb, A p%, B)` is the per-channel blend.
+function mix(first: string, percent: number, second: string): string {
+    const channel = (at: number) => Math.round((parseInt(first.slice(at, at + 2), 16) * percent + parseInt(second.slice(at, at + 2), 16) * (100 - percent)) / 100).toString(16).padStart(2, "0");
+    return `#${channel(1)}${channel(3)}${channel(5)}`;
+}
+
+test("every Oasis theme: the text pairs of the hud and the command line read at 4.5 to 1 in both schemes", () => {
+    for (const name of OASIS_THEME_NAMES) {
+        const theme = resolve_theme(name);
+        for (const scheme of ["dark", "light"] as const) {
+            const c = theme[scheme];
+            const surface = c.bg_mantle;
+            const muted = mix(c.fg_core, 72, surface);
+            const pairs: [string, string, string][] = [
+                ["text", c.fg_core, surface],
+                ["muted", muted, surface],
+                ["accent", mix(c.primary, 85, c.fg_core), surface],
+                ["error text on the toast", c.fg_core, mix(c.error, 22, surface)],
+                ["error text on the status line", c.error, surface],
+                ["text on the selected row", c.fg_core, c.selection],
+            ];
+            for (const [label, color, background] of pairs) assert.ok(contrast_ratio(color, background) >= READABLE, `${name} ${scheme} ${label}: ${contrast_ratio(color, background).toFixed(2)}`);
+        }
+    }
+});

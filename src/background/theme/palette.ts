@@ -1,7 +1,7 @@
 // What the background resolves from the `theme` setting: the role colors the pages read, and the mode label colors the Experiment draws.
 
 import { DEFAULT_LIGHT_INTENSITY } from "../../../vendor/desertfox/config.ts";
-import { load_theme } from "../../../vendor/desertfox/theme/load.ts";
+import { oasis_theme } from "../../../vendor/desertfox/theme/load.ts";
 import type { RoleColors } from "../../../vendor/desertfox/theme/roles.ts";
 import { luminance } from "../../../vendor/desertfox/theme/contrast.ts";
 import type { ModeLabelColors, ModeLabelScheme } from "../../shared/protocol.ts";
@@ -10,8 +10,9 @@ import type { StoredTheme } from "../../shared/theme_css.ts";
 
 /** The theme of a name. A name the table does not know, such as one from a hand-edited setting, gives the default. */
 export function resolve_theme(name: string): StoredTheme {
-    const theme = load_theme(name, DEFAULT_LIGHT_INTENSITY) ?? load_theme(DEFAULT_THEME, DEFAULT_LIGHT_INTENSITY)!;
-    return { dark: theme.dark, light: theme.light };
+    // `oasis_theme` and not `load_theme`: only the latter reaches the contributed themes table, which no setting value can pick.
+    const theme = oasis_theme(name) ?? oasis_theme(DEFAULT_THEME)!;
+    return { dark: theme.dark, light: theme.light[DEFAULT_LIGHT_INTENSITY] };
 }
 
 export function contrast_ratio(first: string, second: string): number {

@@ -1,14 +1,14 @@
-/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. Muted text mixes the text color into the surface, so it stays readable on every theme. */
+/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. The fallbacks hold until the background has published one. Muted text mixes the text color into the surface, so it stays readable on every theme. */
 :root {
     color-scheme: light dark;
-    --surface: var(--desertfox-bg-mantle);
-    --text: var(--desertfox-fg-core);
-    --muted: color-mix(in srgb, var(--desertfox-fg-core) 72%, var(--desertfox-bg-mantle));
-    --accent: var(--desertfox-primary);
-    --edge: var(--desertfox-border);
-    --error_surface: color-mix(in srgb, var(--desertfox-error) 22%, var(--desertfox-bg-mantle));
-    --error_text: var(--desertfox-fg-core);
-    --error_edge: var(--desertfox-error);
+    --surface: var(--desertfox-bg-mantle, Canvas);
+    --text: var(--desertfox-fg-core, CanvasText);
+    --muted: color-mix(in srgb, var(--text) 72%, var(--surface));
+    --accent: color-mix(in srgb, var(--desertfox-primary, CanvasText) 85%, var(--text));
+    --edge: var(--desertfox-border, GrayText);
+    --error_surface: color-mix(in srgb, var(--error_edge) 22%, var(--surface));
+    --error_text: var(--text);
+    --error_edge: var(--desertfox-error, #b3261e);
 }
 html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-serif; color: var(--text); overflow: hidden; }
 #which_key, #toasts > div { background: var(--surface); color: var(--text); border: 1px solid var(--edge); box-sizing: border-box; }
