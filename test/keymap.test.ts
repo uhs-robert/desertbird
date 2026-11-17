@@ -103,7 +103,7 @@ test("the keymap compile accepts the bound chords and the matcher reads each one
 
 test("the command line opener is unrepeatable", async () => {
     const { UNREPEATABLE_IDS } = await import("../src/background/commands/index.ts");
-    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.archive", "msg.delete", "msg.move", "msg.snooze", "msg.unsubscribe"]);
+    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.archive", "msg.delete", "msg.move", "msg.snooze", "msg.unsubscribe", "notify.toggle"]);
 });
 
 test("mark_unrepeatable tags the steps of delete, archive and move and no other", async () => {

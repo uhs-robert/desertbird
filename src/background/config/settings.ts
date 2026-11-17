@@ -5,10 +5,10 @@ import type { Settings as VendoredSettings } from "../../../vendor/desertfox/con
 import { MESSAGE_SCROLL_STEP_PX } from "../../shared/protocol.ts";
 
 /** The vendored table plus the settings only DesertBird has. The vendored table is a pinned copy and stays as it is. */
-export type Settings = VendoredSettings & { message_scroll_step_px: number };
+export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean };
 
 
-export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator";
+export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "notify_new_mail";
 
 export type SettingKind = { kind: "number"; min?: number } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
 
@@ -21,6 +21,7 @@ export const SETTING_KINDS: Record<SettingName, SettingKind> = {
     which_key_skip: { kind: "list" },
     layout_fallback: { kind: "boolean" },
     mode_indicator: { kind: "choice", choices: ["always", "not_normal", "off"] },
+    notify_new_mail: { kind: "boolean" },
 };
 
 export const SETTING_NAMES = Object.keys(SETTING_KINDS) as SettingName[];
@@ -59,6 +60,6 @@ export function sanitize_settings(raw: unknown, on_problem: (message: string) =>
 }
 
 /** Every setting at its default: the vendored defaults plus DesertBird's own. */
-export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX };
+export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false };
 
 export const settings_with_defaults = (overrides: Partial<Settings>): Settings => ({ ...SETTING_DEFAULTS, ...overrides });

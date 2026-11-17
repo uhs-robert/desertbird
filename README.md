@@ -15,6 +15,10 @@ Pre-alpha. The design is in progress and there is no code yet. Read [`docs/desig
 
 `g a` saves the attachments of the selected messages to `Downloads/DesertBird/<date>-<subject>/`. The command needs the `downloads` permission. File names and the subject are cleaned first, and a saved file is never opened. `msg.save_attachments {where: ask}` shows the save dialog for each file. A message with no attachments is refused.
 
+## New-mail notifications
+
+Off by default. Thunderbird shows its own new-mail alert, so this one is opt-in. Turn it on with the `notify_new_mail` setting on the options page, or run `:notify.toggle`. While it is on, each new unread, non-junk Inbox message shows a desktop notification with the sender and the subject. More than three at once give one notification with a count. Clicking a notification opens the message in a tab. Notifications have no action buttons, because Thunderbird 153 does not support them. The subject and sender show on the lock screen and in the desktop's notification history. The add-on needs no new permission.
+
 ## License
 
 MPL-2.0. See [`LICENSE`](LICENSE).
