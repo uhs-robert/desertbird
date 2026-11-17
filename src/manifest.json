@@ -17,7 +17,8 @@
         "page": "options/options.html",
         "open_in_tab": true
     },
-    "permissions": ["accountsFolders", "accountsRead", "alarms", "clipboardWrite", "compose", "messagesDelete", "messagesMove", "messagesRead", "messagesTagsList", "messagesUpdate", "notifications", "storage", "tabs"],
+    "permissions": ["accountsFolders", "accountsRead", "alarms", "clipboardWrite", "compose", "messagesDelete", "messagesModify", "messagesMove", "messagesRead", "messagesTagsList", "messagesUpdate", "notifications", "storage", "tabs"],
+    "message_display_scripts": [{ "js": ["content/message_display.js"] }],
     "experiment_apis": {
         "keys": {
             "schema": "experiment/keys.schema.json",

@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { summary_problems } from "../vendor/desertfox/registry/summary.ts";
-import { DEFAULT_KEYMAP, GROUPS, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, GROUPS, MESSAGE_KEYMAP, registry } from "../src/background/commands/index.ts";
 
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
-const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: string[] }> = {
+const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move"] },
     compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new"] },
@@ -14,6 +14,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: strin
     snooze: { runs_in: "background", ids: ["msg.snooze"] },
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
+    reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -37,7 +38,7 @@ for (const [name, row] of Object.entries(GROUP_TABLE)) {
     });
 
     test(`group ${name}: every default key names a command of the group`, () => {
-        for (const [keys, binding] of Object.entries(GROUPS[name]!.normal_keys)) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
+        for (const [keys, binding] of Object.entries({ ...GROUPS[name]!.normal_keys, ...GROUPS[name]!.message_keys })) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
     });
 }
 
@@ -156,4 +157,11 @@ test("tab.switch takes a typed value, so it has no default key and its validator
     assert.equal(check_args(switch_tab, { tab: "2" }).ok, true);
     assert.equal(check_args(switch_tab, {}).ok, false);
     assert.equal(check_args(switch_tab, { tab: "2", extra: "x" }).ok, false);
+});
+
+test("the reading keys bind in the message keymap only, so j and k keep scrolling there and moving the list in the mail tab", () => {
+    assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
+    const ids = Object.fromEntries(Object.entries(MESSAGE_KEYMAP.normal ?? {}).map(([keys, binding]) => [keys, binding && !Array.isArray(binding) ? binding.id : ""]));
+    assert.deepEqual(ids, { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom" });
+    assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");
 });

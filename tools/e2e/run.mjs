@@ -766,8 +766,117 @@ async function run_mail_account(instance) {
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
+// The body script: keys while a message is read, in the reading pane, a message tab and a message window. The helper's own content script reports the scroll position and whether DesertBird marked the document.
+const LINE_STEP_PX = 40;
+const READING_FOLDER_MESSAGES = ["reading-plain", "reading-html", "reading-remote", "reading-sandbox"];
+const body_state = (state) => state.body ?? { live: false, scroll_y: -1, scroll_height: 0, inner_height: 0 };
+const near = (value, expected) => Math.abs(value - expected) <= 2;
+
+async function run_message_scripts(instance) {
+  const app = instance.app;
+  const kind = instance.kind;
+  const shot = async (name, line) => { const path = await instance.shot(`${app}_${kind}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
+  const opened = await open_inbox(instance);
+  check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
+
+  // Shows the message in the pane and puts focus in its body: the helper selects it, one F6 from the thread list reaches the body.
+  const show_in_pane = async (id) => {
+    await instance.ask(`select:${id}@fixture.invalid`, 30000);
+    await sleep(2500);
+    await instance.press(["-k", "F6"]);
+    await sleep(1500);
+    return instance.ask("state");
+  };
+  // Runs the scroll keys in the document that has focus. `where` names it in each check.
+  // Escape is skipped where Thunderbird itself closes the window on it, the message window.
+  const scroll_keys = async (where, { measure_only = false, escape = true } = {}) => {
+    let state = await instance.ask("state");
+    const start = body_state(state);
+    note(app, kind, `${where}: body document`, `live ${start.live}, top frame ${start.is_top}, scrollHeight ${start.scroll_height}, innerHeight ${start.inner_height}, ${start.href}`);
+    check(app, kind, `${where}: the body script marked the document live`, start.live === true, JSON.stringify(start));
+    check(app, kind, `${where}: the message is taller than a screen`, start.scroll_height > 3 * start.inner_height, `scrollHeight ${start.scroll_height}, innerHeight ${start.inner_height}`);
+    const keys = async (args, wait = 800) => body_state(await key_and_state(instance, args, wait));
+    let body = await keys(["j"]);
+    check(app, kind, `${where}: j scrolls one line`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
+    if (measure_only) return;
+    await instance.press(["5"]);
+    body = await keys(["j"]);
+    check(app, kind, `${where}: 5j scrolls five lines`, near(body.scroll_y, 6 * LINE_STEP_PX), `scrollY ${body.scroll_y}`);
+    body = await keys(["k"]);
+    check(app, kind, `${where}: k scrolls one line back`, near(body.scroll_y, 5 * LINE_STEP_PX), `scrollY ${body.scroll_y}`);
+    const before_half = body.scroll_y;
+    body = await keys(["-M", "ctrl", "d", "-m", "ctrl"]);
+    check(app, kind, `${where}: Ctrl+d scrolls half a page`, near(body.scroll_y - before_half, body.inner_height / 2), `scrollY ${before_half} then ${body.scroll_y}, innerHeight ${body.inner_height}`);
+    body = await keys(["-M", "ctrl", "u", "-m", "ctrl"]);
+    check(app, kind, `${where}: Ctrl+u scrolls half a page back`, near(body.scroll_y, before_half), `scrollY ${body.scroll_y}, expected ${before_half}`);
+    await instance.press(["G"]);
+    await sleep(800);
+    body = body_state(await instance.ask("state"));
+    check(app, kind, `${where}: G scrolls to the bottom`, near(body.scroll_y, body.scroll_height - body.inner_height), `scrollY ${body.scroll_y}, scrollHeight ${body.scroll_height}, innerHeight ${body.inner_height}`);
+    await shot(`${where.replaceAll(" ", "_")}_bottom`, `${where} after G`);
+    await instance.press(["g"]);
+    body = await keys(["g"]);
+    check(app, kind, `${where}: g g scrolls to the top`, body.scroll_y === 0, `scrollY ${body.scroll_y}`);
+    if (!escape) return;
+    // A count then Escape ends the count, so the next j is one line.
+    await instance.press(["7"]);
+    await instance.press(["-k", "Escape"]);
+    body = await keys(["j"]);
+    check(app, kind, `${where}: Escape drops a pending count`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
+    await key_and_state(instance, ["g"]);
+    await key_and_state(instance, ["g"]);
+  };
+
+  // The reading pane. j in the body scrolls and moves no row, r opens no compose window, and the list keeps its keys once focus returns.
+  let state = await show_in_pane("reading-plain");
+  const pane_message = first_selected(state);
+  check(app, kind, "a message shows in the pane", pane_message === "reading-plain@fixture.invalid", `selected ${pane_message}`);
+  await shot("pane_plain", "reading pane with the plain text message, body focused");
+  await scroll_keys("pane plain text");
+  state = await key_and_state(instance, ["r"], 3000);
+  check(app, kind, "pane: r opens no compose window, the body script swallows Thunderbird's single-key shortcuts", !state.windows.some((window) => window.type === "messageCompose") && first_selected(state) === pane_message, `windows ${state.windows.map((window) => window.type)}`);
+  await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
+  await sleep(800);
+  state = await key_and_state(instance, ["j"]);
+  check(app, kind, "pane: after focus returns to the list, j moves the list again", first_selected(state) !== pane_message && first_selected(state) !== null, `selected ${first_selected(state)}`);
+
+  // HTML mail, remote content and a sandboxed frame. The measurement the design asked for: does the script run there?
+  for (const id of READING_FOLDER_MESSAGES.slice(1)) {
+    await show_in_pane(id);
+    await shot(`pane_${id}`, `reading pane with ${id}, body focused`);
+    await scroll_keys(`pane ${id}`, { measure_only: true });
+    await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
+    await sleep(600);
+  }
+
+  // A message tab: the message opens in a new tab and the keys go to it.
+  await show_in_pane("reading-plain");
+  await instance.ask("open_message_tab");
+  await sleep(4000);
+  state = await instance.ask("state");
+  check(app, kind, "a message tab opened", main_window_tabs(state).some((tab) => tab.type === "messageDisplay"), JSON.stringify(main_window_tabs(state).map((tab) => tab.type)));
+  await shot("message_tab", "message in its own tab");
+  await scroll_keys("message tab");
+  await instance.ask("reset_tabs");
+  await sleep(1500);
+
+  // A message window.
+  await instance.ask("select:reading-plain@fixture.invalid", 30000);
+  await sleep(1500);
+  await instance.ask("open_message_window");
+  await sleep(4000);
+  state = await instance.ask("state");
+  check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+  await shot("message_window", "message in its own window");
+  await scroll_keys("message window", { escape: false });
+  await instance.ask("close_message_windows");
+  await sleep(1500);
+  check(app, kind, "the app survived", instance.exited() === null);
+}
+
 async function run_assertions(instance) {
   if (instance.kind === "default") await run_default(instance);
+  else if (instance.kind === "message" || instance.kind === "message_remote") await run_message_scripts(instance);
   else if (instance.kind === "mail_account") await run_mail_account(instance);
   else await run_no_identity(instance);
 }
@@ -775,7 +884,7 @@ async function run_assertions(instance) {
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote").split(",");
   for (const kind of kinds) {
     const instance = await start_app({ app, app_binary: binaries[app], work_dir: join(e2e_dir, app, kind), kind, xpi_path });
     try {

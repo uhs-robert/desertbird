@@ -1,6 +1,7 @@
 // Finds out where a key is going: a text field, the reading pane or an open menu. The top window sees keys from every document below it, so the event target alone can name the wrapping element and not the field.
 
 import { OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 
 export interface FocusNode {
     localName?: string;
@@ -10,9 +11,14 @@ export interface FocusNode {
     contentDocument?: FocusDocument | null;
 }
 
+interface MarkedRoot {
+    hasAttribute(name: string): boolean;
+}
+
 export interface FocusDocument {
     activeElement: FocusNode | null;
     body?: FocusNode | null;
+    documentElement?: MarkedRoot | null;
     querySelectorAll?(selectors: string): Iterable<{ state?: string }>;
 }
 
@@ -45,6 +51,12 @@ const READING_PANE_IDS = new Set(["messageBrowser", "messagepane"]);
 
 /** Whether focus sits in the reading pane, whatever the element inside it. */
 export const in_reading_pane = (document: FocusDocument): boolean => focus_chain(document).some((node) => READING_PANE_IDS.has(node.id ?? ""));
+
+/** Whether the document that holds the focus is a message body that runs the body script. Only the innermost document counts: the script runs in the top frame only, so a key from a frame in the mail never reaches it. Focus in the message header or the thread list is in another document. */
+export function body_script_is_live(document: FocusDocument): boolean {
+    const holder = focus_chain(document).findLast((node) => node.contentDocument);
+    return holder?.contentDocument?.documentElement?.hasAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE) === true;
+}
 
 // A menu or panel shows from the moment it opens until it closes. Its `open` attribute stays unset, so only `state` tells.
 const SHOWN_POPUP_STATES = new Set(["showing", "open"]);

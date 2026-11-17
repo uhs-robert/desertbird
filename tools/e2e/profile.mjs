@@ -4,6 +4,7 @@ import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { write_fixtures } from "../measure/fixtures.mjs";
+import { write_reading_folder } from "./reading_fixture.mjs";
 
 const IDENTITY_PREFS = {
   "mail.account.account1.identities": "id1",
@@ -112,6 +113,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
   const folder_dir = write_fixtures(profile_dir);
   writeFileSync(join(folder_dir, "Views"), views_text());
+  write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
   const mail_dir = join(profile_dir, "Mail", "pop.invalid");
@@ -121,7 +123,9 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   }
   const identity_prefs = kind === "reply_no_identity" || kind === "mail_account" ? {} : IDENTITY_PREFS;
   const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
-  const prefs = { ...BASE_PREFS, ...identity_prefs, ...mail_prefs, "mail.server.server1.directory": folder_dir };
+  // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
+  const remote_prefs = kind === "message_remote" ? { "mailnews.message_display.disable_remote_image": false } : {};
+  const prefs = { ...BASE_PREFS, ...identity_prefs, ...mail_prefs, ...remote_prefs, "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   return { profile_dir, folder_dir };
 }

@@ -52,6 +52,7 @@ async function collect() {
     state.windows.push(entry);
   }
   const desertbird = await browser.management.get(DESERTBIRD_ID).catch(() => null);
+  state.body = latest_body;
   state.desertbird_enabled = desertbird?.enabled ?? null;
   return state;
 }
@@ -158,6 +159,19 @@ async function tab_command(command) {
   throw new Error(`unknown tab command ${command.name}`);
 }
 
+// What the body report script last sent: the scroll state of the message document that reported last, and whether DesertBird's body script had marked it.
+let latest_body = null;
+browser.runtime.onMessage.addListener((message) => {
+  if (message?.kind === "body_report") latest_body = { ...message, received: Date.now() };
+});
+
+// Opens the selected message in its own window, as a key-less double click would.
+async function open_message_window() {
+  const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+  const [message] = (await browser.mailTabs.getSelectedMessages(mail_tab.id)).messages;
+  return (await browser.messageDisplay.open({ location: "window", messageId: message.id }))?.windowId ?? null;
+}
+
 async function post(body) {
   await fetch(`${SINK_URL}/state`, { method: "POST", body: JSON.stringify(body) });
 }
@@ -174,6 +188,11 @@ async function poll_forever() {
       } else if (command.name?.startsWith("select:")) {
         await select_message(command.name.slice(7));
         await post({ seq: command.seq, selected: true });
+      } else if (command.name === "open_message_window") {
+        await post({ seq: command.seq, opened: await open_message_window() });
+      } else if (command.name === "close_message_windows") {
+        for (const window of await browser.windows.getAll({ windowTypes: ["messageDisplay"] })) await browser.windows.remove(window.id);
+        await post({ seq: command.seq, closed: true });
       } else if (command.name === "close_compose") {
         await close_compose_windows();
         await post({ seq: command.seq, closed: true });

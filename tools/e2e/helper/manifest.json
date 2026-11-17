@@ -5,5 +5,6 @@
     "description": "Test only. Reports mail state to the e2e result sink and reloads DesertBird on request.",
     "browser_specific_settings": { "gecko": { "id": "e2e-helper@desertbird.invalid", "strict_min_version": "128.0" } },
     "background": { "scripts": ["config.js", "background.js"], "persistent": true },
-    "permissions": ["accountsRead", "clipboardRead", "management", "messagesRead", "messagesMove", "messagesUpdate", "messagesTags", "messagesDelete", "tabs", "compose", "http://127.0.0.1/*"]
+    "message_display_scripts": [{ "js": ["body_report.js"] }],
+    "permissions": ["accountsRead", "clipboardRead", "management", "messagesRead", "messagesModify", "messagesMove", "messagesUpdate", "messagesTags", "messagesDelete", "tabs", "compose", "http://127.0.0.1/*"]
 }

@@ -1,11 +1,10 @@
 // Key handling in the main mail window. It holds no Thunderbird global: the parent hands in a `RuntimeDeps`, so node tests drive every path with fakes.
 
 import type { JsonValue, KeysInvocation } from "../shared/protocol.ts";
-import { COMPILED_KEYMAP_VERSION } from "../../vendor/desertfox/prefix_tree.ts";
-import type { CompiledKeymap, TreeBranch, TreeLeaf } from "../../vendor/desertfox/prefix_tree.ts";
-import { create_matcher } from "../../vendor/desertfox/keys/matcher.ts";
+import type { TreeLeaf } from "../../vendor/desertfox/prefix_tree.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
+import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { run_motion } from "./motions.ts";
 import type { ListPort } from "./view.ts";
 
@@ -39,6 +38,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     menu_is_open(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
+    /** Whether the message body under the focus runs the body script. That script handles the reading-pane keys, so they are no longer swallowed here. */
+    body_script_is_live(window: Window): boolean;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
@@ -54,29 +55,12 @@ export interface Runtime {
     shutdown(): void;
 }
 
-const NORMAL_MODE = "normal";
-
 // How long plain keys are dropped after a command that opens the overlay. The overlay takes the focus a round trip later, so keys typed ahead would otherwise act on the list.
 const HOLD_MS = 1500;
 
-// A plain printable key is one character. Named keys (Enter, Escape, arrows, Tab, Space) have a token in angle brackets, so they pass through.
-const is_plain_printable = (token: string): boolean => [...token].length === 1;
-
-function read_root(tree: { version: number; root: unknown }): TreeBranch {
-    if (tree.version !== COMPILED_KEYMAP_VERSION) throw new Error(`keymap version ${String(tree.version)} is not ${COMPILED_KEYMAP_VERSION}`);
-    const root = tree.root as Partial<TreeBranch> | null;
-    if (typeof root !== "object" || root === null || root.kind !== "branch" || typeof root.children !== "object" || root.children === null) {
-        throw new Error("keymap root is not a branch");
-    }
-    return root as TreeBranch;
-}
-
-// The matcher reads only `modes`, so the rest of a compiled keymap is never built here.
-const keymap_of = (root: TreeBranch): CompiledKeymap => ({ format_version: COMPILED_KEYMAP_VERSION, modes: { [NORMAL_MODE]: root } }) as CompiledKeymap;
-
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
     const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
-    let matcher: ReturnType<typeof create_matcher> | null = null;
+    let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     let listening = false;
     // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
     let sequence_window: Window | null = null;
@@ -120,7 +104,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
-            if (port && is_plain_printable(token)) {
+            if (port && is_plain_printable(token) && !deps.body_script_is_live(window)) {
                 event.preventDefault();
                 event.stopPropagation();
             }
@@ -163,8 +147,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     return {
         install(tree, hold = []) {
-            const keymap = keymap_of(read_root(tree));
-            matcher = create_matcher(keymap);
+            matcher = matcher_for_tree(tree);
             hold_commands = new Set(hold);
             if (listening) return;
             listening = true;

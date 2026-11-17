@@ -1,12 +1,13 @@
 // Background entry. Compiles the default keymap once, keeps it in storage and hands it to the Experiment on every start.
 
-import { COMPILED_KEYMAP_VERSION } from "../shared/protocol.ts";
+import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
-import { registry } from "./commands/index.ts";
+import { MESSAGE_KEYMAP, compile_message_keymap, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { compile_effective_keymap, effective_keymap } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
+import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
 import { notify_refusal } from "./notify.ts";
 import { create_router } from "./router.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
@@ -18,16 +19,16 @@ import type { RouterApi } from "./router.ts";
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
 
-const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
-
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
-const KEYMAP_RECORD_VERSION = 2;
+const KEYMAP_RECORD_VERSION = 3;
 
 interface KeymapRecord {
     record_version: number;
-    /** The hash of the effective keymap (defaults plus user bindings) and the setting overrides the tree was compiled from. Other default bindings or an edit of the user bindings or settings rebuild the tree. */
+    /** The hash of the effective keymap (defaults plus user bindings), the message keys and the setting overrides the tree was compiled from. Other default bindings or an edit of the user bindings or settings rebuild the tree. */
     source_hash: string;
     tree: KeymapTree;
+    /** The keys of the message document. The Experiment never sees it: the body script reads it from storage. */
+    message_tree: KeymapTree;
 }
 
 interface StorageChange {
@@ -57,14 +58,17 @@ async function hash_of(value: unknown): Promise<string> {
 
 function is_current_record(value: unknown, source_hash: string): value is KeymapRecord {
     const record = value as Partial<KeymapRecord> | null | undefined;
-    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION;
+    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION;
+}
+
+function tree_of(result: CompileResult): KeymapTree {
+    for (const warning of result.warnings) console.warn(`desertbird keymap: ${warning}`);
+    const root: KeymapTree["root"] = JSON.parse(JSON.stringify(result.compiled.modes.normal ?? { kind: "branch", children: {} }));
+    return { version: COMPILED_KEYMAP_VERSION, root };
 }
 
 function compile_record(source_hash: string, config: Config): KeymapRecord {
-    const { compiled, warnings } = compile_effective_keymap(config.user_keymap, config.setting_overrides);
-    for (const warning of warnings) console.warn(`desertbird keymap: ${warning}`);
-    const root: KeymapTree["root"] = JSON.parse(JSON.stringify(compiled.modes.normal ?? { kind: "branch", children: {} }));
-    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root } };
+    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(compile_effective_keymap(config.user_keymap, config.setting_overrides)), message_tree: tree_of(compile_message_keymap()) };
 }
 
 // Registered before the listener below, so the store has dropped its copy by the time an install reads it.
@@ -78,7 +82,7 @@ let installed_tree_json: string | undefined;
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: MESSAGE_KEYMAP, settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);

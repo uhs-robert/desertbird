@@ -11,12 +11,13 @@ import { compose } from "./compose.ts";
 import { messages } from "./messages.ts";
 import { motion } from "./motion.ts";
 import { snooze } from "./snooze.ts";
+import { reading } from "./reading.ts";
 import { view } from "./view.ts";
 import { tabs } from "./tabs.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading };
 
 export const registry = create_registry();
 
@@ -33,4 +34,11 @@ export const resolve_command: ResolveCommand = (command_id) => {
 
 export function compile_default_keymap(): CompileResult {
     return compile_keymap(DEFAULT_KEYMAP, {}, resolve_command);
+}
+
+// The keys of the message document. The body script walks this tree, not the one of the mail tab.
+export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, ...Object.values(GROUPS).map((group) => group.message_keys)) };
+
+export function compile_message_keymap(): CompileResult {
+    return compile_keymap(MESSAGE_KEYMAP, {}, resolve_command);
 }
