@@ -51,7 +51,7 @@
         "name": "setModeLabel",
         "type": "function",
         "async": true,
-        "description": "Shows the mode label at the start of the status bar of the window, or removes it when the indicator is off. The parent turns the mode into insert while a text field has the focus, applies the indicator, and maps the mode and the style to the text and the colors.",
+        "description": "Shows the mode label at the start of the status bar of the window, or removes it when the indicator is off. The parent turns the mode into insert while a text field has the focus, applies the indicator, maps the mode and the style to the text, and takes the colors from the scheme Thunderbird shows.",
         "parameters": [
           {
             "name": "args",
@@ -72,6 +72,30 @@
               "style": {
                 "type": "string",
                 "enum": ["classic", "badge"]
+              },
+              "colors": {
+                "type": "object",
+                "description": "The label colors as #rrggbb for each color scheme: one per mode, and the text on a badge. The parent uses the scheme Thunderbird itself shows.",
+                "properties": {
+                  "dark": {
+                    "type": "object",
+                    "properties": {
+                      "normal": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "visual": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "insert": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "on_badge": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+                    }
+                  },
+                  "light": {
+                    "type": "object",
+                    "properties": {
+                      "normal": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "visual": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "insert": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "on_badge": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+                    }
+                  }
+                }
               }
             }
           }

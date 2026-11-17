@@ -3,6 +3,10 @@ import { test } from "node:test";
 import { create_mode_label, label_look, label_shows } from "../src/chrome/mode_label.ts";
 import type { LabelElement, StatusBarDocument } from "../src/chrome/mode_label.ts";
 
+const DARK = { normal: "#aaaa11", visual: "#bb6622", insert: "#cc3333", on_badge: "#111111" };
+const LIGHT = { normal: "#555500", visual: "#663300", insert: "#770000", on_badge: "#eeeeee" };
+const COLORS = { dark: DARK, light: LIGHT };
+
 class FakeLabel implements LabelElement {
     style = { cssText: "" };
     className = "";
@@ -38,6 +42,8 @@ function setup() {
     const windows = new Map([[1, new FakeBar()], [2, new FakeBar()]]);
     const focus_listeners = new Map<FakeBar, Set<() => void>>();
     const typing = new Set<FakeBar>();
+    const dark = new Set<FakeBar>();
+    const scheme_listeners = new Map<FakeBar, Set<() => void>>();
     const loaded_listeners: (() => void)[] = [];
     const label = create_mode_label<FakeBar>({
         window_with_id: (id) => windows.get(id) ?? null,
@@ -49,7 +55,19 @@ function setup() {
             focus_listeners.set(bar, (focus_listeners.get(bar) ?? new Set()).add(listener));
             return () => void focus_listeners.get(bar)?.delete(listener);
         },
+        is_dark: (bar) => dark.has(bar),
+        on_scheme_change(bar, listener) {
+            scheme_listeners.set(bar, (scheme_listeners.get(bar) ?? new Set()).add(listener));
+            return () => void scheme_listeners.get(bar)?.delete(listener);
+        },
     });
+    /** Switches the Thunderbird scheme of the window and fires the change event. */
+    const set_dark = (window_id: number, is_dark: boolean) => {
+        const bar = windows.get(window_id)!;
+        if (is_dark) dark.add(bar);
+        else dark.delete(bar);
+        for (const listener of [...(scheme_listeners.get(bar) ?? [])]) listener();
+    };
     /** Moves focus into or out of a text field of the window and fires the focus event. */
     const move_focus = (window_id: number, into_text_field: boolean) => {
         const bar = windows.get(window_id)!;
@@ -57,27 +75,47 @@ function setup() {
         else typing.delete(bar);
         for (const listener of [...(focus_listeners.get(bar) ?? [])]) listener();
     };
-    return { windows, label, move_focus, loaded_listeners, listeners: (window_id: number) => focus_listeners.get(windows.get(window_id)!)?.size ?? 0 };
+    return { windows, label, move_focus, set_dark, scheme_listeners, loaded_listeners, listeners: (window_id: number) => focus_listeners.get(windows.get(window_id)!)?.size ?? 0 };
 }
-const always = { indicator: "always", style: "classic" } as const;
+const always = { indicator: "always", style: "classic", colors: COLORS } as const;
 
 test("the label text is the mode in each style", () => {
-    assert.equal(label_look("normal", "classic").text, "-- NORMAL --");
-    assert.equal(label_look("visual", "classic").text, "-- VISUAL --");
-    assert.equal(label_look("insert", "badge").text, "INSERT");
+    assert.equal(label_look("normal", "classic", DARK).text, "-- NORMAL --");
+    assert.equal(label_look("visual", "classic", DARK).text, "-- VISUAL --");
+    assert.equal(label_look("insert", "badge", DARK).text, "INSERT");
 });
 
 test("each mode has its own color, and the badge fills with it while classic colors the text", () => {
-    const colors = (["normal", "visual", "insert"] as const).map((mode) => label_look(mode, "classic").css.match(/color: (var\([^)]*\))/)?.[1]);
-    assert.deepEqual(colors, ["var(--color-yellow-50)", "var(--color-orange-50)", "var(--color-red-50)"]);
-    assert.match(label_look("visual", "badge").css, /background-color: var\(--color-orange-50\)/);
-    assert.doesNotMatch(label_look("visual", "classic").css, /background-color/);
+    const colors = (["normal", "visual", "insert"] as const).map((mode) => label_look(mode, "classic", DARK).css.match(/color: (#[0-9a-f]{6})/)?.[1]);
+    assert.deepEqual(colors, [DARK.normal, DARK.visual, DARK.insert]);
+    const badge = label_look("visual", "badge", DARK).css;
+    assert.match(badge, new RegExp(`background-color: ${DARK.visual}`));
+    assert.match(badge, new RegExp(`; color: ${DARK.on_badge};`));
+    assert.doesNotMatch(label_look("visual", "classic", DARK).css, /background-color/);
+});
+
+test("the label takes the scheme Thunderbird shows in its window, and redraws when that scheme changes", () => {
+    const { windows, label, set_dark } = setup();
+    label.set({ windowId: 1, mode: "normal", ...always });
+    const [only] = windows.get(1)!.labels_in;
+    assert.match(only!.style.cssText, new RegExp(`color: ${LIGHT.normal}`));
+    set_dark(1, true);
+    assert.match(only!.style.cssText, new RegExp(`color: ${DARK.normal}`));
+    set_dark(1, false);
+    assert.match(only!.style.cssText, new RegExp(`color: ${LIGHT.normal}`));
+});
+
+test("a color that is not #rrggbb is refused before it reaches a style", () => {
+    const { label } = setup();
+    const bad = { ...COLORS, dark: { ...DARK, normal: "red; position: fixed" } };
+    assert.throws(() => label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: bad }), /normal color must be #rrggbb/);
+    assert.throws(() => label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic" } as never), /must be #rrggbb/);
 });
 
 test("a first call puts one label at the start of the status bar, and later calls reuse it", () => {
     const { windows, label } = setup();
-    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic" });
-    label.set({ windowId: 1, mode: "visual", indicator: "always", style: "classic" });
+    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: COLORS });
+    label.set({ windowId: 1, mode: "visual", indicator: "always", style: "classic", colors: COLORS });
     const bar = windows.get(1)!;
     assert.equal(bar.labels_in.length, 1);
     assert.equal(bar.created, 1);
@@ -87,8 +125,8 @@ test("a first call puts one label at the start of the status bar, and later call
 
 test("a style change restyles the same label", () => {
     const { windows, label } = setup();
-    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic" });
-    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "badge" });
+    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: COLORS });
+    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "badge", colors: COLORS });
     const [only] = windows.get(1)!.labels_in;
     assert.equal(windows.get(1)!.labels_in.length, 1);
     assert.equal(only!.attributes["value"], "NORMAL");
@@ -97,9 +135,9 @@ test("a style change restyles the same label", () => {
 
 test("the off indicator removes the label, and removing again is harmless", () => {
     const { windows, label } = setup();
-    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic" });
-    label.set({ windowId: 1, mode: "normal", indicator: "off", style: "classic" });
-    label.set({ windowId: 1, mode: "normal", indicator: "off", style: "classic" });
+    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: COLORS });
+    label.set({ windowId: 1, mode: "normal", indicator: "off", style: "classic", colors: COLORS });
+    label.set({ windowId: 1, mode: "normal", indicator: "off", style: "classic", colors: COLORS });
     assert.equal(windows.get(1)!.labels_in.length, 0);
 });
 
@@ -108,7 +146,7 @@ test("a label an earlier instance left behind is reused and its duplicates are r
     const bar = windows.get(1)!;
     bar.labels_in.push(new FakeLabel(bar), new FakeLabel(bar), new FakeLabel(bar));
     const old = bar.labels_in[0];
-    label.set({ windowId: 1, mode: "visual", indicator: "always", style: "badge" });
+    label.set({ windowId: 1, mode: "visual", indicator: "always", style: "badge", colors: COLORS });
     assert.deepEqual(bar.labels_in, [old]);
     assert.equal(old!.attributes["value"], "VISUAL");
     assert.equal(bar.created, 0);
@@ -116,7 +154,7 @@ test("a label an earlier instance left behind is reused and its duplicates are r
 
 test("a window that opened before the add-on started gets its label on the first call", () => {
     const { windows, label } = setup();
-    label.set({ windowId: 2, mode: "normal", indicator: "always", style: "classic" });
+    label.set({ windowId: 2, mode: "normal", indicator: "always", style: "classic", colors: COLORS });
     assert.equal(windows.get(2)!.labels_in.length, 1);
 });
 
@@ -131,7 +169,7 @@ test("a window that has no status bar yet gets its label when it finishes loadin
     const { windows, label, loaded_listeners } = setup();
     const bar = windows.get(1)!;
     bar.has_status_bar = false;
-    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic" });
+    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: COLORS });
     assert.equal(bar.labels_in.length, 0);
     bar.has_status_bar = true;
     loaded_listeners.forEach((listener) => listener());
@@ -142,8 +180,8 @@ test("a window that loads after the label was turned off gets none", () => {
     const { windows, label, loaded_listeners } = setup();
     const bar = windows.get(1)!;
     bar.has_status_bar = false;
-    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic" });
-    label.set({ windowId: 1, mode: "normal", indicator: "off", style: "classic" });
+    label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: COLORS });
+    label.set({ windowId: 1, mode: "normal", indicator: "off", style: "classic", colors: COLORS });
     bar.has_status_bar = true;
     loaded_listeners.forEach((listener) => listener());
     assert.equal(bar.labels_in.length, 0);
@@ -151,7 +189,7 @@ test("a window that loads after the label was turned off gets none", () => {
 
 test("a window with no id is refused with a message", () => {
     const { label } = setup();
-    assert.throws(() => label.set({ windowId: 9, mode: "normal", indicator: "always", style: "classic" }), /no main window has id 9/);
+    assert.throws(() => label.set({ windowId: 9, mode: "normal", indicator: "always", style: "classic", colors: COLORS }), /no main window has id 9/);
 });
 
 test("insert mode: the label reads INSERT while a text field has focus and goes back after", () => {
@@ -174,7 +212,7 @@ test("insert mode wins over visual, and visual shows again after the field", () 
 
 test("not_normal hides the label in normal mode and shows it for visual and for insert", () => {
     const { windows, label, move_focus } = setup();
-    const not_normal = { indicator: "not_normal", style: "classic" } as const;
+    const not_normal = { indicator: "not_normal", style: "classic", colors: COLORS } as const;
     label.set({ windowId: 1, mode: "normal", ...not_normal });
     assert.equal(windows.get(1)!.labels_in.length, 0);
     move_focus(1, true);
@@ -193,24 +231,25 @@ test("label_shows applies the indicator to the mode", () => {
 });
 
 test("the off indicator stops listening to focus, a second set adds no second listener, and shutdown stops all", () => {
-    const { label, listeners, move_focus, windows } = setup();
+    const { label, listeners, move_focus, windows, scheme_listeners } = setup();
     label.set({ windowId: 1, mode: "normal", ...always });
     label.set({ windowId: 1, mode: "visual", ...always });
     assert.equal(listeners(1), 1);
-    label.set({ windowId: 1, mode: "visual", indicator: "off", style: "classic" });
+    label.set({ windowId: 1, mode: "visual", indicator: "off", style: "classic", colors: COLORS });
     assert.equal(listeners(1), 0);
     label.set({ windowId: 1, mode: "visual", ...always });
     label.set({ windowId: 2, mode: "visual", ...always });
     label.shutdown();
     assert.equal(listeners(1) + listeners(2), 0);
+    assert.deepEqual([...scheme_listeners.values()].map((set) => set.size), [0, 0], "the scheme listeners stop too");
     move_focus(1, true);
     assert.equal(windows.get(1)!.labels_in.length, 0, "a focus move after shutdown draws nothing");
 });
 
 test("a call that skips the schema is checked too", () => {
     const { label } = setup();
-    assert.throws(() => label.set({ windowId: -1, mode: "normal", indicator: "always", style: "classic" }), /window id/);
-    assert.throws(() => label.set({ windowId: 1, mode: "dizzy" as "normal", indicator: "always", style: "classic" }), /unknown mode/);
-    assert.throws(() => label.set({ windowId: 1, mode: "normal", indicator: "sometimes" as "always", style: "classic" }), /unknown indicator/);
-    assert.throws(() => label.set({ windowId: 1, mode: "normal", indicator: "always", style: "loud" as "classic" }), /unknown style/);
+    assert.throws(() => label.set({ windowId: -1, mode: "normal", indicator: "always", style: "classic", colors: COLORS }), /window id/);
+    assert.throws(() => label.set({ windowId: 1, mode: "dizzy" as "normal", indicator: "always", style: "classic", colors: COLORS }), /unknown mode/);
+    assert.throws(() => label.set({ windowId: 1, mode: "normal", indicator: "sometimes" as "always", style: "classic", colors: COLORS }), /unknown indicator/);
+    assert.throws(() => label.set({ windowId: 1, mode: "normal", indicator: "always", style: "loud" as "classic", colors: COLORS }), /unknown style/);
 });

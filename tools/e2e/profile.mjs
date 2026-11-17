@@ -109,6 +109,11 @@ const MAIL_ACCOUNT_PREFS = {
 const THEME_PREFS = {
   dark: { "extensions.activeThemeID": "thunderbird-compact-dark@mozilla.org", "ui.systemUsesDarkTheme": 1 },
   light: { "extensions.activeThemeID": "thunderbird-compact-light@mozilla.org", "ui.systemUsesDarkTheme": 0 },
+  // Thunderbird's own scheme set against the OS scheme, to tell which signal the themed surfaces can follow.
+  tb_dark_os_light: { "extensions.activeThemeID": "thunderbird-compact-dark@mozilla.org", "ui.systemUsesDarkTheme": 0 },
+  tb_light_os_dark: { "extensions.activeThemeID": "thunderbird-compact-light@mozilla.org", "ui.systemUsesDarkTheme": 1 },
+  default_os_dark: { "ui.systemUsesDarkTheme": 1 },
+  default_os_light: { "ui.systemUsesDarkTheme": 0 },
 };
 
 // E2E_CONSOLE=1 prints the app and add-on console to app.log.

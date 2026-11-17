@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_hud_service, lifting_toasts } from "../src/background/hud/service.ts";
+import { mode_label_colors, resolve_theme } from "../src/background/theme/palette.ts";
 import type { Settings } from "../src/background/config/settings.ts";
 import type { HudState, KeysEvent, KeysMode } from "../src/shared/protocol.ts";
 import { fake_timers, sample_root, settings_with, settle } from "./hud_fakes.ts";
@@ -10,11 +11,12 @@ function setup(overrides: Partial<Settings> = {}) {
     const timers = fake_timers();
     let settings = settings_with({ mode_indicator: "off", ...overrides });
     const labels: string[] = [];
+    const label_colors: unknown[] = [];
     const hud = create_hud_service({
         overlay: {
             mount: async ({ windowId, surface }) => void log.push(`mount ${surface}@${windowId}`),
             unmount: async ({ windowId, surface }) => void log.push(`unmount ${surface}@${windowId}`),
-            setModeLabel: async ({ windowId, mode, indicator, style }) => void labels.push(`${windowId} ${mode} ${indicator} ${style}`),
+            setModeLabel: async ({ windowId, mode, indicator, style, colors }) => void (labels.push(`${windowId} ${mode} ${indicator} ${style}`), label_colors.push(colors)),
             onClosed: { addListener: () => {}, removeListener: () => {} },
         },
         read_settings: async () => settings,
@@ -25,7 +27,7 @@ function setup(overrides: Partial<Settings> = {}) {
     const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id });
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
     const set_mode = (mode: KeysMode["mode"], window_id = 1): Promise<void> => hud.on_keys_event({ command: "mode", mode, windowId: window_id });
-    return { hud, log, labels, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
+    return { hud, log, labels, label_colors, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
 }
 
 test("the panel waits for the delay: nothing mounts before it and the panel shows after it", async () => {
@@ -372,4 +374,13 @@ test("keys from a window with no id show no panel", async () => {
     timers.advance(1000);
     await settle();
     assert.deepEqual(log, []);
+});
+
+test("the label gets the colors of the theme setting, and a theme change sends the new ones", async () => {
+    const { hud, label_colors, set_settings } = setup({ mode_indicator: "always", theme: "oasis_desert" });
+    await hud.track(1);
+    assert.deepEqual(label_colors.at(-1), mode_label_colors(resolve_theme("oasis_desert")));
+    set_settings({ theme: "oasis_sol" });
+    await hud.settings_changed();
+    assert.deepEqual(label_colors.at(-1), mode_label_colors(resolve_theme("oasis_sol")));
 });

@@ -1,23 +1,13 @@
+/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. Muted text mixes the text color into the surface, so it stays readable on every theme. */
 :root {
     color-scheme: light dark;
-    --surface: #f8f9fb;
-    --selected: #d5e3fb;
-    --text: #1f2328;
-    --muted: #4a5159;
-    --accent: #0a4db3;
-    --edge: #8c959f;
-    --error_text: #b3261e;
-}
-@media (prefers-color-scheme: dark) {
-    :root {
-        --surface: #23262b;
-        --selected: #34507d;
-        --text: #e8eaed;
-        --muted: #b4bac2;
-        --accent: #8ab4f8;
-        --edge: #6b7480;
-        --error_text: #f28b82;
-    }
+    --surface: var(--desertfox-bg-mantle);
+    --selected: var(--desertfox-selection);
+    --text: var(--desertfox-fg-core);
+    --muted: color-mix(in srgb, var(--desertfox-fg-core) 72%, var(--desertfox-bg-mantle));
+    --accent: var(--desertfox-primary);
+    --edge: var(--desertfox-border);
+    --error_text: var(--desertfox-error);
 }
 /* The box is 280 px high and the body fills it, so the height never follows the number of rows. */
 html, body { margin: 0; width: 100%; height: 100%; background: var(--surface); color: var(--text); overflow: hidden; }

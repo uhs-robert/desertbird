@@ -1,6 +1,7 @@
 // The hud page: the which-key panel and the toasts. It keeps no state. Each time the background says the hud of this window changed, it asks for the state and draws it.
 
 import type { HudChanged, HudRequest, HudState } from "../shared/protocol.ts";
+import { follow_theme } from "../shared/follow_theme.ts";
 
 declare const messenger: {
     runtime: {
@@ -8,6 +9,8 @@ declare const messenger: {
         onMessage: { addListener(listener: (message: unknown) => void): void };
     };
 };
+
+follow_theme();
 
 // A panel with more keys than this is cut, so it never grows past the box it sits in.
 const MAX_ROWS = 24;

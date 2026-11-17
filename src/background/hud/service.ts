@@ -3,6 +3,7 @@
 import type { Settings } from "../config/settings.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { HudRequest, HudState, KeysEvent, KeysMode, OverlayApi } from "../../shared/protocol.ts";
+import { mode_label_colors, resolve_theme } from "../theme/palette.ts";
 import { create_toasts } from "./toasts.ts";
 import type { Timers, Toasts } from "./toasts.ts";
 import { may_open_by_itself, which_key_panel } from "./which_key.ts";
@@ -74,7 +75,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         const overlay = deps.overlay;
         hud.queue = hud.queue.then(async () => {
             const settings = await deps.read_settings();
-            await overlay.setModeLabel({ windowId: window_id, mode: hud.mode, indicator: settings.mode_indicator, style: settings.mode_indicator_style }).catch((error: unknown) => console.error("desertbird:", error));
+            await overlay.setModeLabel({ windowId: window_id, mode: hud.mode, indicator: settings.mode_indicator, style: settings.mode_indicator_style, colors: mode_label_colors(resolve_theme(settings.theme)) }).catch((error: unknown) => console.error("desertbird:", error));
         });
         return hud.queue;
     }

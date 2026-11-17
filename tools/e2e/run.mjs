@@ -2,8 +2,9 @@
 //   node tools/e2e/run.mjs [thunderbird|betterbird]... [--xpi path] [--binary app=path]
 // With no --xpi it only proves the setup: each app starts in a fresh profile and one screenshot is taken.
 // Scratch files go to $E2E_DIR (default /tmp/desertbird-e2e). Thunderbird comes from tools/measure/fetch_thunderbird.sh. Betterbird is /usr/bin/betterbird.
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { inflateSync } from "node:zlib";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -158,6 +159,7 @@ async function run_default(instance) {
   await shot("inbox_opened");
   // E2E_ONLY=hud runs the which-key, toast and help checks alone, for a quick run of that part.
   if (process.env.E2E_ONLY === "hud") return run_hud(instance, { app, kind, shot });
+  if (process.env.E2E_ONLY === "cmdline") return run_cmdline(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
   await run_mode_label(instance, { app, kind, shot });
 
@@ -901,11 +903,52 @@ const LABEL_STRIP = "50,692 100x24";
 const LABEL_PIECE = LABEL_STRIP;
 const SECOND_WINDOW_PIECE = "114,692 100x24";
 const label_reference = {};
-const MODE_LABEL_KINDS = { mode_label_badge: { desertbird_settings: { mode_indicator_style: "badge" } }, mode_label_off: { desertbird_settings: { mode_indicator: "off" } } };
+// The themed kind draws the badge in an Oasis theme other than the default, and a check reads the badge fill pixels against the theme's mode roles for the scheme Thunderbird shows.
+const THEMED_LABEL = "oasis_sol";
+const MODE_LABEL_KINDS = { mode_label_badge: { desertbird_settings: { mode_indicator_style: "badge" } }, mode_label_off: { desertbird_settings: { mode_indicator: "off" } }, mode_label_themed: { desertbird_settings: { mode_indicator_style: "badge", theme: THEMED_LABEL } } };
+
+// The colors of a grim screenshot (8 bit RGB or RGBA, no interlacing) as a map from "#rrggbb" to its pixel count.
+function png_colors(path) {
+  const png = readFileSync(path);
+  let width = 0, height = 0, channels = 0;
+  const data = [];
+  for (let at = 8; at < png.length; ) {
+    const length = png.readUInt32BE(at);
+    const type = png.toString("latin1", at + 4, at + 8);
+    const body = png.subarray(at + 8, at + 8 + length);
+    if (type === "IHDR") { width = body.readUInt32BE(0); height = body.readUInt32BE(4); channels = body[9] === 6 ? 4 : 3; if (body[8] !== 8 || (body[9] !== 6 && body[9] !== 2) || body[12] !== 0) throw new Error(`png_colors: unsupported png ${path}`); }
+    if (type === "IDAT") data.push(body);
+    at += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(data));
+  const stride = width * channels;
+  const rows = [];
+  for (let row = 0; row < height; row++) {
+    const filter = raw[row * (stride + 1)];
+    const line = Buffer.from(raw.subarray(row * (stride + 1) + 1, (row + 1) * (stride + 1)));
+    const above = rows[row - 1] ?? Buffer.alloc(stride);
+    for (let at = 0; at < stride; at++) {
+      const left = at >= channels ? line[at - channels] : 0;
+      const up = above[at];
+      const corner = at >= channels ? above[at - channels] : 0;
+      const guess = filter === 1 ? left : filter === 2 ? up : filter === 3 ? (left + up) >> 1 : filter === 4 ? (() => { const p = left + up - corner; const [pa, pb, pc] = [Math.abs(p - left), Math.abs(p - up), Math.abs(p - corner)]; return pa <= pb && pa <= pc ? left : pb <= pc ? up : corner; })() : 0;
+      line[at] = (line[at] + guess) & 255;
+    }
+    rows.push(line);
+  }
+  const counts = new Map();
+  for (const line of rows) for (let at = 0; at < stride; at += channels) {
+    const color = `#${[0, 1, 2].map((offset) => line[at + offset].toString(16).padStart(2, "0")).join("")}`;
+    counts.set(color, (counts.get(color) ?? 0) + 1);
+  }
+  return counts;
+}
+const luminance_of = (color) => [1, 3, 5].map((at) => parseInt(color.slice(at, at + 2), 16) / 255).reduce((sum, channel, index) => sum + [0.2126, 0.7152, 0.0722][index] * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4), 0);
 async function run_mode_label(instance, { app, kind, shot }) {
   const { createHash } = await import("node:crypto");
   const { readFileSync } = await import("node:fs");
-  const strip_of = async (name, region = LABEL_STRIP) => createHash("sha256").update(readFileSync(await instance.shot_region(`${app}_${kind}_label_${name}`, region))).digest("hex");
+  const strip_paths = {};
+  const strip_of = async (name, region = LABEL_STRIP) => createHash("sha256").update(readFileSync((strip_paths[name] = await instance.shot_region(`${app}_${kind}_label_${name}`, region)))).digest("hex");
   const settle = () => sleep(900);
   await sleep(1500);
   const normal = await strip_of("normal");
@@ -950,6 +993,20 @@ async function run_mode_label(instance, { app, kind, shot }) {
     if (reference === undefined) return note(app, kind, "no default strips to compare with", "the default kind did not run first");
     if (kind === "mode_label_off") check(app, kind, "the off indicator draws no label", normal !== reference.normal && insert === normal, `reference ${reference.normal.slice(0, 8)}, now ${normal.slice(0, 8)}`);
     else check(app, kind, "the badge style draws a label unlike the classic one in every mode", normal !== reference.normal && visual !== reference.visual && insert !== reference.insert, "strips compared with the default kind");
+  }
+  if (kind === "mode_label_themed") {
+    const { resolve_theme } = await import("../../src/background/theme/palette.ts");
+    const theme = resolve_theme(THEMED_LABEL);
+    // The most common color of the strip is the status bar, and its lightness tells the scheme Thunderbird shows. The OS scheme may differ (E2E_THEME=tb_dark_os_light), so a label in the wrong scheme fails here.
+    const normal_colors = png_colors(strip_paths.normal);
+    const [bar_color] = [...normal_colors].sort((a, b) => b[1] - a[1])[0];
+    const scheme = luminance_of(bar_color) < 0.2 ? "dark" : "light";
+    const wanted = { normal: theme[scheme].mode_normal, visual: theme[scheme].mode_visual, insert: theme[scheme].mode_insert };
+    const seen = { normal: normal_colors, visual: png_colors(strip_paths.visual), insert: png_colors(strip_paths.insert) };
+    for (const mode of ["normal", "visual", "insert"]) {
+      const other = theme[scheme === "dark" ? "light" : "dark"][`mode_${mode}`];
+      check(app, kind, `the ${mode} badge fills with the ${THEMED_LABEL} ${scheme} color for the ${scheme} status bar (${bar_color})`, seen[mode].has(wanted[mode]) && !seen[mode].has(other), `wanted ${wanted[mode]}, the other scheme has ${other}`);
+    }
   }
   check(app, kind, "the app survived the mode label checks", instance.exited() === null);
 }
@@ -1785,7 +1842,7 @@ async function run_assertions(instance) {
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
     const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : MODE_LABEL_KINDS[kind];

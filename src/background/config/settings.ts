@@ -4,12 +4,13 @@ import { DEFAULT_SETTINGS } from "../../../vendor/desertfox/config.ts";
 import type { Settings as VendoredSettings } from "../../../vendor/desertfox/config.ts";
 import { MESSAGE_SCROLL_STEP_PX, MODE_INDICATORS, MODE_LABEL_STYLES } from "../../shared/protocol.ts";
 import type { ModeLabelStyle } from "../../shared/protocol.ts";
+import { DEFAULT_THEME, OASIS_THEME_NAMES } from "../../shared/theme_choice.ts";
 
 /** The vendored table plus the settings only DesertBird has. The vendored table is a pinned copy and stays as it is. */
-export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean; notice_show_subject: boolean; mode_indicator_style: ModeLabelStyle };
+export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean; notice_show_subject: boolean; mode_indicator_style: ModeLabelStyle; theme: string };
 
 
-export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "mode_indicator_style" | "notify_new_mail" | "notice_show_subject";
+export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "mode_indicator_style" | "notify_new_mail" | "notice_show_subject" | "theme";
 
 export type SettingKind = { kind: "number"; min?: number } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
 
@@ -25,6 +26,7 @@ export const SETTING_KINDS: Record<SettingName, SettingKind> = {
     mode_indicator_style: { kind: "choice", choices: MODE_LABEL_STYLES },
     notify_new_mail: { kind: "boolean" },
     notice_show_subject: { kind: "boolean" },
+    theme: { kind: "choice", choices: OASIS_THEME_NAMES },
 };
 
 export const SETTING_NAMES = Object.keys(SETTING_KINDS) as SettingName[];
@@ -63,6 +65,6 @@ export function sanitize_settings(raw: unknown, on_problem: (message: string) =>
 }
 
 /** Every setting at its default: the vendored defaults plus DesertBird's own. */
-export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false, notice_show_subject: true, mode_indicator: "always", mode_indicator_style: "classic" };
+export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false, notice_show_subject: true, mode_indicator: "always", mode_indicator_style: "classic", theme: DEFAULT_THEME };
 
 export const settings_with_defaults = (overrides: Partial<Settings>): Settings => ({ ...SETTING_DEFAULTS, ...overrides });

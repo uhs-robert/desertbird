@@ -7,7 +7,7 @@ This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox
 - Commit: `33a68a009791563e5ba57999e43b5c8d45c8ca6d` (use the commit, since a tag can move)
 - License: MPL-2.0, the same as DesertBird (see `LICENSE` at the repository root). The copied files keep their text unchanged apart from the edits listed below.
 
-The folder mirrors `src/shared/`, except `completion/tokenize.ts` and `history_cursor.ts`, which come from `src/cmdline/`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
+The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin, since they did not change between the tag and later commits), except `completion/tokenize.ts` and `history_cursor.ts`, which come from `src/cmdline/`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
 
 ## Commands
 
@@ -52,7 +52,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `bundles.ts` | copy | `501a602b76060a4af7c06ffd3c470babf3dc38cbb258718cd0063db847a400a6` | `501a602b76060a4af7c06ffd3c470babf3dc38cbb258718cd0063db847a400a6` |
 | `command.ts` | edited | `413d108780e94db8094856820a36ebc0a00105c3aa00b530a5348b66ef90eca3` | `e44c1fc11de62c27b31044b2a36bf9be8e38eb2ca5ef78376bf21d535529c641` |
 | `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
-| `config.ts` | stub | `-` | `d7ef6258d1c3b1f8d791212f4af4875c5a48f538c4b8ae42fccec57c8fe2497a` |
+| `config.ts` | stub | `-` | `782044001ffb548804beac17fbae8f01eafa4c800181b555729418a27cb7f41e` |
 | `default_settings.ts` | stub | `-` | `edc74287069f1b13134282a5456d56669128c3ad031b0e1ffd00a4c020a10cfa` |
 | `history_cursor.ts` | copy | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` |
 | `invocation.ts` | copy | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` |
@@ -78,4 +78,12 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `settings_schema.ts` | stub | `-` | `376fcfdfe3c389f1451d5b291db23effc5ef77d6445ddae3627a4ee92d2a93aa` |
 | `settings_table.ts` | stub | `-` | `ec920ec05c37ed29c3c8729043f5eb836558516529207620e7771025444d44a6` |
 | `table_constants.ts` | stub | `-` | `3bd44266a9390a65304a86b502e6d7ecd257dd68115cd2e2303ab8e3ffb4c2a2` |
+| `theme/contrast.ts` | copy | `1456a9a3746efac46dc9f19e47c13c06896b4d52cc1349fbd0aab679e99838ce` | `1456a9a3746efac46dc9f19e47c13c06896b4d52cc1349fbd0aab679e99838ce` |
+| `theme/derive.ts` | copy | `c2a70b2c3c2de7ebb7c0737d255e4e32a5d58edc48337a6d1f8ee725bfa15ce5` | `c2a70b2c3c2de7ebb7c0737d255e4e32a5d58edc48337a6d1f8ee725bfa15ce5` |
+| `theme/load.ts` | copy | `87516a677b658f67f81d0dfc8ddc7ec2301e212577f2a867c706e5172855c88c` | `87516a677b658f67f81d0dfc8ddc7ec2301e212577f2a867c706e5172855c88c` |
+| `theme_names.ts` | copy | `6ba4364ee4593f357c9b735e05add0d4844b45610dbfdb4d741e79d232d42a0e` | `6ba4364ee4593f357c9b735e05add0d4844b45610dbfdb4d741e79d232d42a0e` |
+| `theme/roles.ts` | copy | `fcc88cf9c8483ac53c0f7346fb8e2ad595c5404d90a637d33ce7b5452cc5bab7` | `fcc88cf9c8483ac53c0f7346fb8e2ad595c5404d90a637d33ce7b5452cc5bab7` |
+| `themes.ts` | copy | `19f7f05dc839f3f74d9bc16a3fefef0e60d74773489d08cbef81ecd9094b048f` | `19f7f05dc839f3f74d9bc16a3fefef0e60d74773489d08cbef81ecd9094b048f` |
+| `theme/theme_file.ts` | copy | `260f325a675df05e4f513056f4dc495e8fb4c901aba0b7e1c92b19927a69ab94` | `260f325a675df05e4f513056f4dc495e8fb4c901aba0b7e1c92b19927a69ab94` |
+| `theme/tokens.ts` | copy | `96d1fa86ac7fac8a4a60ccc0c34a8af8de0afaf927a4067783c043d0bd365c30` | `96d1fa86ac7fac8a4a60ccc0c34a8af8de0afaf927a4067783c043d0bd365c30` |
 <!-- hash table end -->

@@ -50,7 +50,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 - `app.open_page {page}`: built as `keys.appOpenPage`. One key of a fixed table (`addons`, `themes`, `config`), never a URL. The counterpart of the DesertFox host verb `open_firefox_page`.
 - `hints.collect {docs}` and `hints.act {id, action}`: hint targets in the chrome documents. The message and compose content scripts hold their own hints.
 - `overlay.mount` and `overlay.unmount`: the extension page that draws the command line, which-key and toasts in the chrome window.
-- `overlay.setModeLabel`: the mode label at the start of the status bar. The args are a window id and three enums (the mode, the `mode_indicator` setting and the `mode_indicator_style` setting), so the parent owns the text and the colors. The Experiment draws it because a page cannot sit inside the status bar. It reads the focus itself for insert mode, since the key runtime does not track insert.
+- `overlay.setModeLabel`: the mode label at the start of the status bar. The args are a window id, three enums (the mode, the `mode_indicator` setting and the `mode_indicator_style` setting) and the label colors as `#rrggbb` for both color schemes. The parent owns the text and picks the scheme Thunderbird shows in the window. The Experiment draws it because a page cannot sit inside the status bar. It reads the focus itself for insert mode, since the key runtime does not track insert.
 
 ## Split table
 
@@ -135,7 +135,7 @@ These parts carry over with few changes:
 - `define`, the define-time checks and `check_args`.
 - The command line parser, the printer and completion.
 - The key notation and the prefix tree compiler.
-- The which-key panel, toasts, the mode label and themes.
+- The which-key panel, toasts, the mode label and themes. The 16 Oasis themes are in: the `theme` setting picks one, the background publishes its role colors to `storage.local`, and the hud, the command line and the options page read them as `--desertfox-*` tokens. Thunderbird tells its own color scheme to the pages and to the window, and the background page sees only the OS scheme (measured), so the background sends both schemes and the pages and the label pick.
 - The TOML config and its merge.
 - The `commands.json` build and help generation.
 - The native host verbs `read_config`, `editor_start` and `editor_collect`.

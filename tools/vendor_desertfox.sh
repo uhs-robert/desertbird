@@ -17,6 +17,7 @@ COPIED_FILES=(
   registry/define.ts registry/check_args.ts registry/check_shape.ts registry/params.ts registry/summary.ts
   registry/command_line.ts registry/usage.ts registry/print_command.ts registry/single_quote.ts
   completion/tokenize.ts history_cursor.ts
+  themes.ts theme_names.ts theme/roles.ts theme/tokens.ts theme/contrast.ts theme/derive.ts theme/theme_file.ts theme/load.ts
 )
 
 upstream_path_of() {
