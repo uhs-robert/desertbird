@@ -252,6 +252,9 @@ async function poll_forever() {
         await post({ seq: command.seq, cleared: true });
       } else if (["open_content_tab", "open_popup_window", "close_popup_window", "open_normal_window", "close_normal_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
+      } else if (command.name === "click_link") {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        await post({ seq: command.seq, ...(await browser.tabs.sendMessage(tab.id, { kind: "click_link", text: command.args.text })) });
       } else if (command.name === "folder_events_start") {
         folder_events_start();
         await post({ seq: command.seq, started: true });
