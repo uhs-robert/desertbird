@@ -113,3 +113,11 @@ test("a hostile subject and a nameless attachment still give safe paths", async 
     await done;
     assert.match(downloads(calls)[0]!, /^download DesertBird\/2026-11-03-_\.\._x_\/attachment-1 /);
 });
+
+test("the saving notice is a result toast in the command's window", async () => {
+    const { api, done } = run({ messages: [{ id: 1, subject: "S", date }], attachments: { 1: [{ name: "a", partName: "1.2" }] } }, [1]);
+    const toasts: [number, boolean][] = [];
+    Object.assign(api, { toasts: { toast: async (window_id: number, _text: string, is_error: boolean) => (toasts.push([window_id, is_error]), true) } });
+    await done;
+    assert.deepEqual(toasts, [[1, false]]);
+});

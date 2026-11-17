@@ -150,3 +150,11 @@ test("presses that overlap act once", async () => {
     await Promise.all([router.run(invoke([5])), router.run(invoke([5])), router.run(invoke([5]))]);
     assert.equal(calls.filter((call) => call.startsWith("windows.openDefaultBrowser")).length, 1);
 });
+
+test("the first-press preview is an error toast in the command's window", async () => {
+    const { api } = fake_api({ messages: [{ id: 5, headerMessageId: "m5" }], headers: HTTPS_MAIL });
+    const toasts: [number, boolean][] = [];
+    Object.assign(api, { toasts: { toast: async (window_id: number, _text: string, is_error: boolean) => (toasts.push([window_id, is_error]), true) } });
+    await unsubscribe({ api, window_id: 7, message_ids: [5], count: 1 }, {});
+    assert.deepEqual(toasts, [[7, true]]);
+});

@@ -1,7 +1,7 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { choose_target, parse_list_unsubscribe } from "../list_unsubscribe.ts";
 import type { UnsubscribeTarget } from "../list_unsubscribe.ts";
-import { notify_result } from "../notify.ts";
+import { notify_refusal } from "../notify.ts";
 import type { NotificationsApi } from "../notify.ts";
 import { require_messages } from "./each_message.ts";
 import { resolve_identity } from "./identity.ts";
@@ -82,5 +82,6 @@ async function handle_press(scope: UnsubscribeScope, _args: unknown, now: () => 
         return;
     }
     await scope.api.storage.local.set({ [PENDING_KEY]: { record_version: PENDING_VERSION, message_key, target_key: target_key(target), armed_at_ms: now() } satisfies PendingRecord });
-    await notify_result(scope.api, preview_text(target));
+    // The refusal kind lasts longer, so the user can read the preview before the second press.
+    await notify_refusal(scope.api, preview_text(target), scope.window_id);
 }

@@ -118,5 +118,5 @@ export async function toggle_new_mail_notify(scope: HandlerScope<ConfigStorage &
     const config = await store.read();
     const enabled = !config.settings.notify_new_mail;
     await store.write_settings({ ...config.setting_overrides, notify_new_mail: enabled });
-    await notify_result(api, `New-mail notifications are ${enabled ? "on" : "off"}.`);
+    await notify_result(api, `New-mail notifications are ${enabled ? "on" : "off"}.`, scope.window_id);
 }
