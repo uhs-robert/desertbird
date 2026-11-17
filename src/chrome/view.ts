@@ -10,6 +10,7 @@ export interface DbViewLike {
     rowCount: number;
     /** The headers behind the selected rows. A collapsed thread counts as all its messages, as for Thunderbird's own archive and delete. */
     getSelectedMsgHdrs(): unknown[];
+    getKeyAt?(index: number): number;
 }
 
 export interface ThreadTreeLike {
@@ -64,8 +65,8 @@ export interface ListPort extends ViewPort {
     selected_message_ids(): number[];
     /** Selects every row from `anchor` to `end` and makes `end` the current row, so a motion goes on from there. */
     select_range(anchor: number, end: number): void;
-    /** Changes when the list shows another folder or is rebuilt. */
-    view_token(): unknown;
+    /** The view and the message keys at two rows. Equal marks mean the list shows the same messages there, so a row inserted or removed between them shifts the far one. */
+    marks(anchor: number, end: number): unknown[];
 }
 
 /** The MailExtension id of a message header, or null when the extension cannot name it. */
@@ -89,7 +90,7 @@ export function create_list_port(about_3pane: About3PaneLike, message_id_of: Mes
             tree.selectedIndex = index;
             tree.scrollToIndex?.(index);
         },
-        view_token: () => about_3pane.gDBView,
+        marks: (anchor, end) => [about_3pane.gDBView, about_3pane.gDBView?.getKeyAt?.(anchor), about_3pane.gDBView?.getKeyAt?.(end)],
         select_range(anchor, end) {
             const first = Math.min(anchor, end);
             tree.selectedIndices = Array.from({ length: Math.abs(end - anchor) + 1 }, (_, offset) => first + offset);
