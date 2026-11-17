@@ -43,6 +43,7 @@ test("each default key reaches its command with the side that runs it", () => {
         [["m", "z", "l"], "msg.snooze", "background"],
         [["m", "z", "w"], "msg.snooze", "background"],
         [["g", "F"], "msg.forward", "background"],
+        [["g", "u"], "msg.unsubscribe", "background"],
         [["c"], "msg.new", "background"],
     ];
     for (const [tokens, id, runs_in] of expected) {
@@ -102,7 +103,7 @@ test("the keymap compile accepts the bound chords and the matcher reads each one
 
 test("the command line opener is unrepeatable", async () => {
     const { UNREPEATABLE_IDS } = await import("../src/background/commands/index.ts");
-    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.archive", "msg.delete", "msg.move", "msg.snooze"]);
+    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.archive", "msg.delete", "msg.move", "msg.snooze", "msg.unsubscribe"]);
 });
 
 test("mark_unrepeatable tags the steps of delete, archive and move and no other", async () => {
