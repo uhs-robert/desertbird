@@ -1,9 +1,12 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 
 export interface MailFolder {
+    id: string;
     accountId: string;
     path: string;
     specialUse?: string[];
+    isVirtual?: boolean;
+    isUnified?: boolean;
 }
 
 export interface DisplayedFolderApi {

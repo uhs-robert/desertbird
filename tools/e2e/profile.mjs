@@ -75,7 +75,36 @@ function views_text() {
   return entries.join("");
 }
 
-// kind "default" has an identity. kind "reply_no_identity" has an account with none.
+// A second account, the default one: a POP3 account that never connects, with two identities and two Inbox messages. One message is addressed to the alias identity.
+// Local Folders keeps no identity of its own in this kind, as in a real profile.
+const MAIL_ACCOUNT_PREFS = {
+  "mail.accountmanager.accounts": "account1,account2",
+  "mail.accountmanager.defaultaccount": "account2",
+  "mail.account.account2.server": "server2",
+  "mail.account.account2.identities": "id2,id3",
+  "mail.identity.id2.fullName": "Main",
+  "mail.identity.id2.useremail": "main@fixture.invalid",
+  "mail.identity.id2.valid": true,
+  "mail.identity.id2.compose_html": false,
+  "mail.identity.id3.fullName": "Alias",
+  "mail.identity.id3.useremail": "list@fixture.invalid",
+  "mail.identity.id3.valid": true,
+  "mail.identity.id3.compose_html": false,
+  "mail.server.server2.type": "pop3",
+  "mail.server.server2.hostname": "pop.invalid",
+  "mail.server.server2.userName": "main",
+  "mail.server.server2.name": "Mail",
+  "mail.server.server2.storeContractID": "@mozilla.org/msgstore/berkeleystore;1",
+  "mail.server.server2.check_new_mail": false,
+  "mail.server.server2.login_at_startup": false,
+};
+
+const mail_account_inbox = () =>
+  [["mail-plain", "Mail plain", "main@fixture.invalid"], ["mail-alias", "Mail alias", "list@fixture.invalid"]]
+    .map(([id, subject, to], index) => [`From sender@fixture.invalid ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString()}`, "X-Mozilla-Status: 0000", "X-Mozilla-Status2: 00000000", `Message-ID: <${id}@fixture.invalid>`, `Date: ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString().replace("GMT", "+0000")}`, "From: Fixture Sender <sender@fixture.invalid>", `To: Someone <${to}>`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", `Body of ${id}.`, ""].join("\n") + "\n")
+    .join("");
+
+// kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
   rmSync(profile_dir, { recursive: true, force: true });
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
@@ -83,7 +112,14 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   writeFileSync(join(folder_dir, "Views"), views_text());
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
-  const prefs = { ...BASE_PREFS, ...(kind === "reply_no_identity" ? {} : IDENTITY_PREFS), "mail.server.server1.directory": folder_dir };
+  const mail_dir = join(profile_dir, "Mail", "pop.invalid");
+  if (kind === "mail_account") {
+    mkdirSync(mail_dir, { recursive: true });
+    writeFileSync(join(mail_dir, "Inbox"), mail_account_inbox());
+  }
+  const identity_prefs = kind === "reply_no_identity" || kind === "mail_account" ? {} : IDENTITY_PREFS;
+  const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
+  const prefs = { ...BASE_PREFS, ...identity_prefs, ...mail_prefs, "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   return { profile_dir, folder_dir };
 }

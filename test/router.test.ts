@@ -3,38 +3,7 @@ import { test } from "node:test";
 import { registry } from "../src/background/commands/index.ts";
 import { create_registry } from "../vendor/desertfox/registry/define.ts";
 import { create_router } from "../src/background/router.ts";
-import type { RouterApi } from "../src/background/router.ts";
-
-interface FakeOptions {
-    /** The messages `messages.get` knows. */
-    messages?: { id: number; date?: Date; folder?: { accountId: string } }[];
-    identities?: unknown[];
-    experiment?: boolean;
-}
-
-/** A recording fake of the API subset. `calls` holds one line per call, in order. */
-export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[] } {
-    const calls: string[] = [];
-    const known = new Map((options.messages ?? []).map((message) => [message.id, { date: new Date(0), ...message }]));
-    const api: RouterApi = {
-        messages: {
-            archive: async (ids) => void calls.push(`messages.archive ${ids.join(",")}`),
-            delete: async (ids) => void calls.push(`messages.delete ${ids.join(",")}`),
-            get: async (id) => {
-                calls.push(`messages.get ${id}`);
-                const message = known.get(id);
-                if (message === undefined) throw new Error(`Message not found: ${id}.`);
-                return message;
-            },
-        },
-        compose: { beginReply: async (id, type) => (calls.push(`compose.beginReply ${id} ${type}`), undefined) },
-        identities: { list: async (account_id) => (calls.push(`identities.list ${account_id}`), options.identities ?? [{ id: "i1" }]) },
-        mailTabs: { query: async () => [], update: async () => undefined, setQuickFilter: async () => {} },
-        notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
-        keys: options.experiment === false ? undefined : { install: async () => {}, onInvocation: { addListener: () => {}, removeListener: () => {} } },
-    };
-    return { api, calls };
-}
+import { fake_api } from "./fake_api.ts";
 
 const invoke = (command: string, args: Record<string, string> = {}, message_ids: number[] = []) => ({ command, args, count: 1, windowId: 3, messageIds: message_ids });
 const notifications = (calls: string[]) => calls.filter((call) => call.startsWith("notify"));
@@ -44,7 +13,7 @@ const reply_args = { to: "sender" };
 test("r with no identity refuses and never calls beginReply", async () => {
     const { api, calls } = fake_api({ messages: [{ id: 5, folder: { accountId: "a1" } }], identities: [] });
     await create_router(registry, api).run(invoke("msg.reply", reply_args, [5]));
-    assert.ok(calls.includes("identities.list a1"));
+    assert.ok(calls.includes("identities.list"));
     assert.equal(calls.some((call) => call.startsWith("compose.beginReply")), false);
     assert.equal(notifications(calls).length, 1);
 });
@@ -52,7 +21,7 @@ test("r with no identity refuses and never calls beginReply", async () => {
 test("r with one id replies to that message", async () => {
     const { api, calls } = fake_api({ messages: [{ id: 5, folder: { accountId: "a1" } }, { id: 9, folder: { accountId: "a1" } }] });
     await create_router(registry, api).run(invoke("msg.reply", reply_args, [5]));
-    assert.deepEqual(calls.filter((call) => call.startsWith("compose.")), ["compose.beginReply 5 replyToSender"]);
+    assert.deepEqual(calls.filter((call) => call.startsWith("compose.")), ["compose.beginReply 5 replyToSender i1"]);
     assert.deepEqual(notifications(calls), []);
 });
 
@@ -67,14 +36,14 @@ test("r with several ids, such as a collapsed thread root, replies to the newest
     ].map((message) => ({ ...message, folder: { accountId: "a1" } }));
     const { api, calls } = fake_api({ messages: thread });
     await create_router(registry, api).run(invoke("msg.reply", reply_args, [5, 8, 6, 7]));
-    assert.deepEqual(calls.filter((call) => call.startsWith("compose.")), ["compose.beginReply 8 replyToSender"]);
+    assert.deepEqual(calls.filter((call) => call.startsWith("compose.")), ["compose.beginReply 8 replyToSender i1"]);
     assert.deepEqual(notifications(calls), []);
 });
 
 test("r with several ids and no identity refuses and never calls beginReply", async () => {
     const { api, calls } = fake_api({ messages: [5, 6].map((id) => ({ id, folder: { accountId: "a1" } })), identities: [] });
     await create_router(registry, api).run(invoke("msg.reply", reply_args, [5, 6]));
-    assert.ok(calls.includes("identities.list a1"));
+    assert.ok(calls.includes("identities.list"));
     assert.equal(calls.some((call) => call.startsWith("compose.beginReply")), false);
     assert.equal(notifications(calls).length, 1);
 });
@@ -97,7 +66,7 @@ test("a missing Experiment refuses a command that needs it, before any message c
 });
 
 test("a missing Experiment does not block a command that needs no Experiment verb", async () => {
-    for (const [command, call] of [["msg.reply", "compose.beginReply 5 replyToSender"], ["msg.archive", "messages.archive 5"], ["msg.delete", "messages.delete 5"]] as const) {
+    for (const [command, call] of [["msg.reply", "compose.beginReply 5 replyToSender i1"], ["msg.archive", "messages.archive 5"], ["msg.delete", "messages.delete 5"]] as const) {
         const { api, calls } = fake_api({ messages: [{ id: 5, folder: { accountId: "a1" } }], experiment: false });
         await create_router(registry, api).run(invoke(command, command === "msg.reply" ? reply_args : {}, [5]));
         assert.ok(calls.includes(call), command);

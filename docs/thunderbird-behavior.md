@@ -315,3 +315,33 @@ The event target seen from the top window is not enough to tell where focus is. 
 ### Selection after archive and delete
 
 Thunderbird keeps a row selected after `messages.archive` and `messages.delete` on the selected message. In the 60-message Inbox it selected the next row (archive of `Single 2` selected `Single 3`, delete of `Single 3` selected `Single 4`). With the last row removed it selected the new last row (`Single 18` after `Single 19`, `Single 17` after `Single 18`).
+
+## Phase 2: message state and compose
+
+Measured on Thunderbird 153.7.0 and Betterbird, each in a fresh profile with the Local Folders fixture. The probes were raw API calls from a temporary version of the e2e helper add-on, with no DesertBird guard in front. The permission probe ran on Thunderbird only.
+
+### Compose calls
+
+- With no default account (Local Folders only), `compose.beginForward` without `details.identityId` never returned its promise and opened no window, with an identity on the account and without one. Thunderbird's own Ctrl+L forward worked. `beginForward(id, "forwardAsAttachment")` returned, and so did `beginForward(id, undefined, {identityId})`, which also keeps the user's forward mode.
+- With a default POP3 account that has two identities and Local Folders with none, `beginReply` and `beginForward` both returned and opened a window on both apps, for a Local Folders message with the default account's identity and for a message addressed to the alias identity with the alias. Without an `identityId`, forward worked too, but composed from the default identity even for the alias-addressed message. So the identity is passed explicitly.
+- `compose.beginNew` with no identity opened a compose window and did not crash.
+- `compose.beginReply` crashes the app with no identity anywhere (Phase 0). DesertBird refuses reply, forward and new before the call when no identity exists in any account.
+
+### `accounts.getDefault`
+
+It returned `null` in a profile whose only account is Local Folders with an identity, because Local Folders cannot be the default account. `compose.beginNew` still composes there. The guard for `msg.new` reads the default account when there is one and any identity otherwise.
+
+### Permissions
+
+- `messages.update` needs `messagesUpdate`. Without it `browser.messages.update` is not a function.
+- `messages.tags.list` needs `messagesTagsList`. `messages.listTags` works with no permission and is the deprecated form. `messagesTags` alone does not define `messages.tags.list`.
+- `folders.markAsRead` needs `accountsFolders`.
+- `folders.query({accountId, path})` works with `accountsRead`.
+
+### Selection after `messages.move`
+
+Thunderbird keeps a row selected after `messages.move` of the selected message, as it does after archive and delete. It selected the next row (a move of `Single 2` at row 12 selected `Single 3` at row 13 of the old list), and the new last row when the last row moved. Both apps agree.
+
+### Cost of the per-id loop
+
+The handlers make one `messages.update` call per selected id, in order, because the API takes one id. Select-all in a large folder sends every id. The cost on a large selection was not measured.
