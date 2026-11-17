@@ -422,14 +422,12 @@ async function run_cmdline(instance, { app, kind, shot }) {
   let state = await instance.ask("state");
   let selected_before = selection_of(state);
   let folders_before = JSON.stringify(state.folders);
-  // j and x typed with no pause after the colon can reach the list before the overlay has the focus: the mount is a round trip to the background and back. A person types slower, so this is a NOTE and the baseline restarts after it.
+  // j and x typed with no pause after the colon: the key runtime holds plain keys until the overlay has the focus, so neither reaches the list.
   await instance.press([":", "j", "x"]);
   await sleep(1500);
   await shot("cmdline_open", "the command line over the bottom of the window, with the completion list above its input");
   state = await instance.ask("state");
-  note(app, kind, ": j x typed with no pause", `selected ${selected_before} then ${selection_of(state)}, mail changed: ${JSON.stringify(state.folders) !== folders_before}`);
-  selected_before = selection_of(state);
-  folders_before = JSON.stringify(state.folders);
+  check(app, kind, ": then j x typed with no pause runs neither a motion nor archive", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}, mail changed: ${JSON.stringify(state.folders) !== folders_before}`);
   await instance.press(["j", "x"]);
   await sleep(500);
   state = await instance.ask("state");

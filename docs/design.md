@@ -28,7 +28,7 @@ The parts map onto DesertFox like this:
 | Chrome verbs (Experiment API schema) | None (new) | A fixed table of privileged operations that background handlers call |
 | `messageDisplayScripts` | `content.js` in a page | Keys and hints inside the message body, which runs in a content process the chrome listener cannot see. Measured: for local mail the message pane is not remote and a chrome listener sees its keys (see [`thunderbird-behavior.md`](thunderbird-behavior.md), Message pane process) |
 | `composeScripts` | `content.js` in a field | Insert mode, `<C-o>` and hints inside the compose body |
-| Overlay page in the chrome window | `cmdline.html` iframe and the `ui` bundle | Command line, completion, which-key, badge and toasts |
+| Overlay page in the chrome window | `cmdline.html` in a remote `browser` element and the `ui` bundle | Command line, completion, which-key, badge and toasts |
 | Native host | Native host | Config read (`read_config`) and the external editor (`editor_start`, `editor_collect`) |
 
 Registry changes from DesertFox:

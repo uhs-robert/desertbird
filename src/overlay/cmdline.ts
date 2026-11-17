@@ -15,6 +15,8 @@ let highlighted = -1;
 // A later answer replaces an earlier one that arrives after it.
 let latest_request = 0;
 let closing = false;
+// Set before the send, so a second Enter while the answer is on its way sends nothing.
+let running = false;
 
 const send = <Answer>(message: CmdlineRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
 
@@ -68,9 +70,15 @@ function accept_row(): void {
 }
 
 async function run_line(): Promise<void> {
-    const result = await send<CmdlineRunResult>({ type: "cmdline.run", windowId: window_id, text: input.value });
-    if (result.ok) closing = true;
-    else show_status(result.message, true);
+    if (running) return;
+    running = true;
+    try {
+        const result = await send<CmdlineRunResult>({ type: "cmdline.run", windowId: window_id, text: input.value });
+        if (result.ok) closing = true;
+        else show_status(result.message, true);
+    } finally {
+        running = closing;
+    }
 }
 
 function close_line(): void {

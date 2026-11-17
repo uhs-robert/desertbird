@@ -42,15 +42,20 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
     window_id_of(window: Window): number;
+    /** Milliseconds, for the hold timeout. */
+    now(): number;
     emit(invocation: KeysInvocation): void;
 }
 
 export interface Runtime {
-    install(tree: { version: number; root: unknown }): void;
+    install(tree: { version: number; root: unknown }, hold_commands?: readonly string[]): void;
     shutdown(): void;
 }
 
 const NORMAL_MODE = "normal";
+
+// How long plain keys are dropped after a command that opens the overlay. The overlay takes the focus a round trip later, so keys typed ahead would otherwise act on the list.
+const HOLD_MS = 1500;
 
 // A plain printable key is one character. Named keys (Enter, Escape, arrows, Tab, Space) have a token in angle brackets, so they pass through.
 const is_plain_printable = (token: string): boolean => [...token].length === 1;
@@ -73,10 +78,13 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let listening = false;
     // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
     let sequence_window: Window | null = null;
+    let hold_commands = new Set<string>();
+    let hold_until = 0;
 
     function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count: number | undefined): void {
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
+            if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
             if (step.runs_in === "chrome") {
                 run_motion(step.invocation.id, port, step_count);
             } else if (step.runs_in === "background") {
@@ -97,6 +105,15 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         const token = event_to_token(event);
         if (token === null) return;
+        // The hold ends when the focus is in a text field, which the overlay's browser counts as.
+        if (hold_until > deps.now()) {
+            if (deps.is_typing_target(window, event)) hold_until = 0;
+            else if (is_plain_printable(token)) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+        }
         const port = list_port_for(window, event);
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {
@@ -121,7 +138,10 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (hooked.has(window)) return;
         const handler = (event: KeydownEvent) => on_keydown(window, event);
         // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
-        const stop_tab_listening = deps.on_tab_select(window, () => matcher?.reset());
+        const stop_tab_listening = deps.on_tab_select(window, () => {
+            matcher?.reset();
+            hold_until = 0;
+        });
         hooked.set(window, { handler, stop_tab_listening });
         window.addEventListener("keydown", handler, true);
     }
@@ -136,9 +156,10 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     }
 
     return {
-        install(tree) {
+        install(tree, hold = []) {
             const keymap = keymap_of(read_root(tree));
             matcher = create_matcher(keymap);
+            hold_commands = new Set(hold);
             if (listening) return;
             listening = true;
             deps.register_window_listener({ on_load_window: hook, on_unload_window: unhook });
@@ -150,6 +171,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             if (listening) deps.unregister_window_listener();
             listening = false;
             matcher = null;
+            hold_until = 0;
             sequence_window = null;
         },
     };

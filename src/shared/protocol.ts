@@ -19,6 +19,8 @@ export type MatcherSettings = Record<string, never>;
 export interface KeysInstallArgs {
     tree: KeymapTree;
     settings: MatcherSettings;
+    /** Ids of the commands that take the keyboard away from the list (they open the overlay). The runtime holds plain keys after one fires, until the focus moves. */
+    holdCommands: string[];
 }
 
 /** Payload of the `keys.onInvocation` event: a background leaf fired in a window. */

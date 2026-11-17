@@ -73,6 +73,7 @@ const tree = () => ({
             k: leaf("motion.up", "chrome"),
             x: leaf("msg.archive", "background"),
             q: leaf("motion.sideways", "chrome"),
+            ":": leaf("cmdline.open", "background"),
             g: { kind: "branch", children: { g: leaf("motion.top", "chrome") } },
             d: { kind: "branch", children: { d: leaf("msg.delete", "background") } },
         },
@@ -82,6 +83,7 @@ const tree = () => ({
 function setup(list_port_of?: (window: FakeWindow) => ListPort) {
     const windows = [new FakeWindow()];
     const emitted: KeysInvocation[] = [];
+    let time = 0;
     let window_listener: WindowListener<FakeWindow> | null = null;
     let registers = 0;
     let unregisters = 0;
@@ -101,9 +103,10 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
             return () => void window.tab_listeners.delete(listener);
         },
         window_id_of: () => 7,
+        now: () => time,
         emit: (invocation) => void emitted.push(invocation),
     };
-    return { windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
+    return { advance: (ms: number) => void (time += ms), windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
 }
 
 test("a motion key runs in the chrome and is cancelled", () => {
@@ -264,10 +267,10 @@ test("the parent removes the window listener on shutdown and every verb rethrows
     const context = { extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } };
     const keys = keys_parent.get_keys_api(context).keys;
 
-    await assert.rejects(keys.install({ tree: { version: 0 as never, root: {} }, settings: {} }), (error) => error instanceof StubExtensionError && /^keys\.install: keymap version 0/.test(error.message));
+    await assert.rejects(keys.install({ tree: { version: 0 as never, root: {} }, settings: {}, holdCommands: [] }), (error) => error instanceof StubExtensionError && /^keys\.install: keymap version 0/.test(error.message));
 
-    await keys.install({ tree: tree(), settings: {} });
-    await keys.install({ tree: tree(), settings: {} });
+    await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
+    await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
     assert.equal(platform.register_calls, 1);
     assert.equal(platform.window_listeners.size, 1);
     assert.equal(window.listeners.size, 1);
@@ -469,7 +472,7 @@ test("the parent listens for TabSelect on each window and stops on shutdown", as
     const window = new FakeWindow();
     const platform = stub_platform([window]);
     const keys_parent = await import("../src/chrome/parent_keys.ts");
-    await keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys.install({ tree: tree(), settings: {} });
+    await keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys.install({ tree: tree(), settings: {}, holdCommands: [] });
     assert.equal(window.tab_listeners.size, 1);
     keys_parent.shutdown();
     assert.equal(window.tab_listeners.size, 0);
@@ -484,4 +487,70 @@ test("an unloaded window stops listening while another keeps its listener", () =
     unload(other);
     assert.equal(other.tab_listeners.size, 0);
     assert.equal(windows[0]!.tab_listeners.size, 1);
+});
+
+// The overlay takes the focus a round trip after the key that opens it. Plain keys typed in between are dropped, so they never act on the list.
+test("after a hold command, plain keys are dropped until the focus reaches a text field", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    press(windows[0]!, ":");
+    const dropped = ["j", "x"].map((key) => press(windows[0]!, key));
+    assert.deepEqual(dropped.map((result) => result.cancelled), [true, true]);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+    assert.equal(windows[0]!.selected, 0);
+    // The focus arrives: a key from a text field ends the hold, and the next list key runs.
+    press(windows[0]!, "a", { target: { localName: "input" } });
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 1);
+});
+
+test("the hold ends after its timeout", () => {
+    const { windows, advance, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    press(windows[0]!, ":");
+    advance(1400);
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 0);
+    advance(200);
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 1);
+});
+
+test("a tab change ends the hold", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    press(windows[0]!, ":");
+    windows[0]!.select_tab();
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 1);
+});
+
+test("named keys and chords pass during the hold, and other commands start no hold", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    press(windows[0]!, "x");
+    assert.equal(press(windows[0]!, "j").cancelled, true);
+    assert.equal(windows[0]!.selected, 1);
+    press(windows[0]!, ":");
+    assert.equal(press(windows[0]!, "Escape").cancelled, false);
+    assert.equal(press(windows[0]!, "ArrowDown").cancelled, false);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["msg.archive", "cmdline.open"]);
+});
+
+test("with no hold commands installed, a key after a background command runs at once", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, ":");
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 1);
+});
+
+test("shutdown clears the hold", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    press(windows[0]!, ":");
+    runtime.shutdown();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 1);
 });
