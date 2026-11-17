@@ -59,13 +59,13 @@ async function find_row(scope: StepScope, flag: RowFlag, from: number, forward: 
 // Folders come in the order of `folders.query`. The search starts after the shown folder and wraps once, so `] U` in the last folder with unread mail goes round to the first.
 async function folder_with_unread(scope: StepScope, forward: boolean): Promise<MailFolder | undefined> {
     const tab = await active_mail_tab(scope);
-    const all = (await scope.api.folders.query({})).filter((folder) => !folder.isVirtual && !folder.specialUse?.some((use) => SKIPPED_FOLDERS.includes(use)));
+    const all = (await scope.api.folders.query({})).filter((folder) => !folder.isRoot && !folder.isVirtual && !folder.specialUse?.some((use) => SKIPPED_FOLDERS.includes(use)));
     const here = all.findIndex((folder) => folder.id === tab.displayedFolder?.id);
     const before = all.slice(0, Math.max(here, 0));
     const after = all.slice(here + 1);
     const around = forward ? [...after, ...before] : [...before.reverse(), ...after.reverse()];
-    // The unread counts only pick the folder, because a query over every folder takes seconds.
-    const counts = await Promise.all(around.map(async (folder) => (await scope.api.folders.getFolderInfo(folder.id)).unreadMessageCount ?? 0));
+    // The unread counts only pick the folder, because a query over every folder takes seconds. Thunderbird throws for a folder it has not opened yet, which counts as none.
+    const counts = await Promise.all(around.map((folder) => scope.api.folders.getFolderInfo(folder.id).then((info) => info.unreadMessageCount ?? 0, () => 0)));
     return around.find((_, index) => counts[index]! > 0);
 }
 

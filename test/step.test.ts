@@ -17,6 +17,9 @@ interface FolderSpec {
     unread: number;
     special?: string[];
     virtual?: boolean;
+    root?: boolean;
+    /** `getFolderInfo` throws for this folder, as Thunderbird does for one it has not opened. */
+    broken?: boolean;
 }
 
 // Row ids are index + 100. `flagged_rows` maps a row index to its flags. Folders default to one folder, "f1", that is shown.
@@ -37,8 +40,13 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
         keys,
         mailTabs,
         folders: {
-            query: async () => folders.map((folder) => ({ id: folder.id, accountId: "a", path: `/${folder.id}`, specialUse: folder.special, isVirtual: folder.virtual })),
-            getFolderInfo: async (id: string) => (calls.push(`info ${id}`), { unreadMessageCount: folders.find((folder) => folder.id === id)?.unread }),
+            query: async () => folders.map((folder) => ({ id: folder.id, accountId: "a", path: `/${folder.id}`, specialUse: folder.special, isVirtual: folder.virtual, isRoot: folder.root })),
+            getFolderInfo: async (id: string) => {
+                calls.push(`info ${id}`);
+                const folder = folders.find((candidate) => candidate.id === id);
+                if (folder?.broken || folder?.root) throw new Error("An unexpected error occurred");
+                return { unreadMessageCount: folder?.unread };
+            },
         },
         messages: {
             query: async (query: { folderId: string }) => (calls.push(`query ${query.folderId}`), options.empty_first_page ? { id: "p1", messages: [] } : { messages: [{ id: 900 }] }),
@@ -144,4 +152,12 @@ test("] U goes on to the next page when the first one comes back empty", async (
     const fake = step_fake({ rows: 3, current: 1, folders: [{ id: "a", unread: 0 }, { id: "b", unread: 3 }], shown: "a", empty_first_page: true });
     await fake.run("step.unread", { direction: "next", scope: "all_folders" });
     assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query b", "continueList", "show b", "select 9 900"]);
+});
+
+test("] U skips root folders and folders whose unread count Thunderbird cannot read", async () => {
+    const folders: FolderSpec[] = [{ id: "r", unread: 0, root: true }, { id: "a", unread: 0 }, { id: "b", unread: 9, broken: true }, { id: "c", unread: 2 }];
+    const fake = step_fake({ rows: 3, current: 1, folders, shown: "a" });
+    await fake.run("step.unread", { direction: "next", scope: "all_folders" });
+    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query c", "show c", "select 9 900"]);
+    assert.equal(fake.calls().includes("info r"), false);
 });
