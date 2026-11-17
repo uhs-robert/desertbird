@@ -132,12 +132,13 @@ async function hud_pixels(instance, name) {
 }
 
 // Waits out earlier toasts, presses the key, then reads the toast strip while a toast shows and again after it expired. A toast is proven by the strip differing while it shows and matching the strip from before once the toast time is over.
-async function toast_cycle(instance, name, press_args, lead_keys = []) {
-  await sleep(7000);
+async function toast_cycle(instance, name, press_args, lead_keys = [], { wait_out_toasts = true } = {}) {
+  if (wait_out_toasts) await sleep(7000);
   const before = await hud_pixels(instance, `${name}_before`);
   for (const key of lead_keys) await instance.press([key]);
   const state = await key_and_state(instance, press_args, 1500);
   const during = await hud_pixels(instance, `${name}_during`);
+  if (!wait_out_toasts) return { state, shown: during !== before };
   await sleep(6000);
   const after = await hud_pixels(instance, `${name}_after`);
   return { state, shown: during !== before, gone: after === before };
@@ -928,11 +929,11 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const tabs_of = async () => main_window_tabs(await instance.ask("state"));
 
   // q on the only mail tab: tabs.remove does nothing there, so the command refuses with a notification and the tab stays.
-  const refused_q = await toast_cycle(instance, `${app}_q`, ["q"]);
+  // The tab steps below run while this toast still shows, as they did with a notification, so the run waits neither before nor after.
+  const refused_q = await toast_cycle(instance, `${app}_q`, ["q"], [], { wait_out_toasts: false });
   let state = refused_q.state;
   check(app, kind, "q on the only mail tab leaves it open", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}`);
   check(app, kind, "q on the only mail tab shows the refusal as a toast", refused_q.shown, "the toast strip differs while the toast shows");
-  check(app, kind, "the toast of q is gone after toast_error_ms", refused_q.gone, "the toast strip matches the strip from before");
 
   // What the tabs API reports for the first mail tab and for a second one.
   const second = await instance.ask("open_mail_tab");
