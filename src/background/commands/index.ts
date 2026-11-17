@@ -15,10 +15,11 @@ import { snooze } from "./snooze.ts";
 import { reading } from "./reading.ts";
 import { view } from "./view.ts";
 import { tabs } from "./tabs.ts";
+import { thread } from "./thread.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread };
 
 export const registry = create_registry();
 

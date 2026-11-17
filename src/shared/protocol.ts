@@ -99,6 +99,48 @@ export const EXPERIMENT_VERBS = {
 export interface KeysApi {
     install(args: KeysInstallArgs): Promise<void>;
     onInvocation: { addListener(listener: (invocation: KeysInvocation) => void): void; removeListener(listener: (invocation: KeysInvocation) => void): void };
+    viewRows(args: KeysViewRowsArgs): Promise<KeysViewRowsResult>;
+    viewThread(args: KeysViewThreadArgs): Promise<void>;
+    viewAllThreads(args: KeysViewAllThreadsArgs): Promise<void>;
+    viewScroll(args: KeysViewScrollArgs): Promise<void>;
+}
+
+/** One visible row of the thread list. `depth` 0 is a thread root. `collapsed` is true for a thread whose replies are hidden. `id` is null when the extension cannot name the message. */
+export interface ViewRow {
+    index: number;
+    id: number | null;
+    depth: number;
+    collapsed: boolean;
+    unread: boolean;
+}
+
+export interface KeysViewRowsArgs {
+    windowId: number;
+    first: number;
+    last: number;
+}
+
+/** `current` is the current row, or -1. `rows` holds the rows from `first` to `last` that exist, at most 500. */
+export interface KeysViewRowsResult {
+    current: number;
+    rows: ViewRow[];
+}
+
+export interface KeysViewThreadArgs {
+    windowId: number;
+    row: number;
+    open: boolean;
+}
+
+export interface KeysViewAllThreadsArgs {
+    windowId: number;
+    open: boolean;
+}
+
+export interface KeysViewScrollArgs {
+    windowId: number;
+    row: number;
+    position: "center" | "top" | "bottom";
 }
 
 export interface OverlayApi {

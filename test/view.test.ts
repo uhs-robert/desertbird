@@ -6,6 +6,7 @@ import { create_router } from "../src/background/router.ts";
 import { while_loading } from "../src/background/handlers/loading.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
 import type { RouterApi } from "../src/background/router.ts";
+import { read_rows, scroll_row } from "../src/chrome/view.ts";
 
 const INBOX = { id: "f-inbox", accountId: "a1", path: "/Inbox" };
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
@@ -187,4 +188,59 @@ test("a view key during a first display notifies that the folder is loading", as
     const api = { mailTabs: { query: async () => Promise.reject(new Error("An unexpected error occurred")) }, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(notification.message), "n1") }, keys: undefined } as unknown as RouterApi;
     await create_router(registry, api).run(invoke("pane.toggle", { pane: "message" }));
     assert.match(calls[0] ?? "", /still loading/);
+});
+
+// A thread list fake for the chrome verbs: a row spec is its depth, "+" a closed thread.
+function pane_fake(spec: (number | "+")[], current = 0) {
+    const calls: string[] = [];
+    const tree = {
+        selectedIndex: current,
+        currentIndex: current,
+        clientHeight: 500,
+        table: { header: { clientHeight: 20 } },
+        scrollToIndex: (index: number) => void calls.push(`scrollToIndex ${index}`),
+        getRowAtIndex: () => ({ offsetHeight: 20 }),
+        scrollTo: (options: { top: number }) => void calls.push(`scrollTo ${options.top}`),
+        expandRowAtIndex: (index: number) => void calls.push(`expand ${index}`),
+        collapseRowAtIndex: (index: number) => void calls.push(`collapse ${index}`),
+    };
+    const gDBView = {
+        rowCount: spec.length,
+        getSelectedMsgHdrs: () => [],
+        getMsgHdrAt: (index: number) => ({ isRead: index % 2 === 0 }),
+        getLevel: (index: number) => (spec[index] === "+" ? 0 : (spec[index] as number)),
+        isContainer: (index: number) => spec[index] === "+",
+        isContainerOpen: () => false,
+    };
+    const commandController = { doCommand: (command: string) => void calls.push(command) };
+    return { pane: { gDBView, threadTree: tree, commandController }, calls };
+}
+
+test("read_rows names index, id, depth, collapsed and unread, cut to the list", () => {
+    const { pane } = pane_fake([0, 1, "+"], 1);
+    const result = read_rows(pane, 1, 9, (header) => ((header as { isRead: boolean }).isRead ? 7 : 8));
+    assert.equal(result.current, 1);
+    assert.deepEqual(result.rows, [
+        { index: 1, id: 8, depth: 1, collapsed: false, unread: true },
+        { index: 2, id: 7, depth: 0, collapsed: true, unread: false },
+    ]);
+    assert.deepEqual(read_rows(pane, 5, 9, () => 1).rows, []);
+});
+
+test("read_rows stops at 500 rows and reports -1 when no view is loaded", () => {
+    const { pane } = pane_fake(Array.from({ length: 900 }, () => 0));
+    assert.equal(read_rows(pane, 0, 899, () => 1).rows.length, 500);
+    assert.deepEqual(read_rows({ ...pane, gDBView: null }, 0, 3, () => 1).rows, []);
+});
+
+test("scroll_row puts the row at the top, middle or bottom of the visible height", () => {
+    // Row 40 of 20 pixel rows starts at 800. 480 pixels are visible under the header.
+    for (const [position, top] of [["top", 800], ["center", 570], ["bottom", 340]] as const) {
+        const { pane, calls } = pane_fake([0], 40);
+        scroll_row(pane.threadTree, 40, position);
+        assert.deepEqual(calls, ["scrollToIndex 40", `scrollTo ${top}`], position);
+    }
+    const { pane, calls } = pane_fake([0], 1);
+    scroll_row(pane.threadTree, 1, "center");
+    assert.equal(calls.at(-1), "scrollTo 0");
 });
