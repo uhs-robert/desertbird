@@ -10,13 +10,13 @@ export interface ThreadViewApi {
     mailTabs: ViewApi["mailTabs"] & { setSelectedMessages(tab_id: number, message_ids: number[]): Promise<void> };
 }
 
-type ThreadScope = HandlerScope<ThreadViewApi>;
+export type ThreadScope = HandlerScope<ThreadViewApi>;
 
 // A backward or forward search for a thread root reads the list in blocks of this many rows.
-const BLOCK = 50;
+export const BLOCK = 50;
 
 /** The current row and its place in the list, or a refusal when nothing is selected. */
-async function current_row(scope: ThreadScope): Promise<ViewRow> {
+export async function current_row(scope: ThreadScope): Promise<ViewRow> {
     const { current } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
     if (current < 0) throw new RuntimeRefusal("No row is selected.");
     const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: current, last: current });
@@ -42,7 +42,7 @@ async function root_after(scope: ThreadScope, index: number): Promise<ViewRow | 
     }
 }
 
-async function select_row(scope: ThreadScope, row: ViewRow): Promise<void> {
+export async function select_row(scope: ThreadScope, row: Pick<ViewRow, "id">): Promise<void> {
     if (row.id === null) throw new RuntimeRefusal("Thunderbird gave no message for that row.");
     const tab = await active_mail_tab(scope);
     await scope.api.mailTabs.setSelectedMessages(tab.id, [row.id]);

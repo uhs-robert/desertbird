@@ -28,7 +28,7 @@ export interface About3PaneLike {
 
 /** The members only the thread verbs read, kept apart so the key path needs none of them. */
 export interface RowsDbView extends DbViewLike {
-    getMsgHdrAt(index: number): { isRead: boolean } | null;
+    getMsgHdrAt(index: number): { isRead: boolean; flags: number } | null;
     getLevel(index: number): number;
     isContainer(index: number): boolean;
     isContainerOpen(index: number): boolean;
@@ -96,7 +96,7 @@ export function read_rows(about_3pane: ThreadVerbPane, first: number, last: numb
     const rows: KeysViewRowsResult["rows"] = [];
     for (let index = first; view && index <= Math.min(last, view.rowCount - 1, first + 499); index++) {
         const header = view.getMsgHdrAt(index);
-        rows.push({ index, id: header && message_id_of(header), depth: view.getLevel(index), collapsed: view.isContainer(index) && !view.isContainerOpen(index), unread: header?.isRead === false });
+        rows.push({ index, id: header && message_id_of(header), depth: view.getLevel(index), collapsed: view.isContainer(index) && !view.isContainerOpen(index), unread: header?.isRead === false, flags: header?.flags ?? 0 });
     }
     return { current: about_3pane.threadTree.currentIndex ?? -1, rows };
 }

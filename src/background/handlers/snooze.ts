@@ -24,7 +24,7 @@ interface MessagePage {
 
 interface MessageQueryApi {
     messages: {
-        query(query: { headerMessageId: string; folderId: string; autoPaginationTimeout: number }): Promise<MessagePage>;
+        query(query: { headerMessageId?: string; folderId: string; unread?: true; messagesPerPage?: number; autoPaginationTimeout: number }): Promise<MessagePage>;
         continueList(list_id: string): Promise<MessagePage>;
     };
 }
