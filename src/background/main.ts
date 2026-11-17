@@ -12,6 +12,8 @@ import { start_jump_history } from "./handlers/jump_history.ts";
 import { create_body_requests } from "./body_requests.ts";
 import type { BodyRequestApi } from "./body_requests.ts";
 import { notify_refusal } from "./notify.ts";
+import { create_new_mail_notifier } from "./new_mail_notify.ts";
+import type { NewMailApi } from "./new_mail_notify.ts";
 import { create_router } from "./router.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
 import { create_scheduler } from "./scheduler.ts";
@@ -40,6 +42,9 @@ interface StorageChange {
 
 interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
     windows: BodyRequestApi["windows"] & RouterApi["windows"];
+    messages: RouterApi["messages"] & NewMailApi["messages"];
+    notifications: RouterApi["notifications"] & NewMailApi["notifications"];
+    messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"];
     runtime: { onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void } };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
@@ -146,6 +151,9 @@ messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(mess
 messenger.overlay?.onClosed.addListener(({ windowId }) => cmdline.end(windowId));
 
 start_jump_history(messenger);
+
+// Top level, so each page start registers the listeners again.
+create_new_mail_notifier(messenger, async () => (await config_store.read()).settings.notify_new_mail).register();
 
 messenger.keys?.onInvocation.addListener((invocation) => {
     router.run(invocation).catch(console.error);

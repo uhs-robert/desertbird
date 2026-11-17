@@ -466,3 +466,14 @@ Taken from the API schemas. Not yet measured on a running Thunderbird or Betterb
 - `messages.listAttachments` returns `contentDisposition` and `type` on 153. The handler skips inline parts and every part whose type is not `normal` (a deleted attachment leaves a placeholder, a detached or linked part has no bytes in the message) and reports how many it skipped.
 - An explicit `saveAs` wins over the "always ask where to save" setting, so `where: downloads` sets `saveAs: false` and never shows the dialog. A canceled dialog rejects the call and counts as not saved.
 - Hand checks: the bytes of a saved file against the fixture attachment, a tens-of-MB attachment, Betterbird, a mail with a hostile file name, and a mail with a deleted attachment and an inline logo.
+
+## New-mail notifications
+
+Taken from the API schemas and the 153.7.0 notification code. Not yet measured on a running Thunderbird or Betterbird, so each point is a hand check.
+
+- Action buttons do not work. The `notifications` schema lists `buttons`, but `ext-notifications.js` carries `TODO Bug 1190681, implement button support`, and `onButtonClicked` never fires. Only `onClicked` and `onClosed` work. The add-on shows no buttons, and the click opens the message.
+- `messages.onNewMailReceived` fires after filters and junk classification, for the Inbox only unless `monitorAllFolders` is set. The handler still checks `folder.type` and skips read and junk messages.
+- The notification id to message ids map is in `storage.local` under `desertbird_new_mail_notifications`, because the background page can restart while notifications stay on screen. `onClosed` drops an entry. Turning the setting off clears every open notification and the map.
+- A click on a message that is gone (`messages.get` rejects) shows a notification and opens nothing. A moved message keeps its id and opens. The batch click opens the first message of the batch.
+- The first page of the delivered message list is the only page read. A delivery larger than one page is not counted past it.
+- Hand checks: the notification renders on Wayland, Plasma and GNOME with no buttons; real mail triggers it and the click opens the message; Thunderbird's own alert also shows (a double alert); Betterbird behaves the same.

@@ -12,6 +12,7 @@ interface StorageChange {
 function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = []) {
     const change_listeners: ((changes: Record<string, StorageChange>, area: string) => void)[] = [];
     const installs: unknown[] = [];
+    const new_mail_listeners: unknown[] = [];
     let report_read: () => void = () => {};
     const first_read = new Promise<void>((resolve) => (report_read = resolve));
     const messenger = {
@@ -33,7 +34,8 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
         runtime: { onMessage: { addListener: () => {} } },
-        notifications: { create: async () => "n" },
+        notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) }, onClosed: { addListener: () => {} } },
+        messages: { onNewMailReceived: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
         mailTabs: { query: async () => [], onDisplayedFolderChanged: { addListener: () => {} } },
     };
@@ -43,7 +45,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, external_write, first_read };
+    return { stored, installs, external_write, first_read, new_mail_listeners };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -101,4 +103,10 @@ test("a stored record of version 2, with no message tree, is rebuilt with one", 
     assert.equal(record.record_version, 4);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
     assert.equal(installs.length, 1);
+});
+
+test("the new-mail listeners register once at start", async () => {
+    const { new_mail_listeners } = stub_messenger();
+    await start_background();
+    assert.equal(new_mail_listeners.length, 2);
 });
