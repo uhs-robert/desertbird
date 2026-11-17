@@ -35,7 +35,7 @@ function mailbox(options: { storage?: Record<string, unknown>; header_failures?:
     const store = create_followup_store({ storage: storage.api });
     const messages: Stored[] = [];
     const notices: { id: string | undefined; message: string }[] = [];
-    const toast_kinds: { text: string; is_error: boolean }[] = [];
+    const toast_kinds: { window_id: number; text: string; is_error: boolean }[] = [];
     const opened: number[] = [];
     const known_tags: { key: string; tag: string }[] = [];
     const created_tags: string[] = [];
@@ -88,7 +88,7 @@ function mailbox(options: { storage?: Record<string, unknown>; header_failures?:
         followup: { items: store, now: () => NOW },
         notifications: { create: async (id: string | undefined, notification: { message: string }) => (notices.push({ id, message: notification.message }), "n") },
         // Answers false so the system notification still fires and `notices` stays complete.
-        toasts: { toast: async (_window_id: number, text: string, is_error: boolean) => (toast_kinds.push({ text, is_error }), false) },
+        toasts: { toast: async (window_id: number, text: string, is_error: boolean) => (toast_kinds.push({ window_id, text, is_error }), false) },
         messageDisplay: { open: async (properties: { messageId: number }) => void opened.push(properties.messageId) },
     };
     const add = (header: string, extra: Partial<Stored> = {}) => {
@@ -115,7 +115,7 @@ test("msg.remind stores the header id, the account, the anchor date and the due 
     await remind(box, [anchor.id], "three_days");
     assert.deepEqual(await box.store.list(), [item_of("<a@x>", NOW.getTime() + 3 * DAY)]);
     assert.match(box.notices[0]!.message, /^Reminder set for 1 message on /);
-    assert.equal(box.toast_kinds[0]!.is_error, false);
+    assert.deepEqual([box.toast_kinds[0]!.window_id, box.toast_kinds[0]!.is_error], [1, false]);
 });
 
 test("msg.remind again replaces the earlier reminder, and a message without a Message-ID is refused", async () => {
@@ -297,10 +297,10 @@ test("msg.remind_cancel drops the pending item and the tag, and says so when not
     assert.deepEqual(await box.store.list(), []);
     assert.deepEqual(box.messages[0]!.tags, ["$label1"]);
     assert.equal(box.notices.at(-1)!.message, "Cancelled 1 reminder.");
-    assert.equal(box.toast_kinds.at(-1)!.is_error, false);
+    assert.deepEqual([box.toast_kinds.at(-1)!.window_id, box.toast_kinds.at(-1)!.is_error], [1, false]);
     await cancel_followups({ api: box.api as never, window_id: 1, message_ids: [anchor.id], count: 1 });
     assert.equal(box.notices.at(-1)!.message, "No pending reminder on the selected messages.");
-    assert.equal(box.toast_kinds.at(-1)!.is_error, true);
+    assert.deepEqual([box.toast_kinds.at(-1)!.window_id, box.toast_kinds.at(-1)!.is_error], [1, true]);
 });
 
 test("a click on the notification opens the anchor, and other notifications are ignored", async () => {
