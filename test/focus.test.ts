@@ -140,3 +140,13 @@ test("focus inside a frame of the mail is not a live body: the body script does 
     mail_document.activeElement = element("a");
     assert.equal(body_script_is_live(document_of(three_pane)), true);
 });
+
+test("a key is not typing but is left alone when the focused message body runs the body script, and a frame in the mail keeps the swallow", () => {
+    const frame = element("iframe", { contentDocument: { activeElement: element("body"), documentElement: { hasAttribute: () => false } } });
+    const mail_document = { activeElement: element("a") as FocusNode | null, body: element("body"), documentElement: { hasAttribute: (name: string) => name === BODY_SCRIPT_LIVE_ATTRIBUTE } };
+    const message_pane = element("browser", { id: "messagepane", contentDocument: mail_document });
+    const three_pane = element("browser", { contentDocument: { activeElement: element("browser", { id: "messageBrowser", contentDocument: { activeElement: message_pane } }) } });
+    assert.equal(is_typing({ target: element("a") }, document_of(three_pane)), true);
+    mail_document.activeElement = frame;
+    assert.equal(is_typing({ target: element("a") }, document_of(three_pane)), false);
+});

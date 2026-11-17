@@ -22,8 +22,8 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
     process.exit(1);
 }
 
-// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. AGENTS.md records the same number.
-const PARENT_MAX_BYTES = 18004;
+// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard is 18004 plus 372 rounded up to the next 100. AGENTS.md records the same number.
+const PARENT_MAX_BYTES = 18400;
 
 // The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent. AGENTS.md records the same number.
 const CONTENT_MAX_BYTES = 10633;

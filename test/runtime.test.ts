@@ -107,10 +107,9 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         unregister_window_listener: () => void unregisters++,
         open_windows: () => windows,
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
-        is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
+        is_typing_target: (window, event) => (event.target as { localName: string }).localName === "input" || window.body_script_live,
         menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
-        body_script_is_live: (window) => window.body_script_live,
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
             return () => void window.tab_listeners.delete(listener);
@@ -324,6 +323,7 @@ test("with the body script live, reading-pane keys are no longer swallowed and s
     assert.deepEqual(emitted, []);
     // The marker only covers the reading pane: in the list the keys run as before.
     window.in_reading_pane = false;
+    window.body_script_live = false;
     assert.equal(press(window, "j").cancelled, true);
     assert.equal(window.selected, 1);
 });
@@ -337,6 +337,7 @@ test("a half-typed sequence in the list does not finish after a visit to a live 
     window.body_script_live = true;
     press(window, "j");
     window.in_reading_pane = false;
+    window.body_script_live = false;
     press(window, "d");
     assert.deepEqual(emitted, []);
 });

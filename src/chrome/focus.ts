@@ -53,10 +53,7 @@ const READING_PANE_IDS = new Set(["messageBrowser", "messagepane"]);
 export const in_reading_pane = (document: FocusDocument): boolean => focus_chain(document).some((node) => READING_PANE_IDS.has(node.id ?? ""));
 
 /** Whether the document that holds the focus is a message body that runs the body script. Only the innermost document counts: the script runs in the top frame only, so a key from a frame in the mail never reaches it. Focus in the message header or the thread list is in another document. */
-export function body_script_is_live(document: FocusDocument): boolean {
-    const holder = focus_chain(document).findLast((node) => node.contentDocument);
-    return holder?.contentDocument?.documentElement?.hasAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE) === true;
-}
+export const body_script_is_live = (document: FocusDocument): boolean => focus_chain(document).findLast((node) => node.contentDocument)?.contentDocument?.documentElement?.hasAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE) === true;
 
 // A menu or panel shows from the moment it opens until it closes. Its `open` attribute stays unset, so only `state` tells.
 const SHOWN_POPUP_STATES = new Set(["showing", "open"]);
@@ -75,5 +72,5 @@ export interface KeyEventTargets {
 /** A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside. */
 export function is_typing(event: KeyEventTargets, document: FocusDocument): boolean {
     const candidates = [event.target, event.originalTarget, innermost_focus(document)];
-    return candidates.some((candidate) => is_typing_element(candidate as FocusNode | null));
+    return candidates.some((candidate) => is_typing_element(candidate as FocusNode | null)) || body_script_is_live(document);
 }
