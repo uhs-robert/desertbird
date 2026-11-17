@@ -17,7 +17,7 @@
         "page": "options/options.html",
         "open_in_tab": true
     },
-    "permissions": ["accountsFolders", "accountsRead", "clipboardWrite", "compose", "messagesDelete", "messagesMove", "messagesRead", "messagesTagsList", "messagesUpdate", "notifications", "storage", "tabs"],
+    "permissions": ["accountsFolders", "accountsRead", "alarms", "clipboardWrite", "compose", "messagesDelete", "messagesMove", "messagesRead", "messagesTagsList", "messagesUpdate", "notifications", "storage", "tabs"],
     "experiment_apis": {
         "keys": {
             "schema": "experiment/keys.schema.json",

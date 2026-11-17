@@ -8,6 +8,8 @@ import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/sto
 import type { Config } from "./config/store.ts";
 import { notify_refusal } from "./notify.ts";
 import { create_router } from "./router.ts";
+import { create_scheduler } from "./scheduler.ts";
+import type { SchedulerApi } from "./scheduler.ts";
 import type { RouterApi } from "./router.ts";
 
 const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
@@ -26,7 +28,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys"> {
+interface Messenger extends Omit<RouterApi, "keys">, Pick<SchedulerApi, "alarms"> {
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
@@ -112,3 +114,5 @@ messenger.storage.onChanged.addListener((changes, area) => {
 });
 
 queue_install(false);
+
+create_scheduler(messenger).start().catch(console.error);

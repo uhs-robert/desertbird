@@ -33,6 +33,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
         notifications: { create: async () => "n" },
+        alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
     };
     (globalThis as Record<string, unknown>)["messenger"] = messenger;
     const external_write = (items: Record<string, unknown>) => {

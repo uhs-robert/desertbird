@@ -58,3 +58,48 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
     };
     return { api, calls };
 }
+
+/** A fake of `alarms` that dies with the page: `restart()` clears every alarm and listener, as a Firefox restart does. `fire` runs the listeners like an alarm going off. */
+export function fake_alarms() {
+    let alarms = new Map<string, { when?: number; periodInMinutes?: number }>();
+    let listeners: ((alarm: { name: string }) => void)[] = [];
+    return {
+        api: {
+            create: (name: string, info: { when?: number; periodInMinutes?: number }) => void alarms.set(name, info),
+            onAlarm: { addListener: (listener: (alarm: { name: string }) => void) => void listeners.push(listener) },
+        },
+        names: () => [...alarms.keys()].sort(),
+        info: (name: string) => alarms.get(name),
+        fire: (name: string) => listeners.forEach((listener) => listener({ name })),
+        restart: () => {
+            alarms = new Map();
+            listeners = [];
+        },
+    };
+}
+
+/** A fake of `storage.local` that fires `onChanged` after each write. `data` survives a restart. `write_delay_ms` makes writes slow, so quick successive writes overlap. */
+export function fake_storage(data: Record<string, unknown> = {}, write_delay_ms = 0) {
+    const listeners: ((changes: Record<string, unknown>, area: string) => void)[] = [];
+    return {
+        data,
+        api: {
+            local: {
+                get: async (key: string) => (key in data ? { [key]: structuredClone(data[key]) } : {}),
+                set: async (items: Record<string, unknown>) => {
+                    if (write_delay_ms > 0) await new Promise((resolve) => setTimeout(resolve, write_delay_ms));
+                    Object.assign(data, structuredClone(items));
+                    const changes = Object.fromEntries(Object.entries(items).map(([key, newValue]) => [key, { newValue }]));
+                    listeners.forEach((listener) => listener(changes, "local"));
+                },
+            },
+            onChanged: { addListener: (listener: (changes: Record<string, unknown>, area: string) => void) => void listeners.push(listener) },
+        },
+        /** A write from another page of the add-on. */
+        external_write: (items: Record<string, unknown>) => {
+            Object.assign(data, structuredClone(items));
+            const changes = Object.fromEntries(Object.entries(items).map(([key, newValue]) => [key, { newValue }]));
+            listeners.forEach((listener) => listener(changes, "local"));
+        },
+    };
+}
