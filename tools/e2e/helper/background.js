@@ -170,6 +170,7 @@ async function open_message_window() {
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
   const [message] = (await browser.mailTabs.getSelectedMessages(mail_tab.id)).messages;
   return (await browser.messageDisplay.open({ location: "window", messageId: message.id }))?.windowId ?? null;
+}
 
 // Folder history probe. folder_events_start records every onDisplayedFolderChanged event with a clock stamp, folder_events_read returns them.
 const folder_events = [];
