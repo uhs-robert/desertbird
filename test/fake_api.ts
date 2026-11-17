@@ -20,9 +20,13 @@ interface FakeOptions {
     /** The accounts `accounts.list` returns. */
     accounts?: { id: string; type: string }[];
     /** The attachments `messages.listAttachments` returns per message id. */
-    attachments?: Record<number, { name: string; partName: string }[]>;
+    attachments?: Record<number, { name: string; partName: string; contentDisposition?: string; type?: string }[]>;
     /** The end state of each download. Defaults to complete. */
-    download_state?: "complete" | "interrupted";
+    download_state?: "complete" | "interrupted" | "hold";
+    /** `downloads.download` rejects with this, as a canceled save dialog does. */
+    download_error?: string;
+    /** `getAttachmentFile` rejects for these part names. */
+    unreadable_parts?: string[];
     /** The time `snooze.now` returns. */
     now?: Date;
     /** The `storage.local` contents. Pass the same object to a second fake to model a background restart. */
@@ -32,9 +36,10 @@ interface FakeOptions {
 }
 
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
-export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore; displayed: () => MailFolder | undefined } {
+export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore; end_held_downloads: () => void; displayed: () => MailFolder | undefined } {
     const calls: string[] = [];
     let download_count = 0;
+    const held_downloads: number[] = [];
     const download_listeners = new Set<Parameters<RouterApi["downloads"]["onChanged"]["addListener"]>[0]>();
     const snoozes = create_snooze_store({ storage: fake_storage().api });
     const storage = options.storage ?? {};
@@ -53,7 +58,11 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             },
             update: async (id, properties) => void calls.push(`messages.update ${id} ${JSON.stringify(properties)}`),
             listAttachments: async (id) => (calls.push(`messages.listAttachments ${id}`), options.attachments?.[id] ?? []),
-            getAttachmentFile: async (id, part_name) => (calls.push(`messages.getAttachmentFile ${id} ${part_name}`), new Blob([`${id}/${part_name}`])),
+            getAttachmentFile: async (id, part_name) => {
+                calls.push(`messages.getAttachmentFile ${id} ${part_name}`);
+                if (options.unreadable_parts?.includes(part_name)) throw new Error("unreadable");
+                return new Blob([`${id}/${part_name}`]);
+            },
             move: async (ids, folder_id) => void calls.push(`messages.move ${ids.join(",")} ${folder_id}`),
             query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
             continueList: async () => ({ messages: [] }),
@@ -114,8 +123,10 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
         downloads: {
             download: async (download) => {
                 calls.push(`download ${download.filename} saveAs=${download.saveAs} ${download.conflictAction}`);
+                if (options.download_error !== undefined) throw new Error(options.download_error);
                 const id = ++download_count;
-                queueMicrotask(() => download_listeners.forEach((listener) => listener({ id, state: { current: options.download_state ?? "complete" } })));
+                if (options.download_state === "hold") held_downloads.push(id);
+                else queueMicrotask(() => download_listeners.forEach((listener) => listener({ id, state: { current: options.download_state ?? "complete" } })));
                 return id;
             },
             onChanged: { addListener: (listener) => void download_listeners.add(listener), removeListener: (listener) => void download_listeners.delete(listener) },
@@ -145,7 +156,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             end: (window_id) => void calls.push(`cmdline.end ${window_id}`),
         },
     };
-    return { api, calls, snoozes, displayed: () => displayed };
+    return { api, calls, snoozes, end_held_downloads: () => held_downloads.splice(0).forEach((id) => download_listeners.forEach((listener) => listener({ id, state: { current: "complete" } }))), displayed: () => displayed };
 }
 
 /** A fake of `alarms` that dies with the page: `restart()` clears every alarm and listener, as a Firefox restart does. `fire` runs the listeners like an alarm going off. */

@@ -461,8 +461,8 @@ Measured with the end-to-end run on the fixture Inbox (ten threads of four, open
 
 Taken from the API schemas. Not yet measured on a running Thunderbird or Betterbird, so each point is a hand check.
 
-- `downloads.download` resolves when the download starts, not when it ends. The handler keeps the blob URL until `downloads.onChanged` reports `complete` or `interrupted`, so a large file is not cut short.
+- `downloads.download` resolves when the download starts, not when it ends. The command ends then too. The blob URL stays until `downloads.onChanged` reports `complete` or `interrupted`, with a ten-minute fallback for a download that never reports one, so a large file is not cut short.
 - `filename` is relative to the Downloads directory, so the add-on cannot write elsewhere.
-- `messages.listAttachments` lists attachments only. The handler does not tell an inline image from an attached one, because the API reports no disposition.
-- Thunderbird's "always ask where to save" setting may override the folder and show a dialog. A canceled dialog counts as not saved.
-- Hand checks: the bytes of a saved file against the fixture attachment, a tens-of-MB attachment, Betterbird, and a mail with a hostile file name.
+- `messages.listAttachments` returns `contentDisposition` and `type` on 153. The handler skips inline parts and every part whose type is not `normal` (a deleted attachment leaves a placeholder, a detached or linked part has no bytes in the message) and reports how many it skipped.
+- An explicit `saveAs` wins over the "always ask where to save" setting, so `where: downloads` sets `saveAs: false` and never shows the dialog. A canceled dialog rejects the call and counts as not saved.
+- Hand checks: the bytes of a saved file against the fixture attachment, a tens-of-MB attachment, Betterbird, a mail with a hostile file name, and a mail with a deleted attachment and an inline logo.

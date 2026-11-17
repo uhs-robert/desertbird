@@ -35,6 +35,16 @@ test("a long name is cut and keeps its extension", () => {
     assert.ok(result.endsWith(".pdf"));
 });
 
+test("the cap counts UTF-8 bytes and never splits a code point", () => {
+    const bytes = (text: string) => new TextEncoder().encode(text).length;
+    const subject = safe("\u9577".repeat(200));
+    assert.ok(bytes(subject) <= 100 && subject === "\u9577".repeat(subject.length));
+    const name = safe(`${"\u540d".repeat(200)}.pdf`);
+    assert.ok(bytes(name) <= 100 && name.endsWith(".pdf"));
+    const astral = safe("\u{1F600}".repeat(100));
+    assert.ok(bytes(astral) <= 100 && astral === "\u{1F600}".repeat([...astral].length));
+});
+
 test("an empty or blank name takes the fallback", () => {
     assert.equal(safe(""), "fallback");
     assert.equal(safe("   "), "fallback");
