@@ -15,7 +15,7 @@ export interface MessageHeader {
     bccList?: string[];
     headerMessageId?: string;
     subject?: string;
-    folder?: { id?: string; accountId: string; path?: string };
+    folder?: { id?: string; accountId: string; path?: string; specialUse?: string[] };
 }
 
 export interface MailTag {

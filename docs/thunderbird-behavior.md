@@ -487,3 +487,12 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird (t
 - An empty `div` does not survive `setComposeDetails`, so the blank line between the text and the cite line is an empty `<p><br></p>`.
 - The HTML path sets the text with `textContent`. A slot text of `Second & <b>line</b>.` reads back as `Second &amp; &lt;b&gt;line&lt;/b&gt;.` in the draft body, so it is not live markup.
 - A preset `body` on `beginReply` was not measured, because the insert after the draft opens keeps both parts.
+## Follow-up reminders
+
+`msg.remind` is built on standard MailExtension APIs and is not measured in a running Thunderbird yet. Left for a hand check:
+
+- A reply is a message newer than the anchor in the Inbox or an Archives folder of the anchor's account, subfolders included (Thunderbird archives by year, into Archives/2026 and so on), whose `References` or `In-Reply-To` header names the anchor. The check runs only when the reminder is due, and not in the first 5 minutes after a start, because the folders have not synced then. A reply that arrived while Thunderbird was closed cancels the reminder once the sync has brought it in. A reply that syncs later than the grace is missed, which is a hand check. An anchor in Trash or Junk counts as deleted.
+- The reply check reads the headers of each newer message in those folders, so a busy Inbox makes the check slower. A reply filed in any other folder is not seen, and a header that cannot be read is skipped.
+- Hand check: a reply archived into a year subfolder of Archives cancels the reminder.
+- The `Follow up` tag is created on first use, which needs the `messagesTags` permission.
+- The notification id holds the account and the Message-ID header of the anchor. A click looks the anchor up and opens it in a tab.

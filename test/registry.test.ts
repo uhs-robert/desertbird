@@ -20,6 +20,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     attachments: { runs_in: "background", ids: ["msg.save_attachments"] },
     quick_reply: { runs_in: "background", ids: ["msg.reply_with"] },
     new_mail: { runs_in: "background", ids: ["notify.toggle"] },
+    followup: { runs_in: "background", ids: ["msg.remind", "msg.remind_cancel"] },
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"] },
 };
 
@@ -82,6 +83,10 @@ const MESSAGE_KEYS = [
     { id: "msg.snooze", keys: "mzt", args: { until: "tomorrow" } },
     { id: "msg.snooze", keys: "mzw", args: { until: "weekend" } },
     { id: "msg.snooze", keys: "mzm", args: { until: "monday" } },
+    { id: "msg.remind", keys: "mfd", args: { after: "one_day" } },
+    { id: "msg.remind", keys: "mft", args: { after: "three_days" } },
+    { id: "msg.remind", keys: "mfw", args: { after: "one_week" } },
+    { id: "msg.remind_cancel", keys: "mfc", args: undefined },
 ];
 
 test("the message and compose commands keep their default keys", () => {
