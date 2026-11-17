@@ -23,19 +23,22 @@ interface StoredMessage {
 }
 
 /** A small mailbox that keeps what the real API does: a move gives the message a new id and puts it in the target folder. */
-function mailbox(options: { cannot_create_in?: string[]; write_delay_ms?: number; move_failures?: number } = {}) {
+function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: string[]; hang_create_in?: string[]; namespace_in?: string[]; create_delay_ms?: number; page_size?: number; write_delay_ms?: number; inbox_lookup_failures?: number } = {}) {
     const storage = fake_storage({}, options.write_delay_ms ?? 0);
     const store = create_snooze_store({ storage: storage.api });
     const folders: (MailFolder & { isRoot?: boolean })[] = [
-        { id: "imap-root", accountId: "imap", path: "/", isRoot: true },
+        { id: "imap-root", accountId: "imap", path: "/", isRoot: true, canAddSubfolders: !options.cannot_create_in?.includes("imap") },
+        { id: "imap-sent", accountId: "imap", path: "/Sent", specialUse: ["sent"] },
         { id: "imap-inbox", accountId: "imap", path: "/INBOX", specialUse: ["inbox"] },
-        { id: "local-root", accountId: "local", path: "/", isRoot: true },
+        { id: "local-root", accountId: "local", path: "/", isRoot: true, canAddSubfolders: !options.cannot_create_in?.includes("local") },
         { id: "local-inbox", accountId: "local", path: "/Inbox", specialUse: ["inbox"] },
     ];
     const messages: StoredMessage[] = [];
     const log: string[] = [];
     const notices: string[] = [];
     let next_id = 100;
+    let inbox_lookup_failures = options.inbox_lookup_failures ?? 0;
+    const lists = new Map<string, MessageHeader[][]>();
     const header_of = (message: StoredMessage): MessageHeader => {
         const folder = folders.find((candidate) => candidate.id === message.folder_id)!;
         return { id: message.id, date: new Date(0), read: message.read, headerMessageId: message.header, subject: message.subject, folder: { id: folder.id, accountId: folder.accountId, path: folder.path } };
@@ -55,23 +58,46 @@ function mailbox(options: { cannot_create_in?: string[]; write_delay_ms?: number
                     found.folder_id = folder_id;
                 }
             },
-            query: async (query: { headerMessageId: string }) => ({ messages: messages.filter((message) => message.header === query.headerMessageId).map(header_of) }),
+            // A page holds `page_size` matches. The rest come through continueList.
+            query: async (query: { headerMessageId: string; folderId?: string }) => {
+                const matches = messages.filter((message) => message.header === query.headerMessageId && (query.folderId === undefined || message.folder_id === query.folderId)).map(header_of);
+                const size = options.page_size ?? matches.length + 1;
+                const pages: MessageHeader[][] = [];
+                for (let start = 0; start < matches.length; start += size) pages.push(matches.slice(start, start + size));
+                if (pages.length === 0) pages.push([]);
+                const list_id = `list-${lists.size}`;
+                lists.set(list_id, pages.slice(1));
+                return { id: pages.length > 1 ? list_id : null, messages: pages[0]! };
+            },
+            continueList: async (list_id: string) => {
+                const [page = [], ...rest] = lists.get(list_id) ?? [];
+                lists.set(list_id, rest);
+                return { id: rest.length > 0 ? list_id : null, messages: page };
+            },
             update: async (id: number, properties: { read: boolean }) => void (messages.find((message) => message.id === id)!.read = properties.read),
         },
         folders: {
-            query: async (query: { accountId?: string; path?: string; isRoot?: boolean; specialUse?: string[] }) =>
-                folders.filter((folder) => (query.accountId === undefined || folder.accountId === query.accountId) && (query.path === undefined || folder.path === query.path) && (query.isRoot === undefined || folder.isRoot === query.isRoot) && (query.specialUse === undefined || query.specialUse.some((use) => folder.specialUse?.includes(use)))),
+            query: async (query: { accountId?: string; path?: string; isRoot?: boolean; specialUse?: string[] }) => {
+                if (query.specialUse?.includes("inbox") && inbox_lookup_failures > 0) {
+                    inbox_lookup_failures--;
+                    throw new Error("the folder tree is not loaded yet");
+                }
+                return folders.filter((folder) => (query.accountId === undefined || folder.accountId === query.accountId) && (query.path === undefined || folder.path === query.path) && (query.isRoot === undefined || folder.isRoot === query.isRoot) && (query.specialUse === undefined || query.specialUse.some((use) => folder.specialUse?.includes(use))));
+            },
             create: async (parent_id: string, name: string) => {
                 const parent = folders.find((folder) => folder.id === parent_id)!;
                 log.push(`create ${parent.accountId} ${name}`);
-                if (options.cannot_create_in?.includes(parent.accountId)) throw new Error("This account cannot create folders.");
-                const created = { id: `${parent.accountId}-${name}`, accountId: parent.accountId, path: `/${name}` };
+                if (options.hang_create_in?.includes(parent.accountId)) return new Promise<MailFolder>(() => {});
+                await new Promise((resolve) => setTimeout(resolve, options.create_delay_ms ?? 0));
+                if (options.create_fails_in?.includes(parent.accountId)) throw new Error("The server refused the folder.");
+                if (folders.some((folder) => folder.accountId === parent.accountId && folder.id === `${parent.accountId}-${name}`)) throw new Error(`${name} already exists.`);
+                const created = { id: `${parent.accountId}-${name}`, accountId: parent.accountId, path: options.namespace_in?.includes(parent.accountId) ? `/INBOX/${name}` : `/${name}` };
                 folders.push(created);
                 return created;
             },
         },
         accounts: { list: async () => [{ id: "imap", type: "imap" }, { id: "local", type: "none" }] },
-        snooze: { items: store, now: () => NOW },
+        snooze: { items: store, now: () => NOW, create_timeout_ms: 60 },
         notifications: { create: async (_id: string | undefined, notification: { message: string }) => (notices.push(notification.message), "n") },
     };
     const add = (header: string, folder_id = "imap-inbox") => {
@@ -92,7 +118,7 @@ test("a snooze creates the Snoozed folder in the message's account, moves the me
     await snooze(box, [message.id]);
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
     assert.deepEqual(box.log, ["create imap Snoozed", "move <a@x> imap-inbox -> imap-Snoozed"]);
-    assert.deepEqual(await box.store.list(), [{ header_message_id: "<a@x>", origin_account_id: "imap", due_ms: tomorrow_8 }]);
+    assert.deepEqual(await box.store.list(), [{ header_message_id: "<a@x>", origin_account_id: "imap", folder_id: "imap-Snoozed", due_ms: tomorrow_8 }]);
     assert.match(box.notices[0]!, /^Snoozed 1 message until /);
 });
 
@@ -114,10 +140,10 @@ test("an account that cannot create the folder falls back to Local Folders and k
     assert.equal((await box.store.list())[0]?.origin_account_id, "imap");
 });
 
-test("when Local Folders cannot create the folder either, the snooze fails and stores nothing", async () => {
+test("when Local Folders cannot hold the folder either, the snooze fails and stores nothing", async () => {
     const box = mailbox({ cannot_create_in: ["imap", "local"] });
     const message = box.add("<a@x>");
-    await assert.rejects(snooze(box, [message.id]), /cannot create folders/);
+    await assert.rejects(snooze(box, [message.id]), /cannot hold a Snoozed folder/);
     assert.deepEqual(await box.store.list(), []);
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
@@ -170,7 +196,7 @@ test("a wake from the Local Folders fallback returns the message to the origin a
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
-test("a message gone at wake time is dropped with a notification and nothing moves", async () => {
+test("a message no longer in Snoozed at wake time is dropped with a notification and nothing moves", async () => {
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
@@ -178,7 +204,7 @@ test("a message gone at wake time is dropped with a notification and nothing mov
     box.notices.length = 0;
     box.log.length = 0;
     await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item));
-    assert.deepEqual(box.notices, ["A snoozed message is gone, so it did not return."]);
+    assert.deepEqual(box.notices, ["A snoozed message is no longer in the Snoozed folder, so it did not return."]);
     assert.deepEqual(box.log, []);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -216,7 +242,7 @@ test("a repeat of a wake that already moved the message only marks it unread and
     assert.equal(box.messages[0]?.read, false);
 });
 
-test("an account with no Inbox keeps the message in Snoozed and drops the item with a notification", async () => {
+test("an account that is gone keeps the message in Snoozed and drops the item with a notification", async () => {
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
@@ -224,7 +250,90 @@ test("an account with no Inbox keeps the message in Snoozed and drops the item w
     box.notices.length = 0;
     await wake_snoozed(box.api, { ...item!, origin_account_id: "removed" });
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
-    assert.match(box.notices[0]!, /no Inbox/);
+    assert.match(box.notices[0]!, /account is gone/);
+});
+
+test("a refused create or a create that never settles refuses the snooze, leaves the message in place and does not fall back", async () => {
+    const refused = mailbox({ create_fails_in: ["imap"] });
+    const one = refused.add("<a@x>");
+    await assert.rejects(snooze(refused, [one.id]), /server refused/);
+    assert.deepEqual(refused.where("<a@x>"), ["imap-inbox"]);
+    assert.equal(refused.log.some((line) => line.includes("create local")), false);
+    const hung = mailbox({ hang_create_in: ["imap"] });
+    const two = hung.add("<b@x>");
+    await assert.rejects(snooze(hung, [two.id]), /timed out/);
+    assert.deepEqual(hung.where("<b@x>"), ["imap-inbox"]);
+    assert.deepEqual(await hung.store.list(), []);
+    assert.equal(hung.log.some((line) => line.includes("create local")), false);
+});
+
+test("two snoozes at once in one account create the Snoozed folder once and both messages wait in it", async () => {
+    const box = mailbox({ create_delay_ms: 15 });
+    const one = box.add("<a@x>");
+    const two = box.add("<b@x>");
+    await Promise.all([snooze(box, [one.id]), snooze(box, [two.id], "monday")]);
+    assert.equal(box.log.filter((line) => line.startsWith("create")).length, 1);
+    assert.deepEqual([box.where("<a@x>"), box.where("<b@x>")], [["imap-Snoozed"], ["imap-Snoozed"]]);
+});
+
+test("a create that lost a race to another create finds the folder and uses it, with no fallback", async () => {
+    const box = mailbox({ create_delay_ms: 5 });
+    const one = box.add("<a@x>");
+    const racing = box.api.folders.create("imap-root", "Snoozed");
+    await snooze(box, [one.id]);
+    await racing;
+    assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
+    assert.equal(box.log.some((line) => line.includes("local")), false);
+});
+
+test("a Snoozed folder under INBOX is found again, and the wake reads the stored folder", async () => {
+    const box = mailbox({ namespace_in: ["imap"] });
+    const one = box.add("<a@x>");
+    const two = box.add("<b@x>");
+    await snooze(box, [one.id]);
+    await snooze(box, [two.id]);
+    assert.equal(box.log.filter((line) => line.startsWith("create")).length, 1);
+    assert.deepEqual((await box.store.list()).map((found) => found.folder_id), ["imap-Snoozed", "imap-Snoozed"]);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual([box.where("<a@x>"), box.where("<b@x>")], [["imap-inbox"], ["imap-inbox"]]);
+});
+
+test("the wake finds the waiting message on the second page, behind a copy in another folder", async () => {
+    const box = mailbox({ page_size: 1 });
+    const sent_copy = box.add("<a@x>", "imap-sent");
+    const message = box.add("<a@x>");
+    void sent_copy;
+    await snooze(box, [message.id]);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "imap-sent"]);
+    assert.deepEqual(await box.store.list(), []);
+});
+
+test("a copy of the message in the origin Inbox and one in another account do not stand in for the Snoozed copy", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    box.add("<a@x>", "local-inbox");
+    await snooze(box, [message.id]);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "local-inbox"]);
+});
+
+test("an Inbox lookup that fails keeps the item, and the next tick wakes the message", async () => {
+    const box = mailbox({ inbox_lookup_failures: 1 });
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    const original_error = console.error;
+    console.error = () => {};
+    try {
+        await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    } finally {
+        console.error = original_error;
+    }
+    assert.equal((await box.store.list()).length, 1);
+    assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
+    await box.store.wake_due(tomorrow_8 + MINUTE, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
+    assert.deepEqual(await box.store.list(), []);
 });
 
 /** One background run wired as main.ts does it: the listener is added before start. */

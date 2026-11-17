@@ -63,7 +63,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.junk` | `m j` | Standard | `messages.update` |
 | `msg.tag {tag}` | `m t`, `:tag` | Standard | `messages.update`, `messages.tags.list` |
 | `msg.move {folder}` | `m m`, `m p`, `:move` | Standard | `messages.move`, `folders.query` |
-| `msg.snooze {until: later_today, tomorrow, weekend, monday}` | `m z l`, `m z t`, `m z w`, `m z m` | Standard | `folders.create`, `messages.move`, `messages.query`, `messages.update`, `alarms`. The message waits in a `Snoozed` folder of its own account (Local Folders when the account cannot create one) and the due list lives in `storage.local`. |
+| `msg.snooze {until: later_today, tomorrow, weekend, monday}` | `m z l`, `m z t`, `m z w`, `m z m` | Standard | `messages.get`, `folders.query`, `folders.create`, `accounts.list`, `messages.move`, `messages.query`, `messages.update`, `alarms`. The message waits in a `Snoozed` folder of its own account (Local Folders when the account cannot hold subfolders) and the snoozed items live in `storage.local`. |
 | `msg.archive` | `x`, `:archive` | Standard | `messages.archive` |
 | `msg.delete` | `d d`, `:delete` | Standard | `messages.delete` |
 | `msg.reply {to: sender, all, list}` | `r`, `R` | Standard | `compose.beginReply` |

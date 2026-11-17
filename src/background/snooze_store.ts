@@ -12,6 +12,8 @@ export interface SnoozeItem {
     header_message_id: string;
     /** The account the message was in when snoozed. A wake returns it to this account's Inbox. */
     origin_account_id: string;
+    /** The Snoozed folder the message was moved into. The wake looks only there, so a copy of the message in another folder is never taken. */
+    folder_id: string;
     due_ms: number;
 }
 
@@ -33,7 +35,7 @@ export interface SnoozeStore {
 
 function is_item(value: unknown): value is SnoozeItem {
     const item = value as Partial<SnoozeItem> | null;
-    return typeof item?.header_message_id === "string" && typeof item.origin_account_id === "string" && Number.isFinite(item.due_ms);
+    return typeof item?.header_message_id === "string" && typeof item.origin_account_id === "string" && typeof item.folder_id === "string" && Number.isFinite(item.due_ms);
 }
 
 /** The hook for a change to the stored shape: turn each older version into the next one here, then fall through to the current check. A record from a newer version reads as empty. */

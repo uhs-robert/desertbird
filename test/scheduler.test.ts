@@ -7,7 +7,7 @@ import { fake_alarms, fake_storage } from "./fake_api.ts";
 
 const MINUTE = 60_000;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
-const item = (id: string, due_ms: number, account = "a1") => ({ header_message_id: id, origin_account_id: account, due_ms });
+const item = (id: string, due_ms: number, account = "a1") => ({ header_message_id: id, origin_account_id: account, folder_id: "f1", due_ms });
 const quiet = async (run: () => Promise<void>) => {
     const original_error = console.error;
     console.error = () => {};
@@ -171,7 +171,7 @@ test("snooze store round trip: add, replace, list and wake_due survive a fresh s
 test("the snooze record holds a header message id and an account and never a numeric message id", async () => {
     const storage = fake_storage();
     await create_snooze_store({ storage: storage.api }).add(item("<a@x>", 100));
-    assert.deepEqual(Object.keys((storage.data[SNOOZE_STORAGE_KEY] as { items: object[] }).items[0] ?? {}).sort(), ["due_ms", "header_message_id", "origin_account_id"]);
+    assert.deepEqual(Object.keys((storage.data[SNOOZE_STORAGE_KEY] as { items: object[] }).items[0] ?? {}).sort(), ["due_ms", "folder_id", "header_message_id", "origin_account_id"]);
 });
 
 test("two quick snoozes with a slow write lose neither", async () => {
