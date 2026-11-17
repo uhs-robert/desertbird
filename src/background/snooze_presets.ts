@@ -16,14 +16,15 @@ function at_morning(now: Date, days_ahead: number): Date {
     return day;
 }
 
-/** The next full hour at least three hours out, kept before 23:00. Late in the evening there is no such time, so it is one hour from now. */
+/** The first full hour more than three hours out, kept at 23:00 or earlier. When that leaves less than an hour, it is one hour from now. */
 function later_today(now: Date): Date {
     const candidate = new Date(now);
     candidate.setHours(candidate.getHours() + LATER_TODAY_HOURS + 1, 0, 0, 0);
     const evening = new Date(now);
     evening.setHours(LATE_EVENING_HOUR, 0, 0, 0);
     const result = candidate < evening ? candidate : evening;
-    return result > now ? result : new Date(now.getTime() + 60 * 60 * 1000);
+    const hour_ms = 60 * 60 * 1000;
+    return result.getTime() - now.getTime() >= hour_ms ? result : new Date(now.getTime() + hour_ms);
 }
 
 /** The due time in epoch milliseconds. `weekend` is the coming Saturday 08:00 and `monday` the coming Monday 08:00, always on a later day than `now`. */

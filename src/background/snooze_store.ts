@@ -24,8 +24,15 @@ export interface SnoozeStore {
     list(): Promise<SnoozeItem[]>;
     /** A message snoozed again replaces its earlier item. */
     add(item: SnoozeItem): Promise<void>;
-    /** Removes and returns the items due at `now_ms`. Two calls at once split the items between them, so a wake that fires twice acts once. */
-    take_due(now_ms: number): Promise<SnoozeItem[]>;
+    /** The items due at `now_ms`. They stay stored until `remove`. */
+    due(now_ms: number): Promise<SnoozeItem[]>;
+    /** Removes the item when it is still stored with the same due time, so a message snoozed again while its wake ran keeps its new item. */
+    remove(item: SnoozeItem): Promise<void>;
+    /**
+     * Runs `wake` on each due item and removes the item once `wake` succeeds. A failed wake keeps the item for the next tick. An item whose wake is still running is skipped, so ticks that overlap wake it once.
+     * The item leaves the store after the wake, never before, so a wake that fails at start (the account is not online yet) is not lost. `wake` must be safe to repeat, because a quit during a wake repeats it at the next start.
+     */
+    wake_due(now_ms: number, wake: (item: SnoozeItem) => Promise<void>): Promise<void>;
 }
 
 function is_item(value: unknown): value is SnoozeItem {
@@ -40,19 +47,34 @@ export function migrate_snooze_record(stored: unknown): SnoozeRecord | undefined
     return { record_version: SNOOZE_RECORD_VERSION, items: record.items.filter(is_item) };
 }
 
+const same_message = (a: SnoozeItem, b: SnoozeItem) => a.header_message_id === b.header_message_id && a.origin_account_id === b.origin_account_id;
+const key_of = (item: SnoozeItem) => JSON.stringify([item.origin_account_id, item.header_message_id]);
+
 export function create_snooze_store(api: RecordStorageApi): SnoozeStore {
     const store = create_record_store<SnoozeRecord>(api, { key: SNOOZE_STORAGE_KEY, empty: () => ({ record_version: SNOOZE_RECORD_VERSION, items: [] }), migrate: migrate_snooze_record });
+    const waking = new Set<string>();
+    const due = async (now_ms: number) => (await store.read()).items.filter((item) => item.due_ms <= now_ms);
+    const remove = (item: SnoozeItem) =>
+        store.update((record) => ({ value: { ...record, items: record.items.filter((other) => !(same_message(other, item) && other.due_ms === item.due_ms)) }, result: undefined }));
     return {
         list: async () => (await store.read()).items,
-        add: (item) =>
-            store.update((record) => ({
-                value: { ...record, items: [...record.items.filter((other) => !(other.header_message_id === item.header_message_id && other.origin_account_id === item.origin_account_id)), item] },
-                result: undefined,
-            })),
-        take_due: (now_ms) =>
-            store.update((record) => ({
-                value: { ...record, items: record.items.filter((item) => item.due_ms > now_ms) },
-                result: record.items.filter((item) => item.due_ms <= now_ms),
-            })),
+        add: (item) => store.update((record) => ({ value: { ...record, items: [...record.items.filter((other) => !same_message(other, item)), item] }, result: undefined })),
+        due,
+        remove,
+        async wake_due(now_ms, wake) {
+            for (const item of await due(now_ms)) {
+                const key = key_of(item);
+                if (waking.has(key)) continue;
+                waking.add(key);
+                try {
+                    await wake(item);
+                    await remove(item);
+                } catch (error) {
+                    console.error("desertbird snooze wake:", error);
+                } finally {
+                    waking.delete(key);
+                }
+            }
+        },
     };
 }

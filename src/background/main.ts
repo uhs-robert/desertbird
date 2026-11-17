@@ -101,6 +101,9 @@ function queue_install(drop_cache: boolean): void {
         .catch(report_failure);
 }
 
+// Exported so a feature adds its `on_due` listener before `start` runs below.
+export const scheduler = create_scheduler(messenger);
+
 const router = create_router(registry, { ...messenger, keys: messenger.keys });
 
 messenger.keys?.onInvocation.addListener((invocation) => {
@@ -115,4 +118,4 @@ messenger.storage.onChanged.addListener((changes, area) => {
 
 queue_install(false);
 
-create_scheduler(messenger).start().catch(console.error);
+scheduler.start().catch(console.error);
