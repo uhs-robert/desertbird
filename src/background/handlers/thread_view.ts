@@ -53,7 +53,9 @@ export async function step_thread_root(scope: ThreadScope, args: CheckedArgs): P
     const forward = args["direction"] === "next";
     let row = await current_row(scope);
     for (let step = 0; step < scope.count; step++) {
-        const target = await (forward ? root_after(scope, row.index) : root_at_or_before(scope, row.depth > 0 ? row.index : row.index - 1));
+        let target = await (forward ? root_after(scope, row.index) : root_at_or_before(scope, row.depth > 0 ? row.index : row.index - 1));
+        // A group header of a grouped view carries the id of its first member, so selecting it would not move. Search on.
+        while (!forward && target && target.id === row.id) target = target.index > 0 ? await root_at_or_before(scope, target.index - 1) : undefined;
         if (!target) {
             if (step === 0) throw new RuntimeRefusal(forward ? "No later thread." : "No earlier thread.");
             break;
@@ -68,7 +70,10 @@ export async function move_left(scope: ThreadScope): Promise<void> {
     const row = await current_row(scope);
     if (row.depth === 0) return void (await scope.api.keys.viewThread({ windowId: scope.window_id, row: row.index, open: false }));
     const root = await root_at_or_before(scope, row.index);
-    if (root) await select_row(scope, root);
+    if (!root) return;
+    // The root is a group header with this row's id, so selecting it changes nothing: close the group.
+    if (root.id === row.id) await scope.api.keys.viewThread({ windowId: scope.window_id, row: root.index, open: false });
+    else await select_row(scope, root);
 }
 
 // `l` opens a closed thread and on an open thread goes to its first reply.

@@ -9,8 +9,8 @@ import type { ViewRow } from "../src/shared/protocol.ts";
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
 
 // A row spec is its depth, with "+" for a closed thread. Row ids are index + 100.
-function list_fake(spec: (number | "+")[], current: number, count = 1) {
-    const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false }));
+function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[]) {
+    const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: ids?.[index] ?? index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false }));
     const calls: string[] = [];
     const keys = {
         viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current, rows: rows.slice(first, last + 1) }),
@@ -135,4 +135,21 @@ test("a thread command refuses when the Experiment is missing", async () => {
     const api = { keys: undefined, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(notification.message), "n1") } } as unknown as RouterApi;
     await create_router(registry, api).run({ command: "motion.left", args: {}, count: 1, windowId: 3, messageIds: [] });
     assert.match(calls[0] ?? "", /Experiment/);
+});
+
+test("in a grouped view a header shares the id of its first member: [ t searches past it and h closes the group", async () => {
+    const depths = [0, 1, 1, 0, 1, 1];
+    const ids = [100, 100, 101, 102, 102, 103];
+    const back = list_fake(depths, 4, 1, ids);
+    await back.run("step.thread_root", { direction: "previous" });
+    assert.deepEqual(back.calls(), ["select 9 100"]);
+    const none = list_fake(depths, 1, 1, ids);
+    await none.run("step.thread_root", { direction: "previous" });
+    assert.deepEqual(none.calls(), ["notify No earlier thread."]);
+    const close = list_fake(depths, 4, 1, ids);
+    await close.run("motion.left");
+    assert.deepEqual(close.calls(), ["viewThread 3 false"]);
+    const reply = list_fake(depths, 5, 1, ids);
+    await reply.run("motion.left");
+    assert.deepEqual(reply.calls(), ["select 9 102"]);
 });
