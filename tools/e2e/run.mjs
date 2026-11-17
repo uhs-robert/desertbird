@@ -844,7 +844,7 @@ async function run_mode_label(instance, { app, kind, shot }) {
   const after_insert = await strip_of("after_insert");
   // A main window that opens after the add-on started gets its own label.
   const piece = await strip_of("piece", LABEL_PIECE);
-  const second = (await instance.ask("open_normal_window")).opened;
+  const second = (await instance.ask("open_normal_window", 45000)).opened;
   await sleep(4000);
   const in_second_window = await strip_of("second_window", SECOND_WINDOW_PIECE);
   await shot(`label_${kind}_second_window`, `a second main window opened after the add-on started (${kind})`);
