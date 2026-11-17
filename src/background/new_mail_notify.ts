@@ -5,7 +5,7 @@ import { create_config_store } from "./config/store.ts";
 import { SETTINGS_KEY } from "./config/store.ts";
 import type { ConfigStorage, ConfigStore } from "./config/store.ts";
 import type { HandlerScope } from "./handlers/message.ts";
-import { notify_refusal } from "./notify.ts";
+import { notify_refusal, notify_result } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 
 /** More new messages than this in one delivery give a single batched notification. */
@@ -118,5 +118,5 @@ export async function toggle_new_mail_notify(scope: HandlerScope<ConfigStorage &
     const config = await store.read();
     const enabled = !config.settings.notify_new_mail;
     await store.write_settings({ ...config.setting_overrides, notify_new_mail: enabled });
-    await notify_refusal(api, `New-mail notifications are ${enabled ? "on" : "off"}.`);
+    await notify_result(api, `New-mail notifications are ${enabled ? "on" : "off"}.`);
 }
