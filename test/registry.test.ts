@@ -9,6 +9,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: strin
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.reply"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
+    clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -53,7 +54,7 @@ test("msg.reply checks its args in the one validator", () => {
     assert.equal(check_args(archive, { to: "sender" }).ok, false);
 });
 
-/** The phase 1 commands as shipped: their default key, args, side and bridge value. A refactor of the table must keep every row. */
+/** The commands as shipped: their default key, args, side and bridge value. A refactor of the table must keep every row. */
 const PHASE_1_COMMANDS = [
     { id: "motion.down", keys: "j", args: undefined, runs_in: "chrome", bridge: true },
     { id: "motion.up", keys: "k", args: undefined, runs_in: "chrome", bridge: true },
@@ -62,6 +63,12 @@ const PHASE_1_COMMANDS = [
     { id: "msg.archive", keys: "x", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.delete", keys: "dd", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.reply", keys: "r", args: { to: "sender" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "yy", args: { field: "content" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "ys", args: { field: "subject" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "yf", args: { field: "sender" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "ya", args: { field: "address" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "yi", args: { field: "message_id" }, runs_in: "background", bridge: false },
+    { id: "msg.open", keys: "<C-l>", args: undefined, runs_in: "background", bridge: false },
 ];
 
 test("the phase 1 commands keep their keys, args, side and bridge value", () => {

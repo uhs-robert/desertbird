@@ -263,6 +263,7 @@ The other rows were checked for presence only.
 
 ### Not measured
 
+- The size limit of `messages.getFull` for a large body, and so of a yank of one.
 - Key repeat, and a held key under a busy thread list. The burst test above ran 5 keys per burst.
 - Keys with focus in an extension page that is a content tab, the address book tab and the settings tab. `tabs.create` refused `about:addons` ("Loading URL not allowed").
 - A second window of the main type, and tabs other than the mail tab, the message tab and the content tab.
@@ -315,3 +316,7 @@ The event target seen from the top window is not enough to tell where focus is. 
 ### Selection after archive and delete
 
 Thunderbird keeps a row selected after `messages.archive` and `messages.delete` on the selected message. In the 60-message Inbox it selected the next row (archive of `Single 2` selected `Single 3`, delete of `Single 3` selected `Single 4`). With the last row removed it selected the new last row (`Single 18` after `Single 19`, `Single 17` after `Single 18`).
+
+### Clipboard write from the background (PR 5)
+
+`navigator.clipboard.writeText` called from the persistent background page, on a key press that arrived through the Experiment, writes the clipboard with the `clipboardWrite` permission and no user activation of the page. Measured on Thunderbird 153.7 and Betterbird, with the text read back through the e2e helper. `messengerUtilities.convertToPlainText` exists on both and turns HTML into text: it decodes entities, drops the title and puts a tab between table cells.

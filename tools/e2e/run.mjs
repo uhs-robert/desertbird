@@ -218,6 +218,42 @@ async function run_default(instance) {
   if (race_archived) gone.add(race_target);
   await shot("after_x_then_j", "list after x and j typed back to back");
 
+  const probe = await instance.ask("probe_plain_text");
+  check(app, kind, "messengerUtilities.convertToPlainText decodes entities, drops the title and separates cells", probe.converted === "It's \u00e9\nA\tB", JSON.stringify(probe));
+  // Yank: the background page writes the clipboard on a key, with no user activation of its own. The helper reads it back.
+  await key_and_state(instance, ["G"]);
+  state = await key_and_state(instance, ["k"]);
+  const yank_row = first_selected(state);
+  const yank_id = yank_row.replace("@fixture.invalid", "");
+  const yank_expected = {
+    y: `Body of ${yank_id}.\nSecond line of ${yank_id}.`,
+    s: state.selected[0].subject,
+    f: `Fixture Sender <${state.selected[0].subject.toLowerCase().replace(" ", "")}@fixture.invalid>`,
+    a: `${state.selected[0].subject.toLowerCase().replace(" ", "")}@fixture.invalid`,
+    i: yank_row,
+  };
+  for (const [key, expected] of Object.entries(yank_expected)) {
+    await instance.ask("clear_clipboard");
+    await instance.press(["y"]);
+    await sleep(150);
+    await instance.press([key]);
+    await sleep(1200);
+    const text = (await instance.ask("read_clipboard")).text;
+    check(app, kind, `y ${key} writes the clipboard`, text.replace(/\r\n/g, "\n").trim() === expected.trim(), `clipboard ${JSON.stringify(text)}, expected ${JSON.stringify(expected)}`);
+  }
+
+  // A collapsed thread root selects the whole thread. The first selected message decides, so yank still copies one body.
+  await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["g"]);
+  await instance.ask("clear_clipboard");
+  await instance.press(["y"]);
+  await sleep(150);
+  await instance.press(["y"]);
+  await sleep(1200);
+  const root_text = (await instance.ask("read_clipboard")).text;
+  const root_id = first_selected(state).replace("@fixture.invalid", "");
+  check(app, kind, "y y on a collapsed thread root copies the body of the first selected message", state.displayed.length > 1 && root_text.replace(/\r\n/g, "\n").trim() === `Body of ${root_id}.\nSecond line of ${root_id}.`, `displayed ${state.displayed.length}, selected ${first_selected(state)}, clipboard ${JSON.stringify(root_text)}`);
+
   // r on a collapsed thread root.
   await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
@@ -272,6 +308,31 @@ async function run_default(instance) {
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
 
+  // <C-l> on a collapsed thread root (several messages) refuses and opens no tab. On one message it opens a tab.
+  const tab_count = (current) => current.windows.filter((window) => window.type === "normal").flatMap((window) => window.tabs).length;
+  await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["g"]);
+  const tabs_before = tab_count(state);
+  const log_offset = instance.app_log().length;
+  await instance.press(["-k", "Control_L"]);
+  await instance.press(["-M", "ctrl", "l", "-m", "ctrl"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "C-l on a collapsed thread root opens no tab", state.displayed.length > 1 && tab_count(state) === tabs_before, `displayed ${state.displayed.length}, tabs ${tabs_before} then ${tab_count(state)}`);
+  note(app, kind, "C-l refusal", `libnotify warning in the log after the key: ${/libnotify/.test(instance.app_log().slice(log_offset))}`);
+  await key_and_state(instance, ["G"]);
+  await instance.press(["-k", "Control_L"]);
+  await instance.press(["-M", "ctrl", "l", "-m", "ctrl"]);
+  await sleep(2000);
+  state = await instance.ask("state");
+  check(app, kind, "C-l on one message opens it in a tab", tab_count(state) === tabs_before + 1, `tabs ${tabs_before} then ${tab_count(state)}`);
+  await shot("after_ctrl_l", "a message tab after C-l");
+  // Close the message tab again, so the view checks that follow act on the mail tab.
+  await instance.press(["-k", "Control_L"]);
+  await instance.press(["-M", "ctrl", "w", "-m", "ctrl"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "Ctrl+W closes the message tab again", tab_count(state) === tabs_before, `tabs ${tabs_before} then ${tab_count(state)}`);
   await run_view_settings(instance, { app, kind });
   await shot("after_view_settings", "Views folder after the view setting keys");
 }
