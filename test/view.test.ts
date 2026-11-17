@@ -204,7 +204,7 @@ function pane_fake(spec: (number | "+")[], current = 0) {
     const gDBView = {
         rowCount: spec.length,
         getSelectedMsgHdrs: () => [],
-        getMsgHdrAt: (index: number) => ({ isRead: index % 2 === 0 }),
+        getMsgHdrAt: (index: number) => ({ isRead: index % 2 === 0, flags: index === 1 ? 0x10000000 : 0 }),
         getLevel: (index: number) => (spec[index] === "+" ? 0 : (spec[index] as number)),
         isContainer: (index: number) => spec[index] === "+",
         isContainerOpen: () => false,
@@ -213,13 +213,13 @@ function pane_fake(spec: (number | "+")[], current = 0) {
     return { pane: { gDBView, threadTree: tree, commandController }, calls };
 }
 
-test("read_rows names index, id, depth, collapsed and unread, cut to the list", () => {
+test("read_rows names index, id, depth, collapsed, unread and flags, cut to the list", () => {
     const { pane } = pane_fake([0, 1, "+"], 1);
     const result = read_rows(pane, 1, 9, (header) => ((header as { isRead: boolean }).isRead ? 7 : 8));
     assert.equal(result.current, 1);
     assert.deepEqual(result.rows, [
-        { index: 1, id: 8, depth: 1, collapsed: false, unread: true },
-        { index: 2, id: 7, depth: 0, collapsed: true, unread: false },
+        { index: 1, id: 8, depth: 1, collapsed: false, unread: true, flags: 0x10000000 },
+        { index: 2, id: 7, depth: 0, collapsed: true, unread: false, flags: 0 },
     ]);
     assert.deepEqual(read_rows(pane, 5, 9, () => 1).rows, []);
 });

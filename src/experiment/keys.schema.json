@@ -49,7 +49,7 @@
         "name": "viewRows",
         "type": "function",
         "async": true,
-        "description": "Reads the thread list rows from first to last: index, message id, depth, collapsed and unread, and the current row.",
+        "description": "Reads the thread list rows from first to last: index, message id, depth, collapsed, unread and the message flags word, and the current row.",
         "parameters": [
           {
             "name": "args",

@@ -10,7 +10,7 @@ const ok = (id: string, args: Record<string, unknown>) => check_args(registry.ge
 
 // A row spec is its depth, with "+" for a closed thread. Row ids are index + 100.
 function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[]) {
-    const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: ids?.[index] ?? index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false }));
+    const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: ids?.[index] ?? index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false, flags: 0 }));
     const calls: string[] = [];
     const keys = {
         viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current, rows: rows.slice(first, last + 1) }),

@@ -105,13 +105,14 @@ export interface KeysApi {
     viewScroll(args: KeysViewScrollArgs): Promise<void>;
 }
 
-/** One visible row of the thread list. `depth` 0 is a thread root. `collapsed` is true for a thread whose replies are hidden. `id` is null when the extension cannot name the message. */
+/** One visible row of the thread list. `depth` 0 is a thread root. `collapsed` is true for a thread whose replies are hidden. `flags` is the `nsMsgMessageFlags` word of the row's own message, so a collapsed thread shows its root's. The background reads the bits it needs. `id` is null when the extension cannot name the message. */
 export interface ViewRow {
     index: number;
     id: number | null;
     depth: number;
     collapsed: boolean;
     unread: boolean;
+    flags: number;
 }
 
 export interface KeysViewRowsArgs {
