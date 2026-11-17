@@ -1,4 +1,4 @@
-// A versioned record in `storage.local` with a memory copy that mirrors it. Shared by the scheduler and the snooze store.
+// A versioned record in `storage.local` with a memory copy that mirrors it. Used by the snooze store and meant for the follow-up reminders.
 
 export interface RecordStorageApi {
     storage: {

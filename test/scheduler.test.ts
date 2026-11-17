@@ -130,6 +130,24 @@ test("two ticks that overlap wake the item once, with an in-flight guard", async
     assert.deepEqual(await store.list(), []);
 });
 
+test("a tick that read its list before another tick woke an item does not wake that item again", async () => {
+    const store = create_snooze_store({ storage: fake_storage().api });
+    await store.add(item("<a@x>", 100));
+    await store.add(item("<b@x>", 100));
+    const woken: string[] = [];
+    let release_a: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release_a = resolve));
+    const first_tick = store.wake_due(200, async (found) => {
+        woken.push(`t1:${found.header_message_id}`);
+        if (found.header_message_id === "<a@x>") await gate;
+    });
+    await settle();
+    await store.wake_due(200, async (found) => void woken.push(`t2:${found.header_message_id}`));
+    release_a();
+    await first_tick;
+    assert.deepEqual(woken, ["t1:<a@x>", "t2:<b@x>"]);
+});
+
 test("a message snoozed again while its wake runs keeps the new item", async () => {
     const store = create_snooze_store({ storage: fake_storage().api });
     await store.add(item("<m1@x>", 100));
@@ -137,7 +155,7 @@ test("a message snoozed again while its wake runs keeps the new item", async () 
     assert.deepEqual(await store.list(), [item("<m1@x>", 9000)]);
 });
 
-test("snooze store round trip: add, replace, list, due and remove survive a fresh store on the same storage", async () => {
+test("snooze store round trip: add, replace, list and wake_due survive a fresh store on the same storage", async () => {
     const storage = fake_storage();
     const store = create_snooze_store({ storage: storage.api });
     await store.add(item("<a@x>", 100));
@@ -146,10 +164,7 @@ test("snooze store round trip: add, replace, list, due and remove survive a fres
     const reopened = create_snooze_store({ storage: storage.api });
     assert.deepEqual(await reopened.list(), [item("<b@x>", 200, "a2"), item("<a@x>", 300)]);
     assert.equal((storage.data[SNOOZE_STORAGE_KEY] as { record_version: number }).record_version, SNOOZE_RECORD_VERSION);
-    assert.deepEqual(await reopened.due(250), [item("<b@x>", 200, "a2")]);
-    assert.deepEqual(await reopened.due(250), [item("<b@x>", 200, "a2")]);
-    await reopened.remove(item("<b@x>", 200, "a2"));
-    assert.deepEqual(await reopened.due(250), []);
+    await reopened.wake_due(250, async () => {});
     assert.deepEqual(await reopened.list(), [item("<a@x>", 300)]);
 });
 
