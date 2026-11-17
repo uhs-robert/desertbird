@@ -28,9 +28,9 @@ test("app.open_page and pane.focus take only the names the table lists", () => {
     assert.equal(ok("pane.focus", { pane: "compose" }), false);
 });
 
-test("the app keys bind their commands and add no warning", () => {
+test("the app keys bind their commands and add no warning, and undo has no default key", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(normal["u"], { id: "msg.undo" });
+    assert.equal(normal["u"], undefined);
     assert.deepEqual(normal["gC"], { id: "thread.open_conversation" });
     for (const [keys, page] of [["gx", "addons"], ["gT", "themes"], ["gc", "config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page } }, keys);
     for (const [keys, pane] of [["gf", "folders"], ["ge", "threads"], ["gm", "message"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane } }, keys);

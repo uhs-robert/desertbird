@@ -3,7 +3,7 @@ import type { AppApi } from "../handlers/app.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.undo` runs Thunderbird's own undo, which restores or deletes mail again, so `bridge` is false and `.` never repeats it. The other three change only what the window shows or opens.
+// `msg.undo` has no default key: Thunderbird undoes only the steps it recorded itself (a native Delete key, a drag), so a key could restore an older step while the newest `msg.delete` of DesertBird stays in Trash. It is typed as `:undo`. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. `pane.focus` only moves the focus.
 export const app: CommandGroup = {
     commands: {
         "msg.undo": {
@@ -11,12 +11,12 @@ export const app: CommandGroup = {
             repeatable: false,
             runs_in: "background",
             label: "Undo",
-            intent: "Undo the last move or delete that Thunderbird can undo.",
+            intent: "Undo the last native Thunderbird move or delete.",
             needs: ["keys.appCommand"],
             run: scoped<AppApi>(undo),
         },
         "thread.open_conversation": {
-            bridge: true,
+            bridge: false,
             runs_in: "background",
             label: "Open the conversation",
             intent: "Open the conversation view of the selected message.",
@@ -24,7 +24,7 @@ export const app: CommandGroup = {
             run: scoped<AppApi>(open_conversation),
         },
         "app.open_page": {
-            bridge: true,
+            bridge: false,
             runs_in: "background",
             label: "Open a Thunderbird page",
             intent: "Open the add-ons, themes or config page in a tab.",
@@ -43,7 +43,6 @@ export const app: CommandGroup = {
         },
     },
     normal_keys: {
-        u: { id: "msg.undo" },
         gC: { id: "thread.open_conversation" },
         gx: { id: "app.open_page", args: { page: "addons" } },
         gT: { id: "app.open_page", args: { page: "themes" } },
