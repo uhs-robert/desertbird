@@ -490,6 +490,8 @@ async function run_default(instance) {
   await run_cmdline(instance, { app, kind, shot });
   await run_folders(instance);
   await run_followup(instance);
+  await run_steps(instance, { app, kind, shot });
+  await run_visual(instance, { app, kind, shot });
 }
 
 // The stored follow-up record bytes of each add-on, read from the profile. The add-on's `storage.local` is an IndexedDB file there, and the helper add-on cannot read another add-on's storage. The database and its log are copied first, so the read sees the committed state and leaves the file alone. IndexedDB encodes the key with each character one code higher, and the value is compressed, which keeps long runs of an id as copies. So the check looks for the first 20 characters of the id.
@@ -546,6 +548,130 @@ async function run_followup(instance) {
   await sleep(2000);
   check(app, kind, "m f c after the restart leaves the tags alone and the app up", JSON.stringify(state.flags[target]?.tags ?? []) === tags_before && instance.exited() === null, `tags ${JSON.stringify(state.flags[target]?.tags ?? [])}`);
   check(app, kind, "m f c drops the stored reminder", !holds_target(), `${target} is ${holds_target() ? "still" : "no longer"} in the stored record`);
+}
+
+// The step keys in the Views folder (6 messages: unread v0 to v2, starred v0 and v1, an attachment on v0). The row order comes from the listing, since earlier checks sorted the folder.
+// The oracle walks that order: the steps must visit the matching rows in turn and stay on the last one.
+async function run_steps(instance, { app, kind, shot }) {
+  await instance.ask("show_folder", 20000, { path: "/Views" });
+  await sleep(2000);
+  let state = await instance.ask("state");
+  const listed = state.listed;
+  const has = { u: (id) => state.flags[id]?.read === false, s: (id) => state.flags[id]?.flagged === true, a: (id) => id === "views-0@fixture.invalid" };
+  const visited = async (key, backward) => {
+    const seen = [];
+    for (let press = 0; press < 4; press++) {
+      await instance.press([backward ? "[" : "]"]);
+      seen.push(first_selected(await key_and_state(instance, [key], 1200)));
+    }
+    return seen;
+  };
+  for (const [key, name] of [["u", "unread"], ["s", "starred"], ["a", "attachment"]]) {
+    await instance.press(["g"]);
+    await key_and_state(instance, ["g"], 1000);
+    const matches = listed.filter(has[key]);
+    const first = first_selected(await instance.ask("state"));
+    const walk = (path, from) => Array.from({ length: 4 }, (_, at) => path[Math.min(at, path.length - 1)] ?? from);
+    const forward = matches.filter((id) => listed.indexOf(id) > listed.indexOf(first));
+    check(app, kind, `] ${key} visits the ${name} rows in list order and stays on the last`, same(await visited(key, false), walk(forward, first)), `list ${listed.join(" ")}`);
+    const last = first_selected(await instance.ask("state"));
+    const backward = matches.filter((id) => listed.indexOf(id) < listed.indexOf(last)).reverse();
+    check(app, kind, `[ ${key} walks back through the ${name} rows`, same(await visited(key, true), walk(backward, last)), `from ${last}`);
+  }
+  // From the last unread row, ] U leaves the folder for one that has unread mail.
+  await instance.press(["G"]);
+  await key_and_state(instance, ["]"], 300);
+  await instance.press(["U"]);
+  await sleep(2500);
+  const moved = await instance.ask("state");
+  const landed = first_selected(moved);
+  check(app, kind, "] U with no later unread row opens another folder and selects an unread message there", moved.mail_tab?.folder !== "/Views" && landed !== null && moved.flags[landed]?.read === false && moved.folders[moved.mail_tab?.folder]?.includes(landed), `folder ${moved.mail_tab?.folder}, selected ${landed}`);
+  await shot("step_unread_all_folders", "the folder ] U opened, with an unread message selected");
+}
+
+// Visual mode in the Inbox with every thread open, so each row is one message. The commands run on the real list: m s flags the range and x archives it.
+async function run_visual(instance, { app, kind, shot }) {
+  await instance.ask("show_folder", 20000, { path: "/Inbox" });
+  await sleep(2000);
+  // "Escape" is a key name for wtype, which needs -k. Typed as text it would send six letters.
+  const press_args = (key) => (key === "Escape" ? ["-k", "Escape"] : [key]);
+  const keys = async (sequence, wait_ms = 1200) => {
+    for (const key of sequence.slice(0, -1)) await instance.press(press_args(key));
+    return key_and_state(instance, press_args(sequence.at(-1)), wait_ms);
+  };
+  await keys(["z", "R"]);
+  let state = await keys(["g", "g"]);
+  const rows = state.listed;
+  const ids = (selected) => selected.map((message) => message.header_id);
+  state = await keys(["v"]);
+  state = await keys(["j"]);
+  state = await keys(["j"]);
+  check(app, kind, "v then j j selects the three rows from the top", same(ids(state.selected), rows.slice(0, 3)), `selected ${ids(state.selected).join(" ")}`);
+  await shot("visual_range", "three rows selected after v j j");
+  state = await keys(["k"]);
+  check(app, kind, "k in visual mode shrinks the range back toward the anchor", same(ids(state.selected), rows.slice(0, 2)), `selected ${ids(state.selected).join(" ")}`);
+  state = await keys(["Escape"]);
+  check(app, kind, "Escape ends visual mode on the current row", same(ids(state.selected), [rows[1]]), `selected ${ids(state.selected).join(" ")}`);
+  state = await keys(["j"]);
+  check(app, kind, "after Escape j moves one row again", same(ids(state.selected), [rows[2]]), `selected ${ids(state.selected).join(" ")}`);
+  // A range upward from row 5, then m s flags the whole range and ends the mode.
+  await keys(["g", "g"]);
+  await keys(["5", "j"]);
+  await keys(["v"]);
+  await keys(["2", "k"]);
+  const range = ids((await instance.ask("state")).selected);
+  check(app, kind, "v then 2 k selects rows 3 to 5", same(range, rows.slice(3, 6)), `selected ${range.join(" ")}`);
+  const flagged_before = range.map((id) => state.flags[id]?.flagged === true);
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["s"], 2000);
+  const flagged_after = range.map((id) => state.flags[id]?.flagged === true);
+  check(app, kind, "m s in visual mode flags every message of the range", flagged_after.every(Boolean), `before ${flagged_before.join()}, after ${flagged_after.join()}`);
+  state = await keys(["j"]);
+  check(app, kind, "the command ended visual mode, so j selects one row", state.selected.length === 1, `selected ${state.selected.length}`);
+  // x archives the range once and `.` does not archive again.
+  await keys(["g", "g"]);
+  await keys(["v"]);
+  await keys(["j"]);
+  const archive_range = ids((await keys(["j"])).selected);
+  state = await keys(["x"], 3000);
+  const in_inbox = archive_range.filter((id) => state.folders["/Inbox"]?.includes(id));
+  check(app, kind, "x in visual mode archives the whole range", archive_range.length === 3 && in_inbox.length === 0, `range ${archive_range.join(" ")}, still in the Inbox ${in_inbox.join(" ")}`);
+  const after_x = state.folders["/Inbox"]?.length;
+  state = await keys(["."], 2000);
+  check(app, kind, ". after x in visual mode archives nothing", state.folders["/Inbox"]?.length === after_x, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
+  await shot("visual_after_x", "Inbox after x archived the range");
+  check(app, kind, "the app survived visual mode", instance.exited() === null);
+}
+
+// Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.
+async function run_scale(instance) {
+  const app = instance.app;
+  const kind = "default";
+  const selection = () => instance.ask("selection", 60000);
+  await open_inbox(instance);
+  await instance.ask("show_folder", 20000, { path: "/Big" });
+  await sleep(10000);
+  const timed = async (name, keys, expect = null) => {
+    const before = await selection();
+    const started = Date.now();
+    await instance.press(keys);
+    let now = before;
+    while (Date.now() - started < 60000 && same(now.ids, before.ids) && now.folder === before.folder) now = await selection();
+    const elapsed = Date.now() - started;
+    note(app, kind, `time ${name}`, `${elapsed} ms, now ${now.folder} ${now.ids.slice(0, 2).join(" ")}`);
+    if (expect !== null) check(app, kind, `${name} selects ${expect}`, now.ids[0] === expect, `selected ${now.ids[0]}`);
+    return now;
+  };
+  await instance.press(["g"]);
+  await timed("g g", ["g"]);
+  await timed("j (baseline)", ["j"]);
+  await timed("] u (next unread, 1 row away)", ["]", "u"]);
+  await timed("] s (next starred, up to 25 rows away)", ["]", "s"]);
+  await timed("2000 ] u (a pass over 6,000 rows)", ["2", "0", "0", "0", "]", "u"]);
+  await timed("] U with unread rows ahead", ["]", "U"]);
+  await timed("G", ["G"]);
+  await timed("] U from the last row (no unread ahead: folder counts, then one query)", ["]", "U"]);
+  await timed("[ U back across folders", ["[", "U"]);
 }
 
 // The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.
@@ -1172,6 +1298,7 @@ async function run_message_scripts(instance) {
 }
 
 async function run_assertions(instance) {
+  if (process.env.E2E_SCALE === "1") return run_scale(instance);
   if (instance.kind === "default") await run_default(instance);
   else if (instance.kind === "message" || instance.kind === "message_remote") await run_message_scripts(instance);
   else if (instance.kind === "mail_account") await run_mail_account(instance);
