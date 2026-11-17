@@ -8,7 +8,6 @@ import type { NotificationsApi } from "../notify.ts";
 import { preset_due_ms } from "../snooze_presets.ts";
 import type { SnoozePreset } from "../snooze_presets.ts";
 import type { SnoozeItem, SnoozeStore } from "../snooze_store.ts";
-import { special_folder } from "./special_folder.ts";
 import type { SpecialFolderApi } from "./special_folder.ts";
 
 const SNOOZED_NAME = "Snoozed";
@@ -41,7 +40,6 @@ export interface SnoozeApi extends MessageQueryApi {
 /** What the wake needs. */
 export interface WakeApi extends MessageQueryApi, SpecialFolderApi, NotificationsApi {
     messages: MessageQueryApi["messages"] & { move(ids: number[], folder_id: string): Promise<void>; update(id: number, properties: { read: boolean }): Promise<void> };
-    accounts: { list(): Promise<{ id: string }[]> };
 }
 
 /** Every page of one query. A page ends after a set number of matches, so the first page alone can miss the message. */
@@ -86,9 +84,9 @@ async function create_snoozed(api: SnoozeApi, root: MailFolder): Promise<MailFol
 async function resolve_snoozed(api: SnoozeApi, account_id: string): Promise<MailFolder | undefined> {
     const existing = await existing_snoozed(api, account_id);
     if (existing !== undefined) return existing;
-    const [root] = await api.folders.query({ accountId: account_id, isRoot: true });
-    // An account that cannot hold subfolders (the root says so) is the one case that falls back. Any other failure refuses the snooze.
-    if (root === undefined || root.canAddSubfolders === false) return undefined;
+    // `canAddSubfolders` is a query filter, not a field of the folder the query returns. A root that cannot hold subfolders (a news account) matches nothing, and that is the one case that falls back. Any other failure refuses the snooze.
+    const [root] = await api.folders.query({ accountId: account_id, isRoot: true, canAddSubfolders: true });
+    if (root === undefined) return undefined;
     return create_snoozed(api, root);
 }
 
@@ -119,6 +117,8 @@ export async function snooze_messages(scope: HandlerScope<SnoozeApi & Notificati
         const message = await api.messages.get(id);
         const header_message_id = message.headerMessageId;
         const account_id = message.folder?.accountId;
+        const origin_folder_id = message.folder?.id;
+        if (origin_folder_id === undefined) throw new RuntimeRefusal("This message is not in a folder, so it cannot come back to one.");
         if (header_message_id === undefined || header_message_id === "" || account_id === undefined) throw new RuntimeRefusal("This message has no Message-ID header, so it cannot come back at the due time.");
         // A message already waiting in its Snoozed folder (it has an item for this folder) only gets a new time. Its origin account is the stored one, since the folder may sit in Local Folders.
         const stored = (await api.snooze.items.list()).find((item) => item.header_message_id === header_message_id && item.folder_id === message.folder?.id);
@@ -129,30 +129,34 @@ export async function snooze_messages(scope: HandlerScope<SnoozeApi & Notificati
         const target = folders.get(account_id) ?? (await snoozed_folder(api, account_id));
         folders.set(account_id, target);
         if (target.id !== message.folder?.id) await api.messages.move([id], target.id);
-        await api.snooze.items.add({ header_message_id, origin_account_id: account_id, folder_id: target.id, due_ms });
+        await api.snooze.items.add({ header_message_id, origin_account_id: account_id, folder_id: target.id, origin_folder_id, due_ms });
     });
     const count = scope.message_ids.length;
     await notify_refusal(api, `Snoozed ${count} message${count === 1 ? "" : "s"} until ${new Date(due_ms).toLocaleString()}.`);
 }
 
-// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. Only an account that is gone drops the item, since a folder lookup that fails at start can pass a minute later.
+// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to.
 export async function wake_snoozed(api: WakeApi, item: SnoozeItem): Promise<void> {
-    let inbox;
-    try {
-        inbox = await special_folder(api, "inbox", item.origin_account_id);
-    } catch (error) {
-        if ((await api.accounts.list()).some((account) => account.id === item.origin_account_id)) throw error;
-        await notify_refusal(api, "A snoozed message could not return, because its account is gone. It stays in the Snoozed folder.");
+    const [snoozed_folder_still_there] = await api.folders.query({ folderId: item.folder_id });
+    if (snoozed_folder_still_there === undefined) {
+        await notify_refusal(api, "A snoozed message did not return, because its Snoozed folder is gone.");
+        return;
+    }
+    // The Inbox of the origin account, or the folder the message came from when the account has no Inbox (Local Folders can lack one).
+    const [inbox] = await api.folders.query({ accountId: item.origin_account_id, specialUse: ["inbox"] });
+    const destination = inbox ?? (await api.folders.query({ folderId: item.origin_folder_id }))[0];
+    if (destination === undefined) {
+        await notify_refusal(api, "A snoozed message could not return, because its account has no Inbox and its folder is gone. It stays in the Snoozed folder.");
         return;
     }
     const waiting = (await query_all(api, item.header_message_id, item.folder_id))[0];
-    if (waiting !== undefined) await api.messages.move([waiting.id], inbox.id);
+    if (waiting !== undefined) await api.messages.move([waiting.id], destination.id);
     // The move gives the message a new id, so the unread mark needs a fresh lookup.
-    const returned = (await query_all(api, item.header_message_id, inbox.id))[0];
+    const returned = (await query_all(api, item.header_message_id, destination.id))[0];
     if (returned === undefined && waiting === undefined) {
         await notify_refusal(api, "A snoozed message is no longer in the Snoozed folder, so it did not return.");
         return;
     }
     if (returned !== undefined) await api.messages.update(returned.id, { read: false });
-    await notify_refusal(api, `Snoozed message back in the Inbox: ${(waiting ?? returned)?.subject ?? item.header_message_id}`);
+    await notify_refusal(api, `Snoozed message returned: ${(waiting ?? returned)?.subject ?? item.header_message_id}`);
 }
