@@ -1,8 +1,8 @@
 // Names from mail are untrusted. The result is one path segment that no platform reads as a path, a device or a hidden file.
 
 const MAX_BYTES = 100;
-// Bidirectional controls and zero-width marks can dress "gpj.exe" up as "exe.jpg" in a file list.
-const UNSAFE = /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿/\\:*?"<>|]/g;
+// Format characters (bidirectional controls, zero-width marks, the soft hyphen, tag characters) can dress "gpj.exe" up as "exe.jpg" in a file list.
+const UNSAFE = /[\u0000-\u001f\u007f-\u009f\p{Cf}/\\:*?"<>|]/gu;
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 
 /** One safe path segment from `raw`. `fallback` stands in when nothing is left. */
