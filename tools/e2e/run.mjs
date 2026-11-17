@@ -1683,6 +1683,14 @@ async function run_message_scripts(instance) {
   check(app, kind, "hints: Enter on the picked external link leaves the message in place", hint_body.href === href_before && hint_body.scroll_y < hint_body.inner_height, `document ${hint_body.href}, scrollY ${hint_body.scroll_y}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
+  // The probe behind the one-step pick: the same external link, clicked by a script (the helper's content script runs click() as the body script does). A dialog in this shot, as in hint_external_enter, means click() keeps Thunderbird's link-mismatch check.
+  const click_answer = await instance.ask("click_link", 20000, { text: "bank.example" });
+  await sleep(2500);
+  await shot("hint_external_click", "reading pane after a scripted click() on the external link");
+  state = await instance.ask("state");
+  note(app, kind, "hints: click() on the external link", `clicked ${click_answer.clicked}, windows ${JSON.stringify(state.windows.map((window) => window.type))}; read the shot: a Link Mismatch dialog means the check ran`);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await sleep(600);
 

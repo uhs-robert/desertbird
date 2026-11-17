@@ -1,0 +1,140 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { create_hint_session, type HintLabelNode, type HintWindow } from "../src/content/body_hints.ts";
+
+interface FakeElement {
+    name: string;
+    box: { top: number; left: number; width: number; height: number };
+    style: { display: string; visibility: string; opacity: string };
+    covered: boolean;
+    acted: string[];
+    getBoundingClientRect(): FakeElement["box"];
+    contains(other: unknown): boolean;
+    click(): void;
+    focus(): void;
+}
+
+function fake_element(name: string, overrides: Partial<Pick<FakeElement, "box" | "style" | "covered">> = {}): FakeElement {
+    const element: FakeElement = {
+        name,
+        box: { top: 10, left: 10, width: 50, height: 20 },
+        style: { display: "inline", visibility: "visible", opacity: "1" },
+        covered: false,
+        acted: [],
+        ...overrides,
+        getBoundingClientRect: () => element.box,
+        contains: (other) => other === element,
+        click: () => element.acted.push("click"),
+        focus: () => element.acted.push("focus"),
+    };
+    return element;
+}
+
+function fake_node(): HintLabelNode & { removed: boolean } {
+    const node = {
+        textContent: null as string | null,
+        style: { cssText: "" },
+        removed: false,
+        remove: () => {
+            node.removed = true;
+        },
+        append: () => {},
+        attachShadow: () => ({ append: () => {} }),
+    };
+    return node;
+}
+
+function fake_window(elements: FakeElement[]): { window: HintWindow; appended: (HintLabelNode & { removed: boolean })[] } {
+    const appended: (HintLabelNode & { removed: boolean })[] = [];
+    const window: HintWindow = {
+        innerHeight: 600,
+        innerWidth: 800,
+        getComputedStyle: (element) => (element as unknown as FakeElement).style,
+        document: {
+            querySelectorAll: () => elements as never,
+            // The element on top at its centre: a covered element reports a different one.
+            elementFromPoint: (x, y) => elements.find((element) => !element.covered && x >= element.box.left && x <= element.box.left + element.box.width && y >= element.box.top && y <= element.box.top + element.box.height) ?? null,
+            createElement: () => fake_node(),
+            documentElement: { append: (child) => appended.push(child as never) },
+        },
+    };
+    return { window, appended };
+}
+
+const typed = (letter: string) => ({ kind: "typed", letter }) as const;
+
+test("begin labels only the elements a mouse would hit", () => {
+    const shown = fake_element("shown");
+    const hidden = fake_element("hidden", { style: { display: "inline", visibility: "hidden", opacity: "1" } });
+    const faded = fake_element("faded", { style: { display: "inline", visibility: "visible", opacity: "0" } });
+    const none = fake_element("none", { style: { display: "none", visibility: "visible", opacity: "1" } });
+    const flat = fake_element("flat", { box: { top: 10, left: 10, width: 0, height: 20 } });
+    const below = fake_element("below", { box: { top: 700, left: 10, width: 50, height: 20 } });
+    const covered = fake_element("covered", { covered: true });
+    const { window } = fake_window([shown, hidden, faded, none, flat, below, covered]);
+    const session = create_hint_session(window);
+    assert.equal(session.begin(), 1);
+    assert.equal(session.active(), true);
+});
+
+test("begin stays inactive and adds nothing when no element qualifies", () => {
+    const { window, appended } = fake_window([fake_element("hidden", { style: { display: "none", visibility: "visible", opacity: "1" } })]);
+    const session = create_hint_session(window);
+    assert.equal(session.begin(), 0);
+    assert.equal(session.active(), false);
+    assert.equal(appended.length, 0);
+});
+
+test("a typed label acts on its element once and ends the session", () => {
+    const first = fake_element("first");
+    const second = fake_element("second", { box: { top: 50, left: 10, width: 50, height: 20 } });
+    const { window, appended } = fake_window([first, second]);
+    const session = create_hint_session(window);
+    session.begin();
+    session.feed(typed("s"));
+    assert.deepEqual(first.acted, []);
+    assert.deepEqual(second.acted, [PICK_ACTION]);
+    assert.equal(session.active(), false);
+    assert.equal(appended[0]!.removed, true);
+});
+
+test("a letter that no label starts, and cancel, end the session with no pick", () => {
+    for (const key of [typed("z"), { kind: "cancel" } as const]) {
+        const only = fake_element("only");
+        const { window, appended } = fake_window([only]);
+        const session = create_hint_session(window);
+        session.begin();
+        session.feed(key);
+        assert.equal(session.active(), false);
+        assert.deepEqual(only.acted, []);
+        assert.equal(appended[0]!.removed, true);
+    }
+});
+
+test("with many targets a label takes several letters and a partial label keeps the session open", () => {
+    const elements = Array.from({ length: 12 }, (_, index) => fake_element(`link${index}`, { box: { top: 5 + index * 25, left: 10, width: 50, height: 20 } }));
+    const { window } = fake_window(elements);
+    const session = create_hint_session(window);
+    assert.equal(session.begin(), 12);
+    session.feed(typed("a"));
+    assert.equal(session.active(), true);
+    assert.ok(elements.every((element) => element.acted.length === 0));
+    session.feed(typed("a"));
+    assert.equal(session.active(), false);
+    assert.equal(elements[0]!.acted.length, 1);
+});
+
+test("cancel removes the labels and a second begin starts fresh", () => {
+    const only = fake_element("only");
+    const { window, appended } = fake_window([only]);
+    const session = create_hint_session(window);
+    session.begin();
+    session.cancel();
+    assert.equal(session.active(), false);
+    assert.equal(appended[0]!.removed, true);
+    session.begin();
+    session.feed(typed("a"));
+    assert.deepEqual(only.acted, [PICK_ACTION]);
+});
+
+const PICK_ACTION = "focus";
