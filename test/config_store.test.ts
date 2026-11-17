@@ -17,7 +17,10 @@ function stub_storage(stored: Record<string, unknown> = {}) {
                     reads.push(keys);
                     return Object.fromEntries(keys.filter((key) => key in stored).map((key) => [key, structuredClone(stored[key])]));
                 },
-                set: async (items: Record<string, unknown>) => void Object.assign(stored, structuredClone(items)),
+                set: async (items: Record<string, unknown>) => {
+                    Object.assign(stored, structuredClone(items));
+                    listeners.forEach((listener) => listener(Object.fromEntries(Object.keys(items).map((key) => [key, {}])), "local"));
+                },
             },
             onChanged: { addListener: (listener: Listener) => void listeners.push(listener) },
         },
