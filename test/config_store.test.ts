@@ -67,6 +67,8 @@ test("a read serves the memory copy until storage changes, then refills", async 
 test("a change in another area or of another key leaves the copy alone", async () => {
     const { api, reads, change } = stub_storage();
     const store = create_config_store(api);
+    // The first read stamps the version, and that write is a change that keeps the copy empty. The second read fills it.
+    await store.read();
     await store.read();
     const reads_before = reads.length;
     change({ [SETTINGS_KEY]: { toast_ms: 2 } }, "sync");
