@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { registry } from "../src/background/commands/index.ts";
 import { MOTION_IDS } from "../src/chrome/motions.ts";
 
-// The runtime runs `repeat.last` itself, so it has no motion.
-const chrome_ids = () => registry.list().filter((command) => command.runs_in === "chrome" && command.id !== "repeat.last").map((command) => command.id).sort();
+// The runtime runs `repeat.last` and `visual.toggle` itself, so they have no motion.
+const chrome_ids = () => registry.list().filter((command) => command.runs_in === "chrome" && command.id !== "repeat.last" && command.id !== "visual.toggle").map((command) => command.id).sort();
 
 test("every chrome command in the registry has a motion", () => {
     assert.deepEqual(chrome_ids().filter((id) => !MOTION_IDS.includes(id as never)), []);
