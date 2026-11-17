@@ -6,6 +6,7 @@ import { create_overlay_host } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
+import type { KeydownEvent } from "./runtime.ts";
 import { front_about_3pane } from "./view.ts";
 import type { OverlayClosed, OverlayMountArgs, OverlaySurface, OverlayUnmountArgs } from "../shared/protocol.ts";
 
@@ -102,6 +103,13 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
         on_window_unload(window, listener) {
             window.addEventListener("unload", listener, { once: true });
             return () => window.removeEventListener("unload", listener);
+        },
+        on_escape(window, listener) {
+            const handler = (event: KeydownEvent) => {
+                if (event.key === "Escape") listener();
+            };
+            window.addEventListener("keydown", handler, true);
+            return () => window.removeEventListener("keydown", handler, true);
         },
         emit_closed: (window_id) => {
             for (const listener of closed_listeners) listener({ windowId: window_id });

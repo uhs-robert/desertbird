@@ -41,6 +41,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             window.addEventListener("TabSelect", listener, true);
             return () => window.removeEventListener("TabSelect", listener, true);
         },
+        now: () => Date.now(),
         window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {
             for (const listener of invocation_listeners) listener(invocation);
@@ -52,7 +53,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
 export function get_keys_api(context: ExtensionContext) {
     return {
         keys: {
-            install: guard("keys.install", ({ tree }: KeysInstallArgs): void => ensure_runtime(context).install(tree)),
+            install: guard("keys.install", ({ tree, holdCommands }: KeysInstallArgs): void => ensure_runtime(context).install(tree, holdCommands)),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "keys.onInvocation",

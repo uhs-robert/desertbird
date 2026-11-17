@@ -28,6 +28,14 @@
                   "type": "any"
                 }
               },
+              "holdCommands": {
+                "type": "array",
+                "description": "Ids of the commands that open the overlay. After one fires, plain keys are dropped until the focus reaches a text field, the tab changes or 1.5 seconds pass.",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+                }
+              },
               "settings": {
                 "type": "object",
                 "description": "The settings the key matcher reads. It reads none today.",

@@ -14,6 +14,8 @@ export interface OverlayDeps<Window> {
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window closes. Returns the way to stop listening. */
     on_window_unload(window: Window, listener: () => void): () => void;
+    /** Calls `listener` on each Escape key of the window. Returns the way to stop listening. */
+    on_escape(window: Window, listener: () => void): () => void;
     emit_closed(window_id: number): void;
 }
 
@@ -67,9 +69,12 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             const entry: Mounted = { window_id, remove, stop_listening: () => {} };
             const stop_tab = deps.on_tab_select(window, () => close_by_itself(window, entry, false));
             const stop_unload = deps.on_window_unload(window, () => close_by_itself(window, entry, true));
+            // The page closes itself on Escape. This is the way out when the page never loaded and nothing answers the key.
+            const stop_escape = deps.on_escape(window, () => close_by_itself(window, entry, false));
             entry.stop_listening = () => {
                 stop_tab();
                 stop_unload();
+                stop_escape();
             };
             mounted.set(window, entry);
         },

@@ -5,6 +5,7 @@ import { create_overlay_host } from "../src/chrome/overlay.ts";
 class FakeWindow {
     tab_listeners = new Set<() => void>();
     unload_listeners = new Set<() => void>();
+    escape_listeners = new Set<() => void>();
     boxes: string[] = [];
 }
 
@@ -30,6 +31,10 @@ function setup() {
         on_window_unload(window, listener) {
             window.unload_listeners.add(listener);
             return () => void window.unload_listeners.delete(listener);
+        },
+        on_escape(window, listener) {
+            window.escape_listeners.add(listener);
+            return () => void window.escape_listeners.delete(listener);
         },
         emit_closed: (window_id) => void log.push(`closed ${window_id}`),
     });
@@ -103,4 +108,12 @@ test("shutdown removes every overlay and every listener", () => {
     host.mount({ windowId: 2, surface: "cmdline" });
     host.shutdown();
     for (const window of windows.values()) assert.deepEqual([window.boxes.length, window.tab_listeners.size, window.unload_listeners.size], [0, 0, 0]);
+});
+
+test("Escape removes an overlay whose page never answered, tells the background and returns the focus", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "cmdline" });
+    for (const listener of [...windows.get(1)!.escape_listeners]) listener();
+    assert.deepEqual(log, ["create cmdline@1", "remove cmdline@1", "focus list of 1", "closed 1"]);
+    assert.equal(windows.get(1)!.escape_listeners.size, 0);
 });

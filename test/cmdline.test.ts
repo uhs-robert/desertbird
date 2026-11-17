@@ -266,3 +266,13 @@ test("the default keys: : opens an empty line and the typed-value keys open it w
         assert.ok(registry.find(first_word), first_word);
     }
 });
+
+test("a second run before the page closes runs nothing: Enter twice runs the command once", async () => {
+    const { service, ran } = service_setup();
+    service.begin(3, { message_ids: [5], text: "" });
+    const [first, second] = await Promise.all([ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text: "tag Important" }), ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text: "tag Important" })]);
+    assert.deepEqual(first, { ok: true });
+    assert.equal(second.ok, false);
+    await settle();
+    assert.equal(ran.length, 1);
+});

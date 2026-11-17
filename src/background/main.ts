@@ -42,6 +42,9 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline">, Pic
 
 declare const messenger: Messenger;
 
+// The commands that open the overlay. The registry says so through `needs`, so the key runtime learns "these take the keyboard" and no command name.
+const HOLD_COMMANDS = registry.list().filter((command) => command.needs?.includes("overlay.mount")).map((command) => command.id);
+
 async function hash_of(value: unknown): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -84,7 +87,7 @@ async function install_keymap(): Promise<void> {
     const { tree } = await load_record();
     const tree_json = JSON.stringify(tree);
     if (tree_json === installed_tree_json) return;
-    await keys.install({ tree, settings: {} });
+    await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
     installed_tree_json = tree_json;
 }
 

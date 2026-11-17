@@ -81,8 +81,15 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
     }
 
     async function run(window_id: number, session: CmdlineSession, text: string): Promise<CmdlineRunResult> {
+        // The session is claimed before anything awaits, so a second Enter before the page closes finds none and runs nothing.
+        if (sessions.get(window_id) !== session) return { ok: false, message: "The command line is not open." };
+        sessions.delete(window_id);
         const checked = await parse_and_check(text);
-        if (!checked.ok || !("id" in checked)) return checked;
+        if (!checked.ok || !("id" in checked)) {
+            // A line that is not a command keeps the line open, so the session comes back.
+            if (!sessions.has(window_id)) sessions.set(window_id, session);
+            return checked;
+        }
         // The reply goes out first. The unmount destroys the page that is waiting for it, and the command runs after the focus is back in the list.
         setTimeout(() => {
             close(window_id)
