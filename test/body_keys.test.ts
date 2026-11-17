@@ -9,18 +9,23 @@ import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX,
 const VIEWPORT = 600;
 const PAGE_HEIGHT = 5000;
 
-/** A link or button of the stub document. `clicks` counts the clicks it got. */
+/** A link or button of the stub document. `focuses` counts the focus calls it got. `style` is what the computed style gives. */
 class StubElement {
-    clicks = 0;
+    focuses = 0;
     box: { top: number; left: number; width: number; height: number };
-    constructor(box = { top: 10, left: 10, width: 50, height: 12 }) {
+    style = { display: "inline", visibility: "visible", opacity: "1" };
+    constructor(box = { top: 10, left: 10, width: 50, height: 12 }, style: Partial<StubElement["style"]> = {}) {
         this.box = box;
+        Object.assign(this.style, style);
     }
     getBoundingClientRect() {
         return this.box;
     }
-    click() {
-        this.clicks++;
+    contains(other: unknown) {
+        return other === this;
+    }
+    focus() {
+        this.focuses++;
     }
 }
 
@@ -29,6 +34,11 @@ class StubNode {
     style = { cssText: "" };
     children: StubNode[] = [];
     removed = false;
+    shadow_mode: string | null = null;
+    attachShadow(init: { mode: "closed" }) {
+        this.shadow_mode = init.mode;
+        return this;
+    }
     append(...children: StubNode[]) {
         this.children.push(...children);
     }
@@ -80,6 +90,7 @@ class StubWindow implements BodyWindow {
     innerHeight = VIEWPORT;
     document = {
         querySelectorAll: (_selector: string) => this.elements,
+        elementFromPoint: (x: number, y: number) => this.elementFromPoint(x, y),
         createElement: (_name: string) => new StubNode(),
         body: {},
         documentElement: {
@@ -89,8 +100,20 @@ class StubWindow implements BodyWindow {
             removeAttribute: (name: string) => void this.attributes.delete(name),
         },
     };
-    addEventListener(_type: "keydown", listener: (event: BodyKeyEvent) => void) {
-        this.listeners.push(listener);
+    other_listeners: Record<string, (() => void)[]> = {};
+    addEventListener(type: string, listener: (event: BodyKeyEvent) => void) {
+        if (type === "keydown") this.listeners.push(listener);
+        else (this.other_listeners[type] ??= []).push(listener as () => void);
+    }
+    fire(type: string) {
+        for (const listener of this.other_listeners[type] ?? []) listener();
+    }
+    getComputedStyle(element: StubElement) {
+        return element.style;
+    }
+    // The last element drawn at the point that a mouse can hit: `visibility: hidden` is not hit, `opacity: 0` is.
+    elementFromPoint(x: number, y: number) {
+        return [...this.elements].reverse().find((element) => element.style.visibility === "visible" && x >= element.box.left && x <= element.box.left + element.box.width && y >= element.box.top && y <= element.box.top + element.box.height) ?? null;
     }
     removeEventListener() {}
     scrollBy(options: { top: number }) {
@@ -333,7 +356,7 @@ test("slash sends the command line command to the background with the find text,
     assert.deepEqual(window.scrolls, []);
 });
 
-test("f labels the links on screen and the typed label clicks the link", async () => {
+test("f labels the links on screen and the typed label focuses the link", async () => {
     const { window } = await started();
     const links = [new StubElement(), new StubElement({ top: 40, left: 10, width: 50, height: 12 }), new StubElement({ top: 9000, left: 0, width: 50, height: 12 }), new StubElement({ top: 20, left: 0, width: 0, height: 0 })];
     window.elements = links;
@@ -341,7 +364,7 @@ test("f labels the links on screen and the typed label clicks the link", async (
     const labels = window.appended[0]!.children.map((node) => node.textContent);
     assert.deepEqual(labels, ["A", "S"], "only the two links that are visible on screen get a label");
     assert.deepEqual(window.press("s"), { cancelled: true, stopped: true });
-    assert.deepEqual(links.map((link) => link.clicks), [0, 1, 0, 0]);
+    assert.deepEqual(links.map((link) => link.focuses), [0, 1, 0, 0]);
     assert.equal(window.appended[0]!.removed, true, "the labels go away after the pick");
     assert.equal(window.press("j").cancelled, true);
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after the pick");
@@ -354,17 +377,17 @@ test("a label of two letters needs both, a wrong letter or a key that is not a l
     window.press("f");
     assert.equal(window.appended[0]!.children.length, 12);
     window.press("a");
-    assert.equal(links.every((link) => link.clicks === 0), true, "one letter of two picks nothing");
+    assert.equal(links.every((link) => link.focuses === 0), true, "one letter of two picks nothing");
     window.press("Shift");
     window.press("s", { shiftKey: true, key: "S" });
-    assert.deepEqual(links.map((link) => link.clicks), [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "a capital letter counts as the lower case one");
+    assert.deepEqual(links.map((link) => link.focuses), [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "a capital letter counts as the lower case one");
     window.press("f");
     window.press("1");
     assert.equal(window.appended[1]!.removed, true, "a key that is not a letter cancels");
     window.press("f");
     window.press("q");
     assert.equal(window.appended[2]!.removed, true, "a letter that starts no label cancels");
-    assert.equal(links.reduce((total, link) => total + link.clicks, 0), 1);
+    assert.equal(links.reduce((total, link) => total + link.focuses, 0), 1);
 });
 
 test("Escape cancels the labels and is cancelled itself, and f with nothing to label starts no mode", async () => {
@@ -378,4 +401,88 @@ test("Escape cancels the labels and is cancelled itself, and f with nothing to l
     window.press("f");
     assert.equal(window.press("j").cancelled, true);
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "j scrolls, so no hint mode swallowed it");
+});
+
+test("after a pick the next Enter goes to Thunderbird, once, and any other key ends that", async () => {
+    const { window } = await started();
+    window.elements = [new StubElement()];
+    window.press("f");
+    window.press("a");
+    assert.equal(window.elements[0]!.focuses, 1, "the picked link has the focus");
+    assert.deepEqual(window.press("Enter"), { cancelled: false, stopped: false });
+    assert.equal(window.press("Enter").cancelled, false, "Enter is a named key, so it passes in any case");
+    window.press("f");
+    window.press("a");
+    window.press("j");
+    assert.equal(window.press("Enter").cancelled, false);
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
+});
+
+test("a hidden, faded, stacked, disabled-by-selector or off-screen link gets no label", async () => {
+    const { window } = await started();
+    const box = { top: 100, left: 10, width: 80, height: 14 };
+    const bank = new StubElement(box);
+    const hidden = new StubElement({ ...box }, { visibility: "hidden" });
+    const faded = new StubElement({ top: 200, left: 10, width: 80, height: 14 }, { opacity: "0" });
+    const gone = new StubElement({ top: 300, left: 10, width: 80, height: 14 }, { display: "none" });
+    const covered = new StubElement({ top: 400, left: 10, width: 80, height: 14 });
+    const cover = new StubElement({ top: 400, left: 10, width: 80, height: 14 });
+    window.elements = [bank, hidden, faded, gone, covered, cover];
+    window.press("f");
+    const labelled = window.appended[0]!.children.length;
+    assert.equal(labelled, 2, "the bank link (a hidden link above it does not hide it) and the top one of the two stacked links");
+    window.press("a");
+    window.press("s");
+    assert.deepEqual([bank, hidden, faded, gone, covered, cover].map((link) => link.focuses), [1, 0, 0, 0, 0, 0], "the first label is the bank link");
+});
+
+test("the labels sit in a closed shadow root of a container with its own important style", async () => {
+    const { window } = await started();
+    window.elements = [new StubElement()];
+    window.press("f");
+    const container = window.appended[0]!;
+    assert.equal(container.shadow_mode, "closed");
+    assert.match(container.style.cssText, /position: fixed !important/);
+    assert.match(container.style.cssText, /display: block !important/);
+    assert.match(container.style.cssText, /opacity: 1 !important/);
+    assert.equal(container.children.length, 1);
+});
+
+test("the labels end on scroll, blur, pointerdown and when the keymap record goes", async () => {
+    for (const type of ["scroll", "blur", "pointerdown"]) {
+        const { window } = await started();
+        window.elements = [new StubElement()];
+        window.press("f");
+        window.fire(type);
+        assert.equal(window.appended[0]!.removed, true, type);
+        assert.equal(window.press("a").cancelled, true, "a is swallowed as a plain key and picks nothing");
+        assert.equal(window.elements[0]!.focuses, 0, type);
+    }
+    const { window, change } = await started();
+    window.elements = [new StubElement()];
+    window.press("f");
+    change(undefined);
+    assert.equal(window.appended[0]!.removed, true);
+    assert.equal(window.press("a").cancelled, false, "with no tree no key is touched");
+});
+
+test("with the labels up and the keymap record gone, a key still reaches the labels first", async () => {
+    const { window } = await started();
+    window.elements = [new StubElement(), new StubElement({ top: 40, left: 10, width: 50, height: 12 })];
+    window.press("f");
+    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
+});
+
+test("the scroll step setting rejects 0 and anything below 1, and the body script reads the same rule", async () => {
+    const { setting_problem } = await import("../src/background/config/settings.ts");
+    assert.equal(setting_problem("message_scroll_step_px", 0) !== undefined, true);
+    assert.equal(setting_problem("message_scroll_step_px", 0.5) !== undefined, true);
+    assert.equal(setting_problem("message_scroll_step_px", 1), undefined);
+    assert.equal(setting_problem("toast_ms", 0), undefined, "other number settings still take 0");
+    const { window, change } = await started({ [KEYMAP_STORAGE_KEY]: record() });
+    change({ message_scroll_step_px: 0 }, "local", SETTINGS_STORAGE_KEY);
+    window.press("j");
+    change({ message_scroll_step_px: 0.5 }, "local", SETTINGS_STORAGE_KEY);
+    window.press("j");
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`, `by ${MESSAGE_SCROLL_STEP_PX}`]);
 });

@@ -950,9 +950,32 @@ async function run_message_scripts(instance) {
   await sleep(800);
   await shot("hint_labels", "reading pane with the hint label on the link");
   await instance.press(["a"]);
+  await sleep(600);
+  hint_body = body_state(await instance.ask("state"));
+  check(app, kind, "hints: f then a only focuses the link, the page has not scrolled yet", hint_body.scroll_y === 0, `scrollY ${hint_body.scroll_y}`);
+  await instance.press(["-k", "Return"]);
   await sleep(1500);
   hint_body = body_state(await instance.ask("state"));
-  check(app, kind, "hints: f then a clicks the link, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
+  check(app, kind, "hints: Enter then activates the link as a real click, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
+  // An external link whose text names another address. A hint pick focuses it and a real Enter reaches Thunderbird's own click handling, which warns about such a link. A script click would skip the warning. The shot hint_external_enter shows the Link Mismatch dialog on both apps' run when it works.
+  const href_before = hint_body.href;
+  const windows_before = (await instance.ask("state")).windows.length;
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 800);
+  await instance.press(["f"]);
+  await sleep(800);
+  await shot("hint_labels_two", "reading pane with two hint labels, one on each link");
+  await instance.press(["s"]);
+  await sleep(600);
+  await instance.press(["-k", "Return"]);
+  await sleep(2500);
+  await shot("hint_external_enter", "reading pane after the hint pick of the external link and Enter");
+  state = await instance.ask("state");
+  hint_body = body_state(state);
+  note(app, kind, "hints: Enter on the picked external link", `windows ${windows_before} then ${state.windows.length}, ${JSON.stringify(state.windows.map((window) => window.type))}, document ${hint_body.href === href_before ? "unchanged" : hint_body.href}`);
+  check(app, kind, "hints: Enter on the picked external link leaves the message in place", hint_body.href === href_before && hint_body.scroll_y < hint_body.inner_height, `document ${hint_body.href}, scrollY ${hint_body.scroll_y}`);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await sleep(600);
 

@@ -14,8 +14,8 @@ const plain_body = (id) => Array.from({ length: PARAGRAPHS }, (_, index) => `Lin
 
 export const READING_MESSAGES = [
   { id: "reading-plain", subject: "Reading plain", html: false, body: plain_body("reading-plain") },
-  // One link at the top and its target at the bottom, for the hint checks.
-  { id: "reading-html", subject: "Reading html", html: true, body: `<html><body><p><a href="#end-of-mail">Jump to the end</a></p>${paragraphs("reading-html")}<p id="end-of-mail">The end.</p></body></html>` },
+  // A link at the top with its target at the bottom, and an external link whose text names another address (Thunderbird warns on a click on it), for the hint checks.
+  { id: "reading-html", subject: "Reading html", html: true, body: `<html><body><p><a href="#end-of-mail">Jump to the end</a> <a href="http://127.0.0.1:9/phish">https://bank.example/login</a></p>${paragraphs("reading-html")}<p id="end-of-mail">The end.</p></body></html>` },
   // A remote image: the app blocks it by default (a banner shows) or loads it, depending on the profile kind. The address never answers.
   { id: "reading-remote", subject: "Reading remote content", html: true, body: `<html><body><img src="http://127.0.0.1:9/never.png" width="20" height="20">${paragraphs("reading-remote")}</body></html>` },
   // A sandboxed frame inside an HTML mail, and scripts in the mail that the app never runs.
