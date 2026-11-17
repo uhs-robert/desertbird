@@ -72,7 +72,7 @@ test("a stored keymap compiled from other default bindings is rebuilt", async ()
 
 test("a storage change during a pending read wins: the tree read before the change is neither kept nor installed last", async () => {
     const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: MESSAGE_KEYMAP, settings: {} })).digest("hex");
-    const record = (marker: string) => ({ record_version: 3, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
+    const record = (marker: string) => ({ record_version: 4, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
     const { installs, external_write, first_read } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
     await start_background();
     await first_read;
@@ -98,7 +98,7 @@ test("a stored record of version 2, with no message tree, is rebuilt with one", 
     await start_background();
     await settle();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
-    assert.equal(record.record_version, 3);
+    assert.equal(record.record_version, 4);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
     assert.equal(installs.length, 1);
 });

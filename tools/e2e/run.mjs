@@ -104,6 +104,11 @@ async function run_default(instance) {
   state = await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
   check(app, kind, "g g returns to the first row", first_selected(state) === rows[0], `selected ${first_selected(state)}`);
+  await instance.press(["j"]);
+  state = await key_and_state(instance, ["."]);
+  check(app, kind, ". repeats the last motion", first_selected(state) === rows[2], `selected ${first_selected(state)}, expected ${rows[2]}`);
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"]);
   state = await (await instance.press(["5"]), key_and_state(instance, ["j"]));
   check(app, kind, "5j moves five rows", first_selected(state) === rows[5], `selected ${first_selected(state)}, expected ${rows[5]}`);
   await sleep(1500);

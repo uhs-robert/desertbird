@@ -6,7 +6,7 @@ import { DEFAULT_KEYMAP, GROUPS, MESSAGE_KEYMAP, registry } from "../src/backgro
 
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[] }> = {
-    motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
+    motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move"] },
     compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
@@ -94,6 +94,7 @@ const PHASE_1_COMMANDS = [
     { id: "motion.up", keys: "k", args: undefined, runs_in: "chrome", bridge: true },
     { id: "motion.top", keys: "gg", args: undefined, runs_in: "chrome", bridge: true },
     { id: "motion.bottom", keys: "G", args: undefined, runs_in: "chrome", bridge: true },
+    { id: "repeat.last", keys: ".", args: undefined, runs_in: "chrome", bridge: true },
     { id: "msg.archive", keys: "x", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.delete", keys: "dd", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.reply", keys: "r", args: { to: "sender" }, runs_in: "background", bridge: false },

@@ -65,7 +65,12 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let hold_commands = new Set<string>();
     let hold_until = 0;
 
-    function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count: number | undefined): void {
+    // For `.`. An unrepeatable leaf clears it.
+    let last: { leaf: TreeLeaf; count: number | undefined } | null = null;
+
+    function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count?: number): void | null {
+        if (leaf.steps[0]?.invocation.id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
+        last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
             if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;

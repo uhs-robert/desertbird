@@ -30,6 +30,7 @@ test("each default key reaches its command with the side that runs it", () => {
         [["k"], "motion.up", "chrome"],
         [["g", "g"], "motion.top", "chrome"],
         [["G"], "motion.bottom", "chrome"],
+        [["."], "repeat.last", "chrome"],
         [["x"], "msg.archive", "background"],
         [["d", "d"], "msg.delete", "background"],
         [["r"], "msg.reply", "background"],
@@ -97,4 +98,30 @@ test("the keymap compile accepts the bound chords and the matcher reads each one
     } finally {
         DEFAULT_KEYMAP.normal = default_normal;
     }
+});
+
+test("the command line opener is unrepeatable", async () => {
+    const { UNREPEATABLE_IDS } = await import("../src/background/commands/index.ts");
+    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.archive", "msg.delete", "msg.move"]);
+});
+
+test("mark_unrepeatable tags the steps of delete, archive and move and no other", async () => {
+    const { mark_unrepeatable } = await import("../src/background/config/keymap.ts");
+    const step = (id: string) => ({ invocation: { id } });
+    const root = {
+        kind: "branch",
+        children: {
+            x: { kind: "leaf", steps: [step("msg.archive")] },
+            d: { kind: "branch", children: { d: { kind: "leaf", steps: [step("msg.delete")] } } },
+            m: { kind: "leaf", steps: [step("msg.move")], otherwise: { kind: "leaf", steps: [step("msg.delete")] } },
+            r: { kind: "leaf", steps: [step("msg.read")] },
+        },
+    };
+    mark_unrepeatable(root);
+    const flags = (node: { steps: object[] }) => node.steps.map((entry) => (entry as { repeatable?: boolean }).repeatable);
+    assert.deepEqual(flags(root.children.x), [false]);
+    assert.deepEqual(flags(root.children.d.children.d), [false]);
+    assert.deepEqual(flags(root.children.m), [false]);
+    assert.deepEqual(flags(root.children.m.otherwise), [false]);
+    assert.deepEqual(flags(root.children.r), [undefined]);
 });

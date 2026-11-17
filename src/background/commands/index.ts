@@ -26,6 +26,9 @@ const define = (id: string, input: CommandDefinition) => registry.define(id, inp
 
 for (const group of Object.values(GROUPS)) for (const [id, input] of Object.entries(group.commands)) define(id, input);
 
+/** Ids of the commands `.` must not replay. */
+export const UNREPEATABLE_IDS: ReadonlySet<string> = new Set(Object.values(GROUPS).flatMap((group) => Object.entries(group.commands).filter(([, input]) => input.repeatable === false).map(([id]) => id)));
+
 export const DEFAULT_KEYMAP: KeymapConfig = { normal: Object.assign({}, ...Object.values(GROUPS).map((group) => group.normal_keys)) };
 
 export const resolve_command: ResolveCommand = (command_id) => {
