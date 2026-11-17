@@ -1,7 +1,7 @@
 // The mode label at the start of a main window's status bar. It holds no Thunderbird global: the parent hands in `ModeLabelDeps`, so node tests drive every path with fakes.
 
 import { MODE_INDICATORS, MODE_LABEL_STYLES, MODE_NAMES } from "../shared/protocol.ts";
-import type { ModeIndicator, ModeLabelStyle, ModeName, OverlaySetModeLabelArgs } from "../shared/protocol.ts";
+import type { ModeIndicator, ModeLabelScheme, ModeLabelStyle, ModeName, OverlaySetModeLabelArgs } from "../shared/protocol.ts";
 
 export interface LabelElement {
     style: { cssText: string };
@@ -28,6 +28,10 @@ export interface ModeLabelDeps<Window> {
     on_loaded(window: Window, listener: () => void): void;
     /** Calls `listener` when focus moves in the window. Returns the way to stop listening. */
     on_focus_change(window: Window, listener: () => void): () => void;
+    /** Whether Thunderbird shows a dark scheme in the window. This is Thunderbird's own scheme: the OS scheme can differ and the background page only sees that one. */
+    is_dark(window: Window): boolean;
+    /** Calls `listener` when that scheme changes. Returns the way to stop listening. */
+    on_scheme_change(window: Window, listener: () => void): () => void;
 }
 
 export interface ModeLabel {
@@ -39,19 +43,14 @@ export interface ModeLabel {
 /** Whether the indicator setting shows the label in the mode. */
 export const label_shows = (indicator: ModeIndicator, mode: ModeName): boolean => indicator === "always" || (indicator === "not_normal" && mode !== "normal");
 
-// Thunderbird's own colors, so the label follows the theme.
-const MODE_COLORS: Record<ModeName, string> = {
-    normal: "var(--color-yellow-50)",
-    visual: "var(--color-orange-50)",
-    insert: "var(--color-red-50)",
-};
-
-/** The text and the inline style of the label for a mode and a style. Black on the badge: it holds a contrast of at least 5 to 1 on all three colors. */
-export function label_look(mode: ModeName, style: ModeLabelStyle): { text: string; css: string } {
+/** The text and the inline style of the label for a mode and a style. The badge text color comes with the scheme and holds at least 4.5 to 1 on all three mode colors (`test/theme.test.ts`). */
+export function label_look(mode: ModeName, style: ModeLabelStyle, scheme: ModeLabelScheme): { text: string; css: string } {
     const name = mode.toUpperCase();
-    if (style === "classic") return { text: `-- ${name} --`, css: `color: ${MODE_COLORS[mode]}; font-weight: bold; margin-inline: 6px;` };
-    return { text: name, css: `background-color: ${MODE_COLORS[mode]}; color: black; font-weight: bold; padding: 0 8px; margin-inline: 6px; border-radius: 8px;` };
+    if (style === "classic") return { text: `-- ${name} --`, css: `color: ${scheme[mode]}; font-weight: bold; margin-inline: 6px;` };
+    return { text: name, css: `background-color: ${scheme[mode]}; color: ${scheme.on_badge}; font-weight: bold; padding: 0 8px; margin-inline: 6px; border-radius: 8px;` };
 }
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
 
 // The Experiment schema checks these values too. The check here keeps the label safe for a caller that skips the schema, such as a test.
 function checked(args: OverlaySetModeLabelArgs): void {
@@ -59,7 +58,13 @@ function checked(args: OverlaySetModeLabelArgs): void {
     if (args.mode !== "normal" && args.mode !== "visual") throw new Error(`unknown mode ${String(args.mode)}`);
     if (!(MODE_INDICATORS as readonly unknown[]).includes(args.indicator)) throw new Error(`unknown indicator ${String(args.indicator)}`);
     if (!(MODE_LABEL_STYLES as readonly unknown[]).includes(args.style)) throw new Error(`unknown style ${String(args.style)}`);
+    // The colors end up in an inline style, so a value that is not a hex color never reaches it.
+    for (const scheme of [args.colors?.dark, args.colors?.light]) {
+        for (const key of ["normal", "visual", "insert", "on_badge"] as const) if (!HEX_COLOR.test(String(scheme?.[key]))) throw new Error(`the ${key} color must be #rrggbb`);
+    }
 }
+
+const stop_both = (first: () => void, second: () => void) => () => (first(), second());
 
 interface Shown {
     args: OverlaySetModeLabelArgs;
@@ -76,7 +81,7 @@ export function create_mode_label<Window>(deps: ModeLabelDeps<Window>): ModeLabe
         duplicates.forEach((duplicate) => duplicate.remove());
         const mode: ModeName = deps.in_text_field(window) ? "insert" : args.mode;
         if (!label_shows(args.indicator, mode)) return kept?.remove();
-        const look = label_look(mode, args.style);
+        const look = label_look(mode, args.style, deps.is_dark(window) ? args.colors.dark : args.colors.light);
         const label = kept ?? bar.create_label();
         label.className = "statusbarpanel";
         label.style.cssText = look.css;
@@ -102,7 +107,8 @@ export function create_mode_label<Window>(deps: ModeLabelDeps<Window>): ModeLabe
                 forget(window);
                 return draw(window, args);
             }
-            const entry: Shown = shown.get(window) ?? { args, stop_listening: deps.on_focus_change(window, () => draw(window, entry.args)) };
+            const redraw = () => draw(window, entry.args);
+            const entry: Shown = shown.get(window) ?? { args, stop_listening: stop_both(deps.on_focus_change(window, redraw), deps.on_scheme_change(window, redraw)) };
             entry.args = args;
             shown.set(window, entry);
             draw(window, args);

@@ -15,6 +15,7 @@ import type { OverlayClosed, OverlayMountArgs, OverlaySetModeLabelArgs, OverlayS
 
 declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
 
+const DARK_SCHEME = "(prefers-color-scheme: dark)";
 const XHTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 interface SurfaceSpec {
@@ -147,6 +148,13 @@ const mode_label_window_deps = {
         window.addEventListener("focusin", listener, true);
         window.addEventListener("focusout", listener, true);
         return () => (window.removeEventListener("focusin", listener, true), window.removeEventListener("focusout", listener, true));
+    },
+    // Measured: a window's own scheme query follows the Thunderbird theme, while the background page's follows the OS.
+    is_dark: (window: MainWindow) => window.matchMedia(DARK_SCHEME).matches,
+    on_scheme_change(window: MainWindow, listener: () => void) {
+        const query = window.matchMedia(DARK_SCHEME);
+        query.addEventListener("change", listener);
+        return () => query.removeEventListener("change", listener);
     },
 };
 

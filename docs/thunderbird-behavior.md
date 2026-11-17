@@ -541,4 +541,17 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, w
 
 - The label is a XUL `label` with class `statusbarpanel`, inserted before the first child of `#statusTextBox` (else `#status-bar`) of `messenger.xhtml`. Measured on Thunderbird 153.7.0 and Betterbird with the end-to-end run: it draws at the start of the bar, left of the status text.
 - A `focusin` and `focusout` capture listener on the window sees focus move into and out of the quick filter, which sits in `about:3pane`. The label reads the innermost focused element (`focus.ts`) on each event, so insert mode follows the field.
-- Thunderbird's `--color-yellow-50`, `--color-orange-50` and `--color-red-50` resolve in the status bar. The classic style colors the text with them and the badge style fills a pill with them.
+- The label colors come from the theme setting. The classic style colors the text with the mode role and the badge style fills a pill with it. Thunderbird's own `--color-yellow-50` and the other palette variables were used before and gave about 1.9 to 1 on a light status bar.
+
+## Color scheme
+
+Measured on Thunderbird 153.7.0 headless, with the Thunderbird theme (Compact Dark or Compact Light, or none) set against `ui.systemUsesDarkTheme`:
+
+| Where the query runs | Follows |
+| --- | --- |
+| `matchMedia("(prefers-color-scheme: dark)")` in the main window (chrome) | Thunderbird's theme |
+| the same in an extension page mounted in the window (hud, command line) | Thunderbird's theme |
+| the same in an extension page in a tab (options) | Thunderbird's theme |
+| the same in the background page | the OS |
+
+So a surface in the window needs no setting to pick dark or light: it asks its own `prefers-color-scheme`. The background page cannot choose, so it sends both sets and the window side picks. `#status-bar` reads `rgb(39, 39, 42)` under a dark theme and `rgb(250, 250, 250)` under a light one, with the OS set either way.

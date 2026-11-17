@@ -1,9 +1,15 @@
-body { font: message-box; max-width: 52em; margin: 1em auto; }
+/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. */
+:root { color-scheme: light dark; }
+body { font: message-box; max-width: 52em; margin: 1em auto; background: var(--desertfox-bg-core); color: var(--desertfox-fg-core); }
+h1, h2 { color: var(--desertfox-primary); }
 label { display: block; margin: 0.4em 0; }
 label span { display: inline-block; min-width: 14em; }
+input, select, textarea, button { background: var(--desertfox-bg-mantle); color: var(--desertfox-fg-core); border: 1px solid var(--desertfox-border); border-radius: 3px; font: inherit; }
+button:hover { background: var(--desertfox-selection); }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--desertfox-accent); outline-offset: 1px; }
 table { border-collapse: collapse; width: 100%; }
 td, th { padding: 0.15em 0.4em; text-align: left; }
 tr.removed td { text-decoration: line-through; opacity: 0.6; }
 label textarea { vertical-align: top; width: 32em; }
 #status { min-height: 1.5em; }
-#status.error { color: #b00020; }
+#status.error { color: var(--desertfox-error); }
