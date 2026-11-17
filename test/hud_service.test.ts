@@ -1,30 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { badge_for, create_hud_service, lifting_toasts } from "../src/background/hud/service.ts";
-import type { Settings } from "../vendor/desertfox/config.ts";
-import type { HudState, KeysEvent } from "../src/shared/protocol.ts";
+import { create_hud_service, lifting_toasts } from "../src/background/hud/service.ts";
+import type { Settings } from "../src/background/config/settings.ts";
+import type { HudState, KeysEvent, KeysMode } from "../src/shared/protocol.ts";
 import { fake_timers, sample_root, settings_with, settle } from "./hud_fakes.ts";
 
 function setup(overrides: Partial<Settings> = {}) {
     const log: string[] = [];
     const timers = fake_timers();
     let settings = settings_with({ mode_indicator: "off", ...overrides });
-    let mode = "normal";
+    const labels: string[] = [];
     const hud = create_hud_service({
         overlay: {
             mount: async ({ windowId, surface }) => void log.push(`mount ${surface}@${windowId}`),
             unmount: async ({ windowId, surface }) => void log.push(`unmount ${surface}@${windowId}`),
+            setModeLabel: async ({ windowId, mode, indicator, style }) => void labels.push(`${windowId} ${mode} ${indicator} ${style}`),
             onClosed: { addListener: () => {}, removeListener: () => {} },
         },
         read_settings: async () => settings,
         read_root: async () => sample_root(),
         send_changed: (window_id) => void log.push(`changed ${window_id}`),
-        mode_of: () => mode,
         timers,
     });
     const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id });
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
-    return { hud, log, timers, pending, state, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }), set_mode: (next: string) => void (mode = next) };
+    const set_mode = (mode: KeysMode["mode"], window_id = 1): Promise<void> => hud.on_keys_event({ command: "mode", mode, windowId: window_id });
+    return { hud, log, labels, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
 }
 
 test("the panel waits for the delay: nothing mounts before it and the panel shows after it", async () => {
@@ -175,33 +176,77 @@ test("a delay change applies to the next panel, not the one already waiting", as
     assert.deepEqual(log, ["mount hud@1"]);
 });
 
-test("the mode badge mounts the page for as long as the setting asks", async () => {
-    const { hud, log, state, set_settings } = setup({ mode_indicator: "always" });
+test("the label follows the mode setting and mounts no page", async () => {
+    const { hud, log, labels, set_settings } = setup({ mode_indicator: "always" });
     await hud.track(1);
-    assert.deepEqual(log, ["mount hud@1"]);
-    assert.equal((await state()).badge, "NORMAL");
+    assert.deepEqual(labels, ["1 normal always classic"]);
     set_settings({ mode_indicator: "off" });
     await hud.settings_changed();
-    assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);
-    assert.equal((await state()).badge, null);
+    assert.equal(labels.at(-1), "1 normal off classic");
+    assert.deepEqual(log, [], "the label is no hud page");
 });
 
-test("not_normal shows the badge only away from normal mode", () => {
-    assert.equal(badge_for("not_normal", "normal"), null);
-    assert.equal(badge_for("not_normal", "visual"), "VISUAL");
-    assert.equal(badge_for("always", "normal"), "NORMAL");
-    assert.equal(badge_for("off", "visual"), null);
+test("the label follows the style setting", async () => {
+    const { hud, labels, set_settings } = setup({ mode_indicator: "always", mode_indicator_style: "classic" });
+    await hud.track(1);
+    set_settings({ mode_indicator_style: "badge" });
+    await hud.settings_changed();
+    assert.deepEqual(labels, ["1 normal always classic", "1 normal always badge"]);
 });
 
-test("the page stays mounted for the badge while a panel comes and goes", async () => {
+test("a mode event updates the label of its window, and the same mode twice sends one call", async () => {
+    const { hud, labels, set_mode } = setup({ mode_indicator: "always" });
+    await hud.track(1);
+    await set_mode("visual");
+    await set_mode("visual");
+    await set_mode("normal");
+    assert.deepEqual(labels, ["1 normal always classic", "1 visual always classic", "1 normal always classic"]);
+});
+
+test("a mode event of a window with no id changes nothing", async () => {
+    const { labels, set_mode } = setup({ mode_indicator: "always" });
+    await set_mode("visual", -1);
+    assert.deepEqual(labels, []);
+});
+
+test("a mode event of one window leaves the label of another alone", async () => {
+    const { hud, labels, set_mode } = setup({ mode_indicator: "always" });
+    await hud.track(1);
+    await hud.track(2);
+    await set_mode("visual", 2);
+    assert.deepEqual(labels, ["1 normal always classic", "2 normal always classic", "2 visual always classic"]);
+});
+
+test("the label of a failing Experiment call is logged and the next update still runs", async () => {
+    const calls: string[] = [];
+    const hud = create_hud_service({
+        overlay: { mount: async () => {}, unmount: async () => {}, setModeLabel: async ({ mode }) => (calls.push(mode), Promise.reject(new Error("no such window"))), onClosed: { addListener: () => {}, removeListener: () => {} } },
+        read_settings: async () => settings_with({ mode_indicator: "always" }),
+        read_root: async () => sample_root(),
+        send_changed: () => {},
+        timers: fake_timers(),
+    });
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+        await hud.track(1);
+        await hud.on_keys_event({ command: "mode", mode: "visual", windowId: 1 });
+    } finally {
+        console.error = quiet;
+    }
+    assert.deepEqual(calls, ["normal", "visual"]);
+});
+
+test("the page mounts for a panel only, whatever the mode setting says", async () => {
     const { hud, log, timers, pending } = setup({ mode_indicator: "always" });
     await hud.track(1);
+    assert.deepEqual(log, []);
     await pending(["g"]);
     timers.advance(300);
     await settle();
     await pending([]);
     await settle();
-    assert.deepEqual(log, ["mount hud@1", "changed 1", "changed 1"]);
+    assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);
 });
 
 test("a toast mounts the page and lasts toast_error_ms for an error and toast_ms for a result", async () => {
@@ -228,7 +273,7 @@ test("a toast time of zero or a missing window shows no toast, so the caller fal
 });
 
 test("without the Experiment no toast shows", async () => {
-    const hud = create_hud_service({ overlay: undefined, read_settings: async () => settings_with({}), read_root: async () => sample_root(), send_changed: () => {}, mode_of: () => "normal", timers: fake_timers() });
+    const hud = create_hud_service({ overlay: undefined, read_settings: async () => settings_with({}), read_root: async () => sample_root(), send_changed: () => {}, timers: fake_timers() });
     assert.equal(await hud.toast(1, "x", true), false);
 });
 
@@ -272,11 +317,10 @@ test("events that are commands are ignored", async () => {
 function failing_mount() {
     const log: string[] = [];
     const hud = create_hud_service({
-        overlay: { mount: async () => Promise.reject(new Error("no such window")), unmount: async () => void log.push("unmount"), onClosed: { addListener: () => {}, removeListener: () => {} } },
+        overlay: { mount: async () => Promise.reject(new Error("no such window")), unmount: async () => void log.push("unmount"), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         read_settings: async () => settings_with({ mode_indicator: "off" }),
         read_root: async () => sample_root(),
         send_changed: () => {},
-        mode_of: () => "normal",
         timers: fake_timers(),
     });
     return { hud, log };
@@ -311,7 +355,7 @@ test("the toasts lift while the command line is open in the window and drop when
 
 test("mounting the command line through the lifting wrapper lifts the toasts, and a failed mount undoes it", async () => {
     const lifted: string[] = [];
-    const base = { mount: async () => {}, unmount: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } };
+    const base = { mount: async () => {}, unmount: async () => {}, setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } };
     const wrapped = lifting_toasts(base, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) });
     await wrapped.mount({ windowId: 1, surface: "cmdline" });
     await wrapped.mount({ windowId: 1, surface: "hud" });

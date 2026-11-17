@@ -4,3 +4,5 @@ export const OVERLAY_BOX_ID = "desertbird-overlay";
 // The hud has ids of its own, so two overlay boxes in one window never share an id. It never takes the keyboard, so the key runtime has no rule for it.
 export const HUD_BOX_ID = "desertbird-hud";
 export const HUD_BROWSER_ID = "desertbird-hud-browser";
+// The mode label sits in the status bar and is no overlay box. The id is how every call finds, reuses and removes it, so a reload never leaves a second one.
+export const MODE_LABEL_ID = "desertbird-mode-label";

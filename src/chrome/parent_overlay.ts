@@ -1,15 +1,17 @@
 // The parent script of the `overlay` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `overlay`: `getAPI(context)` returns `get_overlay_api(context)` and `onShutdown` calls `shutdown()`.
 // The overlay is a remote `browser` element in the window document, not an iframe: see "Overlay mount" in docs/thunderbird-behavior.md.
 
-import { HUD_BOX_ID, HUD_BROWSER_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
-import { capture_focus } from "./focus.ts";
+import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+import { capture_focus, in_text_field } from "./focus.ts";
+import { create_mode_label } from "./mode_label.ts";
+import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
 import { create_overlay_host } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import type { KeydownEvent } from "./runtime.ts";
 import { front_about_3pane } from "./view.ts";
-import type { OverlayClosed, OverlayMountArgs, OverlaySurface, OverlayUnmountArgs } from "../shared/protocol.ts";
+import type { OverlayClosed, OverlayMountArgs, OverlaySetModeLabelArgs, OverlaySurface, OverlayUnmountArgs } from "../shared/protocol.ts";
 
 declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
 
@@ -39,6 +41,7 @@ const SURFACES: Record<OverlaySurface, SurfaceSpec> = {
 
 const closed_listeners = new Set<(closed: OverlayClosed) => void>();
 let host: OverlayHost | null = null;
+let mode_label: ModeLabel | null = null;
 
 interface OverlayElement {
     id: string;
@@ -106,6 +109,55 @@ function create_overlay_element(window: MainWindow, extension: OverlayExtension,
     return () => box.remove();
 }
 
+interface StatusBarElement extends LabelElement {
+    insertBefore(child: unknown, before: unknown): void;
+    firstChild: unknown;
+}
+
+interface StatusBarWindowDocument extends OverlayDocument {
+    getElementById(id: string): StatusBarElement | null;
+    querySelectorAll(selectors: string): Iterable<LabelElement>;
+}
+
+function status_bar_of(window: MainWindow): StatusBarDocument {
+    const document = window.document as unknown as StatusBarWindowDocument;
+    return {
+        labels: () => [...document.querySelectorAll(`#${MODE_LABEL_ID}`)],
+        create_label() {
+            const label = document.createXULElement("label") as unknown as LabelElement & { id: string };
+            label.id = MODE_LABEL_ID;
+            return label;
+        },
+        insert_first(label) {
+            const host = document.getElementById("statusTextBox") ?? document.getElementById("status-bar");
+            host?.insertBefore(label, host.firstChild);
+            return host !== null;
+        },
+    };
+}
+
+const mode_label_window_deps = {
+    open_windows: open_main_windows,
+    status_bar_of,
+    in_text_field: (window: MainWindow) => in_text_field(window.document),
+    on_loaded(window: MainWindow, listener: () => void) {
+        if (window.document.readyState !== "complete") window.addEventListener("load", listener, { once: true });
+    },
+    on_focus_change(window: MainWindow, listener: () => void) {
+        window.addEventListener("focusin", listener, true);
+        window.addEventListener("focusout", listener, true);
+        return () => (window.removeEventListener("focusin", listener, true), window.removeEventListener("focusout", listener, true));
+    },
+};
+
+function ensure_mode_label(context: ExtensionContext & { extension: OverlayExtension }): ModeLabel {
+    mode_label ??= create_mode_label<MainWindow>({
+        window_with_id: (window_id) => open_main_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
+        ...mode_label_window_deps,
+    });
+    return mode_label;
+}
+
 function ensure_host(context: ExtensionContext & { extension: OverlayExtension }): OverlayHost {
     host ??= create_overlay_host<MainWindow>({
         window_with_id: (window_id) => open_main_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
@@ -143,6 +195,7 @@ export function get_overlay_api(context: ExtensionContext & { extension: Overlay
         overlay: {
             mount: guard("overlay.mount", (args: OverlayMountArgs): void => ensure_host(context).mount(args)),
             unmount: guard("overlay.unmount", (args: OverlayUnmountArgs): void => ensure_host(context).unmount(args)),
+            setModeLabel: guard("overlay.setModeLabel", (args: OverlaySetModeLabelArgs): void => ensure_mode_label(context).set(args)),
             onClosed: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "overlay.onClosed",
@@ -160,5 +213,8 @@ export function get_overlay_api(context: ExtensionContext & { extension: Overlay
 export function shutdown(): void {
     host?.shutdown();
     host = null;
+    // A label sits in the window and not in the host's table, so the sweep runs even when no label call ever came.
+    (mode_label ?? create_mode_label<MainWindow>({ window_with_id: () => null, ...mode_label_window_deps })).shutdown();
+    mode_label = null;
     closed_listeners.clear();
 }

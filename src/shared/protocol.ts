@@ -78,9 +78,34 @@ export interface KeysPending {
     windowId: number;
 }
 
-export type KeysEvent = KeysInvocation | KeysPending;
+/** The third thing `keys.onInvocation` carries: visual mode started or ended in a window. Only the key runtime knows it. Insert mode is not sent: the status bar label reads the focus itself. */
+export interface KeysMode {
+    command: "mode";
+    mode: "normal" | "visual";
+    windowId: number;
+}
 
-/** The pages the overlay can show. The parent maps each name to a page of the extension, so a caller never names a path or an address. `cmdline` takes the keyboard. `hud` (the which-key panel, the toasts and the mode badge) never does and lets clicks through. */
+export type KeysEvent = KeysInvocation | KeysPending | KeysMode;
+
+export const MODE_NAMES = ["normal", "visual", "insert"] as const;
+export type ModeName = (typeof MODE_NAMES)[number];
+
+export const MODE_INDICATORS = ["always", "not_normal", "off"] as const;
+export type ModeIndicator = (typeof MODE_INDICATORS)[number];
+
+/** How the status bar label draws the mode: `classic` is colored text such as `-- NORMAL --`, `badge` is the mode name in a colored pill. */
+export const MODE_LABEL_STYLES = ["classic", "badge"] as const;
+export type ModeLabelStyle = (typeof MODE_LABEL_STYLES)[number];
+
+/** What the status bar label of a window shows. `mode` is the mode the key runtime reports. The parent turns it into insert while a text field has the focus, and applies `indicator` to the result, which is why the setting travels with it. The parent maps mode and style to text and colors, so a caller never supplies either. */
+export interface OverlaySetModeLabelArgs {
+    windowId: number;
+    mode: "normal" | "visual";
+    indicator: ModeIndicator;
+    style: ModeLabelStyle;
+}
+
+/** The pages the overlay can show. The parent maps each name to a page of the extension, so a caller never names a path or an address. `cmdline` takes the keyboard. `hud` (the which-key panel and the toasts) never does and lets clicks through. */
 export const OVERLAY_SURFACES = ["cmdline", "hud"] as const;
 export type OverlaySurface = (typeof OVERLAY_SURFACES)[number];
 
@@ -103,7 +128,7 @@ export interface OverlayClosed {
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
     keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "folderTreeExpand", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
-    overlay: { functions: ["mount", "unmount"], events: ["onClosed"] },
+    overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -193,6 +218,8 @@ export interface OverlayApi {
     mount(args: OverlayMountArgs): Promise<void>;
     /** Removes the overlay and returns the focus to the thread list. Does nothing when no overlay is mounted. */
     unmount(args: OverlayUnmountArgs): Promise<void>;
+    /** Puts the mode label at the start of the window's status bar, or removes it for `none`. One window never holds two labels. */
+    setModeLabel(args: OverlaySetModeLabelArgs): Promise<void>;
     onClosed: { addListener(listener: (closed: OverlayClosed) => void): void; removeListener(listener: (closed: OverlayClosed) => void): void };
 }
 
@@ -235,8 +262,6 @@ export interface ToastView {
 export interface HudState {
     which_key: WhichKeyPanel | null;
     toasts: ToastView[];
-    /** The mode name to show, or null for no badge. */
-    badge: string | null;
     /** The command line is open in this window, so the toasts sit above its box. */
     lifted: boolean;
 }

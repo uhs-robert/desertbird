@@ -11,13 +11,13 @@ declare const Services: { wm: { getEnumerator(type: string | null): Iterable<Mai
 export interface MainWindow extends KeyTarget {
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
-    addEventListener(type: "unload", listener: () => void, options: { once: true }): void;
-    addEventListener(type: "blur", listener: () => void, capture: boolean): void;
+    addEventListener(type: "unload" | "load", listener: () => void, options: { once: true }): void;
+    addEventListener(type: "blur" | "focusin" | "focusout", listener: () => void, capture: boolean): void;
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     removeEventListener(type: "unload", listener: () => void): void;
-    removeEventListener(type: "blur", listener: () => void, capture: boolean): void;
-    document: FocusDocument & { getElementById(id: string): unknown; hasFocus(): boolean };
+    removeEventListener(type: "blur" | "focusin" | "focusout", listener: () => void, capture: boolean): void;
+    document: FocusDocument & { getElementById(id: string): unknown; hasFocus(): boolean; readyState: string };
 }
 
 export interface ExtensionContext {

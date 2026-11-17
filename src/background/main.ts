@@ -5,7 +5,7 @@ import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
-import { NORMAL_MODE, create_hud_service, lifting_toasts } from "./hud/service.ts";
+import { create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -158,14 +158,13 @@ messenger.notifications.onClicked.addListener((id) => {
     open_followup_anchor(messenger, id).catch(console.error);
 });
 
-// The hud shows the which-key panel, the toasts and the mode badge. Its state is a few seconds of interface state per window and lives in memory only, like the command line session.
+// The hud shows the which-key panel and the toasts, and keeps the mode label of the status bar. Its state is a few seconds of interface state per window and lives in memory only, like the command line session.
 const NO_WINDOW = -1;
 const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
     read_root: async () => (await load_record()).tree.root as TreeBranch,
     send_changed: (windowId) => void messenger.runtime.sendMessage({ type: "hud.changed", windowId }).catch(() => {}),
-    mode_of: () => NORMAL_MODE,
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });
 
@@ -196,7 +195,7 @@ start_jump_history(messenger);
 create_new_mail_notifier(messenger, async () => (await config_store.read()).settings.notify_new_mail).register();
 
 messenger.keys?.onInvocation.addListener((event) => {
-    if ("keys" in event) hud.on_keys_event(event).catch(console.error);
+    if ("keys" in event || "mode" in event) hud.on_keys_event(event).catch(console.error);
     else router.run(event).catch(console.error);
 });
 

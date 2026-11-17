@@ -72,6 +72,12 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         was = keys.length;
     };
 
+    // Whether the background last heard that visual mode is on. Only a change is sent, and the label in the status bar reads it.
+    let visual_told = false;
+    const tell_visual = (w: Window) => {
+        if ((visual_anchor >= 0) !== visual_told) deps.emit({ command: "mode", mode: (visual_told = !visual_told) ? "visual" : "normal", windowId: deps.window_id_of(w) });
+    };
+
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
     let visual_anchor = -1;
     // Where the mode last put the current row, and the view and message keys at both ends of the range then. A key that finds anything else means the list changed under the mode (a click, new mail, a row inserted or removed inside the range, a sort or folder change), so the mode ends and the old anchor never reaches into the new list.
@@ -160,11 +166,12 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     function hook(window: Window): void {
         if (hooked.has(window)) return;
-        const handler = (event: KeydownEvent) => on_keydown(window, event);
+        const handler = (event: KeydownEvent) => (on_keydown(window, event), tell_visual(window));
         const reset_typing = () => {
             matcher?.reset();
             hold_until = 0;
             visual_anchor = -1;
+            tell_visual(window);
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);

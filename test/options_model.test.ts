@@ -14,10 +14,11 @@ test("form text parses by kind", () => {
     assert.deepEqual(parse_setting_text("which_key_skip", "a, b"), { value: ["a", "b"] });
     assert.deepEqual(parse_setting_text("which_key_skip", ""), { value: [] });
     assert.deepEqual(parse_setting_text("mode_indicator", "off"), { value: "off" });
+    assert.deepEqual(parse_setting_text("mode_indicator_style", "badge"), { value: "badge" });
 });
 
 test("bad form text is an error", () => {
-    for (const [name, text] of [["toast_ms", "soon"], ["toast_ms", ""], ["toast_ms", "-1"], ["layout_fallback", "maybe"], ["mode_indicator", "sometimes"]] as [SettingName, string][]) {
+    for (const [name, text] of [["toast_ms", "soon"], ["toast_ms", ""], ["toast_ms", "-1"], ["layout_fallback", "maybe"], ["mode_indicator", "sometimes"], ["mode_indicator_style", "pill"]] as [SettingName, string][]) {
         assert.ok("error" in parse_setting_text(name, text), `${name} ${text}`);
     }
 });

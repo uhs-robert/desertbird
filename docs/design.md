@@ -28,7 +28,7 @@ The parts map onto DesertFox like this:
 | Chrome verbs (Experiment API schema) | None (new) | A fixed table of privileged operations that background handlers call |
 | `messageDisplayScripts` | `content.js` in a page | Keys and hints inside the message body, which runs in a content process the chrome listener cannot see. Measured: for local mail the message pane is not remote and a chrome listener sees its keys (see [`thunderbird-behavior.md`](thunderbird-behavior.md), Message pane process) |
 | `composeScripts` | `content.js` in a field | Insert mode, `<C-o>` and hints inside the compose body |
-| Overlay page in the chrome window | `cmdline.html` in a remote `browser` element and the `ui` bundle | Command line, completion, which-key, badge and toasts |
+| Overlay page in the chrome window | `cmdline.html` in a remote `browser` element and the `ui` bundle | Command line, completion, which-key and toasts |
 | Native host | Native host | Config read (`read_config`) and the external editor (`editor_start`, `editor_collect`) |
 
 Registry changes from DesertFox:
@@ -49,7 +49,8 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 - `app.command {name}`: built as `keys.appCommand`. One name from a fixed allowlist of two Thunderbird commands, `cmd_undo` and `cmd_openConversation`. It answers false when Thunderbird has the command disabled. Never a free string.
 - `app.open_page {page}`: built as `keys.appOpenPage`. One key of a fixed table (`addons`, `themes`, `config`), never a URL. The counterpart of the DesertFox host verb `open_firefox_page`.
 - `hints.collect {docs}` and `hints.act {id, action}`: hint targets in the chrome documents. The message and compose content scripts hold their own hints.
-- `overlay.mount` and `overlay.unmount`: the extension page that draws the command line, which-key, badge and toasts in the chrome window.
+- `overlay.mount` and `overlay.unmount`: the extension page that draws the command line, which-key and toasts in the chrome window.
+- `overlay.setModeLabel`: the mode label at the start of the status bar. The args are a window id and three enums (the mode, the `mode_indicator` setting and the `mode_indicator_style` setting), so the parent owns the text and the colors. The Experiment draws it because a page cannot sit inside the status bar. It reads the focus itself for insert mode, since the key runtime does not track insert.
 
 ## Split table
 
@@ -103,7 +104,8 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `app.open_page {page}` | `g x`, `g T`, `g c` | Experiment | `app.open_page`. Built. |
 | `hint.pick {action}` | `f`, `;` | Experiment in chrome, standard in the message body | `hints.collect` and `hints.act`, content script hints |
 | Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime. `.` replays the last motion or background command from runtime memory. A command with `repeatable: false` (`msg.delete`, `msg.archive`, `msg.move`, `msg.snooze`, `msg.remind`, `msg.remind_cancel` and `cmdline.open`) clears it instead |
-| Command line, which-key, badge, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |
+| Command line, which-key, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |
+| Mode label | none | Experiment | `overlay.setModeLabel`. The background tells it the mode and the settings. It is an element of the status bar and no page. |
 
 The table has 42 rows. 27 run without the Experiment (26 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.
 
@@ -132,7 +134,7 @@ These parts carry over with few changes:
 - `define`, the define-time checks and `check_args`.
 - The command line parser, the printer and completion.
 - The key notation and the prefix tree compiler.
-- The which-key panel, toasts, the badge and themes.
+- The which-key panel, toasts, the mode label and themes.
 - The TOML config and its merge.
 - The `commands.json` build and help generation.
 - The native host verbs `read_config`, `editor_start` and `editor_collect`.

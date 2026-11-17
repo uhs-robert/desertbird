@@ -136,6 +136,9 @@ async function tab_command(command) {
   const tabs = window.tabs;
   if (command.name === "open_content_tab") return { opened: (await browser.tabs.create({ url: "about:blank" })).id };
   if (command.name === "open_popup_window") return { opened: (await browser.windows.create({ type: "popup", url: "about:blank" })).id };
+  if (command.name === "open_normal_window") return { opened: (await browser.windows.create({ type: "normal" })).id };
+  // The remove call can outlast the answer on a main window, so it is not awaited.
+  if (command.name === "close_normal_window") return { closed: (browser.windows.remove(command.args.id).catch(console.error), true) };
   if (command.name === "close_popup_window") return { closed: await browser.windows.remove(command.args.id).then(() => true) };
   if (command.name === "open_mail_tab") return { opened: (await browser.mailTabs.create({})).id };
   if (command.name === "move_first_tab") return { moved: await browser.tabs.move(tabs[0].id, { index: 1 }).then((moved) => moved.map((tab) => tab.index)) };
@@ -247,7 +250,7 @@ async function poll_forever() {
       } else if (command.name === "clear_clipboard") {
         await clipboard_text("");
         await post({ seq: command.seq, cleared: true });
-      } else if (["open_content_tab", "open_popup_window", "close_popup_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
+      } else if (["open_content_tab", "open_popup_window", "close_popup_window", "open_normal_window", "close_normal_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
       } else if (command.name === "folder_events_start") {
         folder_events_start();

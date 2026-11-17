@@ -6,7 +6,7 @@ The command line page and the hud page. The `overlay` Experiment mounts it as a 
 | --- | --- |
 | `cmdline.html`, `cmdline.css` | The list of rows, the status line and the input line |
 | `cmdline.ts` | Key handling and drawing. The page learns its window from `?window=<id>` in its address. It asks the background for the opening text (`cmdline.hello`), for rows on each edit (`cmdline.complete`), and sends the line on Enter (`cmdline.run`) or Escape (`cmdline.close`) |
-| `hud.html`, `hud.css`, `hud.ts` | The second surface: the which-key panel, the toasts and the mode badge. It keeps no state: it asks the background for `hud.state` at load and each time it hears `hud.changed` for its window. The box is transparent and passes mouse clicks through. It never takes the keyboard |
+| `hud.html`, `hud.css`, `hud.ts` | The second surface: the which-key panel and the toasts. It keeps no state: it asks the background for `hud.state` at load and each time it hears `hud.changed` for its window. The box is transparent and passes mouse clicks through. It never takes the keyboard |
 | `line_edit.ts` | Pure helpers: apply a picked row to the text, move the highlight, split a name at the matched letters |
 
 ## Keys
@@ -18,7 +18,7 @@ The command line page and the hud page. The `overlay` Experiment mounts it as a 
 ## Rules
 
 - The hud browser is told no size limit (`max_width` and `max_height` of 0). A browser that is told one resizes to its content, and a page of absolutely placed pieces has none, so the browser shrank to 0 by 0 (measured). The box is 520 px high and as wide as the window. The browser carries `transparent="true"`: without it Thunderbird paints the page canvas white.
-- Colors come from CSS variables with a `prefers-color-scheme` block. The text and the border stay at a contrast of at least 7 to 1 against the panel in both themes. The panel and the badge sit 32 px above the window bottom, clear of the status bar.
+- Colors come from CSS variables with a `prefers-color-scheme` block. The text and the border stay at a contrast of at least 7 to 1 against the panel in both themes. The panel sits 32 px above the window bottom, clear of the status bar.
 - A panel of more than 24 keys is cut and ends in a count of the rest.
 
 - The message shapes are in `src/shared/protocol.ts` (`CmdlineRequest` and its answers). Import it for types only.

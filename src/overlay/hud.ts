@@ -1,4 +1,4 @@
-// The hud page: the which-key panel, the toasts and the mode badge. It keeps no state. Each time the background says the hud of this window changed, it asks for the state and draws it.
+// The hud page: the which-key panel and the toasts. It keeps no state. Each time the background says the hud of this window changed, it asks for the state and draws it.
 
 import type { HudChanged, HudRequest, HudState } from "../shared/protocol.ts";
 
@@ -15,7 +15,6 @@ const MAX_ROWS = 24;
 const window_id = Number(new URLSearchParams(location.search).get("window"));
 const which_key_element = document.getElementById("which_key") as HTMLDivElement;
 const toasts_element = document.getElementById("toasts") as HTMLDivElement;
-const badge_element = document.getElementById("badge") as HTMLDivElement;
 
 function make<K extends keyof HTMLElementTagNameMap>(tag: K, class_name: string, text?: string): HTMLElementTagNameMap[K] {
     const node = document.createElement(tag);
@@ -42,8 +41,6 @@ function draw(state: HudState): void {
     draw_which_key(state.which_key);
     toasts_element.replaceChildren(...state.toasts.map((toast) => make("div", toast.is_error ? "error" : "info", toast.text)));
     document.body.classList.toggle("lifted", state.lifted);
-    badge_element.hidden = state.badge === null;
-    badge_element.textContent = state.badge ?? "";
 }
 
 // A later answer replaces an earlier one that arrives after it.
