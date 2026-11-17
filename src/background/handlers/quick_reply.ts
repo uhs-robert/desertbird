@@ -18,10 +18,6 @@ export interface QuickReplyApi extends MessageApi {
     quick_replies: QuickReplyStore;
 }
 
-/** The parts of a `DOMParser` the insert reads, so a test can pass a stand-in. */
-export type HtmlParser = (html: string) => Document;
-const parse_with_dom_parser: HtmlParser = (html) => new DOMParser().parseFromString(html, "text/html");
-
 const QUOTE_SELECTOR = "div.moz-cite-prefix, blockquote[type=cite]";
 
 /** Plain compose: the text goes first and the quote follows after a blank line. */
@@ -30,19 +26,21 @@ export function insert_into_plain(body: string, text: string): string {
 }
 
 /**
- * HTML compose: one `div` per line and an empty one before the first quote node, or at the top when there is no quote. Lines are set as `textContent`, so the text is escaped when the document is written out and never read as markup. The quote and the signature stay as Thunderbird made them.
+ * HTML compose: one `div` per line, then an empty paragraph, before the first quote node or at the top when there is no quote. Lines are set as `textContent`, so the text is escaped when the document is written out and never read as markup. The empty paragraph is Thunderbird's own blank line, which survives `setComposeDetails` where an empty `div` does not.
+ * Known limit: with reply on top and the signature above the quote, the text lands below the signature.
  */
-export function insert_into_html(html: string, text: string, parse: HtmlParser = parse_with_dom_parser): string {
-    const document = parse(html);
+export function insert_into_html(html: string, text: string): string {
+    const document = new DOMParser().parseFromString(html, "text/html");
     const anchor = document.body.querySelector(QUOTE_SELECTOR) ?? document.body.firstChild;
-    // The last line is an empty one, so the quote does not sit against the text, as in plain compose.
-    const lines = [...text.split("\n"), ""].map((line) => {
+    const lines = text.split("\n").map((line) => {
         const block = document.createElement("div");
         if (line === "") block.append(document.createElement("br"));
         else block.textContent = line;
         return block;
     });
-    for (const block of lines) document.body.insertBefore(block, anchor);
+    const blank_line = document.createElement("p");
+    blank_line.append(document.createElement("br"));
+    for (const block of [...lines, blank_line]) document.body.insertBefore(block, anchor);
     return document.documentElement.outerHTML;
 }
 

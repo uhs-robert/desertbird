@@ -895,14 +895,18 @@ async function run_quick_replies(instance) {
   check(app, kind, "the slot text sits above the quote and the quote survives", at_text >= 0 && at_quote > at_text, `text at ${at_text}, quote at ${at_quote}`);
   check(app, kind, "the compose is plain or HTML as the identity says", tab?.is_plain === (kind === "quick_reply_plain"), `isPlainText ${tab?.is_plain}`);
   if (kind === "quick_reply_html") check(app, kind, "markup in the slot text is escaped and not live", /&lt;b&gt;line&lt;\/b&gt;/.test(tab?.html ?? "") && !/<b>line/.test(tab?.html ?? ""), `html ${JSON.stringify(tab?.html)}`);
+  check(app, kind, "the signature survives below the quote", at_signature > at_quote, `quote at ${at_quote}, signature at ${at_signature}`);
+  check(app, kind, "a blank line separates the slot text from the cite line", /line<\/b>\.\n\n+On /.test(body), `body ${JSON.stringify(body)}`);
   note(app, kind, "quick reply draft layout", `text at ${at_text}, quote at ${at_quote}, signature at ${at_signature} (-1 means absent), body ${JSON.stringify(body)}`);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_after_gr1_${kind}`), name: `after_gr1_${kind}`, line: "compose window with the quick reply above the quote" });
   await instance.ask("close_compose");
   await sleep(1500);
   await instance.press(["g"]);
   await instance.press(["r"]);
+  const log_offset = instance.app_log().length;
   state = await key_and_state(instance, ["2"], 3000);
   check(app, kind, "g r 2 on an empty slot opens no compose window", !state.windows.some((window) => window.type === "messageCompose"));
+  check(app, kind, "g r 2 on an empty slot shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), "evidence is the libnotify warning in the app log");
   check(app, kind, "the app survived the quick reply keys", instance.exited() === null);
 }
 

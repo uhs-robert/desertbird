@@ -482,6 +482,8 @@ Taken from the API schemas and the 153.7.0 notification code. Not yet measured o
 
 Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird (the same result on both), with an identity that has a text signature, once in plain compose and once in HTML compose. `compose.beginReply` resolves to the compose tab, and `getComposeDetails` right after it returns the finished draft with the quote and the signature, so no wait is needed.
 
-- Inserting the slot text above the quote with `getComposeDetails` and `setComposeDetails` keeps the quote and the signature in both compose modes. The reply-on-top draft starts with the cite line, then the quoted text, then the signature (`moz-signature`).
+- Inserting the slot text above the quote with `getComposeDetails` and `setComposeDetails` keeps the quote and the signature in both compose modes. The measured draft is the default one: reply below the quote, signature at the bottom (the profile sets neither `reply_on_top` nor `sig_bottom`). It has the cite line, the quoted text, then the signature (`moz-signature`). Reply on top and a signature above the quote were not measured.
+- Known limit: with reply on top and the signature above the quote, the HTML insert lands below the signature, because it goes before the cite line. Plain compose puts the text at the very top in every layout.
+- An empty `div` does not survive `setComposeDetails`, so the blank line between the text and the cite line is an empty `<p><br></p>`.
 - The HTML path sets the text with `textContent`. A slot text of `Second & <b>line</b>.` reads back as `Second &amp; &lt;b&gt;line&lt;/b&gt;.` in the draft body, so it is not live markup.
 - A preset `body` on `beginReply` was not measured, because the insert after the draft opens keeps both parts.

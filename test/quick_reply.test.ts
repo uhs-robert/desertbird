@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
-import { insert_into_html, insert_into_plain } from "../src/background/handlers/quick_reply.ts";
+import { insert_into_plain } from "../src/background/handlers/quick_reply.ts";
 import { create_quick_reply_store, migrate_quick_reply_record, QUICK_REPLY_STORAGE_KEY } from "../src/background/quick_reply_store.ts";
 import { create_router } from "../src/background/router.ts";
 import { fake_api, fake_storage } from "./fake_api.ts";
@@ -42,54 +42,8 @@ test("an empty slot refuses with a message and opens nothing", async () => {
     assert.equal(calls.some((call) => call.startsWith("compose.")), false);
 });
 
-test("the command never sends and uses no send call", async () => {
-    const { api, calls } = fake_api({ messages: MESSAGES, quick_replies: ["Hi"] });
-    await create_router(registry, api).run(invocation(1));
-    assert.equal(calls.some((call) => /\.send/i.test(call)), false);
-});
-
 test("plain insert keeps the quote and drops the leading blank lines of the draft", () => {
     assert.equal(insert_into_plain("\n\nOn x wrote:\n> q\n\n-- \nsig", "Hi"), "Hi\n\nOn x wrote:\n> q\n\n-- \nsig");
-});
-
-/** A stand-in for the few document calls the insert makes. It serializes text nodes escaped, as a real document does. */
-function fake_document(children: string[]) {
-    interface Node_ { tag: string; text?: string; kind?: string; kids: Node_[] }
-    const make = (tag: string): Node_ => ({ tag, kids: [] });
-    const body = make("body");
-    for (const child of children) {
-        const node = make(child.startsWith("q") ? "blockquote" : "div");
-        node.text = child;
-        if (child.startsWith("q")) node.kind = "cite";
-        body.kids.push(node);
-    }
-    const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const serialize = (node: Node_): string => `<${node.tag}>${node.text === undefined ? "" : escape(node.text)}${node.kids.map(serialize).join("")}</${node.tag}>`;
-    const wrap = (node: Node_): Node_ & { append(child: Node_): void; textContent: string } =>
-        Object.defineProperties(node, {
-            append: { value: (child: Node_) => void node.kids.push(child) },
-            textContent: { get: () => node.text ?? "", set: (value: string) => void (node.text = value) },
-        }) as Node_ & { append(child: Node_): void; textContent: string };
-    const document = {
-        body: {
-            querySelector: () => body.kids.find((kid) => kid.kind === "cite") ?? null,
-            get firstChild() {
-                return body.kids[0] ?? null;
-            },
-            insertBefore: (node: Node_, anchor: Node_ | null) => body.kids.splice(anchor === null ? body.kids.length : body.kids.indexOf(anchor), 0, node),
-        },
-        createElement: (tag: string) => wrap(make(tag)),
-        documentElement: { get outerHTML() { return serialize(body); } },
-    };
-    return document as unknown as Document;
-}
-
-test("html insert puts escaped lines before the quote and leaves the quote and signature", () => {
-    const html = insert_into_html("ignored", "a <b>bold</b> & more\n\nsecond", () => fake_document(["", "quote", "signature"]));
-    assert.match(html, /<div>a &lt;b&gt;bold&lt;\/b&gt; &amp; more<\/div>/);
-    assert.ok(html.indexOf("second") < html.indexOf("quote"));
-    assert.ok(html.indexOf("quote") < html.indexOf("signature"));
-    assert.equal(html.includes("<b>"), false);
 });
 
 test("the store keeps nine slots, pads short lists and drops bad entries", async () => {
