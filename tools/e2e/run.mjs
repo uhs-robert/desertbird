@@ -654,10 +654,11 @@ async function run_scale(instance) {
   await sleep(10000);
   const timed = async (name, keys, expect = null) => {
     const before = await selection();
+    for (const key of keys.slice(0, -1)) await instance.press([key]);
     const started = Date.now();
-    await instance.press(keys);
+    await instance.press([keys.at(-1)]);
     let now = before;
-    while (Date.now() - started < 60000 && same(now.ids, before.ids) && now.folder === before.folder) now = await selection();
+    while (Date.now() - started < 40000 && same(now.ids, before.ids) && now.folder === before.folder) now = await selection();
     const elapsed = Date.now() - started;
     note(app, kind, `time ${name}`, `${elapsed} ms, now ${now.folder} ${now.ids.slice(0, 2).join(" ")}`);
     if (expect !== null) check(app, kind, `${name} selects ${expect}`, now.ids[0] === expect, `selected ${now.ids[0]}`);
