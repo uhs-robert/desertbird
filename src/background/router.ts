@@ -4,7 +4,8 @@ import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
-import type { KeysApi, KeysInvocation } from "../shared/protocol.ts";
+import type { KeysApi, KeysInvocation, OverlayApi } from "../shared/protocol.ts";
+import type { CmdlineSessions } from "./cmdline/service.ts";
 import type { MessageApi } from "./handlers/message.ts";
 import type { ViewApi } from "./handlers/view.ts";
 import { notify_refusal } from "./notify.ts";
@@ -14,6 +15,8 @@ import type { ScopedContext } from "./commands/index.ts";
 export interface RouterApi extends MessageApi, ViewApi, NotificationsApi {
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
+    overlay: OverlayApi | undefined;
+    cmdline: CmdlineSessions;
 }
 
 const is_experiment_namespace = (name: string): name is keyof typeof EXPERIMENT_VERBS => Object.hasOwn(EXPERIMENT_VERBS, name);

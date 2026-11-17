@@ -32,6 +32,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             onChanged: { addListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void change_listeners.push(listener) },
         },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
+        runtime: { onMessage: { addListener: () => {} } },
         notifications: { create: async () => "n" },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
     };

@@ -31,9 +31,28 @@ export interface KeysInvocation {
     messageIds: number[];
 }
 
+/** The pages the overlay can show. The parent maps each name to a page of the extension, so a caller never names a path or an address. */
+export const OVERLAY_SURFACES = ["cmdline"] as const;
+export type OverlaySurface = (typeof OVERLAY_SURFACES)[number];
+
+export interface OverlayMountArgs {
+    windowId: number;
+    surface: OverlaySurface;
+}
+
+export interface OverlayUnmountArgs {
+    windowId: number;
+}
+
+/** Payload of the `overlay.onClosed` event: the overlay left a window without an `unmount` call, because the front tab changed or the window closed. */
+export interface OverlayClosed {
+    windowId: number;
+}
+
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
     keys: { functions: ["install"], events: ["onInvocation"] },
+    overlay: { functions: ["mount", "unmount"], events: ["onClosed"] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -41,3 +60,31 @@ export interface KeysApi {
     install(args: KeysInstallArgs): Promise<void>;
     onInvocation: { addListener(listener: (invocation: KeysInvocation) => void): void; removeListener(listener: (invocation: KeysInvocation) => void): void };
 }
+
+export interface OverlayApi {
+    /** Shows the surface in the window and gives it the focus. A second call for the same window replaces the first. */
+    mount(args: OverlayMountArgs): Promise<void>;
+    /** Removes the overlay and returns the focus to the thread list. Does nothing when no overlay is mounted. */
+    unmount(args: OverlayUnmountArgs): Promise<void>;
+    onClosed: { addListener(listener: (closed: OverlayClosed) => void): void; removeListener(listener: (closed: OverlayClosed) => void): void };
+}
+
+/** Messages from the command line page to the background, sent with `runtime.sendMessage`. The page learns its `windowId` from the address the overlay loaded it with. */
+export type CmdlineRequest =
+    | { type: "cmdline.hello"; windowId: number }
+    | { type: "cmdline.complete"; windowId: number; text: string; caret: number }
+    | { type: "cmdline.run"; windowId: number; text: string }
+    | { type: "cmdline.close"; windowId: number };
+
+/** The rows are plain data. `positions` are the letters of `name` the query matched. */
+export interface CmdlineCompletion {
+    rows: { name: string; insert: string; description: string; args: string; positions: number[] }[];
+    start: number;
+    end: number;
+    usage?: string;
+}
+
+export type CmdlineHello = { open: true; text: string } | { open: false };
+
+/** `ok` is false when the line is not a command, with the reason in `message`. The line stays open then. A usage line from `-h` comes back the same way. */
+export type CmdlineRunResult = { ok: true } | { ok: false; message: string };

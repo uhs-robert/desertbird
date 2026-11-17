@@ -55,6 +55,18 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
         mailTabs: { query: async (query) => (calls.push(`mailTabs.query ${query.windowId}`), options.displayed === undefined ? [{ id: 1 }] : [{ id: 1, displayedFolder: options.displayed }]), update: async () => undefined, setQuickFilter: async () => {} },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
         keys: options.experiment === false ? undefined : { install: async () => {}, onInvocation: { addListener: () => {}, removeListener: () => {} } },
+        overlay:
+            options.experiment === false
+                ? undefined
+                : {
+                      mount: async (args) => void calls.push(`overlay.mount ${args.windowId} ${args.surface}`),
+                      unmount: async (args) => void calls.push(`overlay.unmount ${args.windowId}`),
+                      onClosed: { addListener: () => {}, removeListener: () => {} },
+                  },
+        cmdline: {
+            begin: (window_id, session) => void calls.push(`cmdline.begin ${window_id} ${JSON.stringify(session)}`),
+            end: (window_id) => void calls.push(`cmdline.end ${window_id}`),
+        },
     };
     return { api, calls };
 }

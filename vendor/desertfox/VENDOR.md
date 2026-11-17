@@ -1,13 +1,13 @@
 # Vendored DesertFox code
 
-This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension. DesertFox is the source of the key matcher, the key notation, the keymap compiler and the command registry validator. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
+This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension. DesertFox is the source of the key matcher, the key notation, the keymap compiler, the command registry validator, the command line parser and printer, and the completion tokenizer and scorer. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
 
 - Source: the DesertFox repository, folder `src/shared/`
 - Tag: `v1.0.0`
 - Commit: `33a68a009791563e5ba57999e43b5c8d45c8ca6d` (use the commit, since a tag can move)
 - License: MPL-2.0, the same as DesertBird (see `LICENSE` at the repository root). The copied files keep their text unchanged apart from the edits listed below.
 
-The folder mirrors `src/shared/`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
+The folder mirrors `src/shared/`, except `completion/tokenize.ts`, which comes from `src/cmdline/completion/tokenize.ts`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
 
 ## Commands
 
@@ -30,13 +30,17 @@ All edits live in `local_edits.patch`. They widen the Firefox-only values of `co
 - The unknown-source check (line 265) accepts `"tags"`, matching the `DynamicValues` edit.
 - `check_count_and_modes` accepts the four `RunsIn` values. The rule that a bundle belongs to a command outside the background now reads `(input.runs_in as string) === "background"` instead of `!== "content"`. The cast is there because the type already rules the case out. The rule that a content command has no `run` now applies to every side except `background`, since chrome, message and compose code does not live in the registry. This is the validator half of the `RunsIn` edit.
 
+### `completion/tokenize.ts`
+
+- The three imports of `../../shared/...` read `../...`, because the file sits beside the shared files here and in a `cmdline/completion/` folder upstream.
+
 ### Checked, not edited
 
 - `MODES` already holds `normal`, `insert`, `visual` and `cmdline`. Narrowing it breaks `bundles.ts` and `command.ts`, which name the other DesertFox modes, so the list stays as it is.
 
 ## Not copied
 
-`keys/prune_tree.ts`, `keys/firefox_shortcut.ts`, `keys/index.ts`, `registry/builtin.ts` (DesertBird writes its own registry), `registry/index.ts` (it re-exports the command-line files below), the command-line files (`command_line`, `usage`, `parse_binding`, `print_command`, `single_quote`, `commands_file`) and every DesertFox test. The command-line files wait for the phase that needs them.
+`keys/prune_tree.ts`, `keys/firefox_shortcut.ts`, `keys/index.ts`, `registry/builtin.ts` (DesertBird writes its own registry), `registry/index.ts`, the binding and file files of the command line (`parse_binding`, `commands_file`) and every DesertFox test. The rest of the DesertFox command line page (`src/cmdline/`) is Firefox specific: its row sources read tabs, bookmarks and history. DesertBird writes its own completer in `src/background/cmdline/` on top of `completion/tokenize.ts` and `score.ts`.
 
 DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled keymap under its own key.
 
@@ -47,6 +51,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | --- | --- | --- | --- |
 | `bundles.ts` | copy | `501a602b76060a4af7c06ffd3c470babf3dc38cbb258718cd0063db847a400a6` | `501a602b76060a4af7c06ffd3c470babf3dc38cbb258718cd0063db847a400a6` |
 | `command.ts` | edited | `413d108780e94db8094856820a36ebc0a00105c3aa00b530a5348b66ef90eca3` | `e44c1fc11de62c27b31044b2a36bf9be8e38eb2ca5ef78376bf21d535529c641` |
+| `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `d7ef6258d1c3b1f8d791212f4af4875c5a48f538c4b8ae42fccec57c8fe2497a` |
 | `default_settings.ts` | stub | `-` | `c053a2a8cf518e95b72f0cccd60102c25909eccd5c6729f74e634351e6967827` |
 | `invocation.ts` | copy | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` |
@@ -61,9 +66,14 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `register_names.ts` | copy | `1d75546949b7bab964fde8c482921058b95cbab007d8d244c0bda187721bed01` | `1d75546949b7bab964fde8c482921058b95cbab007d8d244c0bda187721bed01` |
 | `registry/check_args.ts` | copy | `a9656151caf562f85a3ef7c3d6c639cb5f97b9fe6cd3a9e80cb8cc6aa14dcbf0` | `a9656151caf562f85a3ef7c3d6c639cb5f97b9fe6cd3a9e80cb8cc6aa14dcbf0` |
 | `registry/check_shape.ts` | copy | `ceffccc1d5a69ba605b89f0853fccc30924c8451ba231d276ab8e0adf0e0aca4` | `ceffccc1d5a69ba605b89f0853fccc30924c8451ba231d276ab8e0adf0e0aca4` |
+| `registry/command_line.ts` | copy | `3f4a603c09673fdc53535b5147203031e1ef7a3b3b1242f08feccea8dfcbad3b` | `3f4a603c09673fdc53535b5147203031e1ef7a3b3b1242f08feccea8dfcbad3b` |
 | `registry/define.ts` | edited | `fef06161fec4c009b6f028fc1348e4de74eec4581cf1adab61b1ec8d655c5a5c` | `4e4f4c71de93e59eb8ec8b369d8b93004c6db2d52bdd30d5d0fb5b2b4e8972b9` |
 | `registry/params.ts` | copy | `62137e99703e3ab8ec7cb7a04933a78b92fbeeb47bb8908808092d0c728bd9b8` | `62137e99703e3ab8ec7cb7a04933a78b92fbeeb47bb8908808092d0c728bd9b8` |
+| `registry/print_command.ts` | copy | `c79b5b6fe3eef65e9af781926dcd2ccb6d3ae08269c525a03cee903487aef627` | `c79b5b6fe3eef65e9af781926dcd2ccb6d3ae08269c525a03cee903487aef627` |
+| `registry/single_quote.ts` | copy | `69108762c4226d0040ca8c53532b00013e1f7ca2ff9581d90da373ea90d233b9` | `69108762c4226d0040ca8c53532b00013e1f7ca2ff9581d90da373ea90d233b9` |
 | `registry/summary.ts` | copy | `3ec30b815417c7f27c2b1dd685f48b033870f21ef2504c505be2606899acb78e` | `3ec30b815417c7f27c2b1dd685f48b033870f21ef2504c505be2606899acb78e` |
+| `registry/usage.ts` | copy | `76ee0dab6e7ae055caa44bbd2a80f148ece2fc270ea59cbe8f1e273ec44156c5` | `76ee0dab6e7ae055caa44bbd2a80f148ece2fc270ea59cbe8f1e273ec44156c5` |
+| `score.ts` | copy | `a478f506e3b5446c5fb89d22ce484341d5fbeb682949ade20ffd23e89d010905` | `a478f506e3b5446c5fb89d22ce484341d5fbeb682949ade20ffd23e89d010905` |
 | `settings_schema.ts` | stub | `-` | `376fcfdfe3c389f1451d5b291db23effc5ef77d6445ddae3627a4ee92d2a93aa` |
 | `settings_table.ts` | stub | `-` | `ec920ec05c37ed29c3c8729043f5eb836558516529207620e7771025444d44a6` |
 | `table_constants.ts` | stub | `-` | `3bd44266a9390a65304a86b502e6d7ecd257dd68115cd2e2303ab8e3ffb4c2a2` |

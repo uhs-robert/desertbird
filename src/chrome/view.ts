@@ -13,6 +13,9 @@ export interface ThreadTreeLike {
     selectedIndex: number;
     currentIndex: number;
     scrollToIndex?(index: number, instant?: boolean): void;
+    /** The focusable body of the list. The overlay returns the focus here. */
+    table?: { body?: { focus?(): void } };
+    focus?(): void;
 }
 
 export interface About3PaneLike {

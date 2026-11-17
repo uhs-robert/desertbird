@@ -34,6 +34,7 @@ function stub_messenger(hold_first_get = false) {
             onChanged: { addListener: (listener: Listener) => void listeners.push(listener) },
         },
         keys: { install: async (args: { tree: { root: { children: Record<string, unknown> } } }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
+        runtime: { onMessage: { addListener: () => {} } },
         notifications: { create: async () => "n" },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
     };

@@ -1,5 +1,7 @@
 // Finds out where a key is going: a text field, the reading pane or an open menu. The top window sees keys from every document below it, so the event target alone can name the wrapping element and not the field.
 
+import { OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+
 export interface FocusNode {
     localName?: string;
     id?: string;
@@ -20,7 +22,8 @@ const TYPING_ELEMENTS = new Set(["input", "textarea", "select", "search-textbox"
 // The measured chains are four deep (main window, about:3pane, about:message, message body). The cap only stops a pathological nesting.
 const MAX_DEPTH = 12;
 
-export const is_typing_element = (node: FocusNode | null | undefined): boolean => node?.isContentEditable === true || TYPING_ELEMENTS.has(node?.localName ?? "");
+// The overlay's browser is remote and its document is out of reach, so its id is the only mark. Its keys are the page's own.
+export const is_typing_element = (node: FocusNode | null | undefined): boolean => node?.isContentEditable === true || node?.id === OVERLAY_BROWSER_ID || TYPING_ELEMENTS.has(node?.localName ?? "");
 
 /** The focused element and every element it sits in, outermost first. The walk follows shadow roots and the documents of browsers and frames. A browser whose document is out of reach ends it. */
 export function focus_chain(document: FocusDocument): FocusNode[] {

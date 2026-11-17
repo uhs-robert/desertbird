@@ -10,11 +10,19 @@ set -euo pipefail
 
 PIN_SHA=33a68a009791563e5ba57999e43b5c8d45c8ca6d
 UPSTREAM_DIR=src/shared
+# A file under `completion/` comes from `src/cmdline/completion/` upstream. Every other file mirrors `src/shared/`.
 COPIED_FILES=(
   keys/token.ts keys/notation.ts keys/matcher.ts keys/compiler.ts
-  register_names.ts prefix_tree.ts command.ts invocation.ts keymap.ts bundles.ts
+  register_names.ts prefix_tree.ts command.ts invocation.ts keymap.ts bundles.ts score.ts
   registry/define.ts registry/check_args.ts registry/check_shape.ts registry/params.ts registry/summary.ts
+  registry/command_line.ts registry/usage.ts registry/print_command.ts registry/single_quote.ts
+  completion/tokenize.ts
 )
+
+upstream_path_of() {
+  local file=$1
+  if [[ $file == completion/* ]]; then echo "src/cmdline/$file"; else echo "$UPSTREAM_DIR/$file"; fi
+}
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 vendor_dir=$repo_root/vendor/desertfox
@@ -35,7 +43,7 @@ write_pinned_tree() {
   local target=$1 file
   for file in "${COPIED_FILES[@]}"; do
     mkdir -p "$target/vendor/desertfox/$(dirname "$file")"
-    git -C "$checkout" show "$PIN_SHA:$UPSTREAM_DIR/$file" >"$target/vendor/desertfox/$file"
+    git -C "$checkout" show "$PIN_SHA:$(upstream_path_of "$file")" >"$target/vendor/desertfox/$file"
   done
   (cd "$target" && git apply "$patch_file")
 }
@@ -57,7 +65,7 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 for file in "${COPIED_FILES[@]}"; do
   mkdir -p "$scratch/$(dirname "$file")"
-  git -C "$checkout" show "$PIN_SHA:$UPSTREAM_DIR/$file" >"$scratch/$file"
+  git -C "$checkout" show "$PIN_SHA:$(upstream_path_of "$file")" >"$scratch/$file"
 done
 write_pinned_tree "$repo_root"
 

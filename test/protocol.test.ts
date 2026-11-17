@@ -4,7 +4,8 @@ import { EXPERIMENT_VERBS, type KeysInvocation } from "../src/shared/protocol.ts
 
 test("the Experiment exposes the fixed verb table", () => {
     assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install"]);
-    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys"]);
+    assert.deepEqual(EXPERIMENT_VERBS.overlay.functions, ["mount", "unmount"]);
+    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay"]);
 });
 
 test("an invocation payload is plain data", () => {

@@ -143,6 +143,8 @@ The Experiment mounted the same extension page four ways, in a red box. The page
 - Without focus on the overlay, typed text goes to the thread list and triggers shortcuts. The probe sets the focus first.
 - The frame loader of a remote `browser` can fire its creation event before a listener that code adds after `appendChild`. Add the listener first.
 - The look, the position and the return of focus were judged only from the screenshots.
+- Chosen for the product: the `browser` element in the main window document, pinned to the bottom edge (not an iframe, not a panel). Built and run in both apps with the end-to-end run. Two details the probe did not show: the message manager of the `browser` does not exist while `XULFrameLoaderCreated` is dispatched, so the load must run a microtask later; and the frame script and the load follow the order of the probe. The remote page is capped at 800 px wide. After the overlay is removed, a focus call on the thread list body returns the focus, and Thunderbird's own Down key then moves the selection in both apps.
+- A key typed right after `:` with no pause (one `wtype` call) reached the list on Thunderbird 153.7 before the overlay had the focus, and an `x` in it archived a message. The same keys on Betterbird went to the overlay. The mount is a round trip from the key runtime to the background and back.
 
 ### Time from a key to the background page
 
