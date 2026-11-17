@@ -10,6 +10,7 @@ export const app: CommandGroup = {
             bridge: false,
             repeatable: false,
             runs_in: "background",
+            name: "undo",
             label: "Undo",
             intent: "Undo the last native Thunderbird move or delete.",
             needs: ["keys.appCommand"],
