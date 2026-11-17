@@ -522,7 +522,7 @@ test("the parent resets on a blur only when the window lost focus, not when focu
     const keys = keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
     const emitted: KeysInvocation[] = [];
     (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void emitted.push(invocation));
-    await keys.install({ tree: tree(), settings: {} });
+    await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
     press(window, "3");
     window.blur(false);
     press(window, "x");
