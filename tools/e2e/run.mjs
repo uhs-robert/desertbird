@@ -438,6 +438,17 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   // One more d: it pairs with the d typed after the switch only if that d reached the app, so a lost first key fails here.
   state = await key_and_state(instance, ["d"], 2500);
   check(app, kind, "the d after the switch counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
+  // A count is part of the half-typed state too: 3, a tab switch and back, then k moves one row. Three rows means the count survived. No move means the key was lost.
+  const listed_index = (snapshot) => snapshot.listed.indexOf(first_selected(snapshot));
+  state = await key_and_state(instance, ["G"]);
+  const last_row = listed_index(state);
+  await instance.press(["3"]);
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(800);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  state = await key_and_state(instance, ["k"], 1500);
+  check(app, kind, "a count typed before a tab switch is dropped, so k moves one row", listed_index(state) === last_row - 1, `row ${listed_index(state)} after k from row ${last_row}`);
   await instance.ask("remove_tab", 20000, { index: 1 });
   await sleep(1000);
 }

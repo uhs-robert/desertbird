@@ -100,16 +100,22 @@ test("a window the Experiment could not name falls back to the current window", 
     assert.ok(calls.includes('tabs.query {"currentWindow":true}'));
 });
 
-test("a count steps that many tabs and wraps", async () => {
-    const forward = with_tabs(bar(0, ["Mail", "Docs", "Message", "More"]));
-    await run(forward.api, "tab.next", {}, 3);
-    assert.deepEqual(writes(forward.calls), ['tabs.update 11 {"active":true}', 'tabs.update 12 {"active":true}', 'tabs.update 13 {"active":true}']);
-    const wrapped = with_tabs(bar(2, ["Mail", "Docs", "Message", "More"]));
-    await run(wrapped.api, "tab.next", {}, 3);
-    assert.equal(writes(wrapped.calls).at(-1), 'tabs.update 11 {"active":true}');
-    const backward = with_tabs(bar(1, ["Mail", "Docs", "Message", "More"]));
-    await run(backward.api, "tab.prev", {}, 3);
-    assert.equal(writes(backward.calls).at(-1), 'tabs.update 12 {"active":true}');
+test("a count makes one update to the tab that many steps away, wrapping", async () => {
+    const titles = ["Mail", "Docs", "Message", "More"];
+    const cases: [string, number, number, number][] = [
+        ["tab.next", 0, 3, 13],
+        ["tab.next", 2, 3, 11],
+        ["tab.prev", 1, 3, 12],
+        ["tab.next", 1, 9, 12],
+        ["tab.prev", 1, 9, 10],
+        ["tab.next", 1, 1, 12],
+        ["tab.prev", 1, 1, 10],
+    ];
+    for (const [command, active, count, expected_id] of cases) {
+        const { api, calls } = with_tabs(bar(active, titles));
+        await run(api, command, {}, count);
+        assert.deepEqual(writes(calls), [`tabs.update ${expected_id} {"active":true}`], `${command} from ${active} by ${count}`);
+    }
 });
 
 test("a count does not repeat tab.close", async () => {

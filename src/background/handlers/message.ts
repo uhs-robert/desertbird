@@ -21,6 +21,8 @@ export interface HandlerScope<Api = MessageApi> {
     api: Api;
     window_id: number;
     message_ids: number[];
+    /** The count typed before the key, 1 when none. A command reads it only when its definition says `count: "repeat"`. */
+    count: number;
 }
 
 const REPLY_TYPE = { sender: "replyToSender" } as const;

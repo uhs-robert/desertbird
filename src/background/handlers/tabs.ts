@@ -36,7 +36,8 @@ async function step_active(scope: TabsScope, direction: 1 | -1): Promise<void> {
     const at = tabs.findIndex((tab) => tab.active);
     if (at < 0) throw new RuntimeRefusal("No tab is active.");
     if (tabs.length === 1) throw new RuntimeRefusal("There is no other tab.");
-    await activate(scope, tabs[(at + direction + tabs.length) % tabs.length]!);
+    // One update to the final tab, so a count never switches through the tabs in between. The extra modulo keeps a negative step positive.
+    await activate(scope, tabs[(((at + direction * scope.count) % tabs.length) + tabs.length) % tabs.length]!);
 }
 
 /** Wraps from the last tab to the first. */
