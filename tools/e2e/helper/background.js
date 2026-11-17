@@ -47,7 +47,7 @@ async function collect() {
     const entry = { id: window.id, type: window.type, tabs: [] };
     for (const tab of window.tabs ?? []) {
       const detail = window.type === "messageCompose" ? await browser.compose.getComposeDetails(tab.id).catch(() => null) : null;
-      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
+      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null, is_plain: detail?.isPlainText ?? null, html: detail?.body ?? null });
     }
     state.windows.push(entry);
   }

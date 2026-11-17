@@ -2,7 +2,8 @@
 //   node tools/e2e/run.mjs [thunderbird|betterbird]... [--xpi path] [--binary app=path]
 // With no --xpi it only proves the setup: each app starts in a fresh profile and one screenshot is taken.
 // Scratch files go to $E2E_DIR (default /tmp/desertbird-e2e). Thunderbird comes from tools/measure/fetch_thunderbird.sh. Betterbird is /usr/bin/betterbird.
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
 
@@ -858,6 +859,53 @@ async function run_mail_account(instance) {
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
+// Quick replies. The seeded slots are in the xpi this kind installs (see `seed_quick_replies`). g r 1 opens a reply with the slot text. The run checks that the quote survives and records where the text, the quote and the signature land.
+const QUICK_REPLY_SEED = ["Quick reply one.\nSecond & <b>line</b>.", "", "", "", "", "", "", "", ""];
+
+function seed_quick_replies(xpi, work_dir) {
+  const stage = join(work_dir, "seed_stage");
+  rmSync(stage, { recursive: true, force: true });
+  mkdirSync(stage, { recursive: true });
+  execFileSync("unzip", ["-q", xpi, "-d", stage]);
+  const record = { record_version: 1, slots: QUICK_REPLY_SEED };
+  appendFileSync(join(stage, "background.js"), `\nmessenger.storage.local.set({ desertbird_quick_replies: ${JSON.stringify(record)} });\n`);
+  const seeded = join(work_dir, "desertbird_seeded.xpi");
+  rmSync(seeded, { force: true });
+  execFileSync("zip", ["-qr", seeded, "."], { cwd: stage });
+  return seeded;
+}
+
+async function run_quick_replies(instance) {
+  const app = instance.app;
+  const kind = instance.kind;
+  const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+  await sleep(2000);
+  await instance.press(["-k", "F6"]);
+  await instance.ask("select:inbox-s2@fixture.invalid", 30000);
+  await sleep(1000);
+  await instance.press(["g"]);
+  await instance.press(["r"]);
+  let state = await key_and_state(instance, ["1"], 7000);
+  const tab = compose_tab(state);
+  const body = tab?.body ?? "";
+  const at_text = body.indexOf("Quick reply one.");
+  const at_quote = body.indexOf("Body of inbox-s2.");
+  const at_signature = body.indexOf("E2E signature line");
+  check(app, kind, "g r 1 opens a reply to the sender with the slot text", tab?.subject?.startsWith("Re: ") === true && at_text >= 0, `subject ${JSON.stringify(tab?.subject)}, body ${JSON.stringify(body)}`);
+  check(app, kind, "the slot text sits above the quote and the quote survives", at_text >= 0 && at_quote > at_text, `text at ${at_text}, quote at ${at_quote}`);
+  check(app, kind, "the compose is plain or HTML as the identity says", tab?.is_plain === (kind === "quick_reply_plain"), `isPlainText ${tab?.is_plain}`);
+  if (kind === "quick_reply_html") check(app, kind, "markup in the slot text is escaped and not live", /&lt;b&gt;line&lt;\/b&gt;/.test(tab?.html ?? "") && !/<b>line/.test(tab?.html ?? ""), `html ${JSON.stringify(tab?.html)}`);
+  note(app, kind, "quick reply draft layout", `text at ${at_text}, quote at ${at_quote}, signature at ${at_signature} (-1 means absent), body ${JSON.stringify(body)}`);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_after_gr1_${kind}`), name: `after_gr1_${kind}`, line: "compose window with the quick reply above the quote" });
+  await instance.ask("close_compose");
+  await sleep(1500);
+  await instance.press(["g"]);
+  await instance.press(["r"]);
+  state = await key_and_state(instance, ["2"], 3000);
+  check(app, kind, "g r 2 on an empty slot opens no compose window", !state.windows.some((window) => window.type === "messageCompose"));
+  check(app, kind, "the app survived the quick reply keys", instance.exited() === null);
+}
+
 // The body script: keys while a message is read, in the reading pane, a message tab and a message window. The helper's own content script reports the scroll position and whether DesertBird marked the document.
 const LINE_STEP_PX = 40;
 const READING_FOLDER_MESSAGES = ["reading-plain", "reading-html", "reading-remote", "reading-sandbox"];
@@ -1056,15 +1104,18 @@ async function run_assertions(instance) {
   if (instance.kind === "default") await run_default(instance);
   else if (instance.kind === "message" || instance.kind === "message_remote") await run_message_scripts(instance);
   else if (instance.kind === "mail_account") await run_mail_account(instance);
+  else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
   else await run_no_identity(instance);
 }
 
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html").split(",");
   for (const kind of kinds) {
-    const instance = await start_app({ app, app_binary: binaries[app], work_dir: join(e2e_dir, app, kind), kind, xpi_path });
+    const work_dir = join(e2e_dir, app, kind);
+    const kind_xpi = xpi_path && kind.startsWith("quick_reply") ? seed_quick_replies(xpi_path, work_dir) : xpi_path;
+    const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
     try {
       if (xpi_path) await run_assertions({ ...instance, kind });
       else {

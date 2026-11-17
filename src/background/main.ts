@@ -18,6 +18,7 @@ import { create_router } from "./router.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
 import { create_scheduler } from "./scheduler.ts";
 import type { SchedulerApi } from "./scheduler.ts";
+import { create_quick_reply_store } from "./quick_reply_store.ts";
 import { create_snooze_store } from "./snooze_store.ts";
 import type { RouterApi } from "./router.ts";
 
@@ -40,7 +41,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
     windows: BodyRequestApi["windows"] & RouterApi["windows"];
     messages: RouterApi["messages"] & NewMailApi["messages"];
     notifications: RouterApi["notifications"] & NewMailApi["notifications"];
@@ -142,7 +143,7 @@ const cmdline = create_cmdline_service({
     overlay: messenger.overlay,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
 

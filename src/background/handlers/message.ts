@@ -42,7 +42,7 @@ export interface MessageApi extends IdentityApi, SpecialFolderApi {
         tags: { list(): Promise<MailTag[]> };
     };
     compose: {
-        beginReply(id: number, type: ReplyType, details: { identityId: string }): Promise<unknown>;
+        beginReply(id: number, type: ReplyType, details: { identityId: string }): Promise<{ id?: number } | undefined>;
         beginForward(id: number, forward_type: undefined, details: { identityId: string }): Promise<unknown>;
         beginNew(message_id?: undefined, details?: { to: string[]; subject: string; plainTextBody: string; isPlainText: true; identityId: string }): Promise<unknown>;
     };

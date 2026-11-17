@@ -477,3 +477,11 @@ Taken from the API schemas and the 153.7.0 notification code. Not yet measured o
 - A click clears its notification. On a message that is gone (`messages.get` rejects) it shows a notification and opens nothing. A moved message keeps its id and opens. The batch click opens the first message of the batch.
 - The first page of the delivered message list is the only page read. A delivery larger than one page is not counted past it.
 - Hand checks: the notification renders on Wayland, Plasma and GNOME with no buttons; real mail triggers it and the click opens the message; Thunderbird's own alert also shows (a double alert); Betterbird behaves the same.
+
+## Quick reply draft
+
+Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird (the same result on both), with an identity that has a text signature, once in plain compose and once in HTML compose. `compose.beginReply` resolves to the compose tab, and `getComposeDetails` right after it returns the finished draft with the quote and the signature, so no wait is needed.
+
+- Inserting the slot text above the quote with `getComposeDetails` and `setComposeDetails` keeps the quote and the signature in both compose modes. The reply-on-top draft starts with the cite line, then the quoted text, then the signature (`moz-signature`).
+- The HTML path sets the text with `textContent`. A slot text of `Second & <b>line</b>.` reads back as `Second &amp; &lt;b&gt;line&lt;/b&gt;.` in the draft body, so it is not live markup.
+- A preset `body` on `beginReply` was not measured, because the insert after the draft opens keeps both parts.

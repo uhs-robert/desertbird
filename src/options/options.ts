@@ -1,4 +1,4 @@
-// The options page. It lists the settings and the key bindings and writes both to `storage.local`. The background page picks the change up through `storage.onChanged`.
+// The options page. It lists the settings, the key bindings and the quick replies and writes them to `storage.local`. The background page picks the change up through `storage.onChanged`.
 
 import { SETTING_DEFAULTS } from "../background/config/settings.ts";
 import { SETTING_KINDS } from "../background/config/settings.ts";
@@ -6,12 +6,17 @@ import type { SettingName } from "../background/config/settings.ts";
 import { CONFIG_VERSION } from "../background/config/migrations.ts";
 import { create_config_store } from "../background/config/store.ts";
 import type { ConfigStorage } from "../background/config/store.ts";
+import type { RecordStorageApi } from "../background/record_store.ts";
+import { create_quick_reply_store } from "../background/quick_reply_store.ts";
 import { build_user_keymap, default_rows, edits_from_user_keymap, overrides_from_texts, setting_to_text } from "./model.ts";
 import type { BindingRow } from "./model.ts";
 
-declare const messenger: ConfigStorage;
+// Both stores read `storage.local`. Their `get` types differ only in the argument shape, so the page holds the intersection.
+declare const messenger: ConfigStorage & RecordStorageApi;
 
 const store = create_config_store(messenger);
+const quick_reply_store = create_quick_reply_store(messenger);
+const quick_reply_inputs: HTMLTextAreaElement[] = [];
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function make<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: Node[]): HTMLElementTagNameMap[K] {
@@ -87,7 +92,24 @@ async function save(): Promise<void> {
     say(build.messages.length > 0 ? `Saved. ${build.messages.join(" | ")}` : "Saved.");
 }
 
+function render_quick_replies(slots: string[]): void {
+    const form = element("quick_replies_form");
+    form.replaceChildren();
+    quick_reply_inputs.length = 0;
+    slots.forEach((text, index) => {
+        const input = make("textarea", { rows: 3, value: text });
+        quick_reply_inputs.push(input);
+        form.append(make("label", {}, make("span", { textContent: `Slot ${index + 1}` }), input));
+    });
+}
+
+async function save_quick_replies(): Promise<void> {
+    await quick_reply_store.write_all(quick_reply_inputs.map((input) => input.value));
+    say("Saved quick replies.");
+}
+
 async function start(): Promise<void> {
+    render_quick_replies(await quick_reply_store.read_all());
     const config = await store.read();
     const edits = edits_from_user_keymap(config.user_keymap);
     for (const keys of edits.removed) removed_defaults.add(keys);
@@ -106,4 +128,5 @@ element("add_binding").onclick = () => {
     render_bindings();
 };
 element("save").onclick = () => void save().catch((error: unknown) => say(`Could not save: ${error instanceof Error ? error.message : String(error)}`, true));
+element("save_quick_replies").onclick = () => void save_quick_replies().catch((error: unknown) => say(`Could not save: ${error instanceof Error ? error.message : String(error)}`, true));
 start().catch((error: unknown) => say(`Could not load: ${error instanceof Error ? error.message : String(error)}`, true));

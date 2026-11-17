@@ -10,7 +10,7 @@ const newest = (messages: MessageHeader[]): MessageHeader | undefined =>
     messages.reduce<MessageHeader | undefined>((latest, message) => (latest === undefined || new Date(message.date).getTime() > new Date(latest.date).getTime() ? message : latest), undefined);
 
 // A selected collapsed thread root stands for the whole thread. Reply and forward then take its newest message, the one the conversation continues from.
-async function newest_with_identity(scope: HandlerScope): Promise<{ message: MessageHeader; identity_id: string }> {
+export async function newest_with_identity(scope: HandlerScope): Promise<{ message: MessageHeader; identity_id: string }> {
     const message = newest(await Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id))));
     if (message === undefined) throw new RuntimeRefusal("No message is selected.");
     const identity = await resolve_identity(scope.api, message);
