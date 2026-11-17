@@ -98,12 +98,16 @@ async function run_threads(instance, { app, kind, shot }) {
   await keys(["g", "g"]);
   expect("z M closes every thread", await keys(["j"]), id_of(1, 0));
   await keys(["G"]);
-  for (const [name, sequence] of [["top", ["z", "t"]], ["center", ["z", "z"]], ["bottom", ["z", "b"]]]) {
+  // Hide the message pane so the list is tall enough to show several rows around the scrolled one.
+  await keys(["t", "m"]);
+  // The list shows about 21 of the 30 rows, so a row can only reach the top near the start and the bottom near the end.
+  for (const [name, sequence, down] of [["top", ["z", "t"], ["5", "j"]], ["center", ["z", "z"], ["1", "5", "j"]], ["bottom", ["z", "b"], ["2", "5", "j"]]]) {
     await keys(["g", "g"]);
-    await keys(["1", "5", "j"]);
+    await keys(down);
     await keys(sequence);
-    await shot(`z_${name}`, `15 rows down, then z ${sequence[1]}: the current row sits at the ${name} of the thread list`);
+    await shot(`z_${name}`, `${down.slice(0, -1).join("")} rows down, then z ${sequence[1]}: the current row sits at the ${name} of the thread list`);
   }
+  await keys(["t", "m"]);
   await keys(["g", "g"]);
 }
 
@@ -118,6 +122,7 @@ async function run_default(instance) {
   check(app, kind, "helper add-on and DesertBird both enabled", start.desertbird_enabled === true);
   await shot("inbox_opened");
   await run_threads(instance, { app, kind, shot });
+  if (process.env.E2E_THREADS_ONLY) return;
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
   let state;

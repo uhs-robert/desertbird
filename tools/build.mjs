@@ -22,8 +22,8 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
     process.exit(1);
 }
 
-// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard was 18004 plus 372 rounded up to 18400. The four thread verbs added 1957 bytes, so it is 18400 plus 1957 rounded up to the next 100. AGENTS.md records the same number.
-const PARENT_MAX_BYTES = 20400;
+// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard was 18004 plus 372 rounded up to 18400. The four thread verbs added 1957 bytes, so it was 18400 plus 1957 rounded up to 20400. The sticky header offset in the scroll verb added 173 bytes, so it is 20600. AGENTS.md records the same number.
+const PARENT_MAX_BYTES = 20600;
 
 // The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard is 15879 rounded up to 15900. AGENTS.md records the same number.
 const CONTENT_MAX_BYTES = 15900;

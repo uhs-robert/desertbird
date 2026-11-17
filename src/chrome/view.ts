@@ -39,6 +39,8 @@ export interface RowsThreadTree extends ThreadTreeLike {
     expandRowAtIndex(index: number): void;
     collapseRowAtIndex(index: number): void;
     getRowAtIndex(index: number): { scrollIntoView(options: { block: "start" | "center" | "end"; behavior: "instant" }): void } | null;
+    scrollBy(options: { top: number; behavior: "instant" }): void;
+    table?: ThreadTreeLike["table"] & { header?: { clientHeight: number } };
 }
 
 export interface ThreadVerbPane extends About3PaneLike {
@@ -101,11 +103,14 @@ export function read_rows(about_3pane: ThreadVerbPane, first: number, last: numb
 }
 
 const SCROLL_BLOCK = { top: "start", center: "center", bottom: "end" } as const;
+// The sticky column header covers the top of the list, which scrollIntoView ignores. Top moves back by its height and center by half.
+const HEADER_SHARE = { top: 1, center: 0.5, bottom: 0 } as const;
 
 // scrollToIndex first, because only rows near the view have an element.
 export function scroll_row(tree: RowsThreadTree, row: number, position: KeysViewScrollArgs["position"]): void {
     tree.scrollToIndex?.(row, true);
     tree.getRowAtIndex(row)?.scrollIntoView({ block: SCROLL_BLOCK[position], behavior: "instant" });
+    tree.scrollBy({ top: -(tree.table?.header?.clientHeight ?? 0) * HEADER_SHARE[position], behavior: "instant" });
 }
 
 /** The `keys` thread verbs: each names a window by id and acts on its front mail tab. */
