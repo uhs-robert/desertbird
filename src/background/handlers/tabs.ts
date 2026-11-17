@@ -63,6 +63,7 @@ export async function switch_tab(scope: TabsScope, args: CheckedArgs): Promise<v
 export async function close_tab(scope: TabsScope): Promise<void> {
     const active = (await tabs_of_window(scope)).find((tab) => tab.active);
     if (active === undefined) throw new RuntimeRefusal("No tab is active.");
-    if (active.index === 0 || active.id === undefined) throw new RuntimeRefusal("The main mail tab cannot be closed.");
+    if (active.id === undefined) throw new RuntimeRefusal("The tab has no id, so it cannot be closed.");
+    if (active.index === 0) throw new RuntimeRefusal("The main mail tab cannot be closed.");
     await scope.api.tabs.remove(active.id);
 }

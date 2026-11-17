@@ -17,9 +17,11 @@ const bar = (active: number, titles: string[]): FakeTab[] => titles.map((title, 
 
 function with_tabs(tabs: FakeTab[]) {
     const calls: string[] = [];
+    // Each update moves the active mark, as the real API does, so a repeated step reads the state the step before left.
+    const move_active = (id: number) => tabs.forEach((tab) => void (tab.active = tab.id === id));
     const tabs_api = {
         query: async (query: object) => (calls.push(`tabs.query ${JSON.stringify(query)}`), tabs),
-        update: async (id: number, properties: object) => void calls.push(`tabs.update ${id} ${JSON.stringify(properties)}`),
+        update: async (id: number, properties: object) => (calls.push(`tabs.update ${id} ${JSON.stringify(properties)}`), move_active(id)),
         remove: async (id: number) => void calls.push(`tabs.remove ${id}`),
     };
     // The tab commands read only `tabs` and the router only `notifications`, so the rest of the messenger is absent.
@@ -27,8 +29,8 @@ function with_tabs(tabs: FakeTab[]) {
     return { api: api as unknown as RouterApi, calls };
 }
 
-const invoke = (command: string, args: Record<string, string> = {}) => ({ command, args, count: 1, windowId: 3, messageIds: [] });
-const run = (api: RouterApi, command: string, args?: Record<string, string>) => create_router(registry, api).run(invoke(command, args));
+const invoke = (command: string, args: Record<string, string> = {}, count = 1) => ({ command, args, count, windowId: 3, messageIds: [] });
+const run = (api: RouterApi, command: string, args?: Record<string, string>, count?: number) => create_router(registry, api).run(invoke(command, args, count));
 const writes = (calls: string[]) => calls.filter((call) => call.startsWith("tabs.update") || call.startsWith("tabs.remove"));
 const notifications = (calls: string[]) => calls.filter((call) => call.startsWith("notify"));
 
@@ -96,4 +98,37 @@ test("a window the Experiment could not name falls back to the current window", 
     const { api, calls } = with_tabs(bar(0, ["Mail", "Docs"]));
     await create_router(registry, api).run({ ...invoke("tab.next"), windowId: -1 });
     assert.ok(calls.includes('tabs.query {"currentWindow":true}'));
+});
+
+test("a count steps that many tabs and wraps", async () => {
+    const forward = with_tabs(bar(0, ["Mail", "Docs", "Message", "More"]));
+    await run(forward.api, "tab.next", {}, 3);
+    assert.deepEqual(writes(forward.calls), ['tabs.update 11 {"active":true}', 'tabs.update 12 {"active":true}', 'tabs.update 13 {"active":true}']);
+    const wrapped = with_tabs(bar(2, ["Mail", "Docs", "Message", "More"]));
+    await run(wrapped.api, "tab.next", {}, 3);
+    assert.equal(writes(wrapped.calls).at(-1), 'tabs.update 11 {"active":true}');
+    const backward = with_tabs(bar(1, ["Mail", "Docs", "Message", "More"]));
+    await run(backward.api, "tab.prev", {}, 3);
+    assert.equal(writes(backward.calls).at(-1), 'tabs.update 12 {"active":true}');
+});
+
+test("a count does not repeat tab.close", async () => {
+    const { api, calls } = with_tabs(bar(1, ["Mail", "Mail two", "Docs"]));
+    await run(api, "tab.close", {}, 3);
+    assert.deepEqual(writes(calls), ["tabs.remove 11"]);
+});
+
+test("tab.close closes a second mail tab, the one tab a key can be pressed in", async () => {
+    const { api, calls } = with_tabs(bar(1, ["Mail", "Folder"]));
+    await run(api, "tab.close");
+    assert.deepEqual(writes(calls), ["tabs.remove 11"]);
+});
+
+test("tab.close with no tab id says so and removes nothing", async () => {
+    const tabs = bar(1, ["Mail", "Folder"]);
+    delete (tabs[1] as Partial<FakeTab>).id;
+    const { api, calls } = with_tabs(tabs);
+    await run(api, "tab.close");
+    assert.deepEqual(writes(calls), []);
+    assert.deepEqual(notifications(calls), ["notify The tab has no id, so it cannot be closed."]);
 });

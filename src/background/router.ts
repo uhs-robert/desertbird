@@ -38,7 +38,8 @@ export function create_router(registry: Registry, api: RouterApi) {
         if (missing_experiment_verb(api, command.needs ?? []) !== undefined) throw new RuntimeRefusal(`${command.label} needs the DesertBird Experiment, which is not loaded.`);
         // The ids are the selection at the key press. A read of the selection now could see the row a later `j` moved to.
         const context: ScopedContext = { tab_id: undefined, window_id: invocation.windowId, frame_id: 0, mode: "normal", api, message_ids: invocation.messageIds };
-        await command.run(context, checked.args);
+        // `repeat` runs the command once per count, each run reading the state the one before left.
+        for (let run = 0; run < (command.count === "repeat" ? invocation.count : 1); run++) await command.run(context, checked.args);
     }
 
     return {

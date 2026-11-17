@@ -12,8 +12,8 @@ const with_tabs = (handler: (scope: TabsScope, args: CheckedArgs) => Promise<voi
 // Keys run in the mail tab only, so these keys work from there and nowhere else.
 export const tabs: CommandGroup = {
     commands: {
-        "tab.next": { bridge: true, runs_in: "background", label: "Next tab", intent: "Switch to the next tab. It wraps from the last tab to the first.", run: with_tabs(next_tab) },
-        "tab.prev": { bridge: true, runs_in: "background", label: "Previous tab", intent: "Switch to the previous tab. It wraps from the first tab to the last.", run: with_tabs(previous_tab) },
+        "tab.next": { bridge: true, runs_in: "background", label: "Next tab", count: "repeat", intent: "Switch to the next tab. It wraps from the last tab to the first.", run: with_tabs(next_tab) },
+        "tab.prev": { bridge: true, runs_in: "background", label: "Previous tab", count: "repeat", intent: "Switch to the previous tab. It wraps from the first tab to the last.", run: with_tabs(previous_tab) },
         "tab.switch": {
             bridge: true,
             runs_in: "background",

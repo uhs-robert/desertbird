@@ -323,6 +323,8 @@ Facts measured while the end-to-end tab checks ran on Thunderbird 153.7 ESR and 
 ### Tabs
 
 - `tabs.update(id, {active: true})` selects a content tab, a message tab and the mail tab. `tabs.remove` closes a content tab and a message tab. Only the first tab ignores it (see above).
-- `tabmail.tabContainer` reads `undefined` from the Experiment. The tab strip is `#tabmail-tabs`, and it fires `TabSelect` for every change of the front tab, also one made through `tabs.update`.
+- `tabmail.tabContainer` reads `undefined` from the Experiment. `TabSelect` fires for every change of the front tab, also one made through `tabs.update`. At startup the window is hooked before `#tabmail-tabs` exists, so a listener on the strip never attached in about one run in three. A capture listener on the window always attaches.
 - A bound chord pressed in the mail tab runs its command and Thunderbird's own action does not happen. `<C-j>` switched tabs and opened no Saved Files tab.
 - A chord pressed in a content tab or a message tab reaches no DesertBird command. `<C-j>` in a content tab ran Thunderbird's own action and opened the Saved Files tab (type `special`). `<C-k>` in a message tab changed nothing. So the tab keys work from the mail tab only, and a switch to another tab by key has no way back by key.
+- The tabs API gives the first mail tab and a second mail tab the same fields (`type: "mail"`, `mailTab: true`, the same `spaceId`). Only the index differs. `tabs.move` of the first tab fails with "The primary mail tab in a normal Thunderbird window cannot be moved", so it always stays at index 0.
+- `mailTabs.create({})` opens a second mail tab (folder tab) and brings it to the front. `tabs.remove` closes it, and `q` closes it by key.
