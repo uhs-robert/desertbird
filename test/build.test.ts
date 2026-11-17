@@ -16,6 +16,7 @@ const PARENT_ALLOWED_INPUTS = [
     /^vendor\/desertfox\/prefix_tree\.ts$/,
     /^vendor\/desertfox\/register_names\.ts$/,
     /^src\/chrome\/[a-z_]+\.ts$/,
+    /^src\/shared\/protocol\.ts$/,
 ];
 
 const BANNED_IN_PARENT: [string, RegExp][] = [
@@ -33,7 +34,7 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-const PARENT_NAMES = ["keys"];
+const PARENT_NAMES = ["keys", "overlay"];
 const sources: Record<string, string> = {};
 const inputs: Record<string, string[]> = {};
 
@@ -63,8 +64,8 @@ test("no parent bundle uses a banned API", () => {
     for (const name of PARENT_NAMES) for (const [banned, pattern] of BANNED_IN_PARENT) assert.ok(!pattern.test(sources[name]!), `the ${name} bundle contains ${banned}`);
 });
 
-test("the parent bundle defines its API class", () => {
-    assert.match(sources["keys"]!, /^var keys = class extends ExtensionAPI/m);
+test("each parent bundle defines its API class", () => {
+    for (const name of PARENT_NAMES) assert.match(sources[name]!, new RegExp(`^var ${name} = class extends ExtensionAPI`, "m"));
 });
 
 test("each parent bundle stays within the size guard", () => {
@@ -89,7 +90,7 @@ test("AGENTS.md records the size guard", () => {
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
 });
 

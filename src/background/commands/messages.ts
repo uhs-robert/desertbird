@@ -28,6 +28,7 @@ export const messages: CommandGroup = {
         "msg.tag": {
             bridge: false,
             runs_in: "background",
+            name: "tag",
             label: "Tag",
             intent: "Add a tag to the selected messages.",
             params: [{ name: "tag", type: "string", main: true, values: { from: "tags" }, pattern: "^\\S(.*\\S)?$" }],
@@ -36,6 +37,7 @@ export const messages: CommandGroup = {
         "msg.move": {
             bridge: false,
             runs_in: "background",
+            name: "move",
             label: "Move",
             intent: "Move the selected messages to a folder by its path.",
             params: [{ name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^/.+" }],

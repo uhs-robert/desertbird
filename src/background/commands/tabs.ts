@@ -11,6 +11,7 @@ export const tabs: CommandGroup = {
         "tab.switch": {
             bridge: true,
             runs_in: "background",
+            name: "tab",
             label: "Switch tab",
             intent: "Switch to a tab by its number or part of its title.",
             params: [{ name: "tab", type: "string", main: true, rest: true }],

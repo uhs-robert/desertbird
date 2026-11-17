@@ -1,0 +1,66 @@
+[
+  {
+    "namespace": "overlay",
+    "description": "A page of the extension shown over the main mail window, for the command line. The page name comes from a fixed list and the parent maps it to a page of the extension.",
+    "functions": [
+      {
+        "name": "mount",
+        "type": "function",
+        "async": true,
+        "description": "Shows the surface in the window and gives it the focus. A second call for the same window replaces the first.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "surface": {
+                "type": "string",
+                "enum": ["cmdline"]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "unmount",
+        "type": "function",
+        "async": true,
+        "description": "Removes the overlay of the window and returns the focus to the thread list. Does nothing when none is mounted.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onClosed",
+        "type": "function",
+        "description": "The overlay left a window by itself: the front tab changed or the window closed. The payload is output only, so it takes no argument check.",
+        "parameters": [
+          {
+            "name": "closed",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

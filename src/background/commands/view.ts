@@ -14,6 +14,7 @@ export const view: CommandGroup = {
         "filter.set": {
             bridge: true,
             runs_in: "background",
+            name: "filter",
             label: "Filter the list",
             intent: "Show only the messages in one state, or all of them.",
             params: [
@@ -40,6 +41,7 @@ export const view: CommandGroup = {
         "search.threads": {
             bridge: true,
             runs_in: "background",
+            name: "search",
             label: "Search the list",
             intent: "Show only the messages that match the text.",
             params: [{ name: "query", type: "string", description: "Match this text in the subject and the sender.", main: true, rest: true, pattern: "\\S" }],
@@ -48,6 +50,7 @@ export const view: CommandGroup = {
         "sort.set": {
             bridge: true,
             runs_in: "background",
+            name: "sort",
             label: "Sort the list",
             intent: "Sort the message list by a column.",
             params: [

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
+import { OVERLAY_BROWSER_ID } from "../src/chrome/overlay_id.ts";
 
 const element = (localName: string, extra: Partial<FocusNode> = {}): FocusNode => ({ localName, ...extra });
 const document_of = (active: FocusNode | null) => ({ activeElement: active });
@@ -95,4 +96,11 @@ test("a menu open in the window or in a document on the way to the focus counts,
     assert.equal(menu_is_open({ activeElement: three_pane(["closed"]), querySelectorAll: popups("showing") }), true);
     assert.equal(menu_is_open({ activeElement: three_pane(["closed"]), querySelectorAll: popups("closed", "hiding") }), false);
     assert.equal(menu_is_open(document_of(null)), false);
+});
+
+test("a key while the overlay's browser has focus is typing, so no command runs from it", () => {
+    // The browser is remote: its document is out of reach, so the chain ends at the element and only its id marks it.
+    const overlay = element("browser", { id: OVERLAY_BROWSER_ID });
+    assert.equal(is_typing({ target: overlay }, document_of(overlay)), true);
+    assert.equal(is_typing({ target: element("div") }, document_of(overlay)), true);
 });

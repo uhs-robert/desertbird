@@ -412,6 +412,76 @@ async function run_default(instance) {
   check(app, kind, "the app survived the compose keys", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
   await run_view_settings(instance, { app, kind });
   await shot("after_view_settings", "Views folder after the view setting keys");
+  await run_cmdline(instance, { app, kind, shot });
+}
+
+// The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.
+// Focus back in the list is measured with Thunderbird's own Down key: it moves the list selection only while the list has focus, and the overlay is gone from the focus chain by then.
+async function run_cmdline(instance, { app, kind, shot }) {
+  const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
+  let state = await instance.ask("state");
+  let selected_before = selection_of(state);
+  let folders_before = JSON.stringify(state.folders);
+  // j and x typed with no pause after the colon can reach the list before the overlay has the focus: the mount is a round trip to the background and back. A person types slower, so this is a NOTE and the baseline restarts after it.
+  await instance.press([":", "j", "x"]);
+  await sleep(1500);
+  await shot("cmdline_open", "the command line over the bottom of the window, with the completion list above its input");
+  state = await instance.ask("state");
+  note(app, kind, ": j x typed with no pause", `selected ${selected_before} then ${selection_of(state)}, mail changed: ${JSON.stringify(state.folders) !== folders_before}`);
+  selected_before = selection_of(state);
+  folders_before = JSON.stringify(state.folders);
+  await instance.press(["j", "x"]);
+  await sleep(500);
+  state = await instance.ask("state");
+  check(app, kind, "j and x typed into the open command line run nothing", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}`);
+  await shot("cmdline_typed", "the line after j and x were typed into it");
+  await instance.press(["-k", "Escape"]);
+  await sleep(1000);
+  await shot("cmdline_closed", "the window after Escape, with no command line");
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "after Escape a bound key runs again", selection_of(state) !== selected_before, `selected ${selected_before} then ${selection_of(state)}`);
+  const row_after_j = selection_of(state);
+  await instance.press(["-k", "Down"]);
+  await sleep(800);
+  state = await instance.ask("state");
+  check(app, kind, "after Escape the list has focus: Thunderbird's own Down moves the selection", selection_of(state) !== row_after_j && selection_of(state) !== "", `selected ${row_after_j} then ${selection_of(state)}`);
+
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["sort --date --ascending"]);
+  await sleep(500);
+  await shot("cmdline_sort", "the line with sort --date --ascending typed");
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, ": sort --date --ascending runs the command", state.mail_tab?.sort_type === "date" && state.mail_tab?.sort_order === "ascending", `sort ${state.mail_tab?.sort_type} ${state.mail_tab?.sort_order}`);
+  await instance.press(["-k", "Up"]);
+  await sleep(800);
+  const after_run = selection_of(await instance.ask("state"));
+  await instance.press(["-k", "Up"]);
+  await sleep(800);
+  check(app, kind, "after a command ran the list has focus again", selection_of(await instance.ask("state")) !== after_run);
+
+  // The key m t opens the line with the command started, and the command acts on the message selected when the key was pressed.
+  const target = (await instance.ask("state")).selected[0]?.header_id;
+  await instance.press(["m"]);
+  await instance.press(["t"]);
+  await sleep(1200);
+  await instance.press(["Work"]);
+  await sleep(400);
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "m t then Work tags the selected message", target !== undefined && (state.flags[target]?.tags ?? []).includes("$label2"), `${target} tags ${JSON.stringify(state.flags[target]?.tags)}`);
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["bogus"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(800);
+  await shot("cmdline_error", "the line stays open and names the unknown command");
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  check(app, kind, "the app survived the command line", instance.exited() === null);
 }
 
 // The view settings, read as row counts of the Views folder (6 messages: 3 unread, 2 starred, 1 with an attachment, 2 tagged).

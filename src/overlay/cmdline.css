@@ -1,0 +1,14 @@
+html, body { margin: 0; height: 100%; }
+body { display: flex; flex-direction: column; font: 14px sans-serif; background: Canvas; color: CanvasText; border-top: 2px solid AccentColor; box-sizing: border-box; }
+#rows { flex: 1; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
+#rows li { display: flex; gap: 12px; padding: 2px 8px; white-space: nowrap; }
+#rows li.selected { background: Highlight; color: HighlightText; }
+#rows .name { width: 12em; flex: none; }
+#rows .name b { font-weight: 700; text-decoration: underline; }
+#rows .args { width: 24em; flex: none; overflow: hidden; text-overflow: ellipsis; opacity: 0.7; }
+#rows .description { opacity: 0.8; overflow: hidden; text-overflow: ellipsis; }
+#status { min-height: 1.3em; padding: 0 8px; opacity: 0.8; }
+#status.error { color: crimson; opacity: 1; }
+#line { display: flex; padding: 4px 8px; gap: 4px; }
+#prompt { font-family: monospace; }
+#input { flex: 1; font: 14px monospace; border: 0; outline: 0; background: transparent; color: inherit; }

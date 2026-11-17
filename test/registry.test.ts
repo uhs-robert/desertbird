@@ -12,6 +12,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: strin
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
+    cmdline: { runs_in: "background", ids: ["cmdline.open"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -56,7 +57,7 @@ test("msg.reply checks its args in the one validator", () => {
     assert.equal(check_args(archive, { to: "sender" }).ok, false);
 });
 
-/** The phase 2 message and compose keys. `msg.tag` and `msg.move` have none until the command line exists. */
+/** The phase 2 message and compose keys. `msg.tag` and `msg.move` take a typed value, so their keys open the command line (see the cmdline tests). */
 const MESSAGE_KEYS = [
     { id: "msg.read", keys: "mr", args: { state: "read" } },
     { id: "msg.read", keys: "mu", args: { state: "unread" } },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { EXPERIMENT_VERBS } from "../src/shared/protocol.ts";
+import { EXPERIMENT_VERBS, OVERLAY_SURFACES } from "../src/shared/protocol.ts";
 import { stub_platform } from "./chrome_stubs.ts";
 
 interface SchemaNode {
@@ -22,7 +22,8 @@ interface Namespace {
     events?: SchemaNode[];
 }
 
-const schema = ["keys"].flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
+const PARENTS = ["keys", "overlay"];
+const schema = PARENTS.flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
 const namespace_named = (name: string): Namespace => schema.find((entry) => entry.namespace === name)!;
 
 function walk(node: SchemaNode, path: string, visit: (node: SchemaNode, path: string) => void): void {
@@ -37,9 +38,10 @@ const function_parameters = (): { path: string; node: SchemaNode }[] =>
 
 test("the schema functions and events equal the parent exports", async () => {
     const platform = stub_platform();
-    const keys_parent = await import("../src/chrome/parent_keys.ts");
     const context = { extension: { windowManager: { getWrapper: () => null }, messageManager: { convert: () => null } } };
-    const apis = keys_parent.get_keys_api(context) as Record<string, Record<string, unknown>>;
+    const keys_parent = await import("../src/chrome/parent_keys.ts");
+    const overlay_parent = await import("../src/chrome/parent_overlay.ts");
+    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
@@ -49,6 +51,7 @@ test("the schema functions and events equal the parent exports", async () => {
         assert.deepEqual(exported_events.sort(), (entry.events ?? []).map((event) => event.name).sort(), `${entry.namespace} events`);
     }
     keys_parent.shutdown();
+    overlay_parent.shutdown();
     platform.restore();
 });
 
@@ -91,4 +94,17 @@ test("the invocation event sends the selection as an integer array, not a string
     const message_ids = invocation?.properties?.["messageIds"];
     assert.equal(message_ids?.type, "array");
     assert.equal(message_ids?.items?.type, "integer");
+});
+
+test("overlay.mount takes an integer window id and a surface from a fixed list", () => {
+    const mount = namespace_named("overlay").functions?.find((fn) => fn.name === "mount")?.parameters?.[0];
+    assert.equal(mount?.properties?.["windowId"]?.type, "integer");
+    assert.deepEqual(mount?.properties?.["surface"]?.enum, [...OVERLAY_SURFACES]);
+    assert.deepEqual(Object.keys(mount?.properties ?? {}).sort(), ["surface", "windowId"]);
+});
+
+test("overlay.unmount takes a window id and nothing else", () => {
+    const unmount = namespace_named("overlay").functions?.find((fn) => fn.name === "unmount")?.parameters?.[0];
+    assert.deepEqual(Object.keys(unmount?.properties ?? {}), ["windowId"]);
+    assert.equal(unmount?.properties?.["windowId"]?.type, "integer");
 });

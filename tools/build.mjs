@@ -1,4 +1,4 @@
-// Builds dist/: background.js, experiment/keys.{schema.json,js}, manifest.json and an unsigned desertbird.xpi.
+// Builds dist/: background.js, experiment/{keys,overlay}.{schema.json,js}, overlay/ (the command line page), manifest.json and an unsigned desertbird.xpi.
 //   node tools/build.mjs [--out <dir>]
 // The esbuild metafiles go to <out>/meta/ and stay out of the xpi. test/build.test.ts reads them.
 
@@ -27,7 +27,10 @@ const PARENT_MAX_BYTES = 18004;
 
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
-const PARENTS = [{ name: "keys", entry: "src/chrome/parent_keys.ts" }].map((parent) => ({
+const PARENTS = [
+    { name: "keys", entry: "src/chrome/parent_keys.ts" },
+    { name: "overlay", entry: "src/chrome/parent_overlay.ts" },
+].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,
     footer: `
@@ -49,6 +52,7 @@ const shared_options = {
 
 rmSync(out_dir, { recursive: true, force: true });
 mkdirSync(join(out_dir, "experiment"), { recursive: true });
+mkdirSync(join(out_dir, "overlay"), { recursive: true });
 mkdirSync(join(out_dir, "meta"), { recursive: true });
 
 const background = await build({ ...shared_options, entryPoints: ["src/background/main.ts"], outfile: join(out_dir, "background.js") });
@@ -67,6 +71,10 @@ mkdirSync(join(out_dir, "options"), { recursive: true });
 await build({ ...shared_options, entryPoints: ["src/options/options.ts"], outfile: join(out_dir, "options", "options.js") });
 for (const name of ["options.html", "options.css"]) copyFileSync(join(root, "src", "options", name), join(out_dir, "options", name));
 
+// The command line page is an ordinary extension page. The overlay parent loads it into the window.
+await build({ ...shared_options, entryPoints: ["src/overlay/cmdline.ts"], outfile: join(out_dir, "overlay", "cmdline.js") });
+for (const file of ["cmdline.html", "cmdline.css"]) copyFileSync(join(root, "src", "overlay", file), join(out_dir, "overlay", file));
+
 copyFileSync(join(root, "src", "manifest.json"), join(out_dir, "manifest.json"));
 
 for (const [name, bytes] of parent_sizes) {
@@ -76,5 +84,5 @@ for (const [name, bytes] of parent_sizes) {
     }
 }
 
-execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "options"], { cwd: out_dir });
+execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "options", "overlay"], { cwd: out_dir });
 console.log(`build: ${out_dir} (${parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`).join(", ")})`);

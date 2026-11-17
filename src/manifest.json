@@ -26,6 +26,14 @@
                 "paths": [["keys"]],
                 "script": "experiment/keys.js"
             }
+        },
+        "overlay": {
+            "schema": "experiment/overlay.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["overlay"]],
+                "script": "experiment/overlay.js"
+            }
         }
     }
 }

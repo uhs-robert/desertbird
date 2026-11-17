@@ -1,8 +1,9 @@
 // Background entry. Compiles the default keymap once, keeps it in storage and hands it to the Experiment on every start.
 
 import { COMPILED_KEYMAP_VERSION } from "../shared/protocol.ts";
-import type { KeymapTree, KeysApi } from "../shared/protocol.ts";
+import type { KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { registry } from "./commands/index.ts";
+import { create_cmdline_service } from "./cmdline/service.ts";
 import { compile_effective_keymap, effective_keymap } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -28,13 +29,15 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys">, Pick<SchedulerApi, "alarms"> {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline">, Pick<SchedulerApi, "alarms"> {
+    runtime: { onMessage: { addListener(listener: (message: unknown) => Promise<unknown> | undefined): void } };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
     };
     // The Experiment namespace is absent when it fails to load.
     keys?: KeysApi;
+    overlay?: OverlayApi;
 }
 
 declare const messenger: Messenger;
@@ -104,7 +107,21 @@ function queue_install(drop_cache: boolean): void {
 // A feature adds its `on_due` listener here in main.ts, before the `start` call at the end.
 const scheduler = create_scheduler(messenger);
 
-const router = create_router(registry, { ...messenger, keys: messenger.keys });
+// The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
+const cmdline = create_cmdline_service({
+    registry,
+    sources: {
+        folders: async () => [...new Set((await messenger.folders.query({})).map((folder) => folder.path))].sort(),
+        tags: async () => (await messenger.messages.tags.list()).map((entry) => entry.tag),
+    },
+    overlay: messenger.overlay,
+    run: (invocation) => router.run(invocation),
+});
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline });
+
+messenger.runtime.onMessage.addListener((message) => cmdline.handle(message));
+// The overlay left a window on its own (a tab change or a closed window), so the session for that window is dropped.
+messenger.overlay?.onClosed.addListener(({ windowId }) => cmdline.end(windowId));
 
 messenger.keys?.onInvocation.addListener((invocation) => {
     router.run(invocation).catch(console.error);
