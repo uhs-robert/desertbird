@@ -97,7 +97,7 @@ test("the validator rejects a bad msg.move folder and a bad msg.tag value", () =
     const move = registry.get("msg.move");
     const tag = registry.get("msg.tag");
     assert.ok(move && tag);
-    for (const folder of ["Inbox", "", "  ", "/"]) assert.equal(check_args(move, { folder }).ok, false, `folder ${JSON.stringify(folder)}`);
+    for (const folder of ["", "  ", " proj"]) assert.equal(check_args(move, { folder }).ok, false, `folder ${JSON.stringify(folder)}`);
     assert.equal(check_args(move, {}).ok, false);
     assert.equal(check_args(move, { folder: "/Archive/2026" }).ok, true);
     for (const value of ["", "  ", " Work", "Work "]) assert.equal(check_args(tag, { tag: value }).ok, false, `tag ${JSON.stringify(value)}`);

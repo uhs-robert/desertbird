@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "../src/overlay/line_edit.ts";
+import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, shown_highlight } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -52,4 +52,18 @@ test("a history read that rejects or holds odd data gives an empty list", async 
     assert.deepEqual(await read_history(() => Promise.reject(new Error("storage closed"))), []);
     assert.deepEqual(await read_history(async () => ({ bad: true })), []);
     assert.deepEqual(await read_history(async () => ["a", 3, "b"]), ["a", "b"]);
+});
+
+test("the first row is shown highlighted only when the completion asks for it", () => {
+    assert.equal(shown_highlight(-1, 3, true), 0);
+    assert.equal(shown_highlight(-1, 3, undefined), -1);
+    assert.equal(shown_highlight(-1, 0, true), -1);
+    assert.equal(shown_highlight(2, 3, true), 2);
+});
+
+test("Enter swaps the typed word for the picked row, unless a preview already did", () => {
+    const pick = { start: 5, end: 9, insert: "/Projects " };
+    assert.equal(enter_text("move proj", pick, false), "move /Projects ");
+    assert.equal(enter_text("move /Projects ", pick, true), "move /Projects ");
+    assert.equal(enter_text("move proj", undefined, false), "move proj");
 });

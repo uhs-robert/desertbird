@@ -53,3 +53,14 @@ export function name_parts(name: string, positions: readonly number[]): { text: 
     });
     return parts;
 }
+
+/** The row the page highlights: the one the user moved to, else the first when the completion asks for that, else none. */
+export function shown_highlight(highlighted: number, row_count: number, highlight_first: boolean | undefined): number {
+    if (highlighted >= 0) return highlighted;
+    return highlight_first === true && row_count > 0 ? 0 : -1;
+}
+
+/** The text Enter runs. When the completion highlights a row, Enter takes it in place of the typed word. A row C-n or C-p already put in the line is in the text. */
+export function enter_text(text: string, pick: Pick | undefined, previewed: boolean): string {
+    return pick === undefined || previewed ? text : apply_pick(text, pick).text;
+}

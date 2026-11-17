@@ -4,7 +4,7 @@ import { add_tag, move_messages, read_all, set_read, toggle_flag, toggle_junk } 
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.tag` and `msg.move` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern rejects anything but a path.
+// `msg.tag` and `msg.move` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
 export const messages: CommandGroup = {
     commands: {
         "msg.archive": { bridge: false, runs_in: "background", label: "Archive", intent: "Archive the selected messages. A count archives that many rows from the current one.", count: "repeat", run: scoped<TrashApi>(archive) },
@@ -42,7 +42,7 @@ export const messages: CommandGroup = {
             name: "move",
             label: "Move",
             intent: "Move the selected messages to a folder by its path.",
-            params: [{ name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^/.+" }],
+            params: [{ name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^\\S.*" }],
             run: scoped(move_messages),
         },
     },

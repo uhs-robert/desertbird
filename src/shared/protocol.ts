@@ -286,6 +286,7 @@ export interface CmdlineCompletion {
     start: number;
     end: number;
     usage?: string;
+    highlight_first?: true;
 }
 
 export type SearchDirection = "forward" | "backward";

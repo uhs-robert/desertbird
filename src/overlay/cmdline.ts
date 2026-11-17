@@ -5,7 +5,7 @@ import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts"
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
-import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "./line_edit.ts";
+import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, shown_highlight } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
@@ -48,10 +48,11 @@ function show_status(text: string, is_error: boolean): void {
 }
 
 function draw_rows(): void {
+    const shown = shown_highlight(highlighted, completion.rows.length, completion.highlight_first);
     rows_element.replaceChildren(
         ...completion.rows.map((row, index) => {
             const item = document.createElement("li");
-            item.classList.toggle("selected", index === highlighted);
+            item.classList.toggle("selected", index === shown);
             const name = document.createElement("span");
             name.className = "name";
             for (const part of name_parts(row.name, row.positions)) {
@@ -69,7 +70,7 @@ function draw_rows(): void {
             return item;
         }),
     );
-    rows_element.children[highlighted]?.scrollIntoView({ block: "nearest" });
+    rows_element.children[shown]?.scrollIntoView({ block: "nearest" });
 }
 
 async function refresh_completion(): Promise<void> {
@@ -106,7 +107,7 @@ function step_history(direction: 1 | -1): void {
 }
 
 function step_highlight(step: 1 | -1): void {
-    highlighted = move_highlight(highlighted, step, completion.rows.length);
+    highlighted = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
     draw_rows();
 }
 
@@ -141,11 +142,17 @@ function accept_row(index: number): void {
     refresh_completion().catch(report_failure);
 }
 
+// Enter takes the first row of a folder or tag value in place of the typed word, or the row the user moved to.
+function line_to_run(): string {
+    const row = completion.highlight_first && !search_direction ? completion.rows[shown_highlight(highlighted, completion.rows.length, true)] : undefined;
+    return enter_text(input.value, row && { start: completion.start, end: completion.end, insert: row.insert }, preview_base !== null);
+}
+
 async function run_line(): Promise<void> {
     if (running) return;
     running = true;
     try {
-        const result = await send<CmdlineRunResult>({ type: search_direction ? "cmdline.search_commit" : "cmdline.run", windowId: window_id, text: input.value });
+        const result = await send<CmdlineRunResult>({ type: search_direction ? "cmdline.search_commit" : "cmdline.run", windowId: window_id, text: line_to_run() });
         if (result.ok) closing = true;
         else show_status(result.message, true);
     } finally {
