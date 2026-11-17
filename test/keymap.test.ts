@@ -105,26 +105,26 @@ test("the keymap compile accepts the bound chords and the matcher reads each one
 
 test("the command line opener is unrepeatable", async () => {
     const { UNREPEATABLE_IDS } = await import("../src/background/commands/index.ts");
-    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.archive", "msg.delete", "msg.move", "msg.remind", "msg.remind_cancel", "msg.reply_with", "msg.snooze", "msg.undo", "msg.unsubscribe", "notify.toggle"]);
+    assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "msg.move", "msg.remind", "msg.remind_cancel", "msg.reply_with", "msg.snooze", "msg.undo", "msg.unsubscribe", "notify.toggle"]);
 });
 
-test("mark_unrepeatable tags the steps of delete, archive and move and no other", async () => {
+test("mark_unrepeatable tags the steps of move and snooze, and not delete or archive, which u undoes", async () => {
     const { mark_unrepeatable } = await import("../src/background/config/keymap.ts");
     const step = (id: string) => ({ invocation: { id } });
     const root = {
         kind: "branch",
         children: {
             x: { kind: "leaf", steps: [step("msg.archive")] },
-            d: { kind: "branch", children: { d: { kind: "leaf", steps: [step("msg.delete")] } } },
+            d: { kind: "branch", children: { d: { kind: "leaf", steps: [step("msg.snooze")] } } },
             m: { kind: "leaf", steps: [step("msg.move")], otherwise: { kind: "leaf", steps: [step("msg.delete")] } },
             r: { kind: "leaf", steps: [step("msg.read")] },
         },
     };
     mark_unrepeatable(root);
     const flags = (node: { steps: object[] }) => node.steps.map((entry) => (entry as { repeatable?: boolean }).repeatable);
-    assert.deepEqual(flags(root.children.x), [false]);
+    assert.deepEqual(flags(root.children.x), [undefined]);
     assert.deepEqual(flags(root.children.d.children.d), [false]);
     assert.deepEqual(flags(root.children.m), [false]);
-    assert.deepEqual(flags(root.children.m.otherwise), [false]);
+    assert.deepEqual(flags(root.children.m.otherwise), [undefined]);
     assert.deepEqual(flags(root.children.r), [undefined]);
 });

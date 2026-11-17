@@ -1,9 +1,11 @@
-import { focus_pane, focus_pane_beside, open_conversation, open_page, undo } from "../handlers/app.ts";
+import { focus_pane, focus_pane_beside, open_conversation, open_page } from "../handlers/app.ts";
+import { undo } from "../handlers/undo.ts";
+import type { UndoApi } from "../handlers/undo.ts";
 import type { AppApi } from "../handlers/app.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.undo` has no default key: Thunderbird undoes only the steps it recorded itself (a native Delete key, a drag), so a key could restore an older step while the newest `msg.delete` of DesertBird stays in Trash. It is typed as `:undo`. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
+// `msg.undo` reverses DesertBird's own changes from its undo log, never Thunderbird's: Thunderbird records no step for an API change, and mixing the two stacks would undo in the wrong order. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
 // Each names a pane, not a direction: `<A-h>` and `L` both reach the thread list from any pane. `pane.left` and `pane.right` are the relative pair, unbound by default.
 const PANE_CHORDS = {
     H: { id: "pane.focus", args: { pane: "folders" } },
@@ -20,9 +22,8 @@ export const app: CommandGroup = {
             runs_in: "background",
             name: "undo",
             label: "Undo",
-            intent: "Undo the last native Thunderbird move or delete.",
-            needs: ["keys.appCommand"],
-            run: scoped<AppApi>(undo),
+            intent: "Undo DesertBird's last delete, archive, move or mark. The marks are read, star and junk. Snooze, tags, mark folder read and changes made in Thunderbird itself are not undone.",
+            run: scoped<UndoApi>(undo),
         },
         "thread.open_conversation": {
             bridge: false,
@@ -68,6 +69,7 @@ export const app: CommandGroup = {
         },
     },
     normal_keys: {
+        u: { id: "msg.undo" },
         gC: { id: "thread.open_conversation" },
         gx: { id: "app.open_page", args: { page: "addons" } },
         gT: { id: "app.open_page", args: { page: "themes" } },
