@@ -9,7 +9,7 @@ import type { ViewRow } from "../src/shared/protocol.ts";
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
 
 // A row spec is its depth, with "+" for a closed thread. Row ids are index + 100.
-function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[]) {
+function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[], in_folder_pane = false) {
     const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: ids?.[index] ?? index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false, flags: 0 }));
     const calls: string[] = [];
     const keys = {
@@ -17,6 +17,7 @@ function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: num
         viewThread: async ({ row, open }: { row: number; open: boolean }) => void calls.push(`viewThread ${row} ${open}`),
         viewAllThreads: async ({ open }: { open: boolean }) => void calls.push(`viewAllThreads ${open}`),
         viewScroll: async ({ row, position }: { row: number; position: string }) => void calls.push(`viewScroll ${row} ${position}`),
+        folderTreeExpand: async ({ open }: { open: boolean }) => (calls.push(`folderTreeExpand ${open}`), in_folder_pane),
     };
     const mailTabs = {
         query: async () => [{ id: 9 }],
@@ -25,7 +26,7 @@ function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: num
     const notifications = { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") };
     const api = { keys, mailTabs, notifications } as unknown as RouterApi;
     const run = (command: string, args: Record<string, unknown> = {}) => create_router(registry, api).run({ command, args: args as never, count, windowId: 3, messageIds: [] });
-    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows")), all: calls };
+    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows") && !call.startsWith("folderTreeExpand")), all: calls };
 }
 
 test("the thread commands check their typed args", () => {
@@ -152,4 +153,11 @@ test("in a grouped view a header shares the id of its first member: [ t searches
     const reply = list_fake(depths, 5, 1, ids);
     await reply.run("motion.left");
     assert.deepEqual(reply.calls(), ["select 9 102"]);
+});
+
+test("h and l in the folder pane close and open the selected folder row and leave the thread list alone", async () => {
+    const fake = list_fake([0, 1, 0], 0, 1, undefined, true);
+    await fake.run("motion.left");
+    await fake.run("motion.right");
+    assert.deepEqual(fake.all, ["folderTreeExpand false", "folderTreeExpand true"]);
 });

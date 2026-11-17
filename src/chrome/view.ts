@@ -124,14 +124,17 @@ export function scroll_row(tree: RowsThreadTree, row: number, position: KeysView
     tree.scrollBy({ top: -(tree.table?.header?.clientHeight ?? 0) * HEADER_SHARE[position], behavior: "instant" });
 }
 
+/** The `about:3pane` of the front mail tab of a window named by id, or a throw when the window shows no mail tab. */
+export function mail_pane_of(context: ExtensionContext, window_id: number): ThreadVerbPane {
+    const window = open_main_windows().find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === window_id);
+    const about_3pane = window && front_about_3pane<ThreadVerbPane>(tabmail_of(window));
+    if (!about_3pane) throw new Error("the window shows no mail tab");
+    return about_3pane;
+}
+
 /** The `keys` thread verbs: each names a window by id and acts on its front mail tab. */
 export function view_verbs(context: ExtensionContext) {
-    const about_3pane_of = (window_id: number): ThreadVerbPane => {
-        const window = open_main_windows().find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === window_id);
-        const about_3pane = window && front_about_3pane<ThreadVerbPane>(tabmail_of(window));
-        if (!about_3pane) throw new Error("the window shows no mail tab");
-        return about_3pane;
-    };
+    const about_3pane_of = (window_id: number) => mail_pane_of(context, window_id);
     return {
         viewRows: guard("keys.viewRows", ({ windowId, first, last }: KeysViewRowsArgs) => read_rows(about_3pane_of(windowId), first, last, (header) => context.extension.messageManager.convert(header, { skipFolder: true })?.id ?? null)),
         viewThread: guard("keys.viewThread", ({ windowId, row, open }: KeysViewThreadArgs): void => about_3pane_of(windowId).threadTree[open ? "expandRowAtIndex" : "collapseRowAtIndex"](row)),

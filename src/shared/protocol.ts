@@ -102,7 +102,7 @@ export interface OverlayClosed {
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
-    keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll"], events: ["onInvocation"] },
+    keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "folderTreeExpand", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount"], events: ["onClosed"] },
 } as const;
 
@@ -114,6 +114,10 @@ export interface KeysApi {
     viewThread(args: KeysViewThreadArgs): Promise<void>;
     viewAllThreads(args: KeysViewAllThreadsArgs): Promise<void>;
     viewScroll(args: KeysViewScrollArgs): Promise<void>;
+    folderTreeExpand(args: KeysFolderTreeExpandArgs): Promise<boolean>;
+    paneFocus(args: KeysPaneFocusArgs): Promise<void>;
+    appCommand(args: KeysAppCommandArgs): Promise<boolean>;
+    appOpenPage(args: KeysAppOpenPageArgs): Promise<void>;
 }
 
 /** One visible row of the thread list. `depth` 0 is a thread root. `collapsed` is true for a thread whose replies are hidden. `flags` is the `nsMsgMessageFlags` word of the row's own message, so a collapsed thread shows its root's. The background reads the bits it needs. `id` is null when the extension cannot name the message. */
@@ -153,6 +157,35 @@ export interface KeysViewScrollArgs {
     windowId: number;
     row: number;
     position: "center" | "top" | "bottom";
+}
+
+/** Opens or closes the selected folder row. The answer is false, with nothing done, unless the folder pane has the focus. */
+export interface KeysFolderTreeExpandArgs {
+    windowId: number;
+    open: boolean;
+}
+
+export type Pane = "folders" | "threads" | "message";
+
+export interface KeysPaneFocusArgs {
+    windowId: number;
+    pane: Pane;
+}
+
+/** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. */
+export const APP_COMMANDS = ["cmd_undo", "cmd_openConversation"] as const;
+
+export interface KeysAppCommandArgs {
+    windowId: number;
+    name: (typeof APP_COMMANDS)[number];
+}
+
+/** The pages the Experiment opens. The parent holds the addresses and no caller names one. */
+export const APP_PAGES = ["addons", "themes", "config"] as const;
+
+export interface KeysAppOpenPageArgs {
+    windowId: number;
+    page: (typeof APP_PAGES)[number];
 }
 
 export interface OverlayApi {

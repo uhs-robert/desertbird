@@ -517,3 +517,17 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, w
 - `messages.query` with `messagesPerPage: 1` and `autoPaginationTimeout: 0` can return an empty first page with a list id. The step follows it with `continueList`.
 - Selecting a message in the thread list marks it read when the message pane shows it, so an unread step that walks the list leaves the rows it visited read.
 - `threadTree.selectedIndices = [...]` followed by `threadTree.currentIndex = end` selects a range with the current row at its end. `_selectRange(anchor, end)` of the tree sets the current row to the anchor.
+
+## Panes, undo and pages
+
+Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, with the same result on both. Native Down tells which pane has the focus: it moves the selection of the pane that holds it.
+
+- `about:3pane` has the globals `folderTree` (the folder pane, `ul#folderTree`) and `messageBrowser`. The tree has `selectedRow`, `expandRow(row)` and `collapseRow(row)`, which do nothing on a row without children or in the state asked for. `folderTree.focus()` and `threadTree.table.body.focus()` give the focus to the folder pane and the thread list. `messageBrowser.contentWindow.getMessagePaneBrowser().focus()` gives it to the message body of a single shown message.
+- A collapsed thread root shows the thread summary and no message body, so focusing the message pane on it leaves the focus where it was. The check selects a single message first.
+- `h` on the account row of Local Folders closes it, and Down then stays on the account row. `l` opens it, and Down reaches the Inbox.
+- The focus is in the folder pane when the focus chain of the main window holds an element with the id `folderTree`.
+- The body script takes every key while the message pane has the focus, so `g e` and `g f` there run through its own keymap and the background. Both moved the focus out.
+- `cmd_undo` is a command of the main window's `DefaultController`. `cmd_openConversation` is a command of the `commandController` of `about:3pane`. Both have `isCommandEnabled`.
+- What `cmd_undo` undoes, on the fixture Inbox: a delete by the native Delete key is undone and the thread returns to the Inbox. `d d` (the `messages.delete` API) is not undone, and `u` after it changes nothing. A second `u` with nothing left to undo changes no mail.
+- `cmd_openConversation` is disabled when no search index covers the message, as in the fixture profile, so `g C` opens nothing and the command refuses with a message.
+- `openAddonsMgr("addons://list/extension")` and `openAddonsMgr("addons://list/theme")` open or reuse the Add-ons Manager tab. `openContentTab("about:config")` opens the configuration editor in a tab. Keys do not run in those tabs, so the next key press needs the mail tab in front.

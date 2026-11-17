@@ -6,8 +6,8 @@ import type { CommandGroup } from "./define.ts";
 // All five move the selection or the fold state of the list and never touch mail, so `bridge` is true. Each reads the rows through the chrome verbs in `needs`.
 export const thread: CommandGroup = {
     commands: {
-        "motion.left": { bridge: true, runs_in: "background", label: "Close thread or go to its root", intent: "Close the open thread, or go from a reply to its root.", needs: ["keys.viewRows", "keys.viewThread"], run: scoped<ThreadViewApi>(move_left) },
-        "motion.right": { bridge: true, runs_in: "background", label: "Open thread or go to its first reply", intent: "Open the closed thread, or go to its first reply.", needs: ["keys.viewRows", "keys.viewThread"], run: scoped<ThreadViewApi>(move_right) },
+        "motion.left": { bridge: true, runs_in: "background", label: "Close thread or go to its root", intent: "Close the open thread, or go from a reply to its root.", needs: ["keys.folderTreeExpand", "keys.viewRows", "keys.viewThread"], run: scoped<ThreadViewApi>(move_left) },
+        "motion.right": { bridge: true, runs_in: "background", label: "Open thread or go to its first reply", intent: "Open the closed thread, or go to its first reply.", needs: ["keys.folderTreeExpand", "keys.viewRows", "keys.viewThread"], run: scoped<ThreadViewApi>(move_right) },
         "step.thread_root": {
             bridge: true,
             runs_in: "background",

@@ -65,8 +65,9 @@ export async function step_thread_root(scope: ThreadScope, args: CheckedArgs): P
     await select_row(scope, row);
 }
 
-// `h` on a reply goes to its root and on a root closes the thread. Thunderbird ignores the close on a message with no replies.
+// In the folder pane `h` and `l` close and open the selected folder row. Elsewhere `h` on a reply goes to its root and on a root closes the thread. Thunderbird ignores the close on a message with no replies.
 export async function move_left(scope: ThreadScope): Promise<void> {
+    if (await scope.api.keys.folderTreeExpand({ windowId: scope.window_id, open: false })) return;
     const row = await current_row(scope);
     if (row.depth === 0) return void (await scope.api.keys.viewThread({ windowId: scope.window_id, row: row.index, open: false }));
     const root = await root_at_or_before(scope, row.index);
@@ -78,6 +79,7 @@ export async function move_left(scope: ThreadScope): Promise<void> {
 
 // `l` opens a closed thread and on an open thread goes to its first reply.
 export async function move_right(scope: ThreadScope): Promise<void> {
+    if (await scope.api.keys.folderTreeExpand({ windowId: scope.window_id, open: true })) return;
     const row = await current_row(scope);
     if (row.collapsed) return void (await scope.api.keys.viewThread({ windowId: scope.window_id, row: row.index, open: true }));
     const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: row.index + 1, last: row.index + 1 });

@@ -1,5 +1,6 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
+import { app_verbs } from "./app_verbs.ts";
 import { in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
@@ -63,6 +64,7 @@ export function get_keys_api(context: ExtensionContext) {
         keys: {
             install: guard("keys.install", ({ tree, holdCommands }: KeysInstallArgs): void => ensure_runtime(context).install(tree, holdCommands)),
             ...view_verbs(context),
+            ...app_verbs(context),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "keys.onInvocation",
