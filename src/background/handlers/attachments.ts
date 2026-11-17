@@ -13,10 +13,17 @@ interface DownloadDelta {
     state?: { current?: string };
 }
 
+interface Attachment {
+    name: string;
+    partName: string;
+    contentDisposition?: string;
+    type?: string;
+}
+
 export interface AttachmentsApi extends NotificationsApi {
     messages: {
         get(id: number): Promise<{ id: number; subject?: string; date: Date }>;
-        listAttachments(id: number): Promise<{ name: string; partName: string }[]>;
+        listAttachments(id: number): Promise<Attachment[]>;
         getAttachmentFile(id: number, part_name: string): Promise<Blob>;
     };
     downloads: {
@@ -36,59 +43,74 @@ const blob_urls: BlobUrls = { create: (blob) => URL.createObjectURL(blob), revok
 
 const day_of = (date: Date): string => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-/** Resolves when the download ends, done or not. `download` resolves when it starts, and a blob URL revoked by then can cut the file short. */
-function finish_tracker(api: AttachmentsApi) {
-    const ended = new Map<number, boolean>();
-    const waiting = new Map<number, (done: boolean) => void>();
+/** How long a blob URL waits for the end of its download. A paused download never reports one, and the URL must not live forever. */
+const REVOKE_FALLBACK_MS = 10 * 60 * 1000;
+
+/** Revokes `url` when the download ends or the fallback runs out, and removes its listener then. `download` resolves when the download starts, and a blob URL revoked by then can cut a large file short. */
+function revoke_when_ended(api: AttachmentsApi, urls: BlobUrls, url: string, fallback_ms: number) {
+    let download_id: number | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ended_early = new Set<number>();
+    const settle = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        api.downloads.onChanged.removeListener(listener);
+        urls.revoke(url);
+    };
     const listener = (delta: DownloadDelta) => {
-        const state = delta.state?.current;
-        if (state !== "complete" && state !== "interrupted") return;
-        ended.set(delta.id, state === "complete");
-        waiting.get(delta.id)?.(state === "complete");
+        if (delta.state?.current !== "complete" && delta.state?.current !== "interrupted") return;
+        if (download_id === undefined) ended_early.add(delta.id);
+        else if (delta.id === download_id) settle();
     };
     api.downloads.onChanged.addListener(listener);
     return {
-        wait: (id: number) => (ended.has(id) ? Promise.resolve(ended.get(id)!) : new Promise<boolean>((resolve) => waiting.set(id, resolve))),
-        stop: () => api.downloads.onChanged.removeListener(listener),
+        started: (id: number) => {
+            download_id = id;
+            if (ended_early.has(id)) settle();
+            else timer = setTimeout(settle, fallback_ms);
+        },
+        settle,
     };
 }
 
-/** Saves the attachments of each selected message under Downloads/DesertBird/<date>-<subject>/. A saved file is never opened. */
-export async function save_attachments(scope: AttachmentsScope, args: CheckedArgs, urls: BlobUrls = blob_urls): Promise<void> {
+// A part is saved only when it is a normal attachment. Inline parts (a signature logo) and the placeholder Thunderbird leaves for a deleted attachment are skipped, and a detached or linked part has no bytes in the message.
+const is_saveable = (attachment: Attachment): boolean => attachment.contentDisposition !== "inline" && (attachment.type ?? "normal") === "normal";
+
+/** Saves the attachments of each selected message under Downloads/DesertBird/<date>-<subject>/. A saved file is never opened. The command ends when the downloads have started, not when they end. */
+export async function save_attachments(scope: AttachmentsScope, args: CheckedArgs, urls: BlobUrls = blob_urls, fallback_ms = REVOKE_FALLBACK_MS): Promise<void> {
     const { api } = scope;
     const ids = require_messages(scope.message_ids);
     const save_as = args["where"] === "ask";
-    const tracker = finish_tracker(api);
-    let saved = 0;
+    let started = 0;
     let failed = 0;
+    let skipped = 0;
     const folders: string[] = [];
-    try {
-        for (const id of ids) {
-            const attachments = await api.messages.listAttachments(id);
-            if (attachments.length === 0) continue;
-            const message = await api.messages.get(id);
-            const folder = `${ROOT_FOLDER}/${day_of(message.date)}-${safe_filename(message.subject ?? "", "no subject")}`;
-            folders.push(folder);
-            for (const [index, attachment] of attachments.entries()) {
+    for (const id of ids) {
+        const listed = await api.messages.listAttachments(id);
+        const attachments = listed.filter(is_saveable);
+        skipped += listed.length - attachments.length;
+        if (attachments.length === 0) continue;
+        const message = await api.messages.get(id);
+        const folder = `${ROOT_FOLDER}/${day_of(message.date)}-${safe_filename(message.subject ?? "", "no subject")}`;
+        folders.push(folder);
+        for (const [index, attachment] of attachments.entries()) {
+            let revoker: ReturnType<typeof revoke_when_ended> | undefined;
+            try {
                 const url = urls.create(await api.messages.getAttachmentFile(id, attachment.partName));
-                try {
-                    const download_id = await api.downloads.download({ url, filename: `${folder}/${safe_filename(attachment.name, `attachment-${index + 1}`)}`, saveAs: save_as, conflictAction: "uniquify" });
-                    if (await tracker.wait(download_id)) saved++;
-                    else failed++;
-                } catch {
-                    // The save dialog of `ask` rejects when the user cancels it.
-                    failed++;
-                } finally {
-                    urls.revoke(url);
-                }
+                revoker = revoke_when_ended(api, urls, url, fallback_ms);
+                revoker.started(await api.downloads.download({ url, filename: `${folder}/${safe_filename(attachment.name, `attachment-${index + 1}`)}`, saveAs: save_as, conflictAction: "uniquify" }));
+                started++;
+            } catch {
+                // An unreadable attachment must not stop the rest, and the save dialog of `ask` rejects when the user cancels it.
+                revoker?.settle();
+                failed++;
             }
         }
-    } finally {
-        tracker.stop();
     }
-    if (saved + failed === 0) throw new RuntimeRefusal(ids.length === 1 ? "The message has no attachments." : "None of the selected messages has attachments.");
-    const where = folders.length === 1 ? `Downloads/${folders[0]}` : `Downloads/${ROOT_FOLDER}`;
-    if (saved === 0) throw new RuntimeRefusal(`No attachment was saved (${failed} failed or canceled).`);
+    const left_out = skipped > 0 ? ` Skipped ${skipped} inline or removed part${skipped === 1 ? "" : "s"}.` : "";
+    if (started + failed === 0) throw new RuntimeRefusal(`${ids.length === 1 ? "The message has no attachments." : "None of the selected messages has attachments."}${left_out}`);
+    if (started === 0) throw new RuntimeRefusal(`No attachment was saved (${failed} failed or canceled).${left_out}`);
+    const plural = started === 1 ? "" : "s";
+    const where = save_as ? "." : ` to Downloads/${folders.length === 1 ? folders[0] : ROOT_FOLDER}.`;
     const lost = failed > 0 ? ` ${failed} did not save.` : "";
-    await notify_refusal(api, `Saved ${saved} attachment${saved === 1 ? "" : "s"} to ${where}.${lost}`);
+    await notify_refusal(api, `Saving ${started} attachment${plural}${where}${lost}${left_out}`);
 }
