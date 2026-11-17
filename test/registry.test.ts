@@ -24,6 +24,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "view.half_page", "thread.fold_all"] },
     step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment"] },
     help: { runs_in: "background", ids: ["help.open"] },
+    search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
 };
 

@@ -22,6 +22,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Command line: overlay page, key handling, drawing | [`src/overlay/README.md`](src/overlay/README.md) |
 | Command line in the background: completion, sessions, running a typed command | [`src/background/cmdline/README.md`](src/background/cmdline/README.md) |
 | Body script: keys in a message document (pane, tab, window) and on the options and help pages | [`src/content/README.md`](src/content/README.md) |
+| Search in the background: live Quick Filter search, the `/` register, `n` and `N` | [`src/background/search/README.md`](src/background/search/README.md) |
 | Hud in the background: which-key panel, toasts, mode label | [`src/background/hud/README.md`](src/background/hud/README.md) |
 | Theme: the `theme` setting, role colors for pages, mode label colors | [`src/background/theme/README.md`](src/background/theme/README.md) |
 | Help page generated from the registry | [`src/help/README.md`](src/help/README.md) |

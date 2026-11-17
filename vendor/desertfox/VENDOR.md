@@ -1,13 +1,13 @@
 # Vendored DesertFox code
 
-This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension. DesertFox is the source of the key matcher, the key notation, the keymap compiler, the command registry validator, the command line parser and printer, and the completion tokenizer and scorer. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
+This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension. DesertFox is the source of the key matcher, the key notation, the keymap compiler, the command registry validator, the command line parser and printer, the completion tokenizer and scorer, and the search query compiler and match stepper. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
 
 - Source: the DesertFox repository, folder `src/shared/`
 - Tag: `v1.0.0`
 - Commit: `33a68a009791563e5ba57999e43b5c8d45c8ca6d` (use the commit, since a tag can move)
 - License: MPL-2.0, the same as DesertBird (see `LICENSE` at the repository root). The copied files keep their text unchanged apart from the edits listed below.
 
-The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin, since they did not change between the tag and later commits), except `completion/tokenize.ts` and `history_cursor.ts`, which come from `src/cmdline/`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
+The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin, since they did not change between the tag and later commits), except `completion/tokenize.ts` and `history_cursor.ts`, which come from `src/cmdline/`, and `find_match.ts`, which comes from `src/content/caret/`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
 
 ## Commands
 
@@ -34,6 +34,10 @@ All edits live in `local_edits.patch`. They widen the Firefox-only values of `co
 
 - The three imports of `../../shared/...` read `../...`, because the file sits beside the shared files here and in a `cmdline/completion/` folder upstream.
 
+### `find_match.ts`
+
+- The two imports (`RuntimeRefusal` from `command.ts`, `FindScanAnswer` from `messages.ts`) are gone, with the page-side scan they served: `Slicing`, `ScanRegex`, `describe_timeout` and `collect_matches`. DesertBird scans no page text here. What stays is the pure part: `compile_query` (smart case, the costly pattern check, the literal fallback), `nearest_match`, `step_match`, `opposite` and `describe_match`.
+
 ### Checked, not edited
 
 - `MODES` already holds `normal`, `insert`, `visual` and `cmdline`. Narrowing it breaks `bundles.ts` and `command.ts`, which name the other DesertFox modes, so the list stays as it is.
@@ -54,6 +58,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `782044001ffb548804beac17fbae8f01eafa4c800181b555729418a27cb7f41e` |
 | `default_settings.ts` | stub | `-` | `edc74287069f1b13134282a5456d56669128c3ad031b0e1ffd00a4c020a10cfa` |
+| `find_match.ts` | edited | `67f4bd84db09a3d924dd436b261f6fee0f644156dad2a0bf5b6f95394165712d` | `f320289d274b638326562913c43ad2c9a83087df77de5952b4ab486fd2c8e31a` |
 | `history_cursor.ts` | copy | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` |
 | `invocation.ts` | copy | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` | `ed9da0647ee02b4bba5193458662a666402e28ee2cd6626ecfbe0201a4d8aeb9` |
 | `keymap.ts` | copy | `ff1bf49115316cbd304862586a00cad756c6ebcfa9fc60b71e06b84dfd8f26d4` | `ff1bf49115316cbd304862586a00cad756c6ebcfa9fc60b71e06b84dfd8f26d4` |

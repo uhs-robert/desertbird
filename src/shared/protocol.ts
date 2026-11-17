@@ -27,6 +27,12 @@ export const BODY_SCRIPT_LIVE_ATTRIBUTE = "data-desertbird-keys";
 export const SETTINGS_STORAGE_KEY = "desertbird_settings";
 /** The command line history: a list of lines, oldest first. The background writes it and the command line page reads it. */
 export const CMDLINE_HISTORY_STORAGE_KEY = "desertbird_cmdline_history";
+/** The lines typed after `/` and `?`, in the same shape as the command line history. */
+export const SEARCH_HISTORY_STORAGE_KEY = "desertbird_search_history";
+/** The quick filter the add-on last set for each mail tab, by tab id, in session storage. The API cannot read the filter back, so a restart of the background page would otherwise forget what Escape restores. */
+export const APPLIED_FILTERS_STORAGE_KEY = "desertbird_applied_filters";
+/** The `/` register: the last committed search, `{ text, direction }`. `n` and `N` read it, and it survives a restart of the add-on. */
+export const SEARCH_REGISTER_STORAGE_KEY = "desertbird_search_register";
 
 /** The default of the `message_scroll_step_px` setting: one `j` or `k` in a message. */
 export const MESSAGE_SCROLL_STEP_PX = 40;
@@ -129,6 +135,8 @@ export type OverlaySurface = (typeof OVERLAY_SURFACES)[number];
 export interface OverlayMountArgs {
     windowId: number;
     surface: OverlaySurface;
+    /** Lets mouse clicks through the box to the window under it. The search line sets it: its page is transparent and the keyboard drives it. */
+    clickThrough?: boolean;
 }
 
 export interface OverlayUnmountArgs {
@@ -268,7 +276,9 @@ export type CmdlineRequest =
     | { type: "cmdline.hello"; windowId: number }
     | { type: "cmdline.complete"; windowId: number; text: string; caret: number }
     | { type: "cmdline.run"; windowId: number; text: string }
-    | { type: "cmdline.close"; windowId: number };
+    | { type: "cmdline.close"; windowId: number }
+    | { type: "cmdline.search_type"; windowId: number; text: string }
+    | { type: "cmdline.search_commit"; windowId: number; text: string };
 
 /** The rows are plain data. `positions` are the letters of `name` the query matched. */
 export interface CmdlineCompletion {
@@ -278,7 +288,13 @@ export interface CmdlineCompletion {
     usage?: string;
 }
 
-export type CmdlineHello = { open: true; text: string } | { open: false };
+export type SearchDirection = "forward" | "backward";
+
+/** `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. */
+export type CmdlineHello = { open: true; text: string; search?: SearchDirection } | { open: false };
+
+/** The note under the search line after a keystroke. `stale` means a newer keystroke replaced this one, so the page draws nothing. */
+export type CmdlineSearchNote = { note: string; is_error: boolean } | { stale: true };
 
 /** `ok` is false when the line is not a command, with the reason in `message`. The line stays open then. A usage line from `-h` comes back the same way. */
 export type CmdlineRunResult = { ok: true } | { ok: false; message: string };

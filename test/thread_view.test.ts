@@ -161,11 +161,11 @@ test("in a grouped view a header shares the id of its first member: [ t searches
     assert.deepEqual(reply.calls(), ["select 9 102"]);
 });
 
-test("h and l in the folder pane close and open the selected folder row and leave the thread list alone", async () => {
+test("h in the folder pane closes like H, a child included, and l opens the selected folder row and leave the thread list alone", async () => {
     const fake = list_fake([0, 1, 0], 0, 1, undefined, true);
     await fake.run("motion.left");
     await fake.run("motion.right");
-    assert.deepEqual(fake.all, ["fold row false", "fold row true"]);
+    assert.deepEqual(fake.all, ["fold parent false", "fold row true"]);
 });
 
 test("z M and z R in the folder pane fold every folder and leave the thread list alone", async () => {

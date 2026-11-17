@@ -79,3 +79,83 @@
  
  type Command = NonNullable<ReturnType<CommandLookup["find"]>>;
  
+--- a/vendor/desertfox/find_match.ts
++++ b/vendor/desertfox/find_match.ts
+@@ -1,6 +1,3 @@
+-import { RuntimeRefusal } from "../../shared/command.ts";
+-import type { FindScanAnswer } from "../../shared/messages.ts";
+-
+ // The pure half of page search: a query to a search, the match list over the model's text, and which match is next.
+ // A match is the pair of arrays `from` and `to`, one entry each, in text order. A page can hold hundreds of thousands, so no object per match.
+ 
+@@ -95,70 +92,6 @@ export function compile_query(query: string): Query | undefined {
+   }
+ }
+ 
+-export type Slicing = {
+-  // True once a newer query or the end of the search made this scan useless.
+-  is_stale_: () => boolean;
+-  // Lets the page and the keys run, then resumes.
+-  yield_to_page_: () => Promise<void>;
+-  now: () => number;
+-  slice_ms_: number;
+-};
+-
+-// Runs a `regex` search in the background (the `find_scan` message).
+-export type ScanRegex = (text: string, regex: RegExp) => Promise<FindScanAnswer>;
+-
+-// The line under the search line when a `regex` search ran past the background's limit (FIND_SCAN_LIMIT_MS in src/background/find_scan.ts).
+-export const describe_timeout = (query: string) => `Pattern too slow, stopped after 0.3 s: ${query}`;
+-
+-// A page-side scan runs in slices, so a keystroke typed mid-scan is heard and the old scan stops. Undefined means the scan was dropped as stale.
+-// A slice ends between two matches. Only a `literal` or `folded` search runs here, and neither can backtrack, so one step is short.
+-export async function collect_matches(text: string, search: Search, slicing: Slicing, scan_regex: ScanRegex): Promise<Matches | "timeout" | undefined> {
+-  if (search.kind === "regex") {
+-    // A frame torn down or a background reload rejects the send. That says nothing to a search that is already stale.
+-    const answer = await scan_regex(text, search.regex).catch((error: unknown) => {
+-      if (slicing.is_stale_()) return undefined;
+-      throw error;
+-    });
+-    if (!answer || slicing.is_stale_()) return undefined;
+-    if (answer.ok) return { from: Array.from(answer.from), to: Array.from(answer.to) };
+-    if (answer.reason === "failed") throw new RuntimeRefusal(answer.message);
+-    return answer.reason === "timeout" ? "timeout" : undefined;
+-  }
+-  const found: Matches = { from: [], to: [] };
+-  let slice_started = slicing.now();
+-  // The next match after the last one, or undefined when the scan is over.
+-  let next: () => { from: number; to: number } | undefined;
+-  if (search.kind === "literal") {
+-    // A typed space matches a line break, as in the regex path. A string pattern keeps `replaceAll` from running a regex.
+-    const haystack = text.replaceAll("\n", " ");
+-    const needle = search.needle.replaceAll("\n", " ");
+-    let at = 0;
+-    next = () => {
+-      const from = haystack.indexOf(needle, at);
+-      if (from < 0) return undefined;
+-      at = from + needle.length;
+-      return { from, to: at };
+-    };
+-  } else {
+-    // Escaped text of at least one character never matches empty, so `exec` always moves on.
+-    const { regex } = search;
+-    regex.lastIndex = 0;
+-    next = () => {
+-      const hit = regex.exec(text);
+-      return hit ? { from: hit.index, to: hit.index + hit[0].length } : undefined;
+-    };
+-  }
+-  for (let hit = next(); hit; hit = next()) {
+-    found.from.push(hit.from);
+-    found.to.push(hit.to);
+-    if (slicing.now() - slice_started < slicing.slice_ms_) continue;
+-    await slicing.yield_to_page_();
+-    if (slicing.is_stale_()) return undefined;
+-    slice_started = slicing.now();
+-  }
+-  return slicing.is_stale_() ? undefined : found;
+-}
+-
+ // The first match at or after `start` going forward, or the last one before it going backward. Wraps to the other end when there is none.
+ export function nearest_match(from: number[], start: number, direction: Direction): { index: number; wrapped: boolean } | undefined {
+   if (from.length === 0) return undefined;
