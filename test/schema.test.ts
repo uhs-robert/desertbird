@@ -103,7 +103,9 @@ test("overlay.mount takes an integer window id and a surface from a fixed list",
     const mount = namespace_named("overlay").functions?.find((fn) => fn.name === "mount")?.parameters?.[0];
     assert.equal(mount?.properties?.["windowId"]?.type, "integer");
     assert.deepEqual(mount?.properties?.["surface"]?.enum, [...OVERLAY_SURFACES]);
-    assert.deepEqual(Object.keys(mount?.properties ?? {}).sort(), ["surface", "windowId"]);
+    // The one flag is a boolean: no string reaches the box style.
+    assert.equal(mount?.properties?.["clickThrough"]?.type, "boolean");
+    assert.deepEqual(Object.keys(mount?.properties ?? {}).sort(), ["clickThrough", "surface", "windowId"]);
 });
 
 test("overlay.unmount takes a window id and a surface from the fixed list, and nothing else", () => {

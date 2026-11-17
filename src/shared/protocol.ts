@@ -29,6 +29,8 @@ export const SETTINGS_STORAGE_KEY = "desertbird_settings";
 export const CMDLINE_HISTORY_STORAGE_KEY = "desertbird_cmdline_history";
 /** The lines typed after `/` and `?`, in the same shape as the command line history. */
 export const SEARCH_HISTORY_STORAGE_KEY = "desertbird_search_history";
+/** The quick filter the add-on last set for each mail tab, by tab id, in session storage. The API cannot read the filter back, so a restart of the background page would otherwise forget what Escape restores. */
+export const APPLIED_FILTERS_STORAGE_KEY = "desertbird_applied_filters";
 /** The `/` register: the last committed search, `{ text, direction }`. `n` and `N` read it, and it survives a restart of the add-on. */
 export const SEARCH_REGISTER_STORAGE_KEY = "desertbird_search_register";
 
@@ -133,6 +135,8 @@ export type OverlaySurface = (typeof OVERLAY_SURFACES)[number];
 export interface OverlayMountArgs {
     windowId: number;
     surface: OverlaySurface;
+    /** Lets mouse clicks through the box to the window under it. The search line sets it: its page is transparent and the keyboard drives it. */
+    clickThrough?: boolean;
 }
 
 export interface OverlayUnmountArgs {

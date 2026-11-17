@@ -18,7 +18,7 @@ export async function open_search(scope: HandlerScope<SearchOpenApi>, args: Chec
     await scope.api.search.start(scope.window_id, direction);
     scope.api.cmdline.begin(scope.window_id, { message_ids: scope.message_ids, text: "", search: direction });
     try {
-        await scope.api.overlay.mount({ windowId: scope.window_id, surface: "cmdline" });
+        await scope.api.overlay.mount({ windowId: scope.window_id, surface: "cmdline", clickThrough: true });
     } catch (error) {
         scope.api.cmdline.end(scope.window_id);
         throw error;

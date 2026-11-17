@@ -5,7 +5,7 @@ import type { QuickFilter } from "../src/background/handlers/view.ts";
 import { apply_filter } from "../src/background/handlers/view.ts";
 import { create_search_register } from "../src/background/search/register.ts";
 import { SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
-import { SEARCH_REGISTER_STORAGE_KEY } from "../src/shared/protocol.ts";
+import { APPLIED_FILTERS_STORAGE_KEY, SEARCH_REGISTER_STORAGE_KEY } from "../src/shared/protocol.ts";
 import { fake_storage } from "./fake_api.ts";
 import { fake_timers } from "./hud_fakes.ts";
 
@@ -58,14 +58,15 @@ function setup(options: { folder?: string; root?: boolean } = {}) {
     const storage = fake_storage();
     const filters: QuickFilter[] = [];
     const said: string[] = [];
-    const state = { folder: options.folder ?? "f1", tab: tab_id, selected: -1, filter: {} as QuickFilter, root: options.root ?? false };
+    const state = { tab_folders: { [tab_id]: options.folder ?? "f1" } as Record<number, string>, tab: tab_id, selected: -1, filter: {} as QuickFilter, root: options.root ?? false };
     const visible = () => {
         const text = state.filter.text?.text.toLowerCase();
         return text === undefined ? MAILS : MAILS.filter((mail) => `${mail.subject} ${mail.author}`.toLowerCase().includes(text));
     };
     const api = {
         mailTabs: {
-            query: async () => [{ id: state.tab, displayedFolder: { id: state.folder, accountId: "a1", path: "/Inbox", isRoot: state.root } }],
+            query: async () => [{ id: state.tab, displayedFolder: { id: state.tab_folders[state.tab] ?? "other", accountId: "a1", path: "/Inbox", isRoot: state.root } }],
+            get: async (id: number) => ({ displayedFolder: { id: state.tab_folders[id] ?? "other" } }),
             update: async () => undefined,
             setQuickFilter: async (id: number, filter: QuickFilter) => {
                 filters.push(filter);
@@ -176,9 +177,9 @@ test("a cancel while a filter is still running waits for it, so the restore is t
 });
 
 test("a folder that changes mid-search ends the search and touches no filter", async () => {
-    const { service, type, filters, state } = setup();
+    const { service, type, filters, state, tab_id } = setup();
     await service.start(3, "forward");
-    state.folder = "f2";
+    state.tab_folders[tab_id] = "f2";
     const answer = await type("invoice");
     assert.deepEqual(answer, { note: "The folder changed, so the search ended.", is_error: true });
     assert.deepEqual(filters, []);
@@ -186,17 +187,21 @@ test("a folder that changes mid-search ends the search and touches no filter", a
     await assert.rejects(service.commit(3, "x"), /ended/);
 });
 
-test("Escape in another folder or tab restores nothing", async () => {
+test("Escape after a folder change restores nothing", async () => {
     const folder_case = setup();
     await folder_case.service.start(3, "forward");
-    folder_case.state.folder = "f2";
+    folder_case.state.tab_folders[folder_case.tab_id] = "f2";
     await folder_case.service.cancel(3);
     assert.deepEqual(folder_case.filters, []);
-    const tab_case = setup();
-    await tab_case.service.start(3, "forward");
-    tab_case.state.tab = 1;
-    await tab_case.service.cancel(3);
-    assert.deepEqual(tab_case.filters, []);
+});
+
+test("a tab switch mid-search still restores the tab the search narrowed", async () => {
+    const { service, type, filters, state } = setup();
+    await service.start(3, "forward");
+    await type("inv");
+    state.tab = 1;
+    await service.cancel(3);
+    assert.deepEqual(filters.at(-1), { show: false });
 });
 
 test("Enter keeps the filter, selects the first row, stores the register and says where it stands", async () => {
@@ -305,7 +310,7 @@ import { registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import { fake_api } from "./fake_api.ts";
 
-function line_setup(options: { commit_error?: string } = {}) {
+function line_setup(options: { commit_error?: string; commit_gate?: Promise<void> } = {}) {
     const log: string[] = [];
     const histories: string[] = [];
     const service = create_cmdline_service({
@@ -318,6 +323,7 @@ function line_setup(options: { commit_error?: string } = {}) {
             type: async (_window, text) => (log.push(`type ${text}`), { note: "1 of 2", is_error: false }),
             commit: async (_window, text) => {
                 log.push(`commit ${text}`);
+                await options.commit_gate;
                 if (options.commit_error) throw new Error(options.commit_error);
             },
             cancel: async (window_id) => void log.push(`cancel ${window_id}`),
@@ -351,7 +357,7 @@ test("Enter commits first, then closes the overlay and records the line in the s
     service.begin(3, { message_ids: [], text: "", search: "forward" });
     assert.deepEqual(await ask(service, { type: "cmdline.search_commit", windowId: 3, text: "foo" }), { ok: true });
     await settle();
-    assert.deepEqual(log, ["commit foo", "unmount 3"]);
+    assert.deepEqual(log, ["commit foo", "cancel 3", "unmount 3"]);
     assert.deepEqual(histories, ["foo"]);
     // A second Enter finds no session.
     assert.deepEqual(await ask(service, { type: "cmdline.search_commit", windowId: 3, text: "foo" }), { ok: false, message: "The search line is not open." });
@@ -369,13 +375,13 @@ test("a search that cannot finish keeps the line open with the reason and record
     assert.deepEqual(log, ["commit zzz", "cancel 3", "unmount 3"]);
 });
 
-test("Escape cancels the search before the overlay goes, and a command line cancels nothing", async () => {
+test("Escape cancels the search before the overlay goes, and a command line asks for a cancel that finds no search", async () => {
     const { service, log } = line_setup();
     service.begin(3, { message_ids: [], text: "", search: "forward" });
     await ask(service, { type: "cmdline.close", windowId: 3 });
     service.begin(4, { message_ids: [], text: "" });
     await ask(service, { type: "cmdline.close", windowId: 4 });
-    assert.deepEqual(log, ["cancel 3", "unmount 3", "unmount 4"]);
+    assert.deepEqual(log, ["cancel 3", "unmount 3", "cancel 4", "unmount 4"]);
 });
 
 test("an overlay that left on its own (a tab change) cancels the search through end", async () => {
@@ -411,4 +417,100 @@ test("? is backward search and g? is help, / and n and N are bound in the mail t
     // The message pane keeps its own find on / n N.
     const message = MESSAGE_KEYMAP.normal as Record<string, { id: string }>;
     assert.deepEqual([message["/"]?.id, message["n"]?.id, message["?"]], ["cmdline.open", "message.find_next", undefined]);
+});
+
+// --- lifecycle races
+
+test("Escape while an Enter is still counting cancels the search and the late commit does not keep its text", async () => {
+    const { service, filters, api, state } = setup();
+    await service.start(3, "forward");
+    const rows = api.keys.viewRows;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    api.keys.viewRows = async (range) => (await held, rows(range));
+    const committed = service.commit(3, "invoice");
+    await new Promise((resolve) => setImmediate(resolve));
+    const cancelled = service.cancel(3);
+    release();
+    await assert.rejects(committed, /cancelled/);
+    await cancelled;
+    assert.deepEqual(filters.at(-1), { show: false });
+    assert.equal(state.filter.text, undefined);
+    assert.equal(state.selected, -1);
+});
+
+test("Enter that fails to store the register or select leaves the search open for another Enter", async () => {
+    const { service, storage, state } = setup();
+    await service.start(3, "forward");
+    const write = storage.api.local.set;
+    storage.api.local.set = async () => {
+        throw new Error("disk full");
+    };
+    await assert.rejects(service.commit(3, "invoice"), /disk full/);
+    storage.api.local.set = write;
+    await service.commit(3, "invoice");
+    assert.equal(state.selected, 0);
+});
+
+test("keystrokes that settle after Enter cannot overwrite the committed filter", async () => {
+    const { service, filters, timers, state } = setup();
+    await service.start(3, "forward");
+    const first = service.type(3, "inv");
+    const second = service.type(3, "invoice");
+    await new Promise((resolve) => setImmediate(resolve));
+    await service.commit(3, "invoice");
+    timers.advance(SEARCH_DEBOUNCE_MS);
+    assert.deepEqual([await first, await second], [{ stale: true }, { stale: true }]);
+    assert.deepEqual(filters.map((filter) => filter.text?.text), ["invoice"]);
+    assert.equal(state.filter.text?.text, "invoice");
+});
+
+test("a keystroke already filtering when Enter comes lands before the commit and never after it", async () => {
+    const { service, filters, timers, api } = setup();
+    await service.start(3, "forward");
+    const slow = api.mailTabs.setQuickFilter;
+    let release: () => void = () => {};
+    api.mailTabs.setQuickFilter = async (id, filter) => {
+        if (filter.text?.text === "inv") await new Promise<void>((resolve) => (release = resolve));
+        await slow(id, filter);
+    };
+    const typed = service.type(3, "inv");
+    await new Promise((resolve) => setImmediate(resolve));
+    timers.advance(SEARCH_DEBOUNCE_MS);
+    await new Promise((resolve) => setImmediate(resolve));
+    const committed = service.commit(3, "invoice");
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+    await typed;
+    await committed;
+    assert.equal(filters.at(-1)?.text?.text, "invoice");
+});
+
+test("the remembered filters come back from session storage after a restart of the page", async () => {
+    const { keep_filters, remembered_filter, filters_ready, apply_filter, forget_filter } = await import("../src/background/handlers/view.ts");
+    const stored: Record<string, unknown> = { [APPLIED_FILTERS_STORAGE_KEY]: { 777: { unread: true } } };
+    const writes: unknown[] = [];
+    keep_filters({ get: async () => stored, set: async (items) => void writes.push(items) });
+    await filters_ready();
+    assert.deepEqual(remembered_filter(777), { unread: true });
+    await apply_filter({ setQuickFilter: async () => {} }, 778, { flagged: true });
+    // Other tests leave filters of their own tabs in the same map, so only these two tabs are compared.
+    const written = (writes.at(-1) as Record<string, Record<string, unknown>>)[APPLIED_FILTERS_STORAGE_KEY]!;
+    assert.deepEqual([written["777"], written["778"]], [{ unread: true }, { flagged: true }]);
+    forget_filter(777);
+    forget_filter(778);
+    keep_filters(undefined);
+});
+
+test("Escape while an Enter is still committing cancels the search, and the late failure keeps no session", async () => {
+    let release: () => void = () => {};
+    const { service, log } = line_setup({ commit_error: "Not found: zzz", commit_gate: new Promise<void>((resolve) => (release = resolve)) });
+    service.begin(3, { message_ids: [], text: "", search: "forward" });
+    const pending = ask(service, { type: "cmdline.search_commit", windowId: 3, text: "zzz" });
+    await settle();
+    await ask(service, { type: "cmdline.close", windowId: 3 });
+    release();
+    assert.deepEqual(await pending, { ok: false, message: "Not found: zzz" });
+    assert.deepEqual(log, ["commit zzz", "cancel 3", "unmount 3"]);
+    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 3 }), { open: false });
 });

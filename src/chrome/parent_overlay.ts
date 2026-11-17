@@ -72,12 +72,12 @@ interface OverlayExtension {
 }
 
 // An extension page needs the browser attributes of an extension view, then a load through the extension's own principal. The load waits for the frame loader, which a remote browser creates after it joins the document.
-function create_overlay_element(window: MainWindow, extension: OverlayExtension, surface: OverlaySurface, window_id: number): () => void {
+function create_overlay_element(window: MainWindow, extension: OverlayExtension, surface: OverlaySurface, window_id: number, click_through: boolean): () => void {
     const spec = SURFACES[surface];
     const document = window.document as unknown as OverlayDocument;
     const box = document.createElementNS(XHTML_NAMESPACE, "div");
     box.id = spec.box_id;
-    box.style.cssText = spec.box_style;
+    box.style.cssText = click_through ? `${spec.box_style} pointer-events: none;` : spec.box_style;
     const browser = document.createXULElement("browser");
     browser.id = spec.browser_id;
     browser.setAttribute("type", "content");
@@ -169,7 +169,7 @@ function ensure_mode_label(context: ExtensionContext & { extension: OverlayExten
 function ensure_host(context: ExtensionContext & { extension: OverlayExtension }): OverlayHost {
     host ??= create_overlay_host<MainWindow>({
         window_with_id: (window_id) => open_main_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
-        create: (window, surface, window_id) => create_overlay_element(window, context.extension, surface, window_id),
+        create: (window, surface, window_id, click_through) => create_overlay_element(window, context.extension, surface, window_id, click_through),
         capture_focus: (window) => capture_focus(window.document),
         focus_thread_list(window) {
             const tree = front_about_3pane(tabmail_of(window))?.threadTree;

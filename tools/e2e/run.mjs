@@ -1164,8 +1164,9 @@ async function run_search(instance, { app, kind, shot }) {
   state = await instance.ask("state");
   check(app, kind, "Escape restores the earlier list", state.listed.length === full, `listed ${state.listed.length}, expected ${full}`);
   await shot("search_escaped", "the full list after Escape, with no search line");
+  const before_j = selection_of(await instance.ask("state"));
   state = await key_and_state(instance, ["j"], 800);
-  check(app, kind, "after Escape a bound key runs again", selection_of(state) !== "", `selected ${selection_of(state)}`);
+  check(app, kind, "after Escape a bound key runs again", selection_of(state) !== "" && selection_of(state) !== before_j, `selected ${before_j} then ${selection_of(state)}`);
 
   // The typed text sits on top of the filter that was set before.
   await instance.press(["F"]);

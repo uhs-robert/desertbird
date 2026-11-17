@@ -6,7 +6,7 @@ import { describe_match, opposite, step_match } from "../../../vendor/desertfox/
 import type { CmdlineSearchNote, KeysApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
 import { select_row } from "../handlers/thread_view.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
-import { active_mail_tab, apply_filter, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
+import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
 import type { QuickFilter } from "../handlers/view.ts";
 import type { Timers } from "../hud/toasts.ts";
 import type { SearchRegisterStore } from "./register.ts";
@@ -17,7 +17,7 @@ export const SEARCH_DEBOUNCE_MS = 150;
 // The most rows one `keys.viewRows` call returns.
 const BLOCK = 500;
 
-export type SearchApi = Pick<ThreadViewApi, "mailTabs"> & { keys?: Pick<KeysApi, "viewRows">; folderpane?: ThreadViewApi["folderpane"] };
+export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { keys?: Pick<KeysApi, "viewRows">; folderpane?: ThreadViewApi["folderpane"] };
 
 export interface SearchDeps {
     api: SearchApi;
@@ -72,7 +72,7 @@ function in_order<T>(search: LiveSearch, change: () => Promise<T>): Promise<T> {
 export function create_search_service(deps: SearchDeps): SearchService {
     const live = new Map<number, LiveSearch>();
 
-    const scope_of = (window_id: number) => ({ api: deps.api as ThreadViewApi, window_id, message_ids: [], count: 1 });
+    const scope_of = (window_id: number) => ({ api: deps.api as unknown as ThreadViewApi, window_id, message_ids: [], count: 1 });
 
     function viewer(): Pick<KeysApi, "viewRows"> {
         if (deps.api.keys === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
@@ -97,6 +97,12 @@ export function create_search_service(deps: SearchDeps): SearchService {
         return tab.id === search.tab_id && tab.displayedFolder?.id === search.folder_id;
     }
 
+    // The restore goes to the tab the search began in, even when another tab is in front now. That tab still shows the filter the search left.
+    async function owns_tab(search: LiveSearch): Promise<boolean> {
+        const tab = await deps.api.mailTabs.get(search.tab_id).catch(() => undefined);
+        return tab?.displayedFolder?.id === search.folder_id;
+    }
+
     function leave_search(window_id: number, search: LiveSearch): void {
         search.sequence++;
         if (live.get(window_id) === search) live.delete(window_id);
@@ -115,6 +121,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
         async start(window_id, direction) {
             const tab = await list_mail_tab(scope_of(window_id));
             viewer();
+            await filters_ready();
             live.set(window_id, { tab_id: tab.id, folder_id: tab.displayedFolder!.id, direction, prior: remembered_filter(tab.id), sequence: 0, changes: Promise.resolve() });
         },
 
@@ -145,6 +152,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             // A newer keystroke or the end of the search stops any filter still in flight.
             search.sequence++;
             const register = await deps.register.read();
+            if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
             const query = text === "" ? register?.text : text;
             if (query === undefined) throw new RuntimeRefusal("No earlier search to repeat.");
             await in_order(search, async () => {
@@ -155,11 +163,14 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 }
                 await apply_filter(deps.api.mailTabs, search.tab_id, with_text(search.prior, query));
                 const count = await count_rows(window_id);
+                // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
+                if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
                 // No match keeps the search open, so the user can edit the text. Escape still restores the earlier filter.
                 if (count === 0) throw new RuntimeRefusal(describe_match(query, 0, 0, undefined));
-                leave_search(window_id, search);
                 await deps.register.write({ text: query, direction: search.direction });
                 await show_match(window_id, query, search.direction === "forward" ? 0 : count - 1, count, false);
+                // The search ends only now, so a failed write or selection leaves it open for another Enter.
+                leave_search(window_id, search);
             });
         },
 
@@ -168,7 +179,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             if (search === undefined) return;
             leave_search(window_id, search);
             await in_order(search, async () => {
-                if (await still_here(window_id, search)) await apply_filter(deps.api.mailTabs, search.tab_id, search.prior);
+                if (await owns_tab(search)) await apply_filter(deps.api.mailTabs, search.tab_id, search.prior);
                 else forget_filter(search.tab_id);
             }).catch((error: unknown) => console.error("desertbird:", error));
         },

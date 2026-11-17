@@ -7,7 +7,7 @@ export interface OverlayDeps<Window> {
     /** The main window the MailExtension window id names, or null. */
     window_with_id(window_id: number): Window | null;
     /** Puts the surface in the window and gives it the focus. Returns the way to remove it. */
-    create(window: Window, surface: OverlaySurface, window_id: number): () => void;
+    create(window: Window, surface: OverlaySurface, window_id: number, click_through: boolean): () => void;
     /** Focuses the thread list of the front tab. Does nothing when that tab is not the mail tab. */
     focus_thread_list(window: Window): void;
     /** Notes what has the focus now. The returned function gives it back and answers false when that element is gone or cannot take the focus, so the host falls back to the thread list. */
@@ -81,7 +81,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             const surface = args.surface;
             // Read before the mount moves the focus to the surface.
             const give_back = takes_keyboard(surface) ? deps.capture_focus(window) : () => true;
-            const remove = deps.create(window, surface, window_id);
+            const remove = deps.create(window, surface, window_id, args.clickThrough === true);
             const restore_focus = () => {
                 if (!give_back()) deps.focus_thread_list(window);
             };

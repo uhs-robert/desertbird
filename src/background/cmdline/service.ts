@@ -72,6 +72,7 @@ const has_source = (args: Record<string, unknown> | undefined): boolean => Objec
 
 export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
     const sessions = new Map<number, CmdlineSession>();
+    const committing = new Set<CmdlineSession>();
     const complete = create_completer(deps.registry, deps.sources);
 
     async function parse_and_check(text: string): Promise<CmdlineRunResult | { ok: true; id: string; args: Record<string, JsonValue> }> {
@@ -89,22 +90,28 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
 
     // A search line that closes without a commit puts the filter back first, so the list is as it was when the focus returns to it.
     async function close(window_id: number): Promise<void> {
-        const session = sessions.get(window_id);
         sessions.delete(window_id);
-        if (session?.search) await deps.search.cancel(window_id);
+        // Cancels whenever the window has a live search, also while an Enter is still committing: the commit has the session out of the map then.
+        await deps.search.cancel(window_id);
         await deps.overlay?.unmount({ windowId: window_id, surface: "cmdline" });
     }
 
     // The search keeps the filter and selects a row before the line closes, so a search that finds nothing leaves the line open with the reason.
     async function run_search(window_id: number, session: CmdlineSession, text: string): Promise<CmdlineRunResult> {
         if (sessions.get(window_id) !== session) return { ok: false, message: "The command line is not open." };
-        sessions.delete(window_id);
+        // The session stays in the map while the commit runs, so Escape finds it. A second Enter is stopped by the flag.
+        if (committing.has(session)) return { ok: false, message: "The search is still running." };
+        committing.add(session);
         try {
             await deps.search.commit(window_id, text);
         } catch (error) {
-            if (!sessions.has(window_id)) sessions.set(window_id, session);
             return { ok: false, message: error instanceof Error ? error.message : String(error) };
+        } finally {
+            committing.delete(session);
         }
+        // Escape came during the commit: the overlay is closing already and the search is cancelled.
+        if (sessions.get(window_id) !== session) return { ok: true };
+        sessions.delete(window_id);
         deps.search_history.record(text).catch((error: unknown) => console.error("desertbird:", error));
         setTimeout(() => void close(window_id).catch((error: unknown) => console.error("desertbird:", error)), 0);
         return { ok: true };
@@ -135,9 +142,8 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
     return {
         begin: (window_id, session) => void sessions.set(window_id, session),
         end(window_id) {
-            const session = sessions.get(window_id);
             sessions.delete(window_id);
-            if (session?.search) deps.search.cancel(window_id).catch((error: unknown) => console.error("desertbird:", error));
+            deps.search.cancel(window_id).catch((error: unknown) => console.error("desertbird:", error));
         },
         handle(message) {
             const request = read_request(message);

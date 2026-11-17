@@ -7,6 +7,7 @@ import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_backg
 import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
+import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
 import { publish_theme } from "./theme/publish.ts";
@@ -65,6 +66,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
         };
     tabs: { onActivated: { addListener(listener: () => void): void } };
     messages: RouterApi["messages"] & NewMailApi["messages"];
+    mailTabs: RouterApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> };
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
     messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"] & FollowupOpenApi["messageDisplay"];
     runtime: {
@@ -73,6 +75,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
+        session?: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
     };
     // The Experiment namespace is absent when it fails to load.
@@ -180,6 +183,9 @@ const hud = create_hud_service({
 
 // The command line and the commands that open it mount through this, so a toast sits above the command line box while it is open.
 const command_line_overlay = messenger.overlay && lifting_toasts(messenger.overlay, hud);
+
+// Session storage survives a restart of this page and not of the application, like the window state it copies. It is absent on a build without it, and the memory copy works alone then.
+keep_filters(messenger.storage.session);
 
 // The search of `/` and `?`. It holds the live search of a window and reads the `/` register from storage, so `n` works after a restart.
 const search = create_search_service({
