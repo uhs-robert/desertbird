@@ -1,6 +1,8 @@
 import { open_folder } from "../handlers/folder_open.ts";
 import type { FolderApi } from "../handlers/folder_open.ts";
 import { jump_to_mark, set_mark } from "../handlers/folder_marks.ts";
+import { collapse_folder } from "../handlers/folder_collapse.ts";
+import type { CollapseApi } from "../handlers/folder_collapse.ts";
 import { jump_back, jump_forward } from "../handlers/jump_history.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
@@ -43,12 +45,21 @@ export const folders: CommandGroup = {
             ],
             run: scoped<FolderApi>(open_folder),
         },
+        "folder.collapse": {
+            bridge: true,
+            runs_in: "background",
+            label: "Collapse a folder, or focus the folder pane",
+            intent: "Close a folder or its parent. From another pane, focus the folder pane.",
+            needs: ["folderpane.fold", "keys.paneFocus"],
+            run: scoped<CollapseApi>(collapse_folder),
+        },
         "mark.set": { bridge: false, runs_in: "background", label: "Set a mark", intent: "Remember the shown folder under a one-letter slot.", params: [SLOT_PARAM], run: scoped<FolderApi>(set_mark) },
         "mark.jump": { bridge: true, runs_in: "background", label: "Jump to a mark", intent: "Show the folder a slot remembers.", params: [SLOT_PARAM], run: scoped<FolderApi>(jump_to_mark) },
         "jump.back": { bridge: true, runs_in: "background", label: "Back in folder history", intent: "Show the folder shown before this one. A count goes that many folders back.", count: "repeat", run: scoped<FolderApi>(jump_back) },
         "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back.", count: "repeat", run: scoped<FolderApi>(jump_forward) },
     } satisfies Record<string, CommandDefinition>,
     normal_keys: {
+        H: { id: "folder.collapse" },
         gi: { id: "folder.open", args: { special: "inbox" } },
         gt: { id: "folder.open", args: { special: "trash" } },
         gd: { id: "folder.open", args: { special: "drafts" } },

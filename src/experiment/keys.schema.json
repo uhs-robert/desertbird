@@ -144,26 +144,6 @@
         ]
       },
       {
-        "name": "folderTreeExpand",
-        "type": "function",
-        "async": true,
-        "description": "Opens or closes the selected folder row. Answers false, with nothing done, unless the folder pane has the focus.",
-        "parameters": [
-          {
-            "name": "args",
-            "type": "object",
-            "properties": {
-              "windowId": {
-                "type": "integer"
-              },
-              "open": {
-                "type": "boolean"
-              }
-            }
-          }
-        ]
-      },
-      {
         "name": "paneFocus",
         "type": "function",
         "async": true,

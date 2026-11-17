@@ -734,6 +734,41 @@ async function run_panes(instance, { app, kind, shot }) {
   state = await keys(["j"], 2000);
   check(app, kind, "the folder pane keeps the focus after the motions, so j reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
 
+  // z M, z R and H fold folders. Native Down tells the tree state: with the account row closed it finds no row below, with it open it reaches the Inbox.
+  await keys(["g", "g"]);
+  await keys(["z", "M"]);
+  await shot("panes_zM", "every folder closed by z M");
+  state = await down();
+  check(app, kind, "z M in the folder pane closes every folder, so Down stays on the account row", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
+  await shot("panes_zM_down", "the folder pane after Down from the closed account row");
+  await keys(["z", "R"]);
+  state = await down();
+  check(app, kind, "z R in the folder pane opens every folder, so Down reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
+  await keys(["g", "g"]);
+  await keys(["H"]);
+  state = await down();
+  check(app, kind, "H on an open folder closes it, so Down stays on it", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
+  await keys(["z", "R"]);
+  await keys(["g", "g"]);
+  await keys(["j"]);
+  state = await keys(["H"]);
+  check(app, kind, "H on a child of an open folder closes the parent and selects it", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
+  state = await down();
+  check(app, kind, "after H on the child the parent stays closed, so Down stays on it", folder_of(state) === account_folder, `folder ${folder_of(state)}`);
+  await keys(["z", "R"]);
+  await keys(["g", "g"]);
+  await keys(["j"]);
+
+  // <C-d> and <C-u> in the thread list move ten rows: the fixture list is ten threads, so the first row goes to the last and back.
+  await keys(["L"]);
+  const first_row = first_selected(await keys(["g", "g"]));
+  const after_down = first_selected(await press_state(CTRL("d"), 1500));
+  check(app, kind, "<C-d> in the thread list moves the selection down", after_down !== null && after_down !== first_row, `selected ${first_row} then ${after_down}`);
+  const after_up = first_selected(await press_state(CTRL("u"), 1500));
+  check(app, kind, "<C-u> in the thread list moves the selection back up", after_up === first_row, `selected ${first_row} then ${after_down} then ${after_up}`);
+  await shot("panes_ctrl_d_u", "the selection after <C-d> then <C-u>");
+  await keys(["H"]);
+
   // The pane chords name a pane. Native Down tells which pane has the focus: it moves the folder or the list selection, and in the message it moves no row.
   const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
   const list_moved = async (name, row_before) => {

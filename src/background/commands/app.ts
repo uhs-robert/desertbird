@@ -6,7 +6,6 @@ import type { CommandGroup } from "./define.ts";
 // `msg.undo` has no default key: Thunderbird undoes only the steps it recorded itself (a native Delete key, a drag), so a key could restore an older step while the newest `msg.delete` of DesertBird stays in Trash. It is typed as `:undo`. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
 // Each names a pane, not a direction: `<A-h>` and `L` both reach the thread list from any pane. `pane.left` and `pane.right` are the relative pair, unbound by default.
 const PANE_CHORDS = {
-    H: { id: "pane.focus", args: { pane: "folders" } },
     "<A-h>": { id: "pane.focus", args: { pane: "threads" } },
     L: { id: "pane.focus", args: { pane: "threads" } },
     "<A-l>": { id: "pane.focus", args: { pane: "message" } },
@@ -79,6 +78,7 @@ export const app: CommandGroup = {
     },
     // The body script takes every key while the message pane has the focus, so the way out of it is bound there too.
     message_keys: {
+        H: { id: "pane.focus", args: { pane: "folders" } },
         gf: { id: "pane.focus", args: { pane: "folders" } },
         ge: { id: "pane.focus", args: { pane: "threads" } },
         ...PANE_CHORDS,
