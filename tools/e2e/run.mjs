@@ -121,8 +121,6 @@ async function run_default(instance) {
   const start = await instance.ask("state");
   check(app, kind, "helper add-on and DesertBird both enabled", start.desertbird_enabled === true);
   await shot("inbox_opened");
-  await run_threads(instance, { app, kind, shot });
-  if (process.env.E2E_THREADS_ONLY) return;
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
   let state;
@@ -152,6 +150,7 @@ async function run_default(instance) {
   await key_and_state(instance, ["g"]);
   state = await (await instance.press(["5"]), key_and_state(instance, ["j"]));
   check(app, kind, "5j moves five rows", first_selected(state) === rows[5], `selected ${first_selected(state)}, expected ${rows[5]}`);
+  await run_threads(instance, { app, kind, shot });
   await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, "no message is junk after the motions", Object.values(state.flags).every((flags) => !flags.junk));

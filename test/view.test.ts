@@ -224,7 +224,10 @@ test("read_rows names index, id, depth, collapsed and unread, cut to the list", 
     assert.deepEqual(read_rows(pane, 5, 9, () => 1).rows, []);
 });
 
-test("read_rows reports no rows when no view is loaded", () => {
+test("read_rows stops at 500 rows and reports no rows when no view is loaded", () => {
+    const big = pane_fake(Array.from({ length: 900 }, () => 0)).pane;
+    assert.equal(read_rows(big, 0, 899, () => 1).rows.length, 500);
+    assert.equal(read_rows(big, 600, 2000, () => 1).rows.length, 300);
     const { pane } = pane_fake([0]);
     assert.deepEqual(read_rows({ ...pane, gDBView: null }, 0, 3, () => 1).rows, []);
 });

@@ -120,7 +120,7 @@ export interface KeysViewRowsArgs {
     last: number;
 }
 
-/** `current` is the current row, or -1. `rows` holds the rows from `first` to `last` that exist,. */
+/** `current` is the current row, or -1. `rows` holds the rows from `first` to `last` that exist, at most 500. */
 export interface KeysViewRowsResult {
     current: number;
     rows: ViewRow[];

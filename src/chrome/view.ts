@@ -16,7 +16,6 @@ export interface ThreadTreeLike {
     selectedIndex: number;
     currentIndex: number;
     scrollToIndex?(index: number, instant?: boolean): void;
-
     /** The focusable body of the list. The overlay returns the focus here. */
     table?: { body?: { focus?(): void } };
     focus?(): void;
@@ -95,7 +94,7 @@ export function create_list_port(about_3pane: About3PaneLike, message_id_of: Mes
 export function read_rows(about_3pane: ThreadVerbPane, first: number, last: number, message_id_of: MessageIdOf): KeysViewRowsResult {
     const view = about_3pane.gDBView;
     const rows: KeysViewRowsResult["rows"] = [];
-    for (let index = first; view && index <= Math.min(last, view.rowCount - 1); index++) {
+    for (let index = first; view && index <= Math.min(last, view.rowCount - 1, first + 499); index++) {
         const header = view.getMsgHdrAt(index);
         rows.push({ index, id: header && message_id_of(header), depth: view.getLevel(index), collapsed: view.isContainer(index) && !view.isContainerOpen(index), unread: header?.isRead === false });
     }
