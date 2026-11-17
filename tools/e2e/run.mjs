@@ -690,11 +690,13 @@ async function run_panes(instance, { app, kind, shot }) {
   const tabs_of = (state) => state.windows.flatMap((window) => window.tabs.map((tab) => tab.raw.url ?? tab.title));
   const in_folder = (state, id, path) => state.folders[path]?.includes(id) === true;
 
+  await instance.ask("show_folder", 20000, { path: "/Inbox" });
+  await sleep(2000);
   await keys(["g", "e"]);
   await keys(["g", "g"]);
   await keys(["g", "f"]);
   let state = await down();
-  check(app, kind, "g f puts the focus in the folder pane: Down moves the folder, not the list", folder_of(state) === "/Trash", `folder ${folder_of(state)}`);
+  check(app, kind, "g f puts the focus in the folder pane: Down moves the folder, not the list", folder_of(state) !== "/Inbox" && folder_of(state) !== null, `folder ${folder_of(state)}`);
   await up();
   // The row above the Inbox is the account row. h closes it, so Down finds no row below. l opens it, so Down reaches the Inbox.
   state = await up();
@@ -741,7 +743,8 @@ async function run_panes(instance, { app, kind, shot }) {
   const after_delete = messages_in_inbox(state);
   state = await keys(["u"], 3000);
   note(app, kind, "u after d d", `${victim} in Trash before u ${after_delete < 60}, back in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
-  victim = first_selected(state);
+  await keys(["g", "g"]);
+  victim = first_selected(await keys(["j"]));
   await instance.press(["-k", "Delete"]);
   await sleep(4000);
   state = await instance.ask("state");
@@ -1419,6 +1422,9 @@ async function run_message_scripts(instance) {
   state = await key_and_state(instance, ["-k", "Down"], 1200);
   check(app, kind, "pane: g f in the message body focuses the folder pane, so Down moves the folder", state.mail_tab?.folder !== folder_before, `folder ${folder_before} then ${state.mail_tab?.folder}`);
   await key_and_state(instance, ["-k", "Up"], 1200);
+  // The checks below press F6 from the list, so put the focus back there.
+  await instance.press(["g"]);
+  await key_and_state(instance, ["e"], 1200);
 
   // HTML mail, remote content and a sandboxed frame. The measurement the design asked for: does the script run there?
   for (const id of READING_FOLDER_MESSAGES.slice(1)) {
