@@ -321,7 +321,7 @@ test("with the body script live, reading-pane keys are no longer swallowed and s
     for (const key of ["j", "x", "m", "G"]) assert.equal(press(window, key).cancelled, false, key);
     assert.equal(window.selected, 0);
     assert.deepEqual(emitted, []);
-    // The marker only covers the reading pane: in the list the keys run as before.
+    // The fake window stands in for the focus check: with the flag off, a key in the list runs as before. That the flag is on only for a live message body under the focus is proved in focus.test.ts.
     window.in_reading_pane = false;
     window.body_script_live = false;
     assert.equal(press(window, "j").cancelled, true);
