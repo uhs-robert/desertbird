@@ -27,10 +27,14 @@ import type { SchedulerApi } from "./scheduler.ts";
 import { create_quick_reply_store } from "./quick_reply_store.ts";
 import { create_followup_store } from "./followup_store.ts";
 import { create_snooze_store } from "./snooze_store.ts";
+import { create_undo_log } from "./undo_log.ts";
 import type { RouterApi } from "./router.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
+
+/** The waits before each new lookup of a message an undo cannot find yet. An IMAP server shows a moved copy only after a sync. */
+const UNDO_RETRY_DELAYS_MS = [500, 1000, 1500];
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
 const KEYMAP_RECORD_VERSION = 4;
@@ -48,7 +52,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
     windows: BodyRequestApi["windows"] &
         RouterApi["windows"] & {
             getAll(query: { windowTypes: string[] }): Promise<{ id?: number }[]>;
@@ -185,7 +189,7 @@ const cmdline = create_cmdline_service({
     history: create_cmdline_history(messenger.storage.local),
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
 

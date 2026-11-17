@@ -2,6 +2,8 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { for_each_message } from "./each_message.ts";
 import type { HandlerScope, MailTag, MessageHeader } from "./message.ts";
+import { query_all } from "./message_query.ts";
+import type { MessageQueryApi } from "./message_query.ts";
 import type { SpecialFolderApi, SpecialUse } from "./special_folder.ts";
 import { followup_due_ms } from "../followup_presets.ts";
 import type { FollowupPreset } from "../followup_presets.ts";
@@ -24,25 +26,7 @@ export const FOLLOWUP_START_GRACE_MS = 5 * 60 * 1000;
 /** True once the grace after the background start is over. */
 export const past_start_grace = (started_ms: number, now_ms: number) => now_ms - started_ms >= FOLLOWUP_START_GRACE_MS;
 
-interface MessagePage {
-    /** Set while more pages follow. */
-    id?: string | null;
-    messages: MessageHeader[];
-}
-
-interface MessageQuery {
-    headerMessageId?: string;
-    folderId?: string;
-    accountId?: string;
-    /** Thunderbird files archives by year, so a reply sits in a subfolder such as Archives/2026. */
-    includeSubFolders?: boolean;
-    fromDate?: Date;
-    autoPaginationTimeout: number;
-}
-
-interface FollowupMessagesApi {
-    query(query: MessageQuery): Promise<MessagePage>;
-    continueList(list_id: string): Promise<MessagePage>;
+interface FollowupMessagesApi extends MessageQueryApi {
     get(id: number): Promise<MessageHeader>;
     update(id: number, properties: { tags: string[] }): Promise<void>;
     /** Header names are lower case. */
@@ -71,17 +55,6 @@ export interface FollowupOpenApi {
 // Local on purpose: it moves to `notify.ts` when that file takes an id and a click.
 async function raise_notification(api: NotificationsApi, id: string, message: string): Promise<void> {
     await api.notifications.create(id, { type: "basic", title: "DesertBird", message });
-}
-
-/** Every page of one query. A page ends after a set number of matches, so the first page alone can miss a message. */
-async function query_all(api: Pick<FollowupMessagesApi, "query" | "continueList">, query: MessageQuery): Promise<MessageHeader[]> {
-    const found: MessageHeader[] = [];
-    let page = await api.query(query);
-    for (;;) {
-        found.push(...page.messages);
-        if (page.id === undefined || page.id === null) return found;
-        page = await api.continueList(page.id);
-    }
 }
 
 const header_ids_of = (value: string[] | undefined) => (value ?? []).flatMap((line) => line.split(/\s+/)).map((token) => token.replace(/^<|>$/g, "")).filter((token) => token !== "");

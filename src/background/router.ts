@@ -14,13 +14,14 @@ import type { QuickReplyApi } from "./handlers/quick_reply.ts";
 import type { UnsubscribeApi } from "./handlers/unsubscribe.ts";
 import type { SnoozeApi } from "./handlers/snooze.ts";
 import type { ThreadViewApi } from "./handlers/thread_view.ts";
+import type { UndoApi } from "./handlers/undo.ts";
 import type { ViewApi } from "./handlers/view.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 import type { ScopedContext } from "./commands/index.ts";
 
 // An intersection, not an interface that extends each part: the parts share `folders`, `messages` and `mailTabs` with different members.
-export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & FollowupApi & QuickReplyApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "keys"> & {
+export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & FollowupApi & QuickReplyApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "keys"> & Pick<UndoApi, "undo"> & {
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
     overlay: OverlayApi | undefined;
