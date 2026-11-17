@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_runtime } from "../src/chrome/runtime.ts";
 import type { KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
+import { compile_default_keymap } from "../src/background/commands/index.ts";
+import { mark_unrepeatable } from "../src/background/config/keymap.ts";
 import { create_list_port } from "../src/chrome/view.ts";
 import type { About3PaneLike, ListPort } from "../src/chrome/view.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
@@ -711,4 +713,30 @@ test("a tab switch ends a half-typed sequence but not the last run", () => {
     windows[0]!.select_tab();
     press(windows[0]!, ".");
     assert.equal(windows[0]!.selected, 2);
+});
+
+// The real chain: the default keymap, the background's tagging, the runtime. A hand-built tree could not catch a tag that never reaches a leaf.
+function default_tree(tag: boolean) {
+    const root = JSON.parse(JSON.stringify(compile_default_keymap().compiled.modes.normal));
+    if (tag) mark_unrepeatable(root);
+    return { version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION, root };
+}
+
+test("the default tree carries repeatable false on the leaves that delete, archive, move or snooze", () => {
+    const { root } = default_tree(true);
+    const step_of = (...keys: string[]) => keys.reduce((node, key) => node.children[key], root).steps[0];
+    for (const keys of [["d", "d"], ["x"], ["m", "z", "t"]]) assert.equal(step_of(...keys).repeatable, false);
+    assert.equal(step_of("m", "r").repeatable, undefined);
+});
+
+test("a dot after dd, x or m z t runs nothing, even after a repeatable command", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(default_tree(true));
+    for (const keys of [["d", "d"], ["x"], ["m", "z", "t"]]) {
+        for (const key of ["m", "r"]) press(windows[0]!, key);
+        for (const key of keys) press(windows[0]!, key);
+        const before = emitted.length;
+        press(windows[0]!, ".");
+        assert.equal(emitted.length, before, `a dot after ${keys.join(" ")}`);
+    }
 });

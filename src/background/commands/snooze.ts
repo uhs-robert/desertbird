@@ -9,6 +9,7 @@ export const snooze: CommandGroup = {
     commands: {
         "msg.snooze": {
             bridge: false,
+            repeatable: false,
             runs_in: "background",
             label: "Snooze",
             intent: "Hide the selected messages until a chosen time. They wait in a Snoozed folder, then return to the Inbox as unread.",
