@@ -8,6 +8,8 @@ import type { MailTag, MessageHeader } from "../src/background/handlers/message.
 interface FakeOptions {
     /** The messages `messages.get` knows. */
     messages?: (Partial<MessageHeader> & { id: number })[];
+    /** The headers `messages.getFull` returns, by message id. */
+    headers?: Record<number, Record<string, string[]>>;
     identities?: (Identity & { account_id: string })[];
     experiment?: boolean;
     tags?: MailTag[];
@@ -47,12 +49,13 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             move: async (ids, folder_id) => void calls.push(`messages.move ${ids.join(",")} ${folder_id}`),
             query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
             continueList: async () => ({ messages: [] }),
+            getFull: async (id) => (calls.push(`messages.getFull ${id}`), { ...(options.headers?.[id] && { headers: options.headers[id] }) }),
             tags: { list: async () => (calls.push("messages.tags.list"), options.tags ?? []) },
         },
         compose: {
             beginReply: async (id, type, details) => (calls.push(`compose.beginReply ${id} ${type} ${details.identityId}`), undefined),
             beginForward: async (id, _type, details) => (calls.push(`compose.beginForward ${id} ${details.identityId}`), undefined),
-            beginNew: async () => (calls.push("compose.beginNew"), undefined),
+            beginNew: async (_id, details) => (calls.push(details === undefined ? "compose.beginNew" : `compose.beginNew ${JSON.stringify(details)}`), undefined),
         },
         identities: {
             list: async (account_id) => {
@@ -99,6 +102,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 },
             },
         },
+        windows: { openDefaultBrowser: async (url) => void calls.push(`windows.openDefaultBrowser ${url}`) },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
         keys:
             options.experiment === false

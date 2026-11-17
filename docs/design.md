@@ -69,6 +69,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.reply {to: sender, all, list}` | `r`, `R` | Standard | `compose.beginReply` |
 | `msg.forward` | `g F` | Standard | `compose.beginForward` |
 | `msg.new` | `c` | Standard | `compose.beginNew` |
+| `msg.unsubscribe` | `g u` | Standard | `messages.getFull`, `windows.openDefaultBrowser`, `compose.beginNew`, `storage.local`. Two presses: a preview notification, then the action within 15 seconds. https opens in the browser, mailto opens a draft. It sends nothing and has no new permission |
 | `msg.open` | `<C-l>` | Standard | `messageDisplay.open` |
 | `msg.yank {field: content, subject, sender, address, message_id}` | `y y`, `y s`, `y f`, `y a`, `y i` | Standard | `messages.get`, `messages.getFull`, `navigator.clipboard.writeText` with the `clipboardWrite` permission. The `browser.clipboard` API only sets images. |
 | `folder.open {folder, special}` | `o`, `g o`, `g i`, `g t`, `g d`, `g s`, `g p`, `:open`, `:inbox` | Standard | `folders.query` with `specialUse`, `mailTabs.update`. Built: `g i`, `g t`, `g d`, `g s` and the handler for `folder` (the typed form, no default key until the command line exists). `g p` stays unbound because Projects is a personal folder name, so a user binding is the way to get it. A special folder is looked up in the shown folder's account first, then in any account. The first-display error is a success when the tab shows the folder or is still loading it. |

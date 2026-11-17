@@ -437,6 +437,15 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 - A hint pick focuses the link and leaves the next Enter to Thunderbird. A real Enter on the focused link reached Thunderbird's own click handling: for a link whose text names `bank.example` and whose address is `127.0.0.1`, Thunderbird showed its Link Mismatch dialog (read from the e2e screenshot), as a mouse click does. A script `click()` is an untrusted event and was not used, because it would skip that handling. A link to a place in the same message scrolled to its target on Enter. Opening an external link in the system browser was not measured and is a hand check.
 
 
+## Unsubscribe
+
+Not measured yet. The design rests on these calls, and each is a hand check:
+
+- `messages.getFull(id)` returns the headers as lower-case names with a list of values. The `List-Unsubscribe` header is read from there.
+- `windows.openDefaultBrowser(url)` is in the 153.7.0 schema and needs no permission. Whether it opens the system default browser on both apps is not run.
+- `compose.beginNew(undefined, {to, subject, body, identityId})` opens a draft with those fields and the identity that received the mail.
+- Hostile header samples (`http:`, `javascript:`, `data:`, `file:`, malformed brackets) open nothing. The parser tests cover this. A run with real mail is a hand check.
+
 ## Thread verbs
 
 Measured with the end-to-end run on the fixture Inbox (ten threads of four, opened collapsed) on Thunderbird 153.7.0 ESR and on Betterbird. The chrome functions are `threadTree.expandRowAtIndex` and `collapseRowAtIndex`, `commandController.doCommand("cmd_expandAllThreads")` and `("cmd_collapseAllThreads")`, and `getRowAtIndex(row).scrollIntoView` after `scrollToIndex`.
