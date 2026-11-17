@@ -47,7 +47,7 @@ async function collect() {
     const entry = { id: window.id, type: window.type, tabs: [] };
     for (const tab of window.tabs ?? []) {
       const detail = window.type === "messageCompose" ? await browser.compose.getComposeDetails(tab.id).catch(() => null) : null;
-      entry.tabs.push({ id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
+      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
     }
     state.windows.push(entry);
   }
@@ -106,6 +106,8 @@ async function tab_command(command) {
   const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
   const tabs = window.tabs;
   if (command.name === "open_content_tab") return { opened: (await browser.tabs.create({ url: "about:blank" })).id };
+  if (command.name === "open_mail_tab") return { opened: (await browser.mailTabs.create({})).id };
+  if (command.name === "move_first_tab") return { moved: await browser.tabs.move(tabs[0].id, { index: 1 }).then((moved) => moved.map((tab) => tab.index)) };
   if (command.name === "open_message_tab") {
     const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
     const [message] = (await browser.mailTabs.getSelectedMessages(mail_tab.id)).messages;
@@ -142,7 +144,7 @@ async function poll_forever() {
       } else if (command.name === "api_view") {
         await api_view(command.args);
         await post({ seq: command.seq, applied: true });
-      } else if (["open_content_tab", "open_message_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
+      } else if (["open_content_tab", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
       } else if (command.name === "reload_desertbird") {
         await reload_desertbird();

@@ -341,6 +341,25 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "q on the only mail tab leaves it open", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}`);
   check(app, kind, "q on the only mail tab shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), "evidence is the libnotify warning in the app log");
 
+  // What the tabs API reports for the first mail tab and for a second one.
+  const second = await instance.ask("open_mail_tab");
+  await sleep(2500);
+  state = await instance.ask("state");
+  check(app, kind, "a second mail tab opens", main_window_tabs(state).length === 2, `reply ${JSON.stringify(second)}`);
+  note(app, kind, "tab properties", JSON.stringify(main_window_tabs(state).map((tab) => tab.raw)));
+  // q closes a second mail tab: the one tab a key can be pressed in and tabs.remove can close.
+  state = await key_and_state(instance, ["q"], 2000);
+  check(app, kind, "q closes a second mail tab", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}${tab.active ? "*" : ""}`))}`);
+  await instance.ask("open_mail_tab");
+  await sleep(2500);
+  // The tabs API gives no property that marks the first mail tab. Can the API move it off index 0?
+  const moved = await instance.ask("move_first_tab");
+  await sleep(1000);
+  state = await instance.ask("state");
+  note(app, kind, "tabs.move of the first mail tab to index 1", `reply ${JSON.stringify(moved)}, tab ids by index now ${JSON.stringify(main_window_tabs(state).map((tab) => tab.id))}`);
+  await instance.ask("reset_tabs");
+  await sleep(1500);
+
   // Measured facts for tabs other than the mail tab.
   const content = await instance.ask("open_content_tab");
   await sleep(1500);
@@ -416,9 +435,9 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   await sleep(1000);
   state = await key_and_state(instance, ["d"], 2500);
   check(app, kind, "a d typed before a tab switch does not pair with a d typed after it", (state.folders["/Trash"]?.length ?? 0) === trash_before, `Trash holds ${state.folders["/Trash"]?.length ?? 0}, it held ${trash_before}`);
-  await instance.press(["d"]);
+  // One more d: it pairs with the d typed after the switch only if that d reached the app, so a lost first key fails here.
   state = await key_and_state(instance, ["d"], 2500);
-  check(app, kind, "a fresh d d after that still trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
+  check(app, kind, "the d after the switch counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
   await instance.ask("remove_tab", 20000, { index: 1 });
   await sleep(1000);
 }
