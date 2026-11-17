@@ -63,9 +63,9 @@ export async function switch_tab(scope: TabsScope, args: CheckedArgs): Promise<v
     await activate(scope, picked);
 }
 
-// `tabs.remove` on the first tab does nothing and reports no error, also when it is the only tab (measured). So the handler does not call it there. A message window has one tab at index 0 and closes as a window. On the main mail tab `q` has no tab to close, so it moves the focus to the thread list, which is where `q` leaves a message in the reading pane.
+// `tabs.remove` on the first tab does nothing and reports no error, also when it is the only tab (measured). So the handler does not call it there. A message window has one tab at index 0 and closes as a window. Other non-main windows (a compose window, a popup) take the tab path, so a key never discards a draft. On the main mail tab `q` has no tab to close, so it moves the focus to the thread list, which is where `q` leaves a message in the reading pane.
 export async function close_tab(scope: TabsScope): Promise<void> {
-    if (scope.window_id >= 0 && (await scope.api.windows.get(scope.window_id)).type !== "normal") return scope.api.windows.remove(scope.window_id);
+    if (scope.window_id >= 0 && (await scope.api.windows.get(scope.window_id)).type === "messageDisplay") return scope.api.windows.remove(scope.window_id);
     const active = (await tabs_of_window(scope)).find((tab) => tab.active);
     if (active === undefined) throw new RuntimeRefusal("No tab is active.");
     if (active.index === 0) return scope.api.keys.paneFocus({ windowId: scope.window_id, pane: "threads" });

@@ -108,6 +108,15 @@ test("body.invoke runs a mail command on the displayed message of the sender's w
     ]);
 });
 
+test("a mail key with no displayed message refuses with a notification and acts on nothing", async () => {
+    const base = fake_api();
+    const router = create_router(registry, base.api);
+    const refusing = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => ({ type: "normal" }) }, notifications: { create: async (_id, notification) => (base.calls.push(`notify ${notification.message}`), "n1") } }, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
+    for (const command of ["msg.delete", "msg.archive"]) await refusing({ type: "body.invoke", command, args: {}, count: 1 }, sender);
+    assert.equal(notifications(base.calls).length, 2);
+    assert.equal(base.calls.some((call) => /messages\.(delete|archive)/.test(call)), false);
+});
+
 test("body.invoke refuses a message window with a notification and runs nothing", async () => {
     const { handle, ran, calls } = body_requests("messageDisplay");
     await handle(open_line, sender);

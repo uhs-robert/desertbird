@@ -380,7 +380,7 @@ async function run_default(instance) {
   const junk_before = Object.values((await instance.ask("state")).flags).filter((flags) => flags.junk).length;
   state = await key_and_state(instance, ["j"], 2500);
   const junked = Object.entries(state.flags).filter(([, flags]) => flags.junk).map(([id]) => id);
-  check(app, kind, "j with focus in the message body scrolls and neither junks nor moves the selection", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}`);
+  check(app, kind, "j with focus in the message body neither junks nor moves the selection", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}`);
   await shot("after_reading_pane_j", "state after j with focus in the message body");
   // Shift+F6 goes back one pane. j then moves one row, which proves the j above ran one pane after the list, in the message body.
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);

@@ -100,6 +100,12 @@ test("tab.close on the main mail tab moves the focus to the thread list and neve
     }
 });
 
+test("tab.close in a compose window removes nothing as a window", async () => {
+    const { api, calls } = with_tabs(bar(0, ["Compose"]), "messageCompose");
+    await run(api, "tab.close");
+    assert.deepEqual(writes(calls), []);
+});
+
 test("tab.close in a message window removes the window and not the tab", async () => {
     const { api, calls } = with_tabs(bar(0, ["Message"]), "messageDisplay");
     await run(api, "tab.close");
