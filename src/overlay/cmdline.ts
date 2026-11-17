@@ -4,7 +4,7 @@ import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult 
 import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
-import { apply_pick, arrow_target, move_highlight, name_parts } from "./line_edit.ts";
+import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
@@ -72,8 +72,7 @@ async function refresh_completion(): Promise<void> {
 }
 
 async function load_history(): Promise<void> {
-    const stored = (await messenger.storage.local.get(CMDLINE_HISTORY_STORAGE_KEY))[CMDLINE_HISTORY_STORAGE_KEY];
-    history = Array.isArray(stored) ? stored.filter((entry): entry is string => typeof entry === "string") : [];
+    history = await read_history(async () => (await messenger.storage.local.get(CMDLINE_HISTORY_STORAGE_KEY))[CMDLINE_HISTORY_STORAGE_KEY]);
     history_cursor = create_history_cursor(history);
 }
 
@@ -90,9 +89,29 @@ function step_highlight(step: 1 | -1): void {
     draw_rows();
 }
 
+// While C-n and C-p preview rows, the rows and the text they apply to stay as they were. A new completion would reset the highlight to the first row. Typing or Tab ends the preview.
+let preview_base: string | null = null;
+
+function preview_row(step: 1 | -1): void {
+    walking_history = false;
+    if (completion.rows.length === 0) return;
+    preview_base ??= input.value;
+    highlighted = cycle_index(highlighted, step, completion.rows.length);
+    const picked = apply_pick(preview_base, { start: completion.start, end: completion.end, insert: completion.rows[highlighted]!.insert });
+    input.value = picked.text;
+    input.setSelectionRange(picked.caret, picked.caret);
+    draw_rows();
+}
+
 /** Puts a row into the line. Tab takes the highlighted row, or the first. */
 function accept_row(index: number): void {
     walking_history = false;
+    if (preview_base !== null) {
+        // The preview already put the row in. Tab keeps it and asks for the rows of the new text.
+        preview_base = null;
+        refresh_completion().catch(report_failure);
+        return;
+    }
     const row = completion.rows[index];
     if (!row) return;
     const picked = apply_pick(input.value, { start: completion.start, end: completion.end, insert: row.insert });
@@ -143,8 +162,7 @@ window.addEventListener(
             else step_highlight(step);
         } else if (event.ctrlKey && (event.key === "n" || event.key === "p")) {
             event.preventDefault();
-            // The same as Tab, for the next row (C-n) or the previous one (C-p).
-            accept_row(move_highlight(highlighted, event.key === "n" ? 1 : -1, completion.rows.length));
+            preview_row(event.key === "n" ? 1 : -1);
         }
     },
     true,
@@ -156,6 +174,7 @@ messenger.storage.onChanged.addListener((changes, area) => {
 
 input.addEventListener("input", () => {
     walking_history = false;
+    preview_base = null;
     history_cursor = create_history_cursor(history);
     refresh_completion().catch(report_failure);
 });
@@ -167,12 +186,13 @@ async function start(): Promise<void> {
         close_line();
         return;
     }
-    await load_history();
     input.value = hello.text;
     window.focus();
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
     await refresh_completion();
+    // After the line is ready: a slow or failed read must not hold up typing.
+    await load_history();
 }
 
 start().catch(report_failure);
