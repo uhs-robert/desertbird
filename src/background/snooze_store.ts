@@ -58,9 +58,11 @@ export function create_snooze_store(api: RecordStorageApi): SnoozeStore {
         async wake_due(now_ms, wake) {
             for (const item of (await store.read()).items.filter((stored) => stored.due_ms <= now_ms)) {
                 const key = key_of(item);
-                if (waking.has(key) || !(await is_stored(item))) continue;
+                if (waking.has(key)) continue;
+                // Claimed before the first await, or two ticks both pass the check.
                 waking.add(key);
                 try {
+                    if (!(await is_stored(item))) continue;
                     await wake(item);
                     await remove(item);
                 } catch (error) {
