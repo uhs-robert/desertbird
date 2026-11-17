@@ -19,6 +19,9 @@ export interface MovedItem {
     to_folder_ids: string[];
     /** True for an archive, which files into year subfolders of Archives. */
     to_subfolders: boolean;
+    /** The Date header and the size, which tell apart two copies that share a Message-ID. */
+    date_ms?: number;
+    size?: number;
 }
 
 export interface StateItem {
@@ -31,7 +34,8 @@ export interface StateItem {
 export type MoveAction = "delete" | "archive" | "move";
 export type StateField = "read" | "flagged" | "junk";
 
-export type UndoEntry = { id: string; kind: "moved"; action: MoveAction; items: MovedItem[] } | { id: string; kind: "state"; field: StateField; items: StateItem[] };
+/** `refused` marks an entry whose undo found a message missing once. The next undo of it drops what is still missing. */
+export type UndoEntry = ({ kind: "moved"; action: MoveAction; items: MovedItem[] } | { kind: "state"; field: StateField; items: StateItem[] }) & { id: string; refused?: true };
 
 /** An entry before the log gives it an id. */
 export type NewUndoEntry = { kind: "moved"; action: MoveAction; items: MovedItem[] } | { kind: "state"; field: StateField; items: StateItem[] };
@@ -42,17 +46,23 @@ interface UndoRecord {
     entries: UndoEntry[];
 }
 
-/** What one undo of the newest entry did: the items it could not undo stay in the entry, and `refusal` says why. */
+/** What one undo of an entry did. The items in `left` stay in the entry, `refused` marks it, and `refusal` says why. `undone` and `dropped` count the messages. */
 export interface UndoOutcome {
     left: UndoEntry["items"];
     refusal?: string;
+    refused?: true;
+    undone?: number;
+    dropped?: number;
 }
 
 export interface UndoLog {
     /** Runs `change` with the log held, then stores the last entry it passed to `keep`, even when it throws: a change that failed part way keeps what it did. The mail call goes inside, so a `u` pressed during it waits for the entry. */
     record(change: (keep: (entry: NewUndoEntry) => void) => Promise<void>): Promise<void>;
-    /** Runs `undo` on the newest entry with the log held, so two quick `u` presses never take the same entry. Answers undefined when the stack is empty, else the entry and the outcome. */
-    undo_newest(undo: (entry: UndoEntry) => Promise<UndoOutcome>): Promise<{ entry: UndoEntry; outcome: UndoOutcome } | undefined>;
+    /**
+     * Takes the newest entry no other undo has taken, runs `wait` on it without the log, then `undo` with the log held, and stores the outcome. The wait can last seconds, and an `x` pressed meanwhile must not wait with it. Two quick `u` presses take two entries.
+     * Answers undefined when no entry is left to take, else the entry and the outcome.
+     */
+    undo_newest(wait: (entry: UndoEntry) => Promise<void>, undo: (entry: UndoEntry) => Promise<UndoOutcome>): Promise<{ entry: UndoEntry; outcome: UndoOutcome } | undefined>;
 }
 
 const is_string_list = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -68,6 +78,7 @@ function is_state_item(value: unknown): value is StateItem {
 }
 
 function is_entry(value: unknown): value is UndoEntry {
+    if ((value as { refused?: unknown } | null)?.refused !== undefined && (value as { refused?: unknown }).refused !== true) return false;
     const entry = value as { id?: unknown; kind?: unknown; action?: unknown; field?: unknown; items?: unknown } | null;
     if (typeof entry?.id !== "string" || !Array.isArray(entry.items) || entry.items.length === 0) return false;
     if (entry.kind === "moved") return ["delete", "archive", "move"].includes(entry.action as string) && entry.items.every(is_moved_item);
@@ -85,6 +96,8 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
     const store = create_record_store<UndoRecord>(api, { key: UNDO_STORAGE_KEY, empty: () => ({ record_version: UNDO_RECORD_VERSION, entries: [] }), migrate: migrate_undo_record });
     // The store queues its own reads and writes. This queue holds the log across a whole mail change or undo, which spans several API calls.
     let held: Promise<unknown> = Promise.resolve();
+    // The ids of the entries an undo has taken and not finished. It lives for the seconds of one undo, like the hold itself.
+    const taking = new Set<string>();
     const hold = <R>(work: () => Promise<R>): Promise<R> => {
         const result = held.then(work);
         held = result.catch(() => {});
@@ -104,14 +117,28 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
                     }
                 }
             }),
-        undo_newest: (undo) =>
-            hold(async () => {
-                const entry = (await store.read()).entries.at(-1);
-                if (entry === undefined) return undefined;
-                const outcome = await undo(entry);
-                const left = outcome.left.length === 0 ? undefined : ({ ...entry, items: outcome.left } as UndoEntry);
-                await store.update((record) => ({ value: { ...record, entries: record.entries.flatMap((other) => (other.id !== entry.id ? [other] : left ? [left] : [])) }, result: undefined }));
-                return { entry, outcome };
-            }),
+        async undo_newest(wait, undo) {
+            // Taken inside the hold, so a second `u` queued behind this read cannot take the same entry.
+            const taken = await hold(async () => {
+                const entry = (await store.read()).entries.findLast((other) => !taking.has(other.id));
+                if (entry !== undefined) taking.add(entry.id);
+                return entry;
+            });
+            if (taken === undefined) return undefined;
+            try {
+                await wait(taken);
+                return await hold(async () => {
+                    // The cap can drop the entry while the wait ran.
+                    const entry = (await store.read()).entries.find((other) => other.id === taken.id);
+                    if (entry === undefined) return undefined;
+                    const outcome = await undo(entry);
+                    const left = outcome.left.length === 0 ? undefined : ({ ...entry, items: outcome.left, ...(outcome.refused && { refused: true }) } as UndoEntry);
+                    await store.update((record) => ({ value: { ...record, entries: record.entries.flatMap((other) => (other.id !== entry.id ? [other] : left ? [left] : [])) }, result: undefined }));
+                    return { entry, outcome };
+                });
+            } finally {
+                taking.delete(taken.id);
+            }
+        },
     };
 }

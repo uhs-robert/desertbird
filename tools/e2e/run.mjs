@@ -876,6 +876,12 @@ async function run_panes(instance, { app, kind, shot }) {
   // One stack serves the whole run, so the next u steps back to an older entry: the archive that . made in visual mode.
   state = await keys(["u"], 4000);
   check(app, kind, "the next u undoes the older . archive, one message back in the Inbox", messages_in_inbox(state) === inbox_before + 1, `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
+  // Empty the stack: it holds at most 20 entries, and a step whose message is gone takes a second u to drop.
+  for (let press = 0; press < 42; press++) {
+    await instance.press(["u"]);
+    await sleep(800);
+  }
+  await sleep(3000);
   await keys(["g", "e"]);
   await keys(["g", "g"]);
   victim = first_selected(await keys(["j"]));
@@ -883,8 +889,9 @@ async function run_panes(instance, { app, kind, shot }) {
   await sleep(4000);
   state = await instance.ask("state");
   const deleted = !in_folder(state, victim, "/Inbox");
-  state = await keys(["u"], 3000);
-  check(app, kind, "u leaves a native Delete to Thunderbird and changes no mail", deleted && !in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after Delete ${deleted}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  const inbox_after_delete = messages_in_inbox(state);
+  state = await keys(["u"], 4000);
+  check(app, kind, "with the stack empty, u leaves a native Delete to Thunderbird and changes no mail", deleted && !in_folder(state, victim, "/Inbox") && messages_in_inbox(state) === inbox_after_delete, `${victim} out of the Inbox after Delete ${deleted}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}, Inbox ${inbox_after_delete} then ${messages_in_inbox(state)}`);
 }
 
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.

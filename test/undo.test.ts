@@ -26,21 +26,25 @@ interface Stored {
     read?: boolean;
     flagged?: boolean;
     junk?: boolean;
+    /** The Date header, in ms. Copies that share a Message-ID differ here. */
+    date?: number;
+    size?: number;
 }
 
 /**
  * A mail store that behaves as the API does where undo depends on it: a move gives the message a new id, a delete moves to the Trash of the account (or removes the message for good from Trash), and an archive files into a year folder it makes on first use.
  * `hide_lookups` makes that many next queries find nothing, as an IMAP server that has not synced the moved copy yet.
  */
-function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: number; retry_delays_ms?: number[]; storage?: ReturnType<typeof fake_storage> } = {}) {
+function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: number; retry_delays_ms?: number[]; storage?: ReturnType<typeof fake_storage>; failing_folder_query?: boolean } = {}) {
     const folders = structuredClone(FOLDERS);
     const box = new Map(messages.map((message) => [message.id, { ...message }]));
     let next_id = Math.max(0, ...box.keys()) + 1;
     const calls: string[] = [];
     const notices: string[] = [];
     let hide_lookups = 0;
+    const failing_accounts = new Set<string>();
     const folder = (id: string) => folders.find((entry) => entry.id === id)!;
-    const header_of = (message: Stored): MessageHeader => ({ id: message.id, date: new Date(0), ...(message.header !== undefined && { headerMessageId: message.header }), read: message.read === true, flagged: message.flagged === true, junk: message.junk === true, folder: { ...folder(message.folder) } });
+    const header_of = (message: Stored): MessageHeader => ({ id: message.id, date: new Date(message.date ?? 0), ...(message.size !== undefined && { size: message.size }), ...(message.header !== undefined && { headerMessageId: message.header }), read: message.read === true, flagged: message.flagged === true, junk: message.junk === true, folder: { ...folder(message.folder) } });
     const known = (id: number) => {
         const message = box.get(id);
         if (message === undefined) throw new Error(`Message not found: ${id}.`);
@@ -92,7 +96,10 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
             continueList: async () => ({ messages: [] }),
         },
         folders: {
-            query: async (query: { accountId?: string; specialUse?: string[]; path?: string }) => folders.filter((entry) => (query.accountId === undefined || entry.accountId === query.accountId) && (query.path === undefined || entry.path === query.path) && (query.specialUse === undefined || query.specialUse.some((use) => entry.specialUse?.includes(use)))),
+            query: async (query: { accountId?: string; specialUse?: string[]; path?: string }) => {
+                if ((options.failing_folder_query === true && query.specialUse !== undefined) || failing_accounts.has(query.accountId ?? "")) throw new Error("folder lookup failed");
+                return folders.filter((entry) => (query.accountId === undefined || entry.accountId === query.accountId) && (query.path === undefined || entry.path === query.path) && (query.specialUse === undefined || query.specialUse.some((use) => entry.specialUse?.includes(use))));
+            },
         },
         notifications: { create: async (_id: string | undefined, notification: { message: string }) => (notices.push(notification.message), "n1") },
         keys: { viewRows: async ({ first, last }: { first: number; last: number }) => ({ current: options.current ?? -1, rows: (options.rows ?? []).filter((row) => row.index >= first && row.index <= last) }) },
@@ -111,7 +118,10 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
         message: (header: string) => [...box.values()].find((message) => message.header === header),
         id_of: (header: string) => [...box.values()].find((message) => message.header === header)!.id,
         drop: (header: string) => [...box.entries()].filter(([, message]) => message.header === header).forEach(([id]) => box.delete(id)),
-        put: (header: string, folder_id: string) => void box.set(next_id, { id: next_id++, header, folder: folder_id }),
+        put: (header: string, folder_id: string, more: Partial<Stored> = {}) => void box.set(next_id, { id: next_id++, header, folder: folder_id, ...more }),
+        message_by_id: (id: number) => box.get(id),
+        message_in: (folder_id: string) => [...box.values()].find((message) => message.folder === folder_id),
+        fail_trash_lookup: (account_id: string) => void failing_accounts.add(account_id),
         remove_folder: (id: string) => void folders.splice(folders.findIndex((entry) => entry.id === id), 1),
         folder_of: (id: number) => box.get(id)?.folder,
         top_items: () => ((storage.data[UNDO_STORAGE_KEY] as { entries: { items: unknown[] }[] }).entries.at(-1)?.items ?? []).length,
@@ -174,20 +184,48 @@ test("u steps back through the stack, newest first", async () => {
     assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@inbox"]);
 });
 
-test("a message gone from Trash: u retries, then refuses, moves nothing and keeps the entry", async () => {
+test("a message gone from Trash: u retries, refuses, marks the step, and keeps it", async () => {
     const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)]);
     await mail.run("msg.delete", [1, 2]);
     mail.drop("a@x");
     await mail.run("msg.undo");
-    assert.equal(mail.calls.filter((call) => call.startsWith("query a@x")).length, 3, "one lookup and two retries");
+    assert.equal(mail.calls.filter((call) => call.startsWith("query a@x")).length, 4, "three tries while waiting, one more under the log");
     assert.deepEqual(mail.moves(), [], "b@x stays too: nothing moves while a message is missing");
-    assert.match(mail.notices.at(-1) ?? "", /^1 of 2 messages are no longer in Trash, so nothing changed\. The step stays/);
+    assert.match(mail.notices.at(-1) ?? "", /^1 of 2 messages are no longer in Trash, so nothing changed\. Press u again to drop this step\.$/);
     assert.equal(mail.entries(), 1);
-    // The message turns up again (a sync, a restore by hand), and the kept entry now works.
+    // The message turns up again (a sync, a restore by hand), and the kept entry still works.
     mail.put("a@x", "trash");
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@inbox"]);
     assert.equal(mail.entries(), 0);
+});
+
+test("a second u on a refused step looks once more, moves back what it finds, drops the rest and reaches the older step", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2), inbox("c@x", 3)]);
+    await mail.run("msg.archive", [3]);
+    await mail.run("msg.delete", [1, 2]);
+    mail.drop("a@x");
+    await mail.run("msg.undo");
+    mail.calls.length = 0;
+    await mail.run("msg.undo");
+    assert.equal(mail.calls.filter((call) => call.startsWith("query a@x")).length, 1, "no retries on a step that already refused");
+    assert.deepEqual(mail.places(), ["b@x@inbox", "c@x@archives-2026"]);
+    assert.match(mail.notices.at(-1) ?? "", /^Undid the delete of 1 message\. Dropped 1 message that is no longer in Trash\.$/);
+    assert.equal(mail.entries(), 1);
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["b@x@inbox", "c@x@inbox"]);
+});
+
+test("u does not hold the log while it waits for a missing message, so a d d runs at once", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)], { retry_delays_ms: [40, 40] });
+    await mail.run("msg.delete", [1]);
+    mail.drop("a@x");
+    mail.calls.length = 0;
+    const undoing = mail.run("msg.undo");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await mail.run("msg.delete", [2]);
+    assert.deepEqual(mail.calls.filter((call) => call.startsWith("delete") || call.startsWith("query a@x")), ["query a@x trash", "delete 2"], "the delete ran while the undo waited");
+    await undoing;
 });
 
 test("a copy that shows up late, as on IMAP, is found by a retry", async () => {
@@ -212,9 +250,9 @@ test("a message moved out of Trash by hand is never taken from where it went", a
     assert.equal(mail.entries(), 1);
 });
 
-test("duplicate Message-IDs: u moves only as many copies as were recorded, the newest first", async () => {
+test("duplicate Message-IDs: u moves only as many copies as were recorded, the one with the recorded date", async () => {
     // An older copy of the same message already sits in Trash.
-    const mail = mail_store([{ id: 1, header: "a@x", folder: "trash" }, inbox("a@x", 2)]);
+    const mail = mail_store([{ id: 1, header: "a@x", folder: "trash", date: 1000 }, inbox("a@x", 2, { date: 2000 })]);
     await mail.run("msg.delete", [2]);
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@inbox", "a@x@trash"]);
@@ -356,5 +394,49 @@ test("an unreadable or newer stored record reads as an empty stack", async () =>
     assert.deepEqual(record?.entries.map((entry) => entry.id), ["f"]);
     const storage = fake_storage({ [UNDO_STORAGE_KEY]: { record_version: 9, entries: "nope" } });
     const log = create_undo_log({ storage: storage.api });
-    assert.equal(await log.undo_newest(async () => ({ left: [] })), undefined);
+    assert.equal(await log.undo_newest(async () => {}, async () => ({ left: [] })), undefined);
+});
+
+test("copies that share a Message-ID each go back to their own folder, matched by date", async () => {
+    const mail = mail_store([inbox("a@x", 1, { date: 1000 }), { id: 2, header: "a@x", folder: "work", date: 2000 }]);
+    await mail.run("msg.delete", [1, 2]);
+    await mail.run("msg.undo");
+    const home = (date: number) => [...[1, 2, 3, 4, 5, 6, 7, 8]].map((id) => mail.message_by_id(id)).find((message) => message?.date === date)?.folder;
+    assert.deepEqual([home(1000), home(2000)], ["inbox", "work"]);
+});
+
+test("u after x leaves an older archived copy alone, though the API gave it the larger id", async () => {
+    // The older copy is not seen until the undo queries Archives, so its id comes last.
+    const mail = mail_store([inbox("a@x", 1, { date: 5000 })]);
+    await mail.run("msg.archive", [1]);
+    mail.put("a@x", "archives-2026", { date: 1000 });
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@archives-2026", "a@x@inbox"]);
+    assert.equal(mail.message_in("inbox")?.date, 5000);
+});
+
+test("a count that overlaps the selection acts on each message once, and its undo works", async () => {
+    const rows = [1, 2, 3].map((id, index) => ({ index, id, depth: 0, collapsed: false, unread: false, flags: 0 }));
+    const mail = mail_store([1, 2, 3].map((id) => inbox(`m${id}@x`, id)), { rows, current: 0 });
+    // A range selected upward: the current row is its top, so the rows below are in the selection already.
+    await mail.run("msg.archive", [3, 2, 1], {}, 3);
+    assert.deepEqual(mail.calls.filter((call) => call.startsWith("archive")), ["archive 3,2,1"]);
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["m1@x@inbox", "m2@x@inbox", "m3@x@inbox"]);
+});
+
+test("a failed folder lookup after the move still keeps the change, warns, and reports no failure", async () => {
+    const mail = mail_store([inbox("a@x", 1)], { failing_folder_query: true });
+    await mail.run("msg.delete", [1]);
+    assert.deepEqual(mail.places(), ["a@x@trash"]);
+    assert.deepEqual(mail.notices, ["u cannot undo this for this message: no Message-ID, or no copy DesertBird can find again."]);
+});
+
+test("a failed folder lookup for one account keeps the entry for the others", async () => {
+    const mail = mail_store([inbox("a@x", 1), { id: 2, header: "b@x", folder: "imap-inbox" }]);
+    mail.fail_trash_lookup("a2");
+    await mail.run("msg.delete", [1, 2]);
+    assert.match(mail.notices[0] ?? "", /^u cannot undo this for 1 of 2 messages/);
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@imap-trash"]);
 });

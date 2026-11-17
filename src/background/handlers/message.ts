@@ -10,6 +10,7 @@ import type { UndoApi } from "./undo.ts";
 export interface MessageHeader {
     id: number;
     date: Date;
+    size?: number;
     read?: boolean;
     flagged?: boolean;
     junk?: boolean;
@@ -77,7 +78,8 @@ async function counted_messages(scope: HandlerScope<TrashApi>): Promise<number[]
     if (first?.id === null || first?.id === undefined || !ids.includes(first.id)) throw new RuntimeRefusal("The selection moved before the count ran, so nothing changed.");
     // The row of a closed thread names only its first message, so a count would split the thread.
     if (following.some((row) => row.collapsed)) throw new RuntimeRefusal("A count does not reach into a closed thread, so nothing changed. Open the thread, or select the messages with v.");
-    return [...ids, ...following.flatMap((row) => (row.id === null ? [] : [row.id]))];
+    // A range selected upward ends at its top row, so the rows below can be in the selection already.
+    return [...new Set([...ids, ...following.flatMap((row) => (row.id === null ? [] : [row.id]))])];
 }
 
 // Thunderbird itself keeps a row selected after an archive or a delete (the next message, or the previous one at the end of the list), so the add-on reselects nothing.
