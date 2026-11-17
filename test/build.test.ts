@@ -22,7 +22,7 @@ const PARENT_ALLOWED_INPUTS = [
 ];
 
 // The body script bundle may take the same matcher side and the shared files, plus its own folder and the typing check of the chrome runtime. It never takes the registry or the background.
-const CONTENT_ALLOWED_INPUTS = [...PARENT_ALLOWED_INPUTS, /^src\/content\/[a-z_]+\.ts$/];
+const CONTENT_ALLOWED_INPUTS = [...PARENT_ALLOWED_INPUTS, /^src\/content\/[a-z_]+\.ts$/, /^src\/shared\/hint_labels\.ts$/];
 
 const BANNED_IN_PARENT: [string, RegExp][] = [
     ["eval", /\beval\b/],

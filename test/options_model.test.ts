@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_SETTINGS } from "../vendor/desertfox/config.ts";
+import { SETTING_DEFAULTS as DEFAULT_SETTINGS } from "../src/background/config/settings.ts";
 import { build_user_keymap, default_rows, edits_from_user_keymap, overrides_from_texts, parse_setting_text, setting_to_text } from "../src/options/model.ts";
 import { DEFAULT_KEYMAP } from "../src/background/commands/index.ts";
 import { SETTING_NAMES } from "../src/background/config/settings.ts";

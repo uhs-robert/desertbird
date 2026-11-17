@@ -1,6 +1,6 @@
 // The settings and the user's key bindings in `storage.local`. The background page and the options page each build one store. The memory copy refills from storage and drops on `storage.onChanged`, so an edit from either side applies at once.
 
-import type { Settings } from "../../../vendor/desertfox/config.ts";
+import type { Settings } from "./settings.ts";
 import { sanitize_user_keymap } from "./keymap.ts";
 import type { UserKeymap } from "./keymap.ts";
 import { FIRST_VERSION, MIGRATIONS, migrate } from "./migrations.ts";

@@ -46,3 +46,9 @@ export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, ...Objec
 export function compile_message_keymap(): CompileResult {
     return compile_keymap(MESSAGE_KEYMAP, {}, resolve_command);
 }
+
+/** The ids of the background commands a message key binds. The background runs a request of the body script only for these. */
+export function message_background_commands(): Set<string> {
+    const bound = Object.values(MESSAGE_KEYMAP.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []));
+    return new Set(bound.map((invocation) => invocation.id).filter((id) => registry.get(id)?.runs_in === "background"));
+}

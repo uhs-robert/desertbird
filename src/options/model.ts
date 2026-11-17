@@ -1,13 +1,12 @@
 // The logic behind the options page, free of the DOM so tests drive it directly.
 
-import type { Settings } from "../../vendor/desertfox/config.ts";
 import type { KeyBinding } from "../../vendor/desertfox/invocation.ts";
 import { DEFAULT_KEYMAP } from "../background/commands/index.ts";
 import { parse_sequence } from "../../vendor/desertfox/keys/notation.ts";
 import { compile_effective_keymap } from "../background/config/keymap.ts";
 import type { UserKeymap } from "../background/config/keymap.ts";
 import { SETTING_KINDS, setting_problem } from "../background/config/settings.ts";
-import type { SettingName } from "../background/config/settings.ts";
+import type { SettingName, Settings } from "../background/config/settings.ts";
 
 /** The form text of a setting value: a list reads as comma-separated text. */
 export function setting_to_text(name: SettingName, value: unknown): string {

@@ -1,6 +1,6 @@
 // The options page. It lists the settings and the key bindings and writes both to `storage.local`. The background page picks the change up through `storage.onChanged`.
 
-import { DEFAULT_SETTINGS } from "../../vendor/desertfox/config.ts";
+import { SETTING_DEFAULTS } from "../background/config/settings.ts";
 import { SETTING_KINDS } from "../background/config/settings.ts";
 import type { SettingName } from "../background/config/settings.ts";
 import { CONFIG_VERSION } from "../background/config/migrations.ts";
@@ -36,7 +36,7 @@ function render_settings(overrides: Record<string, unknown>): void {
     setting_inputs.clear();
     for (const name of Object.keys(SETTING_KINDS) as SettingName[]) {
         const spec = SETTING_KINDS[name];
-        const value = setting_to_text(name, name in overrides ? overrides[name] : DEFAULT_SETTINGS[name]);
+        const value = setting_to_text(name, name in overrides ? overrides[name] : SETTING_DEFAULTS[name]);
         let input: HTMLInputElement | HTMLSelectElement;
         if (spec.kind === "choice") {
             input = make("select", {}, ...spec.choices.map((choice) => make("option", { value: choice, textContent: choice, selected: choice === value })));
@@ -76,7 +76,7 @@ function render_bindings(): void {
 
 async function save(): Promise<void> {
     const texts = Object.fromEntries([...setting_inputs].map(([name, input]) => [name, input.value])) as Record<SettingName, string>;
-    const { overrides, errors } = overrides_from_texts(texts, DEFAULT_SETTINGS);
+    const { overrides, errors } = overrides_from_texts(texts, SETTING_DEFAULTS);
     const first_error = Object.entries(errors)[0];
     if (first_error) return say(`${first_error[0]}: ${first_error[1]}`, true);
     const build = build_user_keymap({ removed: [...removed_defaults], rows: user_rows }, overrides);

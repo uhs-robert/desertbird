@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_SETTINGS } from "../vendor/desertfox/config.ts";
+import { SETTING_DEFAULTS as DEFAULT_SETTINGS } from "../src/background/config/settings.ts";
 import { CONFIG_VERSION, MIGRATIONS, migrate } from "../src/background/config/migrations.ts";
 import type { Migration } from "../src/background/config/migrations.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, VERSION_KEY, create_config_store } from "../src/background/config/store.ts";

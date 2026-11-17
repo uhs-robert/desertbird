@@ -2,13 +2,15 @@
 
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
-import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, registry } from "./commands/index.ts";
+import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
 import { start_jump_history } from "./handlers/jump_history.ts";
+import { create_body_requests } from "./body_requests.ts";
+import type { BodyRequestApi } from "./body_requests.ts";
 import { notify_refusal } from "./notify.ts";
 import { create_router } from "./router.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
@@ -36,8 +38,8 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze">, Pick<SchedulerApi, "alarms"> {
-    runtime: { onMessage: { addListener(listener: (message: unknown) => Promise<unknown> | undefined): void } };
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay" | "windows"> {
+    runtime: { onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void } };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
@@ -136,7 +138,9 @@ const cmdline = create_cmdline_service({
 });
 const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS } });
 
-messenger.runtime.onMessage.addListener((message) => cmdline.handle(message));
+const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
+
+messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? body_requests(message, sender));
 // The overlay left a window on its own (a tab change or a closed window), so the session for that window is dropped.
 messenger.overlay?.onClosed.addListener(({ windowId }) => cmdline.end(windowId));
 

@@ -401,7 +401,7 @@ Facts measured while the end-to-end message checks ran on Thunderbird 153.7 ESR 
 
 - Keys in the message body reach the script's capture listener on the window of the message document, as long as no listener above it cancels them. The chrome runtime's capture listener on the main window sees them first. It cancelled the plain printable keys of the reading pane until the script marked the document live. With the mark set, `j`, `k`, `<C-d>`, `<C-u>`, `gg`, `G` and counts all scrolled in the pane.
 - A message tab and a message window need no handoff: the chrome runtime does not hook them, so their keys reach the script directly.
-- With the script live, `f` typed in the reading pane moved no selection and `s` starred no message. The script cancels every plain printable key, as the chrome runtime did.
+- With the script live, `s` typed in the reading pane starred no message and `m` did not toggle the read state. (`f` is the hint key now.) The script cancels every plain printable key, as the chrome runtime did.
 - `Escape` is not cancelled, so Thunderbird still acts on it. In the reading pane and a message tab it ended a pending count. In a message window the `j` after it did not scroll, which fits Thunderbird closing the window on Escape. That was not checked directly, so the e2e run skips the Escape check there.
 - The handoff is an attribute on the root element of the message document. The chrome runtime reads it through the `contentDocument` of the `messagepane` browser, which is readable (see Message pane process). Only the document that holds the end of the focus chain counts. Focus in the message header or in a frame inside the mail leaves the marked document out, so the runtime keeps swallowing there. The script runs in the top frame only, so a key typed in a frame never reaches it.
 
@@ -428,3 +428,10 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 - `folders.query({accountId, path})` and `folders.query({path})` return the folder. A path that does not exist returns an empty list, not an error.
 - `folders.query({specialUse: ["inbox"]})` finds the Inbox. Local Folders has no Drafts, Sent or Archives folder until one exists on disk, so `specialUse` for those returns an empty list.
 - Not measured: a folder renamed or deleted on a server, and a first display on a real IMAP folder.
+### Find, hints and the command line from a message
+
+- The command line opens in a main window only. `overlay.mount` looks the window up among the `mail:3pane` windows, so a standalone message window has none. A message tab and the reading pane sit in a main window, so the line opens there. In a message window `/` refuses with a notification.
+- The body script reaches the background with `runtime.sendMessage`, and the background reaches the script with `tabs.sendMessage` on the front tab of the window. Both worked in the pane and in a message tab. The sender of a message from the script carries `tab.id` and `tab.windowId`. The background takes the window and the messages (`messageDisplay.getDisplayedMessages`) from the sender.
+- The find is `window.find` in the message document. It selects the match and scrolls to it. The `wrapAround` flag measured as no help in a message tab (the search stopped at the last match), so the script wraps itself: at the end of the matches it moves the selection to the far end and searches again.
+- Where the focus lands after the line closes: in a message tab `window.focus()` from the script puts it back in the message, so `n` and `N` work at once. In the reading pane the overlay returns the focus to the thread list, and `window.focus()` did not move it into the message. `F6` does.
+- A synthetic `click()` on a link in a message: see the hint rows of the e2e run. A link to a place in the same message scrolled to its target. Whether an external link opens in the browser the same way was not measured and is a hand check.
