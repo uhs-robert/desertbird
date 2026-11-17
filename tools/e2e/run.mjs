@@ -675,6 +675,17 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "a count typed before a tab switch is dropped, so k moves one row", listed_index(state) === last_row - 1, `row ${listed_index(state)} after k from row ${last_row}`);
   await instance.ask("remove_tab", 20000, { index: 1 });
   await sleep(1000);
+
+  // A window blur ends the sequence too: d, another window takes focus and gives it back, then d. The popup takes focus when it opens, so the main window blurs.
+  state = await key_and_state(instance, ["G"]);
+  const trash_before_blur = (await instance.ask("state")).folders["/Trash"]?.length ?? 0;
+  await instance.press(["d"]);
+  const popup = await instance.ask("open_popup_window", 20000);
+  await sleep(1500);
+  await instance.ask("close_popup_window", 20000, { id: popup.opened });
+  await sleep(1500);
+  state = await key_and_state(instance, ["d"], 2500);
+  check(app, kind, "a d typed before a window blur does not pair with a d typed after it", (state.folders["/Trash"]?.length ?? 0) === trash_before_blur, `Trash holds ${state.folders["/Trash"]?.length ?? 0}, it held ${trash_before_blur}`);
 }
 
 async function run_no_identity(instance) {

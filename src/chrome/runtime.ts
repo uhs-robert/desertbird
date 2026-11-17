@@ -41,6 +41,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     in_reading_pane(window: Window): boolean;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
+    /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
+    on_window_blur(window: Window, listener: () => void): () => void;
     window_id_of(window: Window): number;
     /** Milliseconds, for the hold timeout. */
     now(): number;
@@ -73,7 +75,7 @@ function read_root(tree: { version: number; root: unknown }): TreeBranch {
 const keymap_of = (root: TreeBranch): CompiledKeymap => ({ format_version: COMPILED_KEYMAP_VERSION, modes: { [NORMAL_MODE]: root } }) as CompiledKeymap;
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
-    const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void }>();
+    const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
     let matcher: ReturnType<typeof create_matcher> | null = null;
     let listening = false;
     // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
@@ -137,12 +139,15 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     function hook(window: Window): void {
         if (hooked.has(window)) return;
         const handler = (event: KeydownEvent) => on_keydown(window, event);
-        // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
-        const stop_tab_listening = deps.on_tab_select(window, () => {
+        const reset_typing = () => {
             matcher?.reset();
             hold_until = 0;
-        });
-        hooked.set(window, { handler, stop_tab_listening });
+        };
+        // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
+        const stop_tab_listening = deps.on_tab_select(window, reset_typing);
+        // The same hazard with focus: `d`, an alt-tab away and back, then `d`.
+        const stop_blur_listening = deps.on_window_blur(window, reset_typing);
+        hooked.set(window, { handler, stop_tab_listening, stop_blur_listening });
         window.addEventListener("keydown", handler, true);
     }
 
@@ -151,6 +156,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (!entry) return;
         window.removeEventListener("keydown", entry.handler, true);
         entry.stop_tab_listening();
+        entry.stop_blur_listening();
         hooked.delete(window);
         if (sequence_window === window) sequence_window = null;
     }
