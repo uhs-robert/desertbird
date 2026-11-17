@@ -731,7 +731,10 @@ async function run_panes(instance, { app, kind, shot }) {
     await keys(["g", "e"]);
   }
   state = await keys(["g", "C"], 2500);
-  note(app, kind, "g C", `tabs after: ${tabs_of(state).length}; the conversation command is ${tabs_of(state).length > 1 ? "enabled and opened a tab" : "disabled with no search index, so it opened nothing"}`);
+  note(app, kind, "g C", `tabs after: ${tabs_of(state).length}; the conversation command is ${tabs_of(state).length > 1 ? "enabled and opened a tab" : "disabled, so it opened nothing"}`);
+  await instance.ask("reset_tabs");
+  await sleep(1500);
+  await keys(["g", "e"]);
 
   // u runs Thunderbird's own undo. A delete by the native Delete key registers an undo step. d d and the API delete do not.
   await keys(["g", "t"]);
@@ -743,6 +746,7 @@ async function run_panes(instance, { app, kind, shot }) {
   const after_delete = messages_in_inbox(state);
   state = await keys(["u"], 3000);
   note(app, kind, "u after d d", `${victim} in Trash before u ${after_delete < 60}, back in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  await keys(["g", "e"]);
   await keys(["g", "g"]);
   victim = first_selected(await keys(["j"]));
   await instance.press(["-k", "Delete"]);
