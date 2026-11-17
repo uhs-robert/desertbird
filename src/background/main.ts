@@ -15,6 +15,9 @@ import type { SchedulerApi } from "./scheduler.ts";
 import { create_snooze_store } from "./snooze_store.ts";
 import type { RouterApi } from "./router.ts";
 
+/** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
+const CREATE_FOLDER_TIMEOUT_MS = 10_000;
+
 const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
@@ -125,7 +128,7 @@ const cmdline = create_cmdline_service({
     overlay: messenger.overlay,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, snooze: { items: snoozes, now: () => new Date() } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS } });
 
 messenger.runtime.onMessage.addListener((message) => cmdline.handle(message));
 // The overlay left a window on its own (a tab change or a closed window), so the session for that window is dropped.

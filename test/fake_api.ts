@@ -39,6 +39,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             update: async (id, properties) => void calls.push(`messages.update ${id} ${JSON.stringify(properties)}`),
             move: async (ids, folder_id) => void calls.push(`messages.move ${ids.join(",")} ${folder_id}`),
             query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
+            continueList: async () => ({ messages: [] }),
             tags: { list: async () => (calls.push("messages.tags.list"), options.tags ?? []) },
         },
         compose: {
@@ -56,7 +57,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             getDefault: async () => (calls.push("accounts.getDefault"), options.default_account === undefined ? { id: "a1" } : options.default_account),
             list: async () => (calls.push("accounts.list"), options.accounts ?? [{ id: "a1", type: "imap" }]),
         },
-        snooze: { items: snoozes, now: () => options.now ?? new Date(2026, 10, 18, 10, 15) },
+        snooze: { items: snoozes, now: () => options.now ?? new Date(2026, 10, 18, 10, 15), create_timeout_ms: 50 },
         folders: {
             query: async (query) => {
                 calls.push(`folders.query ${JSON.stringify(query)}`);
