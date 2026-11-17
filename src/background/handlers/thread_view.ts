@@ -13,10 +13,10 @@ export interface ThreadViewApi {
 export type ThreadScope = HandlerScope<ThreadViewApi>;
 
 // A backward or forward search for a thread root reads the list in blocks of this many rows.
-export const BLOCK = 50;
+const BLOCK = 50;
 
 /** The current row and its place in the list, or a refusal when nothing is selected. */
-export async function current_row(scope: ThreadScope): Promise<ViewRow> {
+async function current_row(scope: ThreadScope): Promise<ViewRow> {
     const { current } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
     if (current < 0) throw new RuntimeRefusal("No row is selected.");
     const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: current, last: current });

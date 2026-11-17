@@ -67,6 +67,9 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
     let visual_anchor = -1;
+    // Where the mode last put the current row, and the view it did so in. A key that finds another row or another view means the list changed under the mode (a click, new mail, a sort or folder change), so the mode ends and the old anchor never reaches into the new list.
+    let visual_end = -1;
+    let visual_view: unknown;
 
     function end_visual(port: ListPort): void {
         visual_anchor = -1;
@@ -78,19 +81,20 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count?: number): void | null {
         if (leaf.steps[0]?.invocation.id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
-        if (leaf.steps[0]?.invocation.id === "visual.toggle") return visual_anchor < 0 ? void (visual_anchor = port.selected_index()) : end_visual(port);
+        if (leaf.steps[0]?.invocation.id === "visual.toggle") return visual_anchor < 0 ? void ((visual_end = visual_anchor = port.selected_index()), (visual_view = port.view_token())) : end_visual(port);
         last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
             if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
             if (step.runs_in === "chrome") {
                 const anchor = visual_anchor;
-                run_motion(step.invocation.id, anchor < 0 ? port : { ...port, select: (index) => port.select_range(anchor, index) }, step_count);
+                run_motion(step.invocation.id, anchor < 0 ? port : { ...port, select: (index) => void (port.select_range(anchor, (visual_end = index))) }, step_count);
             } else if (step.runs_in === "background") {
                 // The selection is read here, inside the key's own handler, because the background answers later: by then a following `j` has moved the selection.
                 const args = (step.invocation.args ?? {}) as Record<string, JsonValue>;
                 deps.emit({ command: step.invocation.id, args, count: step_count ?? 1, windowId: deps.window_id_of(window), messageIds: port.selected_message_ids() });
-                visual_anchor = -1;
+                // The range is taken. Collapsing to the current row keeps a following `d d` to one message.
+                if (visual_anchor >= 0) end_visual(port);
             }
         }
     }
@@ -118,12 +122,14 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
+            visual_anchor = -1;
             if (port && is_plain_printable(token)) {
                 event.preventDefault();
                 event.stopPropagation();
             }
             return;
         }
+        if (visual_anchor >= 0 && (port.selected_index() !== visual_end || port.view_token() !== visual_view)) visual_anchor = -1;
         // Escape belongs to visual mode only while it is active, so the command line overlay and Thunderbird keep it otherwise.
         if (visual_anchor >= 0 && token === "<Escape>") {
             matcher.reset();
