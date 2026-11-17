@@ -43,9 +43,9 @@ export interface WakeApi extends MessageQueryApi, SpecialFolderApi, Notification
 }
 
 /** Every page of one query. A page ends after a set number of matches, so the first page alone can miss the message. */
-async function query_all(api: MessageQueryApi, header_message_id: string, folder_id: string): Promise<MessageHeader[]> {
+async function query_all(api: MessageQueryApi, header_message_id: string, folder_id?: string): Promise<MessageHeader[]> {
     const found: MessageHeader[] = [];
-    let page = await api.messages.query({ headerMessageId: header_message_id, folderId: folder_id, autoPaginationTimeout: 0 });
+    let page = await api.messages.query({ headerMessageId: header_message_id, ...(folder_id === undefined ? {} : { folderId: folder_id }), autoPaginationTimeout: 0 });
     for (;;) {
         found.push(...page.messages);
         if (page.id === undefined || page.id === null) return found;
@@ -140,28 +140,24 @@ export async function snooze_messages(scope: HandlerScope<SnoozeApi & Notificati
 const MISSING_MESSAGE_TICKS = 30;
 const missing_ticks = new Map<string, number>();
 const attempt_key = (item: SnoozeItem) => JSON.stringify([item.origin_account_id, item.header_message_id]);
-const DISCARD_USES = ["trash", "junk"];
+// Folders where a copy with the same Message-ID is a filed or sent copy, never the snoozed one.
+const NOT_WAITING_USES = ["trash", "junk", "sent", "archives", "drafts", "templates"];
 
 /** The folder, or undefined when it is gone. The API throws for a folder id it does not know. */
 async function folder_by_id(api: WakeApi, folder_id: string): Promise<MailFolder | undefined> {
     try {
         return (await api.folders.query({ folderId: folder_id }))[0];
-    } catch {
-        return undefined;
+    } catch (error) {
+        // Only the unknown-folder error means gone. A transient failure retries at the next tick.
+        if (error instanceof Error && /not found/i.test(error.message)) return undefined;
+        throw error;
     }
 }
 
-/** Where the message waits: the stored Snoozed folder, or, when that folder is gone or renamed, any folder of the account except Trash and Junk. */
+/** Where the message waits: the stored Snoozed folder, or, when that folder is gone or renamed, any folder of any account except those a filed or sent copy lives in. The account is not part of the search, because the Snoozed folder may have been the one in Local Folders. */
 async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there: boolean): Promise<MessageHeader[]> {
     if (folder_still_there) return query_all(api, item.header_message_id, item.folder_id);
-    const page = await api.messages.query({ headerMessageId: item.header_message_id, accountId: item.origin_account_id, autoPaginationTimeout: 0 });
-    const found = [...page.messages];
-    for (let next = page.id; next !== undefined && next !== null; ) {
-        const more = await api.messages.continueList(next);
-        found.push(...more.messages);
-        next = more.id;
-    }
-    return found.filter((message) => !message.folder?.specialUse?.some((use) => DISCARD_USES.includes(use)));
+    return (await query_all(api, item.header_message_id)).filter((message) => !message.folder?.specialUse?.some((use) => NOT_WAITING_USES.includes(use)));
 }
 
 // Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_TICKS` ticks. The notices leave out the subject: they can reach the desktop, and the user has not agreed to that.

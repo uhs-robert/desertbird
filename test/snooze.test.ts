@@ -30,6 +30,8 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
         { id: "imap-root", accountId: "imap", path: "/", isRoot: true },
         { id: "imap-sent", accountId: "imap", path: "/Sent", specialUse: ["sent"] },
         { id: "imap-inbox", accountId: "imap", path: "/INBOX", specialUse: ["inbox"] },
+        { id: "imap-other", accountId: "imap", path: "/Other" },
+        { id: "imap-archive", accountId: "imap", path: "/Archive", specialUse: ["archives"] },
         { id: "local-root", accountId: "local", path: "/", isRoot: true },
         { id: "local-inbox", accountId: "local", path: "/Inbox", specialUse: ["inbox"] },
     ];
@@ -41,7 +43,7 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
     const lists = new Map<string, MessageHeader[][]>();
     const header_of = (message: StoredMessage): MessageHeader => {
         const folder = folders.find((candidate) => candidate.id === message.folder_id)!;
-        return { id: message.id, date: new Date(0), read: message.read, headerMessageId: message.header, subject: message.subject, folder: { id: folder.id, accountId: folder.accountId, path: folder.path } };
+        return { id: message.id, date: new Date(0), read: message.read, headerMessageId: message.header, subject: message.subject, folder: { id: folder.id, accountId: folder.accountId, path: folder.path, ...(folder.specialUse === undefined ? {} : { specialUse: folder.specialUse }) } };
     };
     const api = {
         messages: {
@@ -256,12 +258,37 @@ test("a Snoozed folder that was deleted or renamed does not stall the wake: the 
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    box.messages[0]!.folder_id = "imap-sent";
+    box.messages[0]!.folder_id = "imap-other";
     const renamed = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(renamed);
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
+});
+
+test("a gone Snoozed folder with several copies moves only the waiting one, not a Sent or filed copy", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    box.add("<a@x>", "imap-sent");
+    box.add("<a@x>", "imap-archive");
+    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(gone);
+    box.messages[0]!.folder_id = "imap-other";
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>").sort(), ["imap-archive", "imap-inbox", "imap-sent"]);
+});
+
+test("a gone Snoozed folder in Local Folders still finds the message there", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    box.messages[0]!.folder_id = "local-inbox";
+    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(gone);
+    box.messages[0]!.folder_id = "local-root";
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
 test("the item is stored before the message moves", async () => {
