@@ -297,3 +297,118 @@ test("a window with no Experiment cannot search", async () => {
     (api as { keys?: unknown }).keys = undefined;
     await assert.rejects(service.start(3, "forward"), /Experiment/);
 });
+
+// --- the command line side
+
+import { create_cmdline_service } from "../src/background/cmdline/service.ts";
+import { registry } from "../src/background/commands/index.ts";
+import { create_router } from "../src/background/router.ts";
+import { fake_api } from "./fake_api.ts";
+
+function line_setup(options: { commit_error?: string } = {}) {
+    const log: string[] = [];
+    const histories: string[] = [];
+    const service = create_cmdline_service({
+        registry,
+        sources: { folders: async () => [], tags: async () => [] },
+        overlay: { mount: async () => {}, unmount: async (args) => void log.push(`unmount ${args.windowId}`), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
+        history: { record: async () => {} },
+        search_history: { record: async (line) => void histories.push(line) },
+        search: {
+            type: async (_window, text) => (log.push(`type ${text}`), { note: "1 of 2", is_error: false }),
+            commit: async (_window, text) => {
+                log.push(`commit ${text}`);
+                if (options.commit_error) throw new Error(options.commit_error);
+            },
+            cancel: async (window_id) => void log.push(`cancel ${window_id}`),
+        },
+        run: async () => {},
+    });
+    return { service, log, histories };
+}
+
+const ask = (service: ReturnType<typeof line_setup>["service"], message: unknown) => service.handle(message) as Promise<unknown>;
+const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test("hello of a search line carries the direction, and a command line has none", async () => {
+    const { service } = line_setup();
+    service.begin(3, { message_ids: [], text: "", search: "backward" });
+    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "", search: "backward" });
+    service.begin(4, { message_ids: [], text: "tag " });
+    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 4 }), { open: true, text: "tag " });
+});
+
+test("search keystrokes reach the search service, and only for a search line", async () => {
+    const { service } = line_setup();
+    service.begin(3, { message_ids: [], text: "" });
+    await assert.rejects(ask(service, { type: "cmdline.search_type", windowId: 3, text: "x" }), /not open/);
+    service.begin(3, { message_ids: [], text: "", search: "forward" });
+    assert.deepEqual(await ask(service, { type: "cmdline.search_type", windowId: 3, text: "x" }), { note: "1 of 2", is_error: false });
+});
+
+test("Enter commits first, then closes the overlay and records the line in the search history", async () => {
+    const { service, log, histories } = line_setup();
+    service.begin(3, { message_ids: [], text: "", search: "forward" });
+    assert.deepEqual(await ask(service, { type: "cmdline.search_commit", windowId: 3, text: "foo" }), { ok: true });
+    await settle();
+    assert.deepEqual(log, ["commit foo", "unmount 3"]);
+    assert.deepEqual(histories, ["foo"]);
+    // A second Enter finds no session.
+    assert.deepEqual(await ask(service, { type: "cmdline.search_commit", windowId: 3, text: "foo" }), { ok: false, message: "The search line is not open." });
+});
+
+test("a search that cannot finish keeps the line open with the reason and records nothing", async () => {
+    const { service, log, histories } = line_setup({ commit_error: "Not found: zzz" });
+    service.begin(3, { message_ids: [], text: "", search: "forward" });
+    assert.deepEqual(await ask(service, { type: "cmdline.search_commit", windowId: 3, text: "zzz" }), { ok: false, message: "Not found: zzz" });
+    await settle();
+    assert.deepEqual(log, ["commit zzz"]);
+    assert.deepEqual(histories, []);
+    // The line is still open: Escape cancels the search and unmounts.
+    await ask(service, { type: "cmdline.close", windowId: 3 });
+    assert.deepEqual(log, ["commit zzz", "cancel 3", "unmount 3"]);
+});
+
+test("Escape cancels the search before the overlay goes, and a command line cancels nothing", async () => {
+    const { service, log } = line_setup();
+    service.begin(3, { message_ids: [], text: "", search: "forward" });
+    await ask(service, { type: "cmdline.close", windowId: 3 });
+    service.begin(4, { message_ids: [], text: "" });
+    await ask(service, { type: "cmdline.close", windowId: 4 });
+    assert.deepEqual(log, ["cancel 3", "unmount 3", "unmount 4"]);
+});
+
+test("an overlay that left on its own (a tab change) cancels the search through end", async () => {
+    const { service, log } = line_setup();
+    service.begin(3, { message_ids: [], text: "", search: "forward" });
+    service.end(3);
+    await settle();
+    assert.deepEqual(log, ["cancel 3"]);
+});
+
+test("the search keys open the line as a search line and a failed mount drops the session", async () => {
+    const { api, calls } = fake_api();
+    const router = create_router(registry, api);
+    await router.run({ command: "search.open", args: { direction: "backward" }, count: 1, windowId: 3, messageIds: [5] });
+    assert.deepEqual(calls.filter((call) => /^(search|cmdline|overlay)/.test(call)), ["search.start 3 backward", 'cmdline.begin 3 {"message_ids":[5],"text":"","search":"backward"}', "overlay.mount 3 cmdline"]);
+    api.overlay!.mount = async () => {
+        throw new Error("no window");
+    };
+    await router.run({ command: "search.open", args: { direction: "forward" }, count: 1, windowId: 3, messageIds: [] });
+    assert.ok(calls.includes("cmdline.end 3"));
+    await router.run({ command: "search.next", args: {}, count: 1, windowId: 3, messageIds: [] });
+    await router.run({ command: "search.prev", args: {}, count: 1, windowId: 3, messageIds: [] });
+    assert.ok(calls.includes("search.step 3 same") && calls.includes("search.step 3 opposite"));
+});
+
+test("? is backward search and g? is help, / and n and N are bound in the mail tab and ? is free in no other place", async () => {
+    const { DEFAULT_KEYMAP, MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
+    const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: Record<string, unknown> }>;
+    assert.deepEqual(normal["?"], { id: "search.open", args: { direction: "backward" } });
+    assert.deepEqual(normal["/"], { id: "search.open", args: { direction: "forward" } });
+    assert.equal(normal["g?"]?.id, "help.open");
+    assert.deepEqual([normal["n"]?.id, normal["N"]?.id], ["search.next", "search.prev"]);
+    // The message pane keeps its own find on / n N.
+    const message = MESSAGE_KEYMAP.normal as Record<string, { id: string }>;
+    assert.deepEqual([message["/"]?.id, message["n"]?.id, message["?"]], ["cmdline.open", "message.find_next", undefined]);
+});
