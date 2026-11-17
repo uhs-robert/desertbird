@@ -58,11 +58,14 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
         if (of_window?.size === 0) mounted.delete(window);
     }
 
-    // The surface left on its own. The focus goes back to the list only when the window lives on and the surface held the keyboard: a tab change leaves it to the tab.
-    function close_by_itself(window: Window, entry: Mounted, window_is_closing: boolean): void {
+    // The surface left on its own. The focus moves only when the window lives on and the surface held the keyboard. After a tab change the captured element sits in the hidden tab, so the focus goes to the new front tab's thread list instead.
+    function close_by_itself(window: Window, entry: Mounted, why: "window_closed" | "tab_changed" | "escape"): void {
         if (mounted.get(window)?.get(entry.surface) !== entry) return;
         take_down(window, entry);
-        if (!window_is_closing && takes_keyboard(entry.surface)) entry.restore_focus();
+        if (takes_keyboard(entry.surface)) {
+            if (why === "escape") entry.restore_focus();
+            if (why === "tab_changed") deps.focus_thread_list(window);
+        }
         deps.emit_closed(entry.window_id, entry.surface);
     }
 
@@ -83,11 +86,11 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
                 if (!give_back()) deps.focus_thread_list(window);
             };
             const entry: Mounted = { window_id, surface, remove, restore_focus, stop_listening: () => {} };
-            const stops = [deps.on_window_unload(window, () => close_by_itself(window, entry, true))];
+            const stops = [deps.on_window_unload(window, () => close_by_itself(window, entry, "window_closed"))];
             if (takes_keyboard(surface)) {
-                stops.push(deps.on_tab_select(window, () => close_by_itself(window, entry, false)));
+                stops.push(deps.on_tab_select(window, () => close_by_itself(window, entry, "tab_changed")));
                 // The page closes itself on Escape. This is the way out when the page never loaded and nothing answers the key.
-                stops.push(deps.on_escape(window, () => close_by_itself(window, entry, false)));
+                stops.push(deps.on_escape(window, () => close_by_itself(window, entry, "escape")));
             }
             entry.stop_listening = () => stops.forEach((stop) => stop());
             if (!mounted.has(window)) mounted.set(window, new Map());

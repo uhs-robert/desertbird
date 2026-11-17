@@ -83,6 +83,14 @@ test("a tab change removes the overlay, tells the background and leaves the focu
     assert.equal(windows.get(1)!.tab_listeners.size, 0);
 });
 
+test("a tab change focuses the new tab's thread list, not the element held in the tab it left", () => {
+    const { windows, log, host } = setup();
+    windows.get(1)!.held_focus = "message browser";
+    host.mount({ windowId: 1, surface: "cmdline" });
+    for (const listener of [...windows.get(1)!.tab_listeners]) listener();
+    assert.deepEqual(log, ["create cmdline@1", "remove cmdline@1", "focus list of 1", "closed 1"]);
+});
+
 test("a closing window removes the overlay and tells the background, without a focus call", () => {
     const { windows, log, host } = setup();
     host.mount({ windowId: 2, surface: "cmdline" });
