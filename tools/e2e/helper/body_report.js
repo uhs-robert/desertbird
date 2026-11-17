@@ -30,3 +30,12 @@ window.addEventListener("scroll", () => {
 });
 // The marker lands after DesertBird reads its keymap, so the first report waits for it.
 setTimeout(report, 1500);
+
+// Probe for the hint pick: a scripted click() on the link whose text contains the given text, as the body script would run it. The answer says whether the document moved on, so the e2e run can compare it with a real Enter.
+browser.runtime.onMessage.addListener((message) => {
+  if (message?.kind !== "click_link") return undefined;
+  const link = [...document.querySelectorAll("a[href]")].find((candidate) => candidate.textContent.includes(message.text));
+  if (!link) return Promise.resolve({ clicked: false });
+  link.click();
+  return Promise.resolve({ clicked: true, href: link.href });
+});

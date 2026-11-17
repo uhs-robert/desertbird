@@ -5,7 +5,8 @@ import { BODY_SCRIPT_LIVE_ATTRIBUTE, EXPERIMENT_VERBS, KEYMAP_STORAGE_KEY, type 
 test("the Experiment exposes the fixed verb table", () => {
     assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"]);
     assert.deepEqual(EXPERIMENT_VERBS.overlay.functions, ["mount", "unmount", "setModeLabel"]);
-    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay", "folderpane"]);
+    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay", "hints", "folderpane"]);
+    assert.deepEqual(EXPERIMENT_VERBS.hints.functions, ["sendEnter"]);
 });
 
 test("an invocation payload is plain data", () => {

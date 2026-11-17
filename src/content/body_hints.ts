@@ -7,6 +7,7 @@ export interface HintElement {
     contains(other: unknown): boolean;
     /** Moves the keyboard focus to the element. A link then takes a real Enter, which Thunderbird handles as a click on it. */
     focus(): void;
+    matches(selector: string): boolean;
 }
 
 export interface HintLabelNode {
@@ -35,6 +36,9 @@ export interface HintWindow {
 /** What a click can act on in a mail. Scripts never run in a mail, so there are no handlers to find. */
 const CLICKABLE = "a[href], button:not(:disabled), input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [role=button]";
 
+/** What a pick opens with an Enter. A form control only gets the focus, since Enter in a field would submit or break a line. */
+const OPENABLE = "a[href], button";
+
 // The host of the labels. Its own rules are inline and `!important`, so a style sheet of the mail cannot hide, move or fade it.
 const CONTAINER_STYLE = "all: initial !important; position: fixed !important; inset: 0 !important; pointer-events: none !important; z-index: 2147483647 !important; display: block !important; opacity: 1 !important; transform: none !important;";
 
@@ -55,7 +59,8 @@ export interface HintSession {
     feed(key: HintKey): void;
 }
 
-export function create_hint_session(window: HintWindow): HintSession {
+/** `open` asks for a trusted Enter on the focused element. A script click would skip Thunderbird's check for a link that lies about its address, so the pick never clicks. */
+export function create_hint_session(window: HintWindow, open: () => void): HintSession {
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";
@@ -108,6 +113,7 @@ export function create_hint_session(window: HintWindow): HintSession {
             if (picked === undefined) return;
             end();
             picked.element.focus();
+            if (picked.element.matches(OPENABLE)) open();
         },
     };
 }

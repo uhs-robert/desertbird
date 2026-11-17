@@ -7,7 +7,7 @@ import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
-import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, JsonValue } from "../shared/protocol.ts";
+import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkRequest, JsonValue } from "../shared/protocol.ts";
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
@@ -35,7 +35,7 @@ export interface BodyStorage {
 
 /** The ways to reach the background page: send a request, and answer the ones it sends. */
 export interface BodyRuntime {
-    sendMessage(message: BodyInvokeRequest): Promise<unknown>;
+    sendMessage(message: BodyInvokeRequest | BodyOpenLinkRequest): Promise<unknown>;
     onMessage: { addListener(listener: (message: unknown) => Promise<BodyFindReply> | undefined): void };
 }
 
@@ -79,7 +79,7 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
 export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
-    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window) };
+    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error))) };
 
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {

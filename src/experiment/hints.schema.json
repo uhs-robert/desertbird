@@ -1,0 +1,26 @@
+[
+  {
+    "namespace": "hints",
+    "description": "Hints in a window of the application. One verb for now: the Enter that opens the link a hint pick has focused.",
+    "functions": [
+      {
+        "name": "sendEnter",
+        "type": "function",
+        "async": true,
+        "description": "Sends a trusted Enter key press to the focused element of the window, a main window or a message window. A script click on a link skips Thunderbird's check for a link that lies about its address, and a real key press runs it. The key is fixed and the call takes no text.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
