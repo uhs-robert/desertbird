@@ -1,0 +1,36 @@
+import { open_message, yank } from "../handlers/clipboard.ts";
+import type { ClipboardApi } from "../handlers/clipboard.ts";
+import { scoped } from "./define.ts";
+import type { CommandGroup } from "./define.ts";
+
+const yank_key = (field: string) => ({ id: "msg.yank", args: { field } });
+
+export const clipboard: CommandGroup = {
+    commands: {
+        "msg.yank": {
+            bridge: false,
+            runs_in: "background",
+            label: "Yank",
+            intent: "Copy a field of the selected message as plain text.",
+            params: [
+                {
+                    name: "field",
+                    type: "enum",
+                    values: ["content", "subject", "sender", "address", "message_id"],
+                    default: "content",
+                    description: { subject: "Copy the subject.", sender: "Copy the sender with name and address.", address: "Copy the sender address only.", message_id: "Copy the Message-ID header value." },
+                },
+            ],
+            run: scoped<ClipboardApi>((scope, args) => yank(scope, args)),
+        },
+        "msg.open": { bridge: false, runs_in: "background", label: "Open", intent: "Open the selected message in a tab.", run: scoped<ClipboardApi>(open_message) },
+    },
+    normal_keys: {
+        yy: yank_key("content"),
+        ys: yank_key("subject"),
+        yf: yank_key("sender"),
+        ya: yank_key("address"),
+        yi: yank_key("message_id"),
+        "<C-l>": { id: "msg.open" },
+    },
+};

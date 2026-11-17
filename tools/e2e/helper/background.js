@@ -101,6 +101,12 @@ async function api_view(args) {
   if (args.update) await browser.mailTabs.update(mail_tab.id, args.update);
 }
 
+// Test-only read of the clipboard text. A write that failed in DesertBird leaves the earlier text, so the runner clears it first.
+async function clipboard_text(set_to) {
+  if (set_to !== undefined) await navigator.clipboard.writeText(set_to);
+  return set_to === undefined ? await navigator.clipboard.readText() : null;
+}
+
 async function post(body) {
   await fetch(`${SINK_URL}/state`, { method: "POST", body: JSON.stringify(body) });
 }
@@ -123,6 +129,15 @@ async function poll_forever() {
       } else if (command.name === "api_view") {
         await api_view(command.args);
         await post({ seq: command.seq, applied: true });
+      } else if (command.name === "probe_plain_text") {
+        const utils = browser.messengerUtilities;
+        const converted = utils?.convertToPlainText ? await utils.convertToPlainText("<html><head><title>T</title></head><body><p>It&#39;s &eacute;</p><table><tr><td>A</td><td>B</td></tr></table></body></html>") : null;
+        await post({ seq: command.seq, has_utils: Boolean(utils), has_convert: Boolean(utils?.convertToPlainText), converted });
+      } else if (command.name === "read_clipboard") {
+        await post({ seq: command.seq, text: await clipboard_text() });
+      } else if (command.name === "clear_clipboard") {
+        await clipboard_text("");
+        await post({ seq: command.seq, cleared: true });
       } else if (command.name === "reload_desertbird") {
         await reload_desertbird();
         await post({ seq: command.seq, reloaded: true });
