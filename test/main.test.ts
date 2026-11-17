@@ -35,7 +35,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         runtime: { onMessage: { addListener: () => {} } },
         notifications: { create: async () => "n" },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
-        mailTabs: { onDisplayedFolderChanged: { addListener: () => {} } },
+        mailTabs: { query: async () => [], onDisplayedFolderChanged: { addListener: () => {} } },
     };
     (globalThis as Record<string, unknown>)["messenger"] = messenger;
     const external_write = (items: Record<string, unknown>) => {

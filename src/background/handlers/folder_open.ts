@@ -14,7 +14,7 @@ export interface FolderMailTab {
 
 export interface FolderApi extends SpecialFolderApi, FolderStateApi {
     mailTabs: {
-        query(query: { windowId: number; active: true }): Promise<FolderMailTab[]>;
+        query(query: { windowId?: number; active: true }): Promise<FolderMailTab[]>;
         update(tab_id: number, update: { displayedFolder: MailFolder }): Promise<unknown>;
         onDisplayedFolderChanged: { addListener(listener: (tab: FolderMailTab, folder?: MailFolder) => void): void };
     };
