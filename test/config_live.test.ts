@@ -35,6 +35,7 @@ function stub_messenger(hold_first_get = false) {
         },
         keys: { install: async (args: { tree: { root: { children: Record<string, unknown> } } }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
         notifications: { create: async () => "n" },
+        alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
     };
     const outside_write = (items: Record<string, unknown>) => {
         Object.assign(stored, items);
