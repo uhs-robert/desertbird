@@ -1,5 +1,6 @@
 // The settings and the user's key bindings in `storage.local`. The background page and the options page each build one store. The memory copy refills from storage and drops on `storage.onChanged`, so an edit from either side applies at once.
 
+import { SETTINGS_STORAGE_KEY } from "../../shared/protocol.ts";
 import type { Settings } from "./settings.ts";
 import { sanitize_user_keymap } from "./keymap.ts";
 import type { UserKeymap } from "./keymap.ts";
@@ -8,7 +9,7 @@ import type { Migration, StoredConfig } from "./migrations.ts";
 import { sanitize_settings, settings_with_defaults } from "./settings.ts";
 
 export const VERSION_KEY = "desertbird_config_version";
-export const SETTINGS_KEY = "desertbird_settings";
+export const SETTINGS_KEY = SETTINGS_STORAGE_KEY;
 export const USER_KEYMAP_KEY = "desertbird_user_keymap";
 export const CONFIG_KEYS = [VERSION_KEY, SETTINGS_KEY, USER_KEYMAP_KEY];
 

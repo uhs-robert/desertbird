@@ -21,6 +21,7 @@ export interface BodyKeyEvent extends KeyEventLike {
 
 export interface BodyWindow extends FindWindow, HintWindow {
     addEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
+    addEventListener(type: "scroll" | "blur" | "pointerdown", listener: () => void, capture: boolean): void;
     removeEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
     scrollBy(options: { top: number; behavior: "instant" }): void;
     scrollTo(options: { top: number; behavior: "instant" }): void;
@@ -62,10 +63,10 @@ const ACTIONS: Record<string, Action> = {
 
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
-/** The scroll step in the stored settings, or the default when it is absent or not a positive number. */
+/** The scroll step in the stored settings, or the default when it is absent or below 1. */
 function scroll_step_of(settings: unknown): number {
     const step = (settings as { message_scroll_step_px?: unknown } | null | undefined)?.message_scroll_step_px;
-    return typeof step === "number" && Number.isFinite(step) && step > 0 ? step : MESSAGE_SCROLL_STEP_PX;
+    return typeof step === "number" && Number.isFinite(step) && step >= 1 ? step : MESSAGE_SCROLL_STEP_PX;
 }
 
 /** The keymap record in storage, read for the tree of this document. A record that is absent or of another shape gives null. */
@@ -77,6 +78,8 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
 /** Starts the keys of one message document. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
 export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
+    // After a hint pick the picked link has the focus. The next Enter is not ours: Thunderbird takes it as a click on the link, with its own external open and its check for a link that lies about its address.
+    let pass_next_enter = false;
     const root_element = window.document.documentElement;
     const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window) };
 
@@ -94,12 +97,15 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         event.preventDefault();
         event.stopPropagation();
         if (MODIFIER_KEYS.has(event.key)) return;
-        context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
+        pass_next_enter = context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
     }
 
     function on_keydown(event: BodyKeyEvent): void {
-        if (!matcher) return;
         if (context.hints.active()) return on_hint_key(event);
+        if (!matcher) return;
+        const enter_for_thunderbird = pass_next_enter && event.key === "Enter";
+        if (!MODIFIER_KEYS.has(event.key)) pass_next_enter = false;
+        if (enter_for_thunderbird) return;
         if (is_typing_element(event.target as FocusNode | null)) return void matcher.reset();
         const token = event_to_token(event);
         if (token === null) return;
@@ -123,10 +129,15 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
             matcher = null;
         }
         if (matcher) root_element.setAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE, "");
-        else root_element.removeAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE);
+        else {
+            root_element.removeAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE);
+            context.hints.cancel();
+        }
     }
 
     window.addEventListener("keydown", on_keydown, true);
+    // The labels sit at fixed places. They end when the page moves under them, the window loses the focus or a click lands elsewhere.
+    for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, () => context.hints.cancel(), true);
     runtime.onMessage.addListener((message) => {
         const request = message as Partial<BodyFindRequest> | null;
         return request?.type === "body.find" && typeof request.pattern === "string" ? Promise.resolve({ found: context.finder.start(request.pattern) }) : undefined;

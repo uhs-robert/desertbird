@@ -25,8 +25,8 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
 // The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard is 18004 plus 372 rounded up to the next 100. AGENTS.md records the same number.
 const PARENT_MAX_BYTES = 18400;
 
-// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard is 14558 rounded up to 14600. AGENTS.md records the same number.
-const CONTENT_MAX_BYTES = 14600;
+// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard is 15879 rounded up to 15900. AGENTS.md records the same number.
+const CONTENT_MAX_BYTES = 15900;
 
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.

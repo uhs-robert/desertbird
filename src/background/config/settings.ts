@@ -10,10 +10,10 @@ export type Settings = VendoredSettings & { message_scroll_step_px: number };
 
 export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator";
 
-export type SettingKind = { kind: "number" } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
+export type SettingKind = { kind: "number"; min?: number } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
 
 export const SETTING_KINDS: Record<SettingName, SettingKind> = {
-    message_scroll_step_px: { kind: "number" },
+    message_scroll_step_px: { kind: "number", min: 1 },
     which_key_delay_ms: { kind: "number" },
     toast_ms: { kind: "number" },
     toast_error_ms: { kind: "number" },
@@ -32,7 +32,7 @@ export function setting_problem(name: SettingName, value: unknown): string | und
     const spec = SETTING_KINDS[name];
     switch (spec.kind) {
         case "number":
-            return typeof value === "number" && Number.isFinite(value) && value >= 0 ? undefined : "expected a number of at least 0";
+            return typeof value === "number" && Number.isFinite(value) && value >= (spec.min ?? 0) ? undefined : `expected a number of at least ${spec.min ?? 0}`;
         case "boolean":
             return typeof value === "boolean" ? undefined : "expected true or false";
         case "list":
