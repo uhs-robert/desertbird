@@ -500,7 +500,7 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird (t
 
 ## Step keys and visual mode
 
-Measured with the end-to-end run on Thunderbird 153.7.0 ESR (`E2E_SCALE=1`: the 10,000-message Big folder, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the last key to the selection change, polled through the helper's light `selection` command. Polling has a granularity of about 100 ms, and the `j` baseline is 218 ms, so the cost of a step is the number minus that.
+Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, which gave the same times within 6 ms (`E2E_SCALE=1`: the 10,000-message Big folder, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the last key to the selection change, polled through the helper's light `selection` command. Polling has a granularity of about 100 ms, and the `j` baseline is 218 ms, so the cost of a step is the number minus that.
 
 | Key | Time |
 | --- | --- |
