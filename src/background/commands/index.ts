@@ -6,13 +6,14 @@ import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
 import { clipboard } from "./clipboard.ts";
+import { compose } from "./compose.ts";
 import { messages } from "./messages.ts";
 import { motion } from "./motion.ts";
 import { view } from "./view.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, view, clipboard };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard };
 
 export const registry = create_registry();
 

@@ -30,7 +30,7 @@ test("for_each_message refuses an empty selection and stops at the first failure
 });
 
 test("displayed_folder reads the active mail tab of the given window", async () => {
-    const folder: MailFolder = { accountId: "a1", path: "/Inbox" };
+    const folder: MailFolder = { id: "f1", accountId: "a1", path: "/Inbox" };
     const queries: unknown[] = [];
     const api = { mailTabs: { query: async (query: unknown) => (queries.push(query), [{ displayedFolder: folder }]) } };
     assert.equal(await displayed_folder(api, 7), folder);
@@ -44,7 +44,7 @@ test("displayed_folder refuses when no folder is displayed", async () => {
 
 test("special_folder queries by special use, in one account when given", async () => {
     const queries: unknown[] = [];
-    const trash: MailFolder = { accountId: "a1", path: "/Trash", specialUse: ["trash"] };
+    const trash: MailFolder = { id: "f2", accountId: "a1", path: "/Trash", specialUse: ["trash"] };
     const api = { folders: { query: async (query: unknown) => (queries.push(query), [trash]) } };
     assert.equal(await special_folder(api, "trash", "a1"), trash);
     assert.equal(await special_folder(api, "trash"), trash);

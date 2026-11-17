@@ -110,12 +110,12 @@ async function run_default(instance) {
   state = await instance.ask("state");
   check(app, kind, "no message is junk after the motions", Object.values(state.flags).every((flags) => !flags.junk));
 
-  // m, s, a and 1 must change nothing: same selection, folders and flags.
+  // s, a and 1 must change nothing: same selection, folders and flags. The m key leads the message state keys now, so a lone m followed by a break key stands in for it: the stray m is dropped and a is unbound.
   const before = await instance.ask("state");
-  for (const key of ["m", "s", "a", "1"]) await instance.press([key]);
+  for (const key of ["s", "m", "a", "1"]) await instance.press([key]);
   await sleep(1200);
   const after = await instance.ask("state");
-  check(app, kind, "m, s, a and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
+  check(app, kind, "s, m a and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
 
   // With the thread list's context menu open (Shift+F10), keys belong to the menu: j moves nothing and k is the menu's access key for Mark.
   const before_menu = first_selected(await instance.ask("state"));
@@ -333,6 +333,82 @@ async function run_default(instance) {
   await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, "Ctrl+W closes the message tab again", tab_count(state) === tabs_before, `tabs ${tabs_before} then ${tab_count(state)}`);
+  // Message state keys. Each key acts on the ids selected when it was pressed; flags are read back through the helper.
+  const flag_of = (state, id, name) => state.flags[id]?.[name];
+  state = await go_to_row(3);
+  const flag_target = first_selected(state);
+  const flagged_before = flag_of(state, flag_target, "flagged") === true;
+  state = await key_and_state(instance, ["m"], 200).then(() => key_and_state(instance, ["s"], 1500));
+  check(app, kind, "m s flips the star of the selected message", flag_of(state, flag_target, "flagged") === !flagged_before, `${flag_target} flagged ${flagged_before} -> ${flag_of(state, flag_target, "flagged")}`);
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["s"], 1500);
+  check(app, kind, "m s again flips it back", flag_of(state, flag_target, "flagged") === flagged_before, `flagged ${flag_of(state, flag_target, "flagged")}`);
+
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["u"], 1500);
+  check(app, kind, "m u marks the selected message unread", flag_of(state, flag_target, "read") === false, `read ${flag_of(state, flag_target, "read")}`);
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["r"], 1500);
+  check(app, kind, "m r marks the selected message read", flag_of(state, flag_target, "read") === true, `read ${flag_of(state, flag_target, "read")}`);
+
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["j"], 2000);
+  check(app, kind, "m j marks the selected message junk", flag_of(state, flag_target, "junk") === true, `junk ${flag_of(state, flag_target, "junk")}`);
+  const junk_home = Object.entries(state.folders).filter(([, ids]) => ids.includes(flag_target)).map(([path]) => path);
+  note(app, kind, "where the message is after m j", JSON.stringify(junk_home));
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["j"], 2000);
+  check(app, kind, "m j again clears junk", flag_of(state, flag_target, "junk") === false, `junk ${flag_of(state, flag_target, "junk")}`);
+
+  // A collapsed thread root selects the whole thread, so one key must reach every message of it.
+  await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["g"]);
+  const thread_ids = state.selected.map((message) => message.header_id);
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["s"], 2000);
+  const flagged_ids = thread_ids.filter((id) => flag_of(state, id, "flagged") === true);
+  note(app, kind, "ids selected on a collapsed thread root", `${thread_ids.length}`);
+  check(app, kind, "m s on a collapsed thread root flags every selected message", thread_ids.length > 0 && flagged_ids.length === thread_ids.length, `${flagged_ids.length} of ${thread_ids.length} flagged`);
+  await instance.press(["m"]);
+  await key_and_state(instance, ["s"], 1500);
+
+  // m R marks the whole displayed folder read. First make one message unread.
+  state = await go_to_row(5);
+  const unread_target = first_selected(state);
+  await instance.press(["m"]);
+  state = await key_and_state(instance, ["u"], 1500);
+  const was_unread = flag_of(state, unread_target, "read") === false;
+  await instance.press(["m"]);
+  await instance.press(["R"]);
+  await sleep(2500);
+  state = await instance.ask("state");
+  const still_unread = Object.entries(state.flags).filter(([id]) => state.folders["/Inbox"].includes(id) && flag_of(state, id, "read") === false);
+  check(app, kind, "m R marks every message of the shown folder read", was_unread && still_unread.length === 0, `an unread message existed: ${was_unread}, unread left in Inbox: ${still_unread.length}`);
+  await shot("after_m_R", "Inbox with no unread count after m R");
+
+  // Compose keys. R replies to all, g F forwards, c writes a new message.
+  const compose_of = (state) => state.windows.find((window) => window.type === "messageCompose");
+  const compose_subject = (state) => compose_of(state)?.tabs.map((tab) => tab.subject).find((subject) => subject !== null && subject !== undefined);
+  state = await go_to_row(8);
+  const compose_source = state.selected[0];
+  state = await key_and_state(instance, ["R"], 6000);
+  check(app, kind, "R opens Re: <subject> as a reply to all", compose_subject(state) === `Re: ${compose_source?.subject}`, `compose subject ${JSON.stringify(compose_subject(state))}`);
+  await shot("after_R", "compose window replying to all");
+  await instance.ask("close_compose");
+  await sleep(1500);
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["F"], 6000);
+  check(app, kind, "g F opens Fwd: <subject>", compose_subject(state) === `Fwd: ${compose_source?.subject}`, `compose subject ${JSON.stringify(compose_subject(state))}`);
+  await shot("after_gF", "compose window forwarding the selected message");
+  await instance.ask("close_compose");
+  await sleep(1500);
+  state = await key_and_state(instance, ["c"], 6000);
+  check(app, kind, "c opens an empty new message", compose_of(state) !== undefined && !compose_subject(state), `compose windows ${state.windows.filter((window) => window.type === "messageCompose").length}, subject ${JSON.stringify(compose_subject(state))}`);
+  await shot("after_c", "empty compose window");
+  await instance.ask("close_compose");
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "the app survived the compose keys", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
   await run_view_settings(instance, { app, kind });
   await shot("after_view_settings", "Views folder after the view setting keys");
 }
@@ -402,20 +478,55 @@ async function run_no_identity(instance) {
   check(app, kind, "r with no identity shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), `evidence is the libnotify warning in the app log, since the headless session shows no notification (selected ${state.selected.length})`);
   check(app, kind, "r with no identity opens no compose window", !state.windows.some((window) => window.type === "messageCompose"));
   check(app, kind, "r with no identity does not crash the app", instance.exited() === null);
+  // Forward and new refuse the same way. Unguarded, forward hangs with no window and new opens a window that cannot send, so the missing window is the proof for new.
+  // The headless session logs the libnotify warning for the first notification only, so these two checks cannot see the refusal itself. The unit tests do.
+  for (const [name, keys] of [["g F", ["g", "F"]], ["c", ["c"]]]) {
+    for (const key of keys.slice(0, -1)) await instance.press([key]);
+    state = await key_and_state(instance, [keys.at(-1)], 4000);
+    check(app, kind, `${name} with no identity opens no compose window`, !state.windows.some((window) => window.type === "messageCompose"), `selected ${state.selected.length}`);
+    check(app, kind, `${name} with no identity does not crash the app`, instance.exited() === null);
+  }
   await shot("refusal", "mail window after r with no identity; the refusal notification should show");
   await sleep(2000);
   await shot("refusal_later", "same window two seconds later");
 }
 
+// A default POP3 account with the identities "id2" (main) and "id3" (alias), plus Local Folders with none. A message of Local Folders borrows the default account's identity, and a message addressed to the alias keeps the alias.
+async function run_mail_account(instance) {
+  const app = instance.app;
+  const kind = "mail_account";
+  const compose_identity = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.identity_id)?.identity_id ?? null;
+  await sleep(2000);
+  await instance.press(["-k", "F6"]);
+  const cases = [
+    ["Local Folders message", "inbox-s2@fixture.invalid", [["r"], "r", "id2"], [["g", "F"], "g F", "id2"]],
+    ["mail account message to the main identity", "mail-plain@fixture.invalid", [["r"], "r", "id2"], [["g", "F"], "g F", "id2"]],
+    ["mail account message to the alias identity", "mail-alias@fixture.invalid", [["r"], "r", "id3"], [["g", "F"], "g F", "id3"]],
+  ];
+  for (const [label, header_id, ...keys] of cases) {
+    for (const [presses, name, expected] of keys) {
+      await instance.ask(`select:${header_id}`, 30000);
+      await sleep(1000);
+      for (const key of presses.slice(0, -1)) await instance.press([key]);
+      const state = await key_and_state(instance, [presses.at(-1)], 7000);
+      check(app, kind, `${name} on a ${label} composes from identity ${expected}`, compose_identity(state) === expected, `compose identity ${compose_identity(state)}, selected ${state.selected.map((message) => message.header_id)}`);
+      await instance.ask("close_compose");
+      await sleep(1500);
+    }
+  }
+  check(app, kind, "the app survived", instance.exited() === null);
+}
+
 async function run_assertions(instance) {
   if (instance.kind === "default") await run_default(instance);
+  else if (instance.kind === "mail_account") await run_mail_account(instance);
   else await run_no_identity(instance);
 }
 
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account").split(",");
   for (const kind of kinds) {
     const instance = await start_app({ app, app_binary: binaries[app], work_dir: join(e2e_dir, app, kind), kind, xpi_path });
     try {
