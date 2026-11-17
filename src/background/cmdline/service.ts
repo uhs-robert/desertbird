@@ -4,7 +4,8 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { check_args } from "../../../vendor/desertfox/registry/check_args.ts";
 import { parse_command_line } from "../../../vendor/desertfox/registry/command_line.ts";
 import type { Registry } from "../../../vendor/desertfox/registry/define.ts";
-import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, JsonValue, KeysInvocation, OverlayApi } from "../../shared/protocol.ts";
+import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, JsonValue, KeysInvocation, OverlayApi, SearchDirection } from "../../shared/protocol.ts";
+import type { SearchService } from "../search/service.ts";
 import { create_completer } from "./completion.ts";
 import type { CmdlineHistory } from "./history.ts";
 import type { ValueSources } from "./completion.ts";
@@ -14,6 +15,8 @@ export interface CmdlineSession {
     message_ids: number[];
     /** Text the line starts with, such as `tag ` for the key that types a command. */
     text: string;
+    /** Set when the line is a search line. The page then shows the `/` or `?` prompt and sends keystrokes as `cmdline.search_type`. */
+    search?: SearchDirection;
 }
 
 /** The part of the service a command handler uses. */
@@ -29,13 +32,17 @@ export interface CmdlineDeps {
     overlay: OverlayApi | undefined;
     /** Keeps the lines that were run. A failed write is logged and never stops the command. */
     history: CmdlineHistory;
+    /** The lines typed after `/` and `?`, kept apart from the command lines. */
+    search_history: CmdlineHistory;
+    /** The live search behind a search line. */
+    search: Pick<SearchService, "type" | "commit" | "cancel">;
     /** Runs one invocation through the router. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
 
 export interface CmdlineService extends CmdlineSessions {
     /** Answers a message of the command line page, or returns undefined for a message that is not one. */
-    handle(message: unknown): Promise<CmdlineHello | CmdlineCompletion | CmdlineRunResult | Record<string, never>> | undefined;
+    handle(message: unknown): Promise<CmdlineHello | CmdlineCompletion | CmdlineRunResult | CmdlineSearchNote | Record<string, never>> | undefined;
 }
 
 const is_integer = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value);
@@ -52,6 +59,8 @@ function read_request(message: unknown): CmdlineRequest | undefined {
         case "cmdline.complete":
             return typeof request["text"] === "string" && is_integer(request["caret"]) ? { type: request["type"], windowId: window_id, text: request["text"], caret: request["caret"] } : undefined;
         case "cmdline.run":
+        case "cmdline.search_type":
+        case "cmdline.search_commit":
             return typeof request["text"] === "string" ? { type: request["type"], windowId: window_id, text: request["text"] } : undefined;
         default:
             return undefined;
@@ -78,9 +87,27 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
         return { ok: true, id: command.id, args: (parsed.invocation.args ?? {}) as Record<string, JsonValue> };
     }
 
+    // A search line that closes without a commit puts the filter back first, so the list is as it was when the focus returns to it.
     async function close(window_id: number): Promise<void> {
+        const session = sessions.get(window_id);
         sessions.delete(window_id);
+        if (session?.search) await deps.search.cancel(window_id);
         await deps.overlay?.unmount({ windowId: window_id, surface: "cmdline" });
+    }
+
+    // The search keeps the filter and selects a row before the line closes, so a search that finds nothing leaves the line open with the reason.
+    async function run_search(window_id: number, session: CmdlineSession, text: string): Promise<CmdlineRunResult> {
+        if (sessions.get(window_id) !== session) return { ok: false, message: "The command line is not open." };
+        sessions.delete(window_id);
+        try {
+            await deps.search.commit(window_id, text);
+        } catch (error) {
+            if (!sessions.has(window_id)) sessions.set(window_id, session);
+            return { ok: false, message: error instanceof Error ? error.message : String(error) };
+        }
+        deps.search_history.record(text).catch((error: unknown) => console.error("desertbird:", error));
+        setTimeout(() => void close(window_id).catch((error: unknown) => console.error("desertbird:", error)), 0);
+        return { ok: true };
     }
 
     async function run(window_id: number, session: CmdlineSession, text: string): Promise<CmdlineRunResult> {
@@ -107,18 +134,26 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
 
     return {
         begin: (window_id, session) => void sessions.set(window_id, session),
-        end: (window_id) => void sessions.delete(window_id),
+        end(window_id) {
+            const session = sessions.get(window_id);
+            sessions.delete(window_id);
+            if (session?.search) deps.search.cancel(window_id).catch((error: unknown) => console.error("desertbird:", error));
+        },
         handle(message) {
             const request = read_request(message);
             if (request === undefined) return undefined;
             const session = sessions.get(request.windowId);
             switch (request.type) {
                 case "cmdline.hello":
-                    return Promise.resolve(session ? { open: true, text: session.text } : { open: false });
+                    return Promise.resolve(session ? { open: true, text: session.text, ...(session.search && { search: session.search }) } : { open: false });
                 case "cmdline.close":
                     return close(request.windowId).then(() => ({}));
                 case "cmdline.complete":
                     return session ? complete(request.text, request.caret) : Promise.reject(new RuntimeRefusal("The command line is not open."));
+                case "cmdline.search_type":
+                    return session?.search ? deps.search.type(request.windowId, request.text) : Promise.reject(new RuntimeRefusal("The search line is not open."));
+                case "cmdline.search_commit":
+                    return session?.search ? run_search(request.windowId, session, request.text) : Promise.resolve({ ok: false, message: "The search line is not open." });
                 case "cmdline.run":
                     return session ? run(request.windowId, session, request.text) : Promise.resolve({ ok: false, message: "The command line is not open." });
             }

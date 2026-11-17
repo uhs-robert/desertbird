@@ -6,6 +6,8 @@ import type { HandlerScope } from "./message.ts";
 
 /** The `mailTabs.setQuickFilter` state. `{}` clears every filter. */
 export interface QuickFilter {
+    /** False hides the filter bar. Thunderbird shows the bar for any filter that leaves this out. */
+    show?: boolean;
     unread?: true;
     flagged?: true;
     attachment?: true;
@@ -47,10 +49,25 @@ export async function active_mail_tab(scope: ViewScope): Promise<MailTab> {
 }
 
 // Account Central (a root folder) and a selection of several folders (no displayed folder) have no message list. Thunderbird then ignores a filter without a word, and a sort call throws.
-async function list_mail_tab(scope: ViewScope): Promise<MailTab> {
+export async function list_mail_tab(scope: ViewScope): Promise<MailTab> {
     const tab = await active_mail_tab(scope);
     if (!tab.displayedFolder || tab.displayedFolder.isRoot) throw new RuntimeRefusal("No message list is shown.");
     return tab;
+}
+
+// The API has no call that reads the quick filter, so the add-on remembers what it set for each tab. A filter the user sets by hand is unknown here: the live search restores the last one the add-on set, or a hidden empty bar when it set none.
+// The map mirrors state that lives in the Thunderbird window, so a restart of the page loses only a copy.
+const applied_filters = new Map<number, QuickFilter>();
+
+export const EMPTY_HIDDEN_FILTER: QuickFilter = { show: false };
+
+export const remembered_filter = (tab_id: number): QuickFilter => applied_filters.get(tab_id) ?? EMPTY_HIDDEN_FILTER;
+
+export const forget_filter = (tab_id: number): boolean => applied_filters.delete(tab_id);
+
+export async function apply_filter(api: Pick<ViewApi["mailTabs"], "setQuickFilter">, tab_id: number, filter: QuickFilter): Promise<void> {
+    await api.setQuickFilter(tab_id, filter);
+    applied_filters.set(tab_id, filter);
 }
 
 const FIXED_FILTERS: Record<string, QuickFilter> = {
@@ -64,12 +81,12 @@ export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<v
     const state = args["state"] as string;
     const filter = state === "tag" ? { tags: { mode: "any" as const, tags: { [args["tag"] as string]: true as const } } } : FIXED_FILTERS[state]!;
     const tab = await list_mail_tab(scope);
-    await scope.api.mailTabs.setQuickFilter(tab.id, filter);
+    await apply_filter(scope.api.mailTabs, tab.id, filter);
 }
 
 export async function search_threads(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    await scope.api.mailTabs.setQuickFilter(tab.id, { text: { text: args["query"] as string, subject: true, author: true } });
+    await apply_filter(scope.api.mailTabs, tab.id, { text: { text: args["query"] as string, subject: true, author: true } });
 }
 
 // A view grouped by its sort column cannot group by size or by read state. Thunderbird swaps in date without an error, so the handler refuses first.

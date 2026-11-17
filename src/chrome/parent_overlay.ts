@@ -85,7 +85,7 @@ function create_overlay_element(window: MainWindow, extension: OverlayExtension,
     browser.setAttribute("webextension-view-type", "popup");
     browser.setAttribute("maychangeremoteness", "true");
     browser.toggleAttribute("nodefaultsrc", true);
-    if (!spec.takes_keyboard) browser.setAttribute("transparent", "true");
+    browser.setAttribute("transparent", "true");
     browser.setAttribute("initialBrowsingContextGroupId", String(extension.policy.browsingContextGroupId));
     if (extension.remote) {
         browser.toggleAttribute("remote", true);

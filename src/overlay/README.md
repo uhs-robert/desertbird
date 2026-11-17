@@ -16,6 +16,8 @@ The command line page and the hud page. The `overlay` Experiment mounts it as a 
 - Tab puts the highlighted row (or the first) into the line. <C-n> and <C-p> put the next or the previous row in, the same way, and the page keeps them from Thunderbird's new message and print. Down and Up move the highlight and stop at the ends.
 - Up and Down walk the history while the line is fresh (nothing typed and no completion key used) or has no rows, as in DesertFox. The history is the list `desertbird_cmdline_history` in `storage.local`. The background writes it when a line runs (`src/background/cmdline/history.ts`). The page keeps a copy that refills on `storage.onChanged`. The cursor is `vendor/desertfox/history_cursor.ts`.
 
+- A search line (`hello.search` set) shows `/` or `?` as the prompt, draws no rows and has a transparent page, so the list narrows in view. Up, Down, C-n and C-p walk the search history. Tab does nothing. The browser of the command line is transparent for this.
+
 ## Rules
 
 - The hud browser is told no size limit (`max_width` and `max_height` of 0). A browser that is told one resizes to its content, and a page of absolutely placed pieces has none, so the browser shrank to 0 by 0 (measured). The box is 520 px high and as wide as the window. The browser carries `transparent="true"`: without it Thunderbird paints the page canvas white.

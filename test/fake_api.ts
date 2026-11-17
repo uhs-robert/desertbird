@@ -176,6 +176,10 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                       setModeLabel: async () => {},
                       onClosed: { addListener: () => {}, removeListener: () => {} },
                   },
+        search: {
+            start: async (window_id, direction) => void calls.push(`search.start ${window_id} ${direction}`),
+            step: async (window_id, relation) => void calls.push(`search.step ${window_id} ${relation}`),
+        },
         cmdline: {
             begin: (window_id, session) => void calls.push(`cmdline.begin ${window_id} ${JSON.stringify(session)}`),
             end: (window_id) => void calls.push(`cmdline.end ${window_id}`),

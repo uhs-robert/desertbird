@@ -126,6 +126,8 @@ function service_setup(options: { experiment?: boolean } = {}) {
         sources,
         overlay: api.overlay,
         history: { record: async (line) => void recorded.push(line) },
+        search_history: { record: async () => {} },
+        search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} },
         run: async (invocation) => {
             ran.push(invocation);
             await router.run(invocation);
@@ -261,7 +263,7 @@ test("the default keys: : opens an empty line and the typed-value keys open it w
         return binding.args?.["text"];
     };
     assert.equal(text_of(":"), undefined);
-    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["/", "search "]] as const) {
+    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["Ft", "filter --tag --tag="], ["T", "tab "]] as const) {
         assert.equal(text_of(keys), text);
         // The text each key types must name a command and parse as far as the word before the value.
         const first_word = text.split(" ")[0]!;
@@ -292,7 +294,7 @@ test("a line that runs is recorded, and a failing history write does not stop th
 test("a failing history write still runs the command", async () => {
     const { api } = fake_api({ experiment: true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [] });
     const ran: KeysInvocation[] = [];
-    const service = create_cmdline_service({ registry, sources, overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, run: async (invocation) => void ran.push(invocation) });
+    const service = create_cmdline_service({ registry, sources, overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, search_history: { record: async () => {} }, search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} }, run: async (invocation) => void ran.push(invocation) });
     service.begin(3, { message_ids: [5], text: "" });
     const errors = console.error;
     console.error = () => undefined;

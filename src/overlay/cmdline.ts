@@ -1,9 +1,9 @@
 // The command line page. It draws the line and the completion rows and reads keys. Parsing, completion and running live in the background: this page sends the text and shows the answer.
 
-import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult } from "../shared/protocol.ts";
+import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, SearchDirection } from "../shared/protocol.ts";
 import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "./line_edit.ts";
 
 declare const messenger: {
@@ -15,6 +15,14 @@ const window_id = Number(new URLSearchParams(location.search).get("window"));
 const input = document.getElementById("input") as HTMLInputElement;
 const rows_element = document.getElementById("rows") as HTMLOListElement;
 const status_element = document.getElementById("status") as HTMLDivElement;
+const prompt_element = document.getElementById("prompt") as HTMLSpanElement;
+
+// Set when the line opened as a search line (`/` forward, `?` backward). It has no completion rows, and the background filters the list as the text changes.
+let search_direction: SearchDirection | undefined;
+// The search lines and the command lines keep separate histories.
+const history_key = (): string => (search_direction ? SEARCH_HISTORY_STORAGE_KEY : CMDLINE_HISTORY_STORAGE_KEY);
+// A later note replaces an earlier one that arrives after it.
+let latest_search = 0;
 
 let completion: CmdlineCompletion = { rows: [], start: 0, end: 0 };
 let highlighted = -1;
@@ -71,8 +79,18 @@ async function refresh_completion(): Promise<void> {
     show_status(completion.usage ?? "", false);
 }
 
+// The background waits out a burst of typing, filters the list and answers with a count, or with `stale` when a newer keystroke took over.
+async function refresh_search(): Promise<void> {
+    const request = ++latest_search;
+    const answer = await send<CmdlineSearchNote>({ type: "cmdline.search_type", windowId: window_id, text: input.value });
+    if (request !== latest_search || closing || "stale" in answer) return;
+    show_status(answer.note, answer.is_error);
+}
+
+const refresh_line = (): Promise<void> => (search_direction ? refresh_search() : refresh_completion());
+
 async function load_history(): Promise<void> {
-    history = await read_history(async () => (await messenger.storage.local.get(CMDLINE_HISTORY_STORAGE_KEY))[CMDLINE_HISTORY_STORAGE_KEY]);
+    history = await read_history(async () => (await messenger.storage.local.get(history_key()))[history_key()]);
     history_cursor = create_history_cursor(history);
 }
 
@@ -81,7 +99,7 @@ function step_history(direction: 1 | -1): void {
     if (entry === undefined) return;
     input.value = entry;
     input.setSelectionRange(entry.length, entry.length);
-    refresh_completion().catch(report_failure);
+    refresh_line().catch(report_failure);
 }
 
 function step_highlight(step: 1 | -1): void {
@@ -124,7 +142,7 @@ async function run_line(): Promise<void> {
     if (running) return;
     running = true;
     try {
-        const result = await send<CmdlineRunResult>({ type: "cmdline.run", windowId: window_id, text: input.value });
+        const result = await send<CmdlineRunResult>({ type: search_direction ? "cmdline.search_commit" : "cmdline.run", windowId: window_id, text: input.value });
         if (result.ok) closing = true;
         else show_status(result.message, true);
     } finally {
@@ -154,29 +172,30 @@ window.addEventListener(
             run_line().catch(report_failure);
         } else if (event.key === "Tab") {
             event.preventDefault();
-            accept_row(highlighted < 0 ? 0 : highlighted);
+            if (!search_direction) accept_row(highlighted < 0 ? 0 : highlighted);
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             const step = event.key === "ArrowDown" ? 1 : -1;
-            if (arrow_target(walking_history, completion.rows.length) === "history") step_history(step);
+            if (search_direction || arrow_target(walking_history, completion.rows.length) === "history") step_history(step);
             else step_highlight(step);
         } else if (event.ctrlKey && (event.key === "n" || event.key === "p")) {
             event.preventDefault();
-            preview_row(event.key === "n" ? 1 : -1);
+            if (search_direction) step_history(event.key === "n" ? 1 : -1);
+            else preview_row(event.key === "n" ? 1 : -1);
         }
     },
     true,
 );
 
 messenger.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && CMDLINE_HISTORY_STORAGE_KEY in changes) load_history().catch(report_failure);
+    if (area === "local" && history_key() in changes) load_history().catch(report_failure);
 });
 
 input.addEventListener("input", () => {
     walking_history = false;
     preview_base = null;
     history_cursor = create_history_cursor(history);
-    refresh_completion().catch(report_failure);
+    refresh_line().catch(report_failure);
 });
 
 async function start(): Promise<void> {
@@ -187,10 +206,15 @@ async function start(): Promise<void> {
         return;
     }
     input.value = hello.text;
+    search_direction = hello.search;
+    if (search_direction) {
+        prompt_element.textContent = search_direction === "forward" ? "/" : "?";
+        document.body.classList.add("search");
+    }
     window.focus();
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
-    await refresh_completion();
+    if (!search_direction) await refresh_completion();
     // After the line is ready: a slow or failed read must not hold up typing.
     await load_history();
 }

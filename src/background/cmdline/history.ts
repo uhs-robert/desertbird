@@ -21,14 +21,15 @@ export interface CmdlineHistory {
     record(line: string): Promise<void>;
 }
 
-export function create_cmdline_history(storage: HistoryStorage): CmdlineHistory {
+/** `key` picks the list: the command lines by default, or the search lines of `/` and `?`, which keep their own so a search text never comes back as a command. */
+export function create_cmdline_history(storage: HistoryStorage, key: string = CMDLINE_HISTORY_STORAGE_KEY): CmdlineHistory {
     let last_write: Promise<void> = Promise.resolve();
     return {
         record(line) {
             const written = last_write.then(async () => {
-                const stored = (await storage.get(CMDLINE_HISTORY_STORAGE_KEY))[CMDLINE_HISTORY_STORAGE_KEY];
+                const stored = (await storage.get(key))[key];
                 const entries = Array.isArray(stored) ? stored.filter((entry): entry is string => typeof entry === "string") : [];
-                await storage.set({ [CMDLINE_HISTORY_STORAGE_KEY]: record_entry(entries, line) });
+                await storage.set({ [key]: record_entry(entries, line) });
             });
             last_write = written.catch(() => undefined);
             return written;
