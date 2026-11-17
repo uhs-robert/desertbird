@@ -435,3 +435,14 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 - The find is `window.find` in the message document. It selects the match and scrolls to it. The `wrapAround` flag measured as no help in a message tab (the search stopped at the last match), so the script wraps itself: at the end of the matches it moves the selection to the far end and searches again.
 - Where the focus lands after the line closes: in a message tab `window.focus()` from the script puts it back in the message, so `n` and `N` work at once. In the reading pane the overlay returns the focus to the thread list, and `window.focus()` did not move it into the message. `F6` does.
 - A hint pick focuses the link and leaves the next Enter to Thunderbird. A real Enter on the focused link reached Thunderbird's own click handling: for a link whose text names `bank.example` and whose address is `127.0.0.1`, Thunderbird showed its Link Mismatch dialog (read from the e2e screenshot), as a mouse click does. A script `click()` is an untrusted event and was not used, because it would skip that handling. A link to a place in the same message scrolled to its target on Enter. Opening an external link in the system browser was not measured and is a hand check.
+
+
+## Thread verbs
+
+Measured with the end-to-end run on the fixture Inbox (ten threads of four, opened collapsed) on Thunderbird 153.7.0 ESR and on Betterbird. The chrome functions are `threadTree.expandRowAtIndex` and `collapseRowAtIndex`, `commandController.doCommand("cmd_expandAllThreads")` and `("cmd_collapseAllThreads")`, and `getRowAtIndex(row).scrollIntoView` after `scrollToIndex`.
+
+- Expand and collapse of one row work on both apps. After `l` on a collapsed root, `j` enters the thread. After `h` on a root, `j` skips its replies.
+- `cmd_expandAllThreads` and `cmd_collapseAllThreads` work on both apps through the `commandController` global of `about:3pane`. After `z R` the row below the first root is its first reply. After `z M` it is the next root.
+- `mailTabs.setSelectedMessages` with a thread root id selects the root and leaves the thread closed.
+- `z z` puts the row in the middle on Thunderbird (screenshot). On Betterbird the e2e window shows a two-row list, and the row sits at the top of it.
+- `z t` on Betterbird scrolls the row under the sticky column header, so it is hidden. On Thunderbird the row shows at the top. A fix needs the header height, which Thunderbird does not offer as a public member, so it stays open.

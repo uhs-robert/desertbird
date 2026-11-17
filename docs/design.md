@@ -43,7 +43,7 @@ Registry changes from DesertFox:
 This list is the whole privileged surface. Each verb takes typed args and is checked against the Experiment schema.
 
 - `keys.install {tree, settings}`, `keys.set_mode {mode}` and the `keys.onInvocation` event: the chrome runtime matches keys locally and sends only finished invocations.
-- `view.rows {first, last}`: the visible thread rows with index, message id, depth, collapsed and unread. `view.select {anchor, end}`, `view.scroll {row, position}`, `view.thread {row, open}` and `view.all_threads {open}`.
+- `view.rows {first, last}`: built as `keys.viewRows`, with `keys.viewThread`, `keys.viewAllThreads` and `keys.viewScroll` for the three below, so no second Experiment bundle is needed. `viewRows` also returns the current row. The visible thread rows with index, message id, depth, collapsed and unread. `view.select {anchor, end}`, `view.scroll {row, position}`, `view.thread {row, open}` and `view.all_threads {open}`.
 - `folder_tree.expand {folder, open}` and `folder_tree.select {folder}`.
 - `pane.focus {pane}`, where pane is `folders`, `threads` or `message`.
 - `app.command {name}`: one name from a fixed allowlist of Thunderbird commands (`cmd_undo`, `cmd_openConversation` and the few others the table names). Never a free string.
@@ -85,11 +85,11 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `compose.edit_external` | `e`, `<C-e>`, `:edit` | Standard | `compose.getComposeDetails` and `setComposeDetails`, host `editor_start` and `editor_collect` |
 | `config.reload`, `help.open` | `:reload`, `:help` | Standard | Background, extension page |
 | `motion.down`, `motion.up` | `j`, `k` | Experiment | Chrome runtime, `view.rows` and `view.select`. The thread list order, with collapsed threads, is only in the view. |
-| `motion.left`, `motion.right` | `h`, `l` | Experiment | `view.thread`, `folder_tree.expand` |
+| `motion.left`, `motion.right` | `h`, `l` | Experiment | `view.thread`, `folder_tree.expand`. Built for the thread list: `h` goes from a reply to its root or closes the thread, `l` opens a closed thread or goes to the first reply. The folder pane half waits for `folder_tree.expand`. |
 | `motion.top`, `motion.bottom`, `page.down`, `page.up` | `g g`, `G`, `<C-d>`, `<C-u>` | Experiment | Chrome runtime |
-| `view.reposition {position: center, top, bottom}` | `z z`, `z t`, `z b` | Experiment | `view.scroll` |
-| `thread.fold_all {open}` | `z M`, `z R` | Experiment | `view.all_threads` |
-| `step.thread_root` | `] t`, `[ t` | Experiment | `view.rows` depth. The API gives no thread tree. |
+| `view.reposition {position: center, top, bottom}` | `z z`, `z t`, `z b` | Experiment | `view.scroll`. Built. |
+| `thread.fold_all {open}` | `z M`, `z R` | Experiment | `view.all_threads`. Built. |
+| `step.thread_root {direction: next, previous}` | `] t`, `[ t` | Experiment | `view.rows` depth. The API gives no thread tree. Built: the background reads rows in blocks of 50 and selects the root with `mailTabs.setSelectedMessages`. |
 | `visual.toggle` and actions over the range | `v` | Experiment | `view.select`. The actions themselves stay standard. |
 | `pane.focus {pane}` | `g f`, `g e`, `g m`, `<A-h>`, `<A-l>`, `<S-h>`, `<S-l>` | Experiment | `pane.focus` |
 | `search.folders {query}` | `/` in the folder pane | Experiment | `folder_tree.select`. Matching is standard. |
