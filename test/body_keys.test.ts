@@ -1,22 +1,89 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
-import { LINE_STEP_PX, start_body_script } from "../src/content/body_keys.ts";
-import type { BodyKeyEvent, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
+import { start_body_script } from "../src/content/body_keys.ts";
+import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
 import { compile_message_keymap } from "../src/background/commands/index.ts";
-import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY } from "../src/shared/protocol.ts";
+import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
 
 const VIEWPORT = 600;
 const PAGE_HEIGHT = 5000;
 
-/** A stand-in for the message document: it records the scrolls and holds the root element attributes. */
+/** A link or button of the stub document. `clicks` counts the clicks it got. */
+class StubElement {
+    clicks = 0;
+    box: { top: number; left: number; width: number; height: number };
+    constructor(box = { top: 10, left: 10, width: 50, height: 12 }) {
+        this.box = box;
+    }
+    getBoundingClientRect() {
+        return this.box;
+    }
+    click() {
+        this.clicks++;
+    }
+}
+
+class StubNode {
+    textContent: string | null = null;
+    style = { cssText: "" };
+    children: StubNode[] = [];
+    removed = false;
+    append(...children: StubNode[]) {
+        this.children.push(...children);
+    }
+    remove() {
+        this.removed = true;
+    }
+}
+
+/** The text of the stub message, for `find`: the matches are the indexes of the pattern, and the position is the match last selected. */
 class StubWindow implements BodyWindow {
+    elements: StubElement[] = [];
+    appended: StubNode[] = [];
+    text = "";
+    at = -1;
+    finds: string[] = [];
+    selection_cleared = 0;
+    focused = 0;
+    innerWidth = 800;
+    find(pattern: string, case_sensitive: boolean, backwards: boolean, wrap: boolean): boolean {
+        this.finds.push(`${pattern} ${case_sensitive ? "cs" : "ci"} ${backwards ? "back" : "fwd"} ${wrap ? "wrap" : "nowrap"}`);
+        const text = case_sensitive ? this.text : this.text.toLowerCase();
+        const needle = case_sensitive ? pattern : pattern.toLowerCase();
+        const starts: number[] = [];
+        for (let index = text.indexOf(needle); index >= 0; index = text.indexOf(needle, index + 1)) starts.push(index);
+        if (starts.length === 0) return false;
+        const after = backwards ? starts.filter((start) => start < this.at) : starts.filter((start) => start > this.at);
+        const pool = after.length > 0 ? after : wrap ? starts : [];
+        if (pool.length === 0) return false;
+        this.at = backwards ? pool[pool.length - 1]! : pool[0]!;
+        return true;
+    }
+    getSelection() {
+        return {
+            removeAllRanges: () => {
+                this.selection_cleared++;
+                this.at = -1;
+            },
+            selectAllChildren: () => void 0,
+            collapseToEnd: () => void (this.at = this.text.length),
+        };
+    }
+    focus() {
+        this.focused++;
+    }
+
     listeners: ((event: BodyKeyEvent) => void)[] = [];
     scrolls: string[] = [];
     attributes = new Map<string, string>();
     innerHeight = VIEWPORT;
     document = {
+        querySelectorAll: (_selector: string) => this.elements,
+        createElement: (_name: string) => new StubNode(),
+        body: {},
         documentElement: {
+            append: (child: StubNode) => void this.appended.push(child),
             scrollHeight: PAGE_HEIGHT,
             setAttribute: (name: string, value: string) => void this.attributes.set(name, value),
             removeAttribute: (name: string) => void this.attributes.delete(name),
@@ -51,13 +118,24 @@ class StubWindow implements BodyWindow {
     }
 }
 
+/** The runtime of the stub: it records what the script sends and keeps the listener the script adds. */
+function stub_runtime() {
+    const sent: unknown[] = [];
+    let listener: ((message: unknown) => Promise<{ found: boolean }> | undefined) | undefined;
+    const runtime: BodyRuntime = {
+        sendMessage: async (message) => void sent.push(message),
+        onMessage: { addListener: (added) => void (listener = added) },
+    };
+    return { runtime, sent, receive: (message: unknown) => listener?.(message) };
+}
+
 function stub_storage(stored: Record<string, unknown>) {
     const change_listeners: ((changes: Record<string, { newValue?: unknown }>, area: string) => void)[] = [];
     const storage: BodyStorage = {
-        get: async (key) => (key in stored ? { [key]: stored[key] } : {}),
+        get: async (keys) => Object.fromEntries(keys.filter((key) => key in stored).map((key) => [key, stored[key]])),
         onChanged: { addListener: (listener) => void change_listeners.push(listener) },
     };
-    return { storage, change: (value: unknown, area = "local") => change_listeners.forEach((listener) => listener({ [KEYMAP_STORAGE_KEY]: { newValue: value } }, area)) };
+    return { storage, change: (value: unknown, area = "local", key = KEYMAP_STORAGE_KEY) => change_listeners.forEach((listener) => listener({ [key]: { newValue: value } }, area)) };
 }
 
 /** The record the background stores, with the message tree compiled from the real default keys. */
@@ -69,15 +147,16 @@ function record() {
 async function started(stored: Record<string, unknown> = { [KEYMAP_STORAGE_KEY]: record() }) {
     const window = new StubWindow();
     const { storage, change } = stub_storage(stored);
-    await start_body_script(window, storage);
-    return { window, change };
+    const { runtime, sent, receive } = stub_runtime();
+    await start_body_script(window, storage, runtime);
+    return { window, change, sent, receive };
 }
 
 test("j and k scroll by a fixed line step and are cancelled", async () => {
     const { window } = await started();
     assert.deepEqual(window.press("j"), { cancelled: true, stopped: true });
     window.press("k");
-    assert.deepEqual(window.scrolls, [`by ${LINE_STEP_PX}`, `by ${-LINE_STEP_PX}`]);
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`, `by ${-MESSAGE_SCROLL_STEP_PX}`]);
 });
 
 test("a count multiplies the line step", async () => {
@@ -87,7 +166,7 @@ test("a count multiplies the line step", async () => {
     window.press("1");
     window.press("2");
     window.press("k");
-    assert.deepEqual(window.scrolls, [`by ${5 * LINE_STEP_PX}`, `by ${-12 * LINE_STEP_PX}`]);
+    assert.deepEqual(window.scrolls, [`by ${5 * MESSAGE_SCROLL_STEP_PX}`, `by ${-12 * MESSAGE_SCROLL_STEP_PX}`]);
 });
 
 test("Ctrl+d and Ctrl+u scroll half a page, with a count", async () => {
@@ -116,7 +195,7 @@ test("Escape ends a half-typed sequence and a count, and is not cancelled", asyn
     window.press("3");
     window.press("Escape");
     window.press("j");
-    assert.deepEqual(window.scrolls, [`by ${LINE_STEP_PX}`]);
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
 });
 
 test("an unbound plain key is swallowed so Thunderbird's single-key shortcuts do not fire, and runs nothing", async () => {
@@ -184,4 +263,119 @@ test("the message keys are not in the mail tab keymap, and the other way round",
     const ids = (root: unknown) => JSON.stringify(root);
     assert.ok(!ids(compile_default_keymap().compiled.modes.normal).includes("message.scroll"));
     assert.ok(!ids(compile_message_keymap().compiled.modes.normal).includes("motion."));
+});
+
+test("the scroll step follows the stored setting, and a value that is not a positive number gives the default", async () => {
+    const { window, change } = await started({ [KEYMAP_STORAGE_KEY]: record(), [SETTINGS_STORAGE_KEY]: { message_scroll_step_px: 25 } });
+    window.press("j");
+    change({ message_scroll_step_px: 70 }, "local", SETTINGS_STORAGE_KEY);
+    window.press("j");
+    change({ message_scroll_step_px: -3 }, "local", SETTINGS_STORAGE_KEY);
+    window.press("j");
+    change({ message_scroll_step_px: "wide" }, "local", SETTINGS_STORAGE_KEY);
+    window.press("j");
+    change(undefined, "local", SETTINGS_STORAGE_KEY);
+    window.press("j");
+    assert.deepEqual(window.scrolls, ["by 25", "by 70", `by ${MESSAGE_SCROLL_STEP_PX}`, `by ${MESSAGE_SCROLL_STEP_PX}`, `by ${MESSAGE_SCROLL_STEP_PX}`]);
+});
+
+test("the setting row defaults to the scroll step the body script falls back to", async () => {
+    const { SETTING_DEFAULTS } = await import("../src/background/config/settings.ts");
+    const { SETTINGS_KEY } = await import("../src/background/config/store.ts");
+    assert.equal(SETTING_DEFAULTS.message_scroll_step_px, MESSAGE_SCROLL_STEP_PX);
+    assert.equal(SETTINGS_KEY, SETTINGS_STORAGE_KEY);
+});
+
+test("the find request selects the first match from the top, with smart case, and focuses the message", async () => {
+    const { window, receive } = await started();
+    window.text = "alpha beta Alpha gamma alpha";
+    window.at = 12;
+    assert.deepEqual(await receive({ type: "body.find", pattern: "alpha" }), { found: true });
+    assert.deepEqual(window.finds, ["alpha ci fwd nowrap"]);
+    assert.equal(window.at, 0, "the find starts from the top, not from the old selection");
+    assert.equal(window.focused, 1);
+    assert.deepEqual(await receive({ type: "body.find", pattern: "Alpha" }), { found: true });
+    assert.equal(window.finds[1], "Alpha cs fwd nowrap");
+    assert.equal(window.at, 11);
+    assert.deepEqual(await receive({ type: "body.find", pattern: "zzz" }), { found: false });
+});
+
+test("n and N step forward and back through the matches and wrap at both ends", async () => {
+    const { window, receive } = await started();
+    window.text = "ab ab ab";
+    await receive({ type: "body.find", pattern: "ab" });
+    assert.equal(window.at, 0);
+    assert.equal(window.press("n").cancelled, true);
+    assert.equal(window.at, 3);
+    window.press("n");
+    assert.equal(window.at, 6);
+    window.press("n");
+    assert.equal(window.at, 0, "n wraps from the last match to the first");
+    window.press("N");
+    assert.equal(window.at, 6, "N wraps from the first match to the last");
+    window.press("N");
+    assert.equal(window.at, 3);
+});
+
+test("n and N do nothing before a first find, and a request that is not a find is not answered", async () => {
+    const { window, receive } = await started();
+    window.text = "ab";
+    assert.equal(window.press("n").cancelled, true);
+    assert.deepEqual(window.finds, []);
+    assert.equal(receive({ type: "other" }), undefined);
+    assert.equal(receive({ type: "body.find", pattern: 4 }), undefined);
+});
+
+test("slash sends the command line command to the background with the find text, and runs nothing here", async () => {
+    const { window, sent } = await started();
+    assert.equal(window.press("/").cancelled, true);
+    assert.deepEqual(sent, [{ type: "body.invoke", command: "cmdline.open", args: { text: "find " }, count: 1 }]);
+    assert.deepEqual(window.scrolls, []);
+});
+
+test("f labels the links on screen and the typed label clicks the link", async () => {
+    const { window } = await started();
+    const links = [new StubElement(), new StubElement({ top: 40, left: 10, width: 50, height: 12 }), new StubElement({ top: 9000, left: 0, width: 50, height: 12 }), new StubElement({ top: 20, left: 0, width: 0, height: 0 })];
+    window.elements = links;
+    assert.deepEqual(window.press("f"), { cancelled: true, stopped: true });
+    const labels = window.appended[0]!.children.map((node) => node.textContent);
+    assert.deepEqual(labels, ["A", "S"], "only the two links that are visible on screen get a label");
+    assert.deepEqual(window.press("s"), { cancelled: true, stopped: true });
+    assert.deepEqual(links.map((link) => link.clicks), [0, 1, 0, 0]);
+    assert.equal(window.appended[0]!.removed, true, "the labels go away after the pick");
+    assert.equal(window.press("j").cancelled, true);
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after the pick");
+});
+
+test("a label of two letters needs both, a wrong letter or a key that is not a letter cancels, and Shift alone does nothing", async () => {
+    const { window } = await started();
+    const links = Array.from({ length: 12 }, (_, index) => new StubElement({ top: index * 20, left: 0, width: 50, height: 12 }));
+    window.elements = links;
+    window.press("f");
+    assert.equal(window.appended[0]!.children.length, 12);
+    window.press("a");
+    assert.equal(links.every((link) => link.clicks === 0), true, "one letter of two picks nothing");
+    window.press("Shift");
+    window.press("s", { shiftKey: true, key: "S" });
+    assert.deepEqual(links.map((link) => link.clicks), [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "a capital letter counts as the lower case one");
+    window.press("f");
+    window.press("1");
+    assert.equal(window.appended[1]!.removed, true, "a key that is not a letter cancels");
+    window.press("f");
+    window.press("q");
+    assert.equal(window.appended[2]!.removed, true, "a letter that starts no label cancels");
+    assert.equal(links.reduce((total, link) => total + link.clicks, 0), 1);
+});
+
+test("Escape cancels the labels and is cancelled itself, and f with nothing to label starts no mode", async () => {
+    const { window } = await started();
+    window.elements = [new StubElement()];
+    window.press("f");
+    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
+    assert.equal(window.appended[0]!.removed, true);
+    assert.equal(window.press("Escape").cancelled, false, "outside hint mode Escape goes on to Thunderbird");
+    window.elements = [];
+    window.press("f");
+    assert.equal(window.press("j").cancelled, true);
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "j scrolls, so no hint mode swallowed it");
 });

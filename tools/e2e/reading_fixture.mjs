@@ -8,11 +8,14 @@ const BASE_TIME_S = Date.UTC(2026, 2, 1) / 1000;
 const paragraphs = (id) => Array.from({ length: PARAGRAPHS }, (_, index) => `<p>Paragraph ${index} of ${id}. The quick brown fox jumps over the lazy dog.</p>`).join("\n");
 
 // Text lines for the plain message, one per row, so the page height is known.
-const plain_body = (id) => Array.from({ length: PARAGRAPHS }, (_, index) => `Line ${index} of ${id}. The quick brown fox jumps over the lazy dog.`).join("\n");
+// Two lines carry the word "marker", far apart, for the find checks.
+const MARKER_LINES = [60, 200];
+const plain_body = (id) => Array.from({ length: PARAGRAPHS }, (_, index) => `Line ${index} of ${id}. The quick brown fox jumps over the lazy dog.${MARKER_LINES.includes(index) ? " marker" : ""}`).join("\n");
 
 export const READING_MESSAGES = [
   { id: "reading-plain", subject: "Reading plain", html: false, body: plain_body("reading-plain") },
-  { id: "reading-html", subject: "Reading html", html: true, body: `<html><body>${paragraphs("reading-html")}</body></html>` },
+  // One link at the top and its target at the bottom, for the hint checks.
+  { id: "reading-html", subject: "Reading html", html: true, body: `<html><body><p><a href="#end-of-mail">Jump to the end</a></p>${paragraphs("reading-html")}<p id="end-of-mail">The end.</p></body></html>` },
   // A remote image: the app blocks it by default (a banner shows) or loads it, depending on the profile kind. The address never answers.
   { id: "reading-remote", subject: "Reading remote content", html: true, body: `<html><body><img src="http://127.0.0.1:9/never.png" width="20" height="20">${paragraphs("reading-remote")}</body></html>` },
   // A sandboxed frame inside an HTML mail, and scripts in the mail that the app never runs.

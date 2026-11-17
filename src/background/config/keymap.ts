@@ -1,7 +1,7 @@
 // The keymap the user runs: the default bindings with the user's bindings on top.
 
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
-import type { Settings } from "../../../vendor/desertfox/config.ts";
+import type { Settings } from "./settings.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
 import { DEFAULT_KEYMAP, UNREPEATABLE_IDS, resolve_command } from "../commands/index.ts";

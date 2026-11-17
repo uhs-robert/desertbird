@@ -13,11 +13,13 @@ function report() {
       scroll_y: Math.round(window.scrollY),
       scroll_height: root.scrollHeight,
       inner_height: window.innerHeight,
+      selection: String(window.getSelection()),
     })
     .catch(() => {});
 }
 
 let scheduled = false;
+document.addEventListener("selectionchange", () => setTimeout(report, 100));
 window.addEventListener("scroll", () => {
   if (scheduled) return;
   scheduled = true;

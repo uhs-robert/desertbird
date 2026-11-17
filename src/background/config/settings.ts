@@ -1,13 +1,19 @@
 // The settings DesertBird stores, cut from the vendored table. A setting is listed here when a DesertBird consumer reads it or will read it soon. The rest of the table belongs to web pages.
 
 import { DEFAULT_SETTINGS } from "../../../vendor/desertfox/config.ts";
-import type { Settings } from "../../../vendor/desertfox/config.ts";
+import type { Settings as VendoredSettings } from "../../../vendor/desertfox/config.ts";
+import { MESSAGE_SCROLL_STEP_PX } from "../../shared/protocol.ts";
 
-export type SettingName = "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator";
+/** The vendored table plus the settings only DesertBird has. The vendored table is a pinned copy and stays as it is. */
+export type Settings = VendoredSettings & { message_scroll_step_px: number };
+
+
+export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator";
 
 export type SettingKind = { kind: "number" } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
 
 export const SETTING_KINDS: Record<SettingName, SettingKind> = {
+    message_scroll_step_px: { kind: "number" },
     which_key_delay_ms: { kind: "number" },
     toast_ms: { kind: "number" },
     toast_error_ms: { kind: "number" },
@@ -52,4 +58,7 @@ export function sanitize_settings(raw: unknown, on_problem: (message: string) =>
     return kept as Partial<Settings>;
 }
 
-export const settings_with_defaults = (overrides: Partial<Settings>): Settings => ({ ...DEFAULT_SETTINGS, ...overrides });
+/** Every setting at its default: the vendored defaults plus DesertBird's own. */
+export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX };
+
+export const settings_with_defaults = (overrides: Partial<Settings>): Settings => ({ ...SETTING_DEFAULTS, ...overrides });

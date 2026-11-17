@@ -821,7 +821,7 @@ async function run_mail_account(instance) {
 // The body script: keys while a message is read, in the reading pane, a message tab and a message window. The helper's own content script reports the scroll position and whether DesertBird marked the document.
 const LINE_STEP_PX = 40;
 const READING_FOLDER_MESSAGES = ["reading-plain", "reading-html", "reading-remote", "reading-sandbox"];
-const body_state = (state) => state.body ?? { live: false, scroll_y: -1, scroll_height: 0, inner_height: 0 };
+const body_state = (state) => state.body ?? { live: false, scroll_y: -1, scroll_height: 0, inner_height: 0, selection: "" };
 const near = (value, expected) => Math.abs(value - expected) <= 2;
 
 async function run_message_scripts(instance) {
@@ -879,18 +879,55 @@ async function run_message_scripts(instance) {
     await key_and_state(instance, ["g"]);
   };
 
+  // `refocus_body` is for the reading pane, where the line returns the focus to the thread list and not to the message: the run then notes whether n moves, and presses F6 to put the focus in the body.
+  const find_checks = async (where, { refocus_body = false } = {}) => {
+    const body_after = async (args, wait = 1200) => body_state(await key_and_state(instance, args, wait));
+    await instance.press(["/"]);
+    await sleep(1500);
+    await shot(`${where.replaceAll(" ", "_")}_find_line`, `${where} with the command line open, find typed in`);
+    await instance.press(["marker"]);
+    await sleep(400);
+    await instance.press(["-k", "Return"]);
+    await sleep(2000);
+    let body = body_state(await instance.ask("state"));
+    const first = body.scroll_y;
+    check(app, kind, `${where}: find selects the first match and scrolls to it`, body.selection === "marker" && first > body.inner_height, `selection ${JSON.stringify(body.selection)}, scrollY ${first}, innerHeight ${body.inner_height}`);
+    if (refocus_body) {
+      body = await body_after(["n"]);
+      note(app, kind, `${where}: n right after the line closed`, `${body.scroll_y === first ? "did not move" : "moved"}: scrollY ${first} then ${body.scroll_y}`);
+      await instance.press(["-k", "F6"]);
+      await sleep(800);
+    }
+    body = await body_after(["n"]);
+    const second = body.scroll_y;
+    check(app, kind, `${where}: n goes to the next match`, body.selection === "marker" && second > first, `scrollY ${first} then ${second}`);
+    body = await body_after(["n"]);
+    check(app, kind, `${where}: n wraps from the last match to the first`, near(body.scroll_y, first), `scrollY ${body.scroll_y}, first match at ${first}`);
+    body = await body_after(["N"]);
+    check(app, kind, `${where}: N wraps from the first match to the last`, near(body.scroll_y, second), `scrollY ${body.scroll_y}, last match at ${second}`);
+    body = await body_after(["N"]);
+    check(app, kind, `${where}: N goes back to the first match`, near(body.scroll_y, first), `scrollY ${body.scroll_y}, first match at ${first}`);
+    await shot(`${where.replaceAll(" ", "_")}_found`, `${where} with the match selected`);
+    await key_and_state(instance, ["g"]);
+    await key_and_state(instance, ["g"]);
+  };
+
   // The reading pane. j in the body scrolls and moves no row, r opens no compose window, and the list keeps its keys once focus returns.
   let state = await show_in_pane("reading-plain");
   const pane_message = first_selected(state);
   check(app, kind, "a message shows in the pane", pane_message === "reading-plain@fixture.invalid", `selected ${pane_message}`);
   await shot("pane_plain", "reading pane with the plain text message, body focused");
   await scroll_keys("pane plain text");
-  // Thunderbird's own single-key shortcuts must not fire while the body script is live. `f` selects the next message and `s` stars the message, and the helper reports both. A bare `r` would prove nothing: the message is already read.
+  // Thunderbird's own single-key shortcuts must not fire while the body script is live. `s` stars the message and `m` toggles its read state, and the helper reports both. A bare `r` would prove nothing: the message is already read. `f` is the hint key now, so it no longer proves the swallow.
   const starred_before = state.flags[pane_message]?.flagged;
-  state = await key_and_state(instance, ["f"], 1500);
-  check(app, kind, "pane: f moves no selection, the body script swallows Thunderbird's single-key shortcuts", first_selected(state) === pane_message, `selected ${first_selected(state)}`);
+  const read_before = state.flags[pane_message]?.read;
   state = await key_and_state(instance, ["s"], 1500);
-  check(app, kind, "pane: s stars nothing", state.flags[pane_message]?.flagged === starred_before, `flagged ${starred_before} then ${state.flags[pane_message]?.flagged}`);
+  check(app, kind, "pane: s stars nothing, the body script swallows Thunderbird's single-key shortcuts", state.flags[pane_message]?.flagged === starred_before, `flagged ${starred_before} then ${state.flags[pane_message]?.flagged}`);
+  state = await key_and_state(instance, ["m"], 1500);
+  check(app, kind, "pane: m does not toggle the read state", state.flags[pane_message]?.read === read_before && first_selected(state) === pane_message, `read ${read_before} then ${state.flags[pane_message]?.read}, selected ${first_selected(state)}`);
+  // Find: `/` opens the command line over the window, the typed text runs `find`, and the body script selects the match. n and N step with wrap, which also proves the focus went back into the message after the line closed.
+  await find_checks("pane plain text", { refocus_body: true });
+  state = await instance.ask("state");
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await sleep(800);
   state = await key_and_state(instance, ["j"]);
@@ -905,6 +942,20 @@ async function run_message_scripts(instance) {
     await sleep(600);
   }
 
+  // Hints: f labels the link on screen, the typed label clicks it, and the link target at the bottom of the mail scrolls into view.
+  await show_in_pane("reading-html");
+  let hint_body = body_state(await instance.ask("state"));
+  check(app, kind, "hints: the html message starts at the top", hint_body.scroll_y === 0, `scrollY ${hint_body.scroll_y}`);
+  await instance.press(["f"]);
+  await sleep(800);
+  await shot("hint_labels", "reading pane with the hint label on the link");
+  await instance.press(["a"]);
+  await sleep(1500);
+  hint_body = body_state(await instance.ask("state"));
+  check(app, kind, "hints: f then a clicks the link, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
+  await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
+  await sleep(600);
+
   // A message tab: the message opens in a new tab and the keys go to it.
   await show_in_pane("reading-plain");
   await instance.ask("open_message_tab");
@@ -913,6 +964,7 @@ async function run_message_scripts(instance) {
   check(app, kind, "a message tab opened", main_window_tabs(state).some((tab) => tab.type === "messageDisplay"), JSON.stringify(main_window_tabs(state).map((tab) => tab.type)));
   await shot("message_tab", "message in its own tab");
   await scroll_keys("message tab");
+  await find_checks("message tab");
   await instance.ask("reset_tabs");
   await sleep(1500);
 
@@ -925,6 +977,13 @@ async function run_message_scripts(instance) {
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
+  // The command line cannot open in a message window. `/` refuses with a notification, and the keys of the window stay as they were.
+  await instance.press(["/"]);
+  await sleep(1500);
+  await shot("message_window_slash", "message window after / (a notification, no command line)");
+  const before_refusal = body_state(await instance.ask("state")).scroll_y;
+  const after_refusal = body_state(await key_and_state(instance, ["j"], 1000)).scroll_y;
+  check(app, kind, "message window: / opens no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
   await instance.ask("close_message_windows");
   await sleep(1500);
   check(app, kind, "the app survived", instance.exited() === null);

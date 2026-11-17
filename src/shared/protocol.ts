@@ -23,6 +23,34 @@ export const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
  */
 export const BODY_SCRIPT_LIVE_ATTRIBUTE = "data-desertbird-keys";
 
+/** The storage key of the settings the user changed. The body script reads its scroll step from here. */
+export const SETTINGS_STORAGE_KEY = "desertbird_settings";
+
+/** The default of the `message_scroll_step_px` setting: one `j` or `k` in a message. */
+export const MESSAGE_SCROLL_STEP_PX = 40;
+
+/**
+ * A key of the message document whose command runs in the background (`/` opens the command line). The body script sends the leaf it matched. The background takes the window and the displayed messages from the sender, never from this message, and runs the command through the router and its one validator.
+ * Only a command that a message key binds is accepted.
+ */
+export interface BodyInvokeRequest {
+    type: "body.invoke";
+    command: string;
+    args: Record<string, JsonValue>;
+    count: number;
+}
+
+/** The background asks the body script of a tab to find text and highlight it. The pattern is literal text, never a regular expression. */
+export interface BodyFindRequest {
+    type: "body.find";
+    pattern: string;
+}
+
+/** `found` is false when the text is not in the message. */
+export interface BodyFindReply {
+    found: boolean;
+}
+
 /** The key matcher reads no setting: it walks the tree alone. The object stays so a setting can join without a new verb shape. */
 export type MatcherSettings = Record<string, never>;
 

@@ -6,10 +6,12 @@ import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
 import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
-import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
-
-/** One `j` or `k`. A fixed step: a setting comes with the config work. */
-export const LINE_STEP_PX = 40;
+import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
+import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, JsonValue } from "../shared/protocol.ts";
+import { create_finder } from "./body_find.ts";
+import type { FindWindow, Finder } from "./body_find.ts";
+import { create_hint_session } from "./body_hints.ts";
+import type { HintSession, HintWindow } from "./body_hints.ts";
 
 export interface BodyKeyEvent extends KeyEventLike {
     target: unknown;
@@ -17,31 +19,54 @@ export interface BodyKeyEvent extends KeyEventLike {
     stopPropagation(): void;
 }
 
-export interface BodyWindow {
+export interface BodyWindow extends FindWindow, HintWindow {
     addEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
     removeEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
     scrollBy(options: { top: number; behavior: "instant" }): void;
     scrollTo(options: { top: number; behavior: "instant" }): void;
-    innerHeight: number;
-    document: { documentElement: { scrollHeight: number; setAttribute(name: string, value: string): void; removeAttribute(name: string): void } };
+    document: HintWindow["document"] & { body: unknown; documentElement: { scrollHeight: number; setAttribute(name: string, value: string): void; removeAttribute(name: string): void } };
 }
 
 export interface BodyStorage {
-    get(key: string): Promise<Record<string, unknown>>;
+    get(keys: string[]): Promise<Record<string, unknown>>;
     onChanged: { addListener(listener: (changes: Record<string, { newValue?: unknown }>, area: string) => void): void };
 }
 
-type Scroller = (window: BodyWindow, count: number) => void;
+/** The ways to reach the background page: send a request, and answer the ones it sends. */
+export interface BodyRuntime {
+    sendMessage(message: BodyInvokeRequest): Promise<unknown>;
+    onMessage: { addListener(listener: (message: unknown) => Promise<BodyFindReply> | undefined): void };
+}
 
-// The fixed table of what a leaf may run. An id that is not here does nothing.
-const SCROLLS: Record<string, Scroller> = {
-    "message.scroll_down": (window, count) => window.scrollBy({ top: LINE_STEP_PX * count, behavior: "instant" }),
-    "message.scroll_up": (window, count) => window.scrollBy({ top: -LINE_STEP_PX * count, behavior: "instant" }),
-    "message.half_page_down": (window, count) => window.scrollBy({ top: (window.innerHeight / 2) * count, behavior: "instant" }),
-    "message.half_page_up": (window, count) => window.scrollBy({ top: -(window.innerHeight / 2) * count, behavior: "instant" }),
-    "message.top": (window) => window.scrollTo({ top: 0, behavior: "instant" }),
-    "message.bottom": (window) => window.scrollTo({ top: window.document.documentElement.scrollHeight, behavior: "instant" }),
+interface BodyContext {
+    window: BodyWindow;
+    step_px: number;
+    finder: Finder;
+    hints: HintSession;
+}
+
+type Action = (context: BodyContext, count: number) => void;
+
+// The fixed table of what a leaf of this document may run. An id that is not here does nothing.
+const ACTIONS: Record<string, Action> = {
+    "message.scroll_down": ({ window, step_px }, count) => window.scrollBy({ top: step_px * count, behavior: "instant" }),
+    "message.scroll_up": ({ window, step_px }, count) => window.scrollBy({ top: -step_px * count, behavior: "instant" }),
+    "message.half_page_down": ({ window }, count) => window.scrollBy({ top: (window.innerHeight / 2) * count, behavior: "instant" }),
+    "message.half_page_up": ({ window }, count) => window.scrollBy({ top: -(window.innerHeight / 2) * count, behavior: "instant" }),
+    "message.top": ({ window }) => window.scrollTo({ top: 0, behavior: "instant" }),
+    "message.bottom": ({ window }) => window.scrollTo({ top: window.document.documentElement.scrollHeight, behavior: "instant" }),
+    "message.find_next": ({ finder }) => finder.step(false),
+    "message.find_prev": ({ finder }) => finder.step(true),
+    "hint.pick": ({ hints }) => void hints.begin(),
 };
+
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
+
+/** The scroll step in the stored settings, or the default when it is absent or not a positive number. */
+function scroll_step_of(settings: unknown): number {
+    const step = (settings as { message_scroll_step_px?: unknown } | null | undefined)?.message_scroll_step_px;
+    return typeof step === "number" && Number.isFinite(step) && step > 0 ? step : MESSAGE_SCROLL_STEP_PX;
+}
 
 /** The keymap record in storage, read for the tree of this document. A record that is absent or of another shape gives null. */
 function message_tree_of(record: unknown): { version: number; root: unknown } | null {
@@ -50,16 +75,31 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
 }
 
 /** Starts the keys of one message document. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
-export async function start_body_script(window: BodyWindow, storage: BodyStorage): Promise<void> {
+export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
+    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window) };
 
-    function run_leaf(leaf: TreeLeaf, count: number | undefined): void {
-        for (const step of leaf.steps) if (step.runs_in === "message") SCROLLS[step.invocation.id]?.(window, count ?? step.invocation.count ?? 1);
+    function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
+        for (const step of leaf.steps) {
+            const count = typed_count ?? step.invocation.count ?? 1;
+            if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count);
+            // The background checks the command and its args again. A refusal there is shown as a notification.
+            else if (step.runs_in === "background") runtime.sendMessage({ type: "body.invoke", command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count }).catch((error: unknown) => console.error("desertbird message keys:", error));
+        }
+    }
+
+    // While the labels show, every key is for them. A key that is not a letter or a modifier cancels them.
+    function on_hint_key(event: BodyKeyEvent): void {
+        event.preventDefault();
+        event.stopPropagation();
+        if (MODIFIER_KEYS.has(event.key)) return;
+        context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
     }
 
     function on_keydown(event: BodyKeyEvent): void {
         if (!matcher) return;
+        if (context.hints.active()) return on_hint_key(event);
         if (is_typing_element(event.target as FocusNode | null)) return void matcher.reset();
         const token = event_to_token(event);
         if (token === null) return;
@@ -87,9 +127,16 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     }
 
     window.addEventListener("keydown", on_keydown, true);
-    storage.onChanged.addListener((changes, area) => {
-        const change = changes[KEYMAP_STORAGE_KEY];
-        if (area === "local" && change) install(change.newValue);
+    runtime.onMessage.addListener((message) => {
+        const request = message as Partial<BodyFindRequest> | null;
+        return request?.type === "body.find" && typeof request.pattern === "string" ? Promise.resolve({ found: context.finder.start(request.pattern) }) : undefined;
     });
-    install((await storage.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY]);
+    storage.onChanged.addListener((changes, area) => {
+        if (area !== "local") return;
+        if (changes[SETTINGS_STORAGE_KEY]) context.step_px = scroll_step_of(changes[SETTINGS_STORAGE_KEY].newValue);
+        if (changes[KEYMAP_STORAGE_KEY]) install(changes[KEYMAP_STORAGE_KEY].newValue);
+    });
+    const stored = await storage.get([KEYMAP_STORAGE_KEY, SETTINGS_STORAGE_KEY]);
+    context.step_px = scroll_step_of(stored[SETTINGS_STORAGE_KEY]);
+    install(stored[KEYMAP_STORAGE_KEY]);
 }

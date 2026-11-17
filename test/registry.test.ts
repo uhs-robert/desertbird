@@ -5,7 +5,7 @@ import { summary_problems } from "../vendor/desertfox/registry/summary.ts";
 import { DEFAULT_KEYMAP, GROUPS, MESSAGE_KEYMAP, registry } from "../src/background/commands/index.ts";
 
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
-const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[] }> = {
+const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[]; background_ids?: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move"] },
     compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new"] },
@@ -14,7 +14,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     snooze: { runs_in: "background", ids: ["msg.snooze"] },
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
-    reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom"] },
+    reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message"], background_ids: ["search.message"] },
     folders: { runs_in: "background", ids: ["folder.open", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
 };
 
@@ -32,14 +32,17 @@ for (const [name, row] of Object.entries(GROUP_TABLE)) {
         assert.deepEqual(Object.keys(GROUPS[name]!.commands).sort(), [...row.ids].sort());
         for (const id of row.ids) {
             const command = registry.get(id);
-            assert.equal(command?.runs_in, row.runs_in, id);
-            assert.equal(typeof command?.run, row.runs_in === "background" ? "function" : "undefined", id);
+            const side = row.background_ids?.includes(id) ? "background" : row.runs_in;
+            assert.equal(command?.runs_in, side, id);
+            assert.equal(typeof command?.run, side === "background" ? "function" : "undefined", id);
             assert.equal(typeof command?.bridge, "boolean", id);
         }
     });
 
     test(`group ${name}: every default key names a command of the group`, () => {
-        for (const [keys, binding] of Object.entries({ ...GROUPS[name]!.normal_keys, ...GROUPS[name]!.message_keys })) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
+        for (const [keys, binding] of Object.entries(GROUPS[name]!.normal_keys)) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
+        // A message key may bind a command of another group: `/` opens the command line.
+        for (const [keys, binding] of Object.entries(GROUPS[name]!.message_keys ?? {})) assert.ok(binding && !Array.isArray(binding) && registry.get(binding.id), keys);
     });
 }
 
@@ -164,6 +167,7 @@ test("tab.switch takes a typed value, so it has no default key and its validator
 test("the reading keys bind in the message keymap only, so j and k keep scrolling there and moving the list in the mail tab", () => {
     assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
     const ids = Object.fromEntries(Object.entries(MESSAGE_KEYMAP.normal ?? {}).map(([keys, binding]) => [keys, binding && !Array.isArray(binding) ? binding.id : ""]));
-    assert.deepEqual(ids, { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom" });
+    assert.deepEqual(ids, { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick" });
+    assert.deepEqual((MESSAGE_KEYMAP.normal?.["/"] as { args: unknown }).args, { text: "find " });
     assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");
 });
