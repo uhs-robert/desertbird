@@ -3,7 +3,7 @@
 import { create_registry } from "../../../vendor/desertfox/registry/define.ts";
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
-import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
+import type { CompileResult, ResolveCommand } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
 import { clipboard } from "./clipboard.ts";
 import { compose } from "./compose.ts";
@@ -24,9 +24,11 @@ for (const group of Object.values(GROUPS)) for (const [id, input] of Object.entr
 
 export const DEFAULT_KEYMAP: KeymapConfig = { normal: Object.assign({}, ...Object.values(GROUPS).map((group) => group.normal_keys)) };
 
+export const resolve_command: ResolveCommand = (command_id) => {
+    const command = registry.get(command_id);
+    return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore", ...(command.params && { params: command.params }) };
+};
+
 export function compile_default_keymap(): CompileResult {
-    return compile_keymap(DEFAULT_KEYMAP, {}, (command_id) => {
-        const command = registry.get(command_id);
-        return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore", ...(command.params && { params: command.params }) };
-    });
+    return compile_keymap(DEFAULT_KEYMAP, {}, resolve_command);
 }

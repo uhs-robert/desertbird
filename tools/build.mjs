@@ -62,6 +62,11 @@ for (const parent of PARENTS) {
 }
 writeFileSync(join(out_dir, "meta", "background.json"), JSON.stringify(background.metafile));
 
+// The options page is an extension page: it bundles the settings code and the command table, and stays out of the parent bundle.
+mkdirSync(join(out_dir, "options"), { recursive: true });
+await build({ ...shared_options, entryPoints: ["src/options/options.ts"], outfile: join(out_dir, "options", "options.js") });
+for (const name of ["options.html", "options.css"]) copyFileSync(join(root, "src", "options", name), join(out_dir, "options", name));
+
 copyFileSync(join(root, "src", "manifest.json"), join(out_dir, "manifest.json"));
 
 for (const [name, bytes] of parent_sizes) {
@@ -71,5 +76,5 @@ for (const [name, bytes] of parent_sizes) {
     }
 }
 
-execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment"], { cwd: out_dir });
+execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "options"], { cwd: out_dir });
 console.log(`build: ${out_dir} (${parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`).join(", ")})`);

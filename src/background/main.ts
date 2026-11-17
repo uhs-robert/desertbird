@@ -2,7 +2,10 @@
 
 import { COMPILED_KEYMAP_VERSION } from "../shared/protocol.ts";
 import type { KeymapTree, KeysApi } from "../shared/protocol.ts";
-import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "./commands/index.ts";
+import { registry } from "./commands/index.ts";
+import { compile_effective_keymap, effective_keymap } from "./config/keymap.ts";
+import { USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
+import type { Config } from "./config/store.ts";
 import { notify_refusal } from "./notify.ts";
 import { create_router } from "./router.ts";
 import type { RouterApi } from "./router.ts";
@@ -14,7 +17,7 @@ const KEYMAP_RECORD_VERSION = 2;
 
 interface KeymapRecord {
     record_version: number;
-    /** The hash of `DEFAULT_KEYMAP` the tree was compiled from. A new add-on version with other default bindings rebuilds the tree. */
+    /** The hash of the effective keymap (defaults plus user bindings) the tree was compiled from. Other default bindings or an edit of the user bindings rebuild the tree. */
     source_hash: string;
     tree: KeymapTree;
 }
@@ -25,7 +28,7 @@ interface StorageChange {
 
 interface Messenger extends Omit<RouterApi, "keys"> {
     storage: {
-        local: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
+        local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
     };
     // The Experiment namespace is absent when it fails to load.
@@ -44,12 +47,15 @@ function is_current_record(value: unknown, source_hash: string): value is Keymap
     return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION;
 }
 
-function compile_record(source_hash: string): KeymapRecord {
-    const { compiled, warnings } = compile_default_keymap();
+function compile_record(source_hash: string, config: Config): KeymapRecord {
+    const { compiled, warnings } = compile_effective_keymap(config.user_keymap, config.setting_overrides);
     for (const warning of warnings) console.warn(`desertbird keymap: ${warning}`);
     const root: KeymapTree["root"] = JSON.parse(JSON.stringify(compiled.modes.normal ?? { kind: "branch", children: {} }));
     return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root } };
 }
+
+// Registered before the listener below, so the store has dropped its copy by the time an install reads it.
+const config_store = create_config_store(messenger);
 
 // The memory copy only mirrors storage: it refills from storage and drops on `storage.onChanged`.
 let cached_record: KeymapRecord | undefined;
@@ -58,10 +64,11 @@ let installed_tree_json: string | undefined;
 
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
-    const source_hash = await hash_of(DEFAULT_KEYMAP);
+    const config = await config_store.read();
+    const source_hash = await hash_of(effective_keymap(config.user_keymap));
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
-    const record = compile_record(source_hash);
+    const record = compile_record(source_hash, config);
     await messenger.storage.local.set({ [KEYMAP_STORAGE_KEY]: record });
     return (cached_record = record);
 }
@@ -99,7 +106,7 @@ messenger.keys?.onInvocation.addListener((invocation) => {
 });
 
 messenger.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local" || !(KEYMAP_STORAGE_KEY in changes)) return;
+    if (area !== "local" || !(KEYMAP_STORAGE_KEY in changes || USER_KEYMAP_KEY in changes)) return;
     cached_record = undefined;
     queue_install(true);
 });
