@@ -833,8 +833,12 @@ async function run_message_scripts(instance) {
   check(app, kind, "a message shows in the pane", pane_message === "reading-plain@fixture.invalid", `selected ${pane_message}`);
   await shot("pane_plain", "reading pane with the plain text message, body focused");
   await scroll_keys("pane plain text");
-  state = await key_and_state(instance, ["r"], 3000);
-  check(app, kind, "pane: r opens no compose window, the body script swallows Thunderbird's single-key shortcuts", !state.windows.some((window) => window.type === "messageCompose") && first_selected(state) === pane_message, `windows ${state.windows.map((window) => window.type)}`);
+  // Thunderbird's own single-key shortcuts must not fire while the body script is live. `f` selects the next message and `s` stars the message, and the helper reports both. A bare `r` would prove nothing: the message is already read.
+  const starred_before = state.flags[pane_message]?.flagged;
+  state = await key_and_state(instance, ["f"], 1500);
+  check(app, kind, "pane: f moves no selection, the body script swallows Thunderbird's single-key shortcuts", first_selected(state) === pane_message, `selected ${first_selected(state)}`);
+  state = await key_and_state(instance, ["s"], 1500);
+  check(app, kind, "pane: s stars nothing", state.flags[pane_message]?.flagged === starred_before, `flagged ${starred_before} then ${state.flags[pane_message]?.flagged}`);
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await sleep(800);
   state = await key_and_state(instance, ["j"]);

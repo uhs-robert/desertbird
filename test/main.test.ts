@@ -89,3 +89,15 @@ test("the first start stores the message keymap in the same record, and an insta
     assert.match(JSON.stringify(record.message_tree.root), /message\.scroll_down/);
     assert.doesNotMatch(JSON.stringify(installs), /message\.scroll_down/);
 });
+
+test("a stored record of version 2, with no message tree, is rebuilt with one", async () => {
+    // A record an earlier add-on version wrote. Its tree is valid for the mail tab, so only the version and the missing `message_tree` can trigger the rebuild.
+    const old_tree = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
+    const { stored, installs } = stub_messenger({ desertbird_compiled_keymap: { record_version: 2, source_hash: "an older default keymap", tree: old_tree } });
+    await start_background();
+    await settle();
+    const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
+    assert.equal(record.record_version, 3);
+    assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
+    assert.equal(installs.length, 1);
+});
