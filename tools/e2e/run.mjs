@@ -1001,6 +1001,16 @@ async function run_cmdline(instance, { app, kind, shot }) {
   check(app, kind, "m t then Work tags the selected message", target !== undefined && (state.flags[target]?.tags ?? []).includes("$label2"), `${target} tags ${JSON.stringify(state.flags[target]?.tags)}`);
   await instance.press([":"]);
   await sleep(1200);
+  await instance.press(["fil"]);
+  await sleep(600);
+  await shot("cmdline_completions", "the line with fil typed: the matching rows above it, the box as wide as the window");
+  await instance.press(["-k", "Tab"]);
+  await sleep(600);
+  await shot("cmdline_after_tab", "the line after Tab: the box keeps its size and position");
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  await instance.press([":"]);
+  await sleep(1200);
   await instance.press(["bogus"]);
   await instance.press(["-k", "Return"]);
   await sleep(800);
