@@ -109,7 +109,7 @@ test("the new-mail listeners register once at start", async () => {
     const { new_mail_listeners, storage_listener_count } = stub_messenger();
     const storage_before = storage_listener_count();
     await start_background();
-    // onNewMailReceived, onClicked and onClosed once each. The storage.onChanged of the setting is one of several storage listeners, so only its presence is counted.
-    assert.equal(new_mail_listeners.length, 3);
+    // onNewMailReceived, onClicked and onClosed once each, and a second onClicked for the follow-up notices. The storage.onChanged of the setting is one of several storage listeners, so only its presence is counted.
+    assert.equal(new_mail_listeners.length, 4);
     assert.ok(storage_listener_count() - storage_before >= 3);
 });
