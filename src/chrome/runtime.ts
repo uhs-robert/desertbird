@@ -32,14 +32,12 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     open_windows(): Window[];
     /** The thread list of the window's front tab, or null when that tab is not the mail tab. Keys then pass through. */
     list_port_of(window: Window): ListPort | null;
-    /** Whether the key is meant for a text field. The event target is not enough: see `focus.ts`. */
+    /** Whether the key is meant for someone else: a text field, or a message body that runs the body script. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
     /** Whether a menu or panel is open. Keys then belong to it, its access keys among them. */
     menu_is_open(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
-    /** Whether the message body under the focus runs the body script. That script handles the reading-pane keys, so they are no longer swallowed here. */
-    body_script_is_live(window: Window): boolean;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
@@ -104,7 +102,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
-            if (port && is_plain_printable(token) && !deps.body_script_is_live(window)) {
+            if (port && is_plain_printable(token)) {
                 event.preventDefault();
                 event.stopPropagation();
             }
