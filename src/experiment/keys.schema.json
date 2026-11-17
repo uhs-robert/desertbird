@@ -148,14 +148,22 @@
       {
         "name": "onInvocation",
         "type": "function",
-        "description": "A key sequence finished on a command that runs in the background. The payload is output only, so it takes no argument check.",
+        "description": "A key sequence finished on a command that runs in the background, or the half-typed sequence changed. The payload is output only, so it takes no argument check.",
         "parameters": [
           {
             "name": "invocation",
             "type": "object",
             "properties": {
               "command": {
-                "type": "string"
+                "type": "string",
+                "description": "A command id, or \"keys.pending\" for a change of the half-typed sequence. That event carries `keys` and `windowId` only."
+              },
+              "keys": {
+                "type": "array",
+                "description": "The typed key tokens of a pending sequence, counts left out. Empty when the sequence ended.",
+                "items": {
+                  "type": "string"
+                }
               },
               "args": {
                 "type": "object",

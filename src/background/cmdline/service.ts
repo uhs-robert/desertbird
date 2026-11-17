@@ -77,7 +77,7 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
 
     async function close(window_id: number): Promise<void> {
         sessions.delete(window_id);
-        await deps.overlay?.unmount({ windowId: window_id });
+        await deps.overlay?.unmount({ windowId: window_id, surface: "cmdline" });
     }
 
     async function run(window_id: number, session: CmdlineSession, text: string): Promise<CmdlineRunResult> {

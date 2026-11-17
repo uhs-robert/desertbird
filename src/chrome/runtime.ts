@@ -1,6 +1,6 @@
 // Key handling in the main mail window. It holds no Thunderbird global: the parent hands in a `RuntimeDeps`, so node tests drive every path with fakes.
 
-import type { JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { JsonValue, KeysEvent, KeysInvocation } from "../shared/protocol.ts";
 import type { TreeLeaf } from "../../vendor/desertfox/prefix_tree.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
@@ -45,7 +45,7 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     window_id_of(window: Window): number;
     /** Milliseconds, for the hold timeout. */
     now(): number;
-    emit(invocation: KeysInvocation): void;
+    emit(event: KeysEvent): void;
 }
 
 export interface Runtime {
@@ -64,6 +64,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let sequence_window: Window | null = null;
     let hold_commands = new Set<string>();
     let hold_until = 0;
+    // Tells the background the keys typed so far, so it can list the keys that may follow. No keys means the sequence ended. A tab change or a window blur is not reported here: the background watches those. The background drops repeats.
+    const pend = (window: Window, keys: string[] = []) => deps.emit({ command: "keys.pending", keys, windowId: deps.window_id_of(window) });
 
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
     let visual_anchor = -1;
@@ -123,6 +125,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
             visual_anchor = -1;
+            pend(window);
             if (port && is_plain_printable(token)) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -133,6 +136,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // Escape belongs to visual mode only while it is active, so the command line overlay and Thunderbird keep it otherwise.
         if (visual_anchor >= 0 && token === "<Escape>") {
             matcher.reset();
+            pend(window);
             end_visual(port);
             event.preventDefault();
             event.stopPropagation();
@@ -141,6 +145,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (sequence_window !== window) matcher.reset();
         sequence_window = window;
         const result = matcher.feed(NORMAL_MODE, token);
+        pend(window, result.kind_ === "pending" ? result.typed_ : []);
         if (result.kind_ === "no_match" && !is_plain_printable(token)) return;
         // Thunderbird binds single keys such as `j` and `a`, so the key stops here whether or not it matched.
         event.preventDefault();

@@ -36,7 +36,7 @@ function setup() {
             window.escape_listeners.add(listener);
             return () => void window.escape_listeners.delete(listener);
         },
-        emit_closed: (window_id) => void log.push(`closed ${window_id}`),
+        emit_closed: (window_id, surface) => void log.push(surface === "cmdline" ? `closed ${window_id}` : `closed ${surface} ${window_id}`),
     });
     return { windows, log, host };
 }
@@ -45,7 +45,7 @@ test("mount shows the surface once and unmount removes it and returns the focus 
     const { windows, log, host } = setup();
     host.mount({ windowId: 1, surface: "cmdline" });
     assert.deepEqual(windows.get(1)!.boxes, ["cmdline@1"]);
-    host.unmount({ windowId: 1 });
+    host.unmount({ windowId: 1, surface: "cmdline" });
     assert.deepEqual(log, ["create cmdline@1", "remove cmdline@1", "focus list of 1"]);
     assert.equal(windows.get(1)!.tab_listeners.size + windows.get(1)!.unload_listeners.size, 0);
 });
@@ -62,10 +62,10 @@ test("mount twice replaces the first overlay: one box and one set of listeners r
 
 test("unmount with nothing mounted, or twice, does nothing", () => {
     const { log, host } = setup();
-    host.unmount({ windowId: 1 });
+    host.unmount({ windowId: 1, surface: "cmdline" });
     host.mount({ windowId: 1, surface: "cmdline" });
-    host.unmount({ windowId: 1 });
-    host.unmount({ windowId: 1 });
+    host.unmount({ windowId: 1, surface: "cmdline" });
+    host.unmount({ windowId: 1, surface: "cmdline" });
     assert.deepEqual(log, ["create cmdline@1", "remove cmdline@1", "focus list of 1"]);
 });
 
@@ -88,7 +88,7 @@ test("each window keeps its own overlay", () => {
     const { windows, host } = setup();
     host.mount({ windowId: 1, surface: "cmdline" });
     host.mount({ windowId: 2, surface: "cmdline" });
-    host.unmount({ windowId: 1 });
+    host.unmount({ windowId: 1, surface: "cmdline" });
     assert.deepEqual([windows.get(1)!.boxes, windows.get(2)!.boxes], [[], ["cmdline@2"]]);
 });
 
@@ -116,4 +116,56 @@ test("Escape removes an overlay whose page never answered, tells the background 
     for (const listener of [...windows.get(1)!.escape_listeners]) listener();
     assert.deepEqual(log, ["create cmdline@1", "remove cmdline@1", "focus list of 1", "closed 1"]);
     assert.equal(windows.get(1)!.escape_listeners.size, 0);
+});
+
+test("the command line and the hud mount together in one window and leave one at a time", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "hud" });
+    host.mount({ windowId: 1, surface: "cmdline" });
+    assert.deepEqual(windows.get(1)!.boxes, ["hud@1", "cmdline@1"]);
+    host.unmount({ windowId: 1, surface: "cmdline" });
+    assert.deepEqual(windows.get(1)!.boxes, ["hud@1"]);
+    assert.deepEqual(log, ["create hud@1", "create cmdline@1", "remove cmdline@1", "focus list of 1"]);
+});
+
+test("removing the hud returns the focus to nothing: it never held the keyboard", () => {
+    const { log, host } = setup();
+    host.mount({ windowId: 1, surface: "hud" });
+    host.unmount({ windowId: 1, surface: "hud" });
+    assert.deepEqual(log, ["create hud@1", "remove hud@1"]);
+});
+
+test("a second hud mount replaces the first and a hud unmount leaves the command line", () => {
+    const { windows, host } = setup();
+    host.mount({ windowId: 1, surface: "cmdline" });
+    host.mount({ windowId: 1, surface: "hud" });
+    host.mount({ windowId: 1, surface: "hud" });
+    assert.deepEqual(windows.get(1)!.boxes, ["cmdline@1", "hud@1"]);
+    host.unmount({ windowId: 1, surface: "hud" });
+    assert.deepEqual(windows.get(1)!.boxes, ["cmdline@1"]);
+});
+
+test("a tab change or Escape closes the command line and leaves the hud", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "hud" });
+    host.mount({ windowId: 1, surface: "cmdline" });
+    for (const listener of windows.get(1)!.escape_listeners) listener();
+    assert.deepEqual(windows.get(1)!.boxes, ["hud@1"]);
+    assert.deepEqual(log.slice(-2), ["focus list of 1", "closed 1"]);
+    assert.equal(windows.get(1)!.tab_listeners.size, 0);
+});
+
+test("a closing window removes both and reports each with its surface", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "hud" });
+    host.mount({ windowId: 1, surface: "cmdline" });
+    for (const listener of [...windows.get(1)!.unload_listeners]) listener();
+    assert.deepEqual(windows.get(1)!.boxes, []);
+    assert.ok(log.includes("closed hud 1") && log.includes("closed 1"));
+    assert.ok(!log.some((line) => line.startsWith("focus")));
+});
+
+test("unmount names a surface from the fixed list", () => {
+    const { host } = setup();
+    assert.throws(() => host.unmount({ windowId: 1, surface: "elsewhere" as never }), /unknown surface/);
 });

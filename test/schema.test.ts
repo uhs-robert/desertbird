@@ -103,8 +103,9 @@ test("overlay.mount takes an integer window id and a surface from a fixed list",
     assert.deepEqual(Object.keys(mount?.properties ?? {}).sort(), ["surface", "windowId"]);
 });
 
-test("overlay.unmount takes a window id and nothing else", () => {
+test("overlay.unmount takes a window id and a surface from the fixed list, and nothing else", () => {
     const unmount = namespace_named("overlay").functions?.find((fn) => fn.name === "unmount")?.parameters?.[0];
-    assert.deepEqual(Object.keys(unmount?.properties ?? {}), ["windowId"]);
+    assert.deepEqual(Object.keys(unmount?.properties ?? {}).sort(), ["surface", "windowId"]);
     assert.equal(unmount?.properties?.["windowId"]?.type, "integer");
+    assert.deepEqual(unmount?.properties?.["surface"]?.enum, [...OVERLAY_SURFACES]);
 });

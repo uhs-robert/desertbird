@@ -58,7 +58,7 @@ export function create_router(registry: Registry, api: RouterApi) {
                 await route(invocation);
             } catch (error) {
                 const message = error instanceof RuntimeRefusal ? error.message : `${invocation.command} failed: ${error instanceof Error ? error.message : String(error)}`;
-                await notify_refusal(api, message);
+                await notify_refusal(api, message, invocation.windowId);
             }
         },
     };

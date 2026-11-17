@@ -1,4 +1,4 @@
-// Builds dist/: background.js, experiment/{keys,overlay}.{schema.json,js}, overlay/ (the command line page), manifest.json and an unsigned desertbird.xpi.
+// Builds dist/: background.js, experiment/{keys,overlay}.{schema.json,js}, overlay/ (the command line and hud pages), help/, manifest.json and an unsigned desertbird.xpi.
 //   node tools/build.mjs [--out <dir>]
 // The esbuild metafiles go to <out>/meta/ and stay out of the xpi. test/build.test.ts reads them.
 
@@ -22,8 +22,8 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
     process.exit(1);
 }
 
-// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard was 18004 plus 372 rounded up to 18400. The thread verbs of the view API took it from 18358 on main to 20501 bytes, so it was 18400 plus 2143 rounded up to 20600. Visual mode and the row flags took the build from 20501 on main to 21451 (950 bytes). The guard for a stale range (the end row and view the mode last set, and the collapse after a command) made it 21785. The message keys at both ends of the range made it 21996 (1495 bytes over main), so it is 20600 plus 1495 rounded up to the next 100. AGENTS.md records the same number.
-const PARENT_MAX_BYTES = 22100;
+// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard was 18004 plus 372 rounded up to 18400. The thread verbs of the view API took it from 18358 on main to 20501 bytes, so it was 18400 plus 2143 rounded up to 20600. Visual mode and the row flags took the build from 20501 on main to 21451 (950 bytes). The guard for a stale range (the end row and view the mode last set, and the collapse after a command) made it 21785. The message keys at both ends of the range made it 21996 (1495 bytes over main), so it was 20600 plus 1495 rounded up to 22100. The which-key report of the typed prefix added 305 bytes, so it is 22100 plus 305 rounded up to the next 100. AGENTS.md records the same number.
+const PARENT_MAX_BYTES = 22500;
 
 // The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard is 15879 rounded up to 15900. AGENTS.md records the same number.
 const CONTENT_MAX_BYTES = 15900;
@@ -83,6 +83,15 @@ for (const name of ["options.html", "options.css"]) copyFileSync(join(root, "src
 await build({ ...shared_options, entryPoints: ["src/overlay/cmdline.ts"], outfile: join(out_dir, "overlay", "cmdline.js") });
 for (const file of ["cmdline.html", "cmdline.css"]) copyFileSync(join(root, "src", "overlay", file), join(out_dir, "overlay", file));
 
+// The hud page draws the which-key panel, the toasts and the mode badge. The overlay parent loads it into the window.
+await build({ ...shared_options, entryPoints: ["src/overlay/hud.ts"], outfile: join(out_dir, "overlay", "hud.js") });
+for (const file of ["hud.html", "hud.css"]) copyFileSync(join(root, "src", "overlay", file), join(out_dir, "overlay", file));
+
+// The help page is generated at run time from the command registry, so it bundles the registry as the options page does.
+mkdirSync(join(out_dir, "help"), { recursive: true });
+await build({ ...shared_options, entryPoints: ["src/help/help.ts"], outfile: join(out_dir, "help", "help.js") });
+for (const file of ["help.html", "help.css"]) copyFileSync(join(root, "src", "help", file), join(out_dir, "help", file));
+
 copyFileSync(join(root, "src", "manifest.json"), join(out_dir, "manifest.json"));
 
 for (const [name, bytes] of parent_sizes) {
@@ -97,5 +106,5 @@ if (message_display_bytes > CONTENT_MAX_BYTES) {
     process.exit(1);
 }
 
-execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay"], { cwd: out_dir });
+execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help"], { cwd: out_dir });
 console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`].join(", ")})`);

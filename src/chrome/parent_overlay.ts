@@ -1,7 +1,7 @@
 // The parent script of the `overlay` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `overlay`: `getAPI(context)` returns `get_overlay_api(context)` and `onShutdown` calls `shutdown()`.
 // The overlay is a remote `browser` element in the window document, not an iframe: see "Overlay mount" in docs/thunderbird-behavior.md.
 
-import { OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+import { HUD_BOX_ID, HUD_BROWSER_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
 import { create_overlay_host } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
@@ -14,11 +14,27 @@ declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
 
 const XHTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
-// The fixed table from a surface name to its page in the extension. A caller never supplies a path.
-const SURFACE_PAGES: Record<OverlaySurface, string> = { cmdline: "overlay/cmdline.html" };
+interface SurfaceSpec {
+    page: string;
+    box_id: string;
+    browser_id: string;
+    /** The style of the box that holds the browser, pinned to the bottom of the window. */
+    box_style: string;
+    /** The most the browser is told to grow to, fitting its content. Zero tells it nothing, and the browser keeps the size of its box. */
+    max_width: number;
+    max_height: number;
+    /** Whether the browser takes the keyboard on mount. */
+    takes_keyboard: boolean;
+}
 
-// Pinned to the bottom of the window. The page draws the completion list above its input line inside this box.
-const BOX_STYLE = "position: fixed; left: 0; right: 0; bottom: 0; height: 280px; z-index: 100000; background: Canvas;";
+const PINNED = "position: fixed; left: 0; right: 0; bottom: 0;";
+
+// The fixed table from a surface name to its page in the extension. A caller never supplies a path.
+// The command line draws the completion list above its input line inside its box. The hud sits one z-index step below it, transparent and deaf to the mouse, so a click on the list under it still lands.
+const SURFACES: Record<OverlaySurface, SurfaceSpec> = {
+    cmdline: { page: "overlay/cmdline.html", box_id: OVERLAY_BOX_ID, browser_id: OVERLAY_BROWSER_ID, box_style: `${PINNED} height: 280px; z-index: 100000; background: Canvas;`, max_width: 800, max_height: 280, takes_keyboard: true },
+    hud: { page: "overlay/hud.html", box_id: HUD_BOX_ID, browser_id: HUD_BROWSER_ID, box_style: `${PINNED} height: 320px; z-index: 99999; pointer-events: none;`, max_width: 0, max_height: 0, takes_keyboard: false },
+};
 
 const closed_listeners = new Set<(closed: OverlayClosed) => void>();
 let host: OverlayHost | null = null;
@@ -52,18 +68,20 @@ interface OverlayExtension {
 
 // An extension page needs the browser attributes of an extension view, then a load through the extension's own principal. The load waits for the frame loader, which a remote browser creates after it joins the document.
 function create_overlay_element(window: MainWindow, extension: OverlayExtension, surface: OverlaySurface, window_id: number): () => void {
+    const spec = SURFACES[surface];
     const document = window.document as unknown as OverlayDocument;
     const box = document.createElementNS(XHTML_NAMESPACE, "div");
-    box.id = OVERLAY_BOX_ID;
-    box.style.cssText = BOX_STYLE;
+    box.id = spec.box_id;
+    box.style.cssText = spec.box_style;
     const browser = document.createXULElement("browser");
-    browser.id = OVERLAY_BROWSER_ID;
+    browser.id = spec.browser_id;
     browser.setAttribute("type", "content");
     browser.setAttribute("disableglobalhistory", "true");
     browser.setAttribute("messagemanagergroup", "webext-browsers");
     browser.setAttribute("webextension-view-type", "popup");
     browser.setAttribute("maychangeremoteness", "true");
     browser.toggleAttribute("nodefaultsrc", true);
+    if (!spec.takes_keyboard) browser.setAttribute("transparent", "true");
     browser.setAttribute("initialBrowsingContextGroupId", String(extension.policy.browsingContextGroupId));
     if (extension.remote) {
         browser.toggleAttribute("remote", true);
@@ -76,14 +94,14 @@ function create_overlay_element(window: MainWindow, extension: OverlayExtension,
         const { ExtensionParent } = ChromeUtils.importESModule("resource://gre/modules/ExtensionParent.sys.mjs");
         ExtensionParent.apiManager.emit("extension-browser-inserted", browser);
         browser.messageManager.loadFrameScript("chrome://extensions/content/ext-browser-content.js", false, true);
-        browser.messageManager.sendAsyncMessage("Extension:InitBrowser", { allowScriptsToClose: true, blockParser: false, fixedWidth: false, maxWidth: 800, maxHeight: 280, stylesheets: [] });
-        browser.fixupAndLoadURIString(extension.baseURI.resolve(`${SURFACE_PAGES[surface]}?window=${window_id}`), { triggeringPrincipal: extension.principal });
-        browser.focus();
+        browser.messageManager.sendAsyncMessage("Extension:InitBrowser", { allowScriptsToClose: true, blockParser: false, fixedWidth: false, maxWidth: spec.max_width, maxHeight: spec.max_height, stylesheets: [] });
+        browser.fixupAndLoadURIString(extension.baseURI.resolve(`${spec.page}?window=${window_id}`), { triggeringPrincipal: extension.principal });
+        if (spec.takes_keyboard) browser.focus();
     });
     box.appendChild(browser);
     document.documentElement.appendChild(box);
     // The focus moves now, not after the page loads: a key typed while the page loads goes to the overlay and not to the thread list.
-    browser.focus();
+    if (spec.takes_keyboard) browser.focus();
     return () => box.remove();
 }
 
@@ -111,8 +129,8 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
             window.addEventListener("keydown", handler, true);
             return () => window.removeEventListener("keydown", handler, true);
         },
-        emit_closed: (window_id) => {
-            for (const listener of closed_listeners) listener({ windowId: window_id });
+        emit_closed: (window_id, surface) => {
+            for (const listener of closed_listeners) listener({ windowId: window_id, surface });
         },
     });
     return host;

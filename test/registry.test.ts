@@ -20,10 +20,10 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     attachments: { runs_in: "background", ids: ["msg.save_attachments"] },
     quick_reply: { runs_in: "background", ids: ["msg.reply_with"] },
     new_mail: { runs_in: "background", ids: ["notify.toggle"] },
-    help: { runs_in: "background", ids: ["help.open"] },
     followup: { runs_in: "background", ids: ["msg.remind", "msg.remind_cancel"] },
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"] },
     step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment"] },
+    help: { runs_in: "background", ids: ["help.open"] },
 };
 
 test("every group file has a table row and each row has a group", () => {

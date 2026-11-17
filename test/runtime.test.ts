@@ -7,7 +7,7 @@ import { mark_unrepeatable } from "../src/background/config/keymap.ts";
 import { create_list_port } from "../src/chrome/view.ts";
 import type { About3PaneLike, ListPort } from "../src/chrome/view.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
-import type { KeysInvocation } from "../src/shared/protocol.ts";
+import type { KeysInvocation, KeysPending } from "../src/shared/protocol.ts";
 import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 
 class FakeWindow implements KeyTarget {
@@ -116,6 +116,8 @@ const tree = () => ({
 function setup(list_port_of?: (window: FakeWindow) => ListPort) {
     const windows = [new FakeWindow()];
     const emitted: KeysInvocation[] = [];
+    // The `keys.pending` events, kept apart so a test of a command reads only the commands.
+    const pending: KeysPending[] = [];
     let time = 0;
     let window_listener: WindowListener<FakeWindow> | null = null;
     let registers = 0;
@@ -141,9 +143,9 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         },
         window_id_of: () => 7,
         now: () => time,
-        emit: (invocation) => void emitted.push(invocation),
+        emit: (event) => void ("keys" in event ? pending.push(event) : emitted.push(event)),
     };
-    return { advance: (ms: number) => void (time += ms), windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
+    return { advance: (ms: number) => void (time += ms), windows, emitted, pending, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
 }
 
 test("a motion key runs in the chrome and is cancelled", () => {
@@ -573,7 +575,7 @@ test("the parent resets on a blur only when the window lost focus, not when focu
     const keys_parent = await import("../src/chrome/parent_keys.ts");
     const keys = keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
     const emitted: KeysInvocation[] = [];
-    (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void emitted.push(invocation));
+    (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void ("keys" in invocation || emitted.push(invocation)));
     await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
     press(window, "3");
     window.blur(false);
@@ -930,4 +932,48 @@ test("visual mode: a message removed inside an upward range drops the mode", () 
     press(window, "k");
     assert.equal(window.range, null);
     assert.equal(window.selected, 5);
+});
+
+const pending_keys = (pending: KeysPending[]) => pending.map((event) => event.keys.join(""));
+
+test("a prefix key reports the typed keys, and finishing the sequence reports the end", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "d");
+    assert.deepEqual(pending, [{ command: "keys.pending", keys: ["d"], windowId: 7 }]);
+    press(windows[0]!, "d");
+    assert.deepEqual(pending_keys(pending), ["d", ""]);
+});
+
+test("keys that start no sequence report no pending keys, and a count alone reports none either", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    press(windows[0]!, "3");
+    assert.deepEqual(pending_keys(pending), ["", ""]);
+});
+
+test("a stray key cancels the sequence and reports the end once", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "g");
+    press(windows[0]!, "z");
+    press(windows[0]!, "z");
+    assert.deepEqual(pending_keys(pending), ["g", "", ""]);
+});
+
+test("a count before a prefix key is left out of the typed keys", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "3");
+    press(windows[0]!, "g");
+    assert.deepEqual(pending_keys(pending), ["", "g"]);
+});
+
+test("a key that goes to a text field ends the sequence", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "d");
+    press(windows[0]!, "d", { target: { localName: "input" } });
+    assert.deepEqual(pending_keys(pending), ["d", ""]);
 });

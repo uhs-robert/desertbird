@@ -71,8 +71,17 @@ export interface KeysInvocation {
     messageIds: number[];
 }
 
-/** The pages the overlay can show. The parent maps each name to a page of the extension, so a caller never names a path or an address. */
-export const OVERLAY_SURFACES = ["cmdline"] as const;
+/** The other thing `keys.onInvocation` carries: the keys typed so far in a half-typed sequence, counts left out. No keys means no sequence is pending. It rides the invocation event to keep the key runtime small. */
+export interface KeysPending {
+    command: "keys.pending";
+    keys: string[];
+    windowId: number;
+}
+
+export type KeysEvent = KeysInvocation | KeysPending;
+
+/** The pages the overlay can show. The parent maps each name to a page of the extension, so a caller never names a path or an address. `cmdline` takes the keyboard. `hud` (the which-key panel, the toasts and the mode badge) never does and lets clicks through. */
+export const OVERLAY_SURFACES = ["cmdline", "hud"] as const;
 export type OverlaySurface = (typeof OVERLAY_SURFACES)[number];
 
 export interface OverlayMountArgs {
@@ -82,11 +91,13 @@ export interface OverlayMountArgs {
 
 export interface OverlayUnmountArgs {
     windowId: number;
+    surface: OverlaySurface;
 }
 
-/** Payload of the `overlay.onClosed` event: the overlay left a window without an `unmount` call, because the front tab changed or the window closed. */
+/** Payload of the `overlay.onClosed` event: a surface left a window without an `unmount` call, because the front tab changed or the window closed. */
 export interface OverlayClosed {
     windowId: number;
+    surface: OverlaySurface;
 }
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
@@ -98,7 +109,7 @@ export const EXPERIMENT_VERBS = {
 /** Call and event shapes as the background sees them on `browser.keys`. */
 export interface KeysApi {
     install(args: KeysInstallArgs): Promise<void>;
-    onInvocation: { addListener(listener: (invocation: KeysInvocation) => void): void; removeListener(listener: (invocation: KeysInvocation) => void): void };
+    onInvocation: { addListener(listener: (event: KeysEvent) => void): void; removeListener(listener: (event: KeysEvent) => void): void };
     viewRows(args: KeysViewRowsArgs): Promise<KeysViewRowsResult>;
     viewThread(args: KeysViewThreadArgs): Promise<void>;
     viewAllThreads(args: KeysViewAllThreadsArgs): Promise<void>;
@@ -171,3 +182,32 @@ export type CmdlineHello = { open: true; text: string } | { open: false };
 
 /** `ok` is false when the line is not a command, with the reason in `message`. The line stays open then. A usage line from `-h` comes back the same way. */
 export type CmdlineRunResult = { ok: true } | { ok: false; message: string };
+
+export type HudRequest = { type: "hud.state"; windowId: number };
+
+/** The which-key panel as the page draws it: the typed keys as a title and one row per key that can follow. */
+export interface WhichKeyPanel {
+    title: string;
+    rows: { key: string; label: string; is_group: boolean }[];
+    border: "square" | "round" | "chamfer";
+}
+
+export interface ToastView {
+    id: number;
+    text: string;
+    is_error: boolean;
+}
+
+/** Everything the hud page draws. The page keeps no state: it asks again each time the background sends `hud.changed`. */
+export interface HudState {
+    which_key: WhichKeyPanel | null;
+    toasts: ToastView[];
+    /** The mode name to show, or null for no badge. */
+    badge: string | null;
+}
+
+/** Sent by the background to every extension page when the state of a window's hud changed. */
+export interface HudChanged {
+    type: "hud.changed";
+    windowId: number;
+}
