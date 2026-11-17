@@ -2,6 +2,7 @@ import { create_snooze_store } from "../src/background/snooze_store.ts";
 import { create_followup_store } from "../src/background/followup_store.ts";
 import type { SnoozeStore } from "../src/background/snooze_store.ts";
 import { create_quick_reply_store } from "../src/background/quick_reply_store.ts";
+import { create_undo_log } from "../src/background/undo_log.ts";
 import type { QuickReplyStore } from "../src/background/quick_reply_store.ts";
 import type { RouterApi } from "../src/background/router.ts";
 import type { MailFolder } from "../src/background/handlers/displayed_folder.ts";
@@ -103,6 +104,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
         quick_replies,
         snooze: { items: snoozes, now: () => options.now ?? new Date(2026, 10, 18, 10, 15), create_timeout_ms: 50 },
         followup: { items: followups, now: () => options.now ?? new Date(2026, 10, 18, 10, 15) },
+        undo: { log: create_undo_log({ storage: fake_storage().api }), retry_delays_ms: [] },
         folders: {
             query: async (query) => {
                 calls.push(`folders.query ${JSON.stringify(query)}`);

@@ -208,7 +208,7 @@ export interface KeysPaneFocusArgs {
 }
 
 /** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. */
-export const APP_COMMANDS = ["cmd_undo", "cmd_openConversation"] as const;
+export const APP_COMMANDS = ["cmd_openConversation"] as const;
 
 export interface KeysAppCommandArgs {
     windowId: number;

@@ -75,9 +75,10 @@ test("a missing Experiment does not block a command that needs no Experiment ver
 
 test("x and d d act on exactly the ids sent, with no selection read", async () => {
     for (const [command, call] of [["msg.archive", "messages.archive 4,5,6"], ["msg.delete", "messages.delete 4,5,6"]] as const) {
-        const { api, calls } = fake_api();
+        const folders = [{ id: "trash", accountId: "a1", path: "/Trash", specialUse: ["trash"] }, { id: "archives", accountId: "a1", path: "/Archives", specialUse: ["archives"] }];
+        const { api, calls } = fake_api({ folders, messages: [4, 5, 6].map((id) => ({ id, headerMessageId: `m${id}@x`, folder: { id: "inbox", accountId: "a1" } })) });
         await create_router(registry, api).run(invoke(command, {}, [4, 5, 6]));
-        assert.deepEqual(calls, [call], command);
+        assert.deepEqual(calls.filter((line) => /^messages\.(archive|delete|move)|^mailTabs|^notify/.test(line)), [call], command);
     }
 });
 

@@ -3,34 +3,30 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { displayed_folder } from "./displayed_folder.ts";
 import type { DisplayedFolderApi } from "./displayed_folder.ts";
 import { for_each_message, require_messages } from "./each_message.ts";
-import type { HandlerScope } from "./message.ts";
+import type { HandlerScope, MessageApi } from "./message.ts";
+import { record_moved, record_state } from "./undo.ts";
+import type { UndoApi } from "./undo.ts";
+import type { StateField } from "../undo_log.ts";
 
 /** What `folder.read_all` needs: the displayed folder and the call that marks it. */
 export interface ReadAllApi extends DisplayedFolderApi {
     folders: { markAsRead(folder_id: string): Promise<void> };
 }
 
+type StateScope = HandlerScope<MessageApi & UndoApi>;
+
 // A toggle on a mixed selection follows the first message: if it is read, every message becomes unread, and the reverse. One answer for the whole selection beats each message flipping on its own.
-async function first_message_state(scope: HandlerScope, field: "read" | "flagged" | "junk"): Promise<boolean> {
-    const [first_id] = require_messages(scope.message_ids);
-    return (await scope.api.messages.get(first_id!))[field] === true;
+// The headers are read up front, since the undo item needs the old value and the Message-ID of each message.
+function set_state(scope: StateScope, field: StateField, value: boolean | "toggle"): Promise<void> {
+    return record_state(scope, field, async () => {
+        const messages = await Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
+        return { messages, value: value === "toggle" ? messages[0]![field] !== true : value };
+    });
 }
 
-export async function set_read(scope: HandlerScope, args: CheckedArgs): Promise<void> {
-    const state = args["state"];
-    const read = state === "toggle" ? !(await first_message_state(scope, "read")) : state === "read";
-    await for_each_message(scope.message_ids, (id) => scope.api.messages.update(id, { read }));
-}
-
-export async function toggle_flag(scope: HandlerScope): Promise<void> {
-    const flagged = !(await first_message_state(scope, "flagged"));
-    await for_each_message(scope.message_ids, (id) => scope.api.messages.update(id, { flagged }));
-}
-
-export async function toggle_junk(scope: HandlerScope): Promise<void> {
-    const junk = !(await first_message_state(scope, "junk"));
-    await for_each_message(scope.message_ids, (id) => scope.api.messages.update(id, { junk }));
-}
+export const set_read = (scope: StateScope, args: CheckedArgs): Promise<void> => set_state(scope, "read", args["state"] === "toggle" ? "toggle" : args["state"] === "read");
+export const toggle_flag = (scope: StateScope): Promise<void> => set_state(scope, "flagged", "toggle");
+export const toggle_junk = (scope: StateScope): Promise<void> => set_state(scope, "junk", "toggle");
 
 // The displayed folder, not the selection: the command marks the whole folder, and needs no selected message.
 export async function read_all(scope: HandlerScope<ReadAllApi>): Promise<void> {
@@ -53,13 +49,15 @@ export async function add_tag(scope: HandlerScope, args: CheckedArgs): Promise<v
 }
 
 // The folder is a path such as `/Archive/2026`, looked up in the one account the selected messages share. The path stays unchecked until now, because only the account knows which folders exist.
-export async function move_messages(scope: HandlerScope, args: CheckedArgs): Promise<void> {
-    const selected = await Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
-    const account_ids = new Set(selected.map((message) => message.folder?.accountId));
-    if (account_ids.size > 1) throw new RuntimeRefusal("The selected messages belong to more than one account, so they cannot move to one folder. Select messages of one account.");
-    const [account_id] = account_ids;
-    const path = String(args["folder"]);
-    const [folder] = await scope.api.folders.query({ ...(account_id !== undefined && { accountId: account_id }), path });
-    if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path} in this account.`);
-    await scope.api.messages.move(scope.message_ids, folder.id);
+export function move_messages(scope: StateScope, args: CheckedArgs): Promise<void> {
+    return record_moved(scope, "move", async () => {
+        const selected = await Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
+        const account_ids = new Set(selected.map((message) => message.folder?.accountId));
+        if (account_ids.size > 1) throw new RuntimeRefusal("The selected messages belong to more than one account, so they cannot move to one folder. Select messages of one account.");
+        const [account_id] = account_ids;
+        const path = String(args["folder"]);
+        const [folder] = await scope.api.folders.query({ ...(account_id !== undefined && { accountId: account_id }), path });
+        if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path} in this account.`);
+        return { ids: scope.message_ids, act: () => scope.api.messages.move(scope.message_ids, folder.id), destination_of: async () => ({ to_folder_ids: [folder.id], to_subfolders: false }) };
+    });
 }

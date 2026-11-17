@@ -9,10 +9,6 @@ export interface AppApi {
 
 type AppScope = HandlerScope<AppApi>;
 
-export async function undo(scope: AppScope): Promise<void> {
-    if (!(await scope.api.keys.appCommand({ windowId: scope.window_id, name: "cmd_undo" }))) throw new RuntimeRefusal("Nothing to undo.");
-}
-
 export async function open_conversation(scope: AppScope): Promise<void> {
     if (!(await scope.api.keys.appCommand({ windowId: scope.window_id, name: "cmd_openConversation" }))) throw new RuntimeRefusal("Thunderbird cannot open a conversation for this selection.");
 }
