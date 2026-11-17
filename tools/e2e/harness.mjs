@@ -93,6 +93,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       try { process.kill(-app_child.pid, "SIGTERM"); } catch {}
       for (let waited = 0; app_exit === null && waited < 15000; waited += 100) await sleep(100);
       if (app_exit === null) try { process.kill(-app_child.pid, "SIGKILL"); } catch {}
+      for (let waited = 0; app_exit === null && waited < 5000; waited += 100) await sleep(100);
+      if (app_exit === null) throw new Error("the old app did not exit after SIGKILL");
       await sleep(2000);
       start_child_app();
       await sleep(startup_ms);
