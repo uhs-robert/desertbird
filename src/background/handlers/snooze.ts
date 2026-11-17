@@ -3,6 +3,7 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { for_each_message } from "./each_message.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import type { HandlerScope, MessageHeader } from "./message.ts";
+import { past_start_grace } from "./followup.ts";
 import { notify_refusal, notify_result } from "../notify.ts";
 import type { NotificationsApi } from "../notify.ts";
 import { preset_due_ms } from "../snooze_presets.ts";
@@ -24,7 +25,7 @@ interface MessagePage {
 
 interface MessageQueryApi {
     messages: {
-        query(query: { headerMessageId?: string; folderId: string; unread?: true; messagesPerPage?: number; autoPaginationTimeout: number }): Promise<MessagePage>;
+        query(query: { headerMessageId?: string; folderId?: string; accountId?: string; unread?: true; messagesPerPage?: number; autoPaginationTimeout: number }): Promise<MessagePage>;
         continueList(list_id: string): Promise<MessagePage>;
     };
 }
@@ -39,13 +40,16 @@ export interface SnoozeApi extends MessageQueryApi {
 
 /** What the wake needs. */
 export interface WakeApi extends MessageQueryApi, SpecialFolderApi, NotificationsApi {
+    accounts: { list(): Promise<{ id: string; type: string }[]> };
+    /** Reads the `notice_show_subject` setting. Absent means the subject stays out. */
+    show_subject?: () => Promise<boolean>;
     messages: MessageQueryApi["messages"] & { move(ids: number[], folder_id: string): Promise<void>; update(id: number, properties: { read: boolean }): Promise<void> };
 }
 
 /** Every page of one query. A page ends after a set number of matches, so the first page alone can miss the message. */
-async function query_all(api: MessageQueryApi, header_message_id: string, folder_id: string): Promise<MessageHeader[]> {
+async function query_all(api: MessageQueryApi, header_message_id: string, folder_id?: string): Promise<MessageHeader[]> {
     const found: MessageHeader[] = [];
-    let page = await api.messages.query({ headerMessageId: header_message_id, folderId: folder_id, autoPaginationTimeout: 0 });
+    let page = await api.messages.query({ headerMessageId: header_message_id, ...(folder_id === undefined ? {} : { folderId: folder_id }), autoPaginationTimeout: 0 });
     for (;;) {
         found.push(...page.messages);
         if (page.id === undefined || page.id === null) return found;
@@ -128,35 +132,63 @@ export async function snooze_messages(scope: HandlerScope<SnoozeApi & Notificati
         }
         const target = folders.get(account_id) ?? (await snoozed_folder(api, account_id));
         folders.set(account_id, target);
-        if (target.id !== message.folder?.id) await api.messages.move([id], target.id);
+        // Recorded before the move: a quit between the two would otherwise leave a hidden message with no item to bring it back. A move that fails leaves an item for a message still in place, and the wake handles that.
         await api.snooze.items.add({ header_message_id, origin_account_id: account_id, folder_id: target.id, origin_folder_id, due_ms });
+        if (target.id !== message.folder?.id) await api.messages.move([id], target.id);
     });
     const count = scope.message_ids.length;
     await notify_result(api, `Snoozed ${count} message${count === 1 ? "" : "s"} until ${new Date(due_ms).toLocaleString()}.`, scope.window_id);
 }
 
-// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to.
-export async function wake_snoozed(api: WakeApi, item: SnoozeItem): Promise<void> {
-    const [snoozed_folder_still_there] = await api.folders.query({ folderId: item.folder_id });
-    if (snoozed_folder_still_there === undefined) {
-        await notify_refusal(api, "A snoozed message did not return, because its Snoozed folder is gone.");
-        return;
+/** A message missing from both folders keeps its item this long after the due time, since an account can show it late. The wait only counts once the start grace is over, so a Thunderbird that was closed past the due time still gets its sync. */
+const MISSING_MESSAGE_GIVE_UP_MS = 30 * 60 * 1000;
+const NOT_WAITING_USES = ["inbox", "trash", "junk", "sent", "archives", "drafts", "templates"];
+
+/** The clock of one wake: the tick time and when the background page started. */
+export interface WakeTiming {
+    now_ms: number;
+    started_ms: number;
+}
+
+/** The folder, or undefined when it is gone. The API throws for a folder id it does not know. */
+async function folder_by_id(api: WakeApi, folder_id: string): Promise<MailFolder | undefined> {
+    try {
+        return (await api.folders.query({ folderId: folder_id }))[0];
+    } catch (error) {
+        // Only the unknown-folder error means gone. A transient failure retries at the next tick.
+        if (error instanceof Error && /not found/i.test(error.message)) return undefined;
+        throw error;
     }
+}
+
+/** Where the message waits: the stored Snoozed folder, or, when that folder is gone or renamed, the folders of the origin account and of Local Folders (the only fallback home of a Snoozed folder). Folders where a filed, sent or other-account copy lives are left alone. */
+async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there: boolean): Promise<MessageHeader[]> {
+    if (folder_still_there) return query_all(api, item.header_message_id, item.folder_id);
+    const own_accounts = new Set([item.origin_account_id, ...(await api.accounts.list()).filter((account) => account.type === LOCAL_ACCOUNT_TYPE).map((account) => account.id)]);
+    return (await query_all(api, item.header_message_id)).filter((message) => own_accounts.has(message.folder?.accountId ?? "") && !message.folder?.specialUse?.some((use) => NOT_WAITING_USES.includes(use)));
+}
+
+// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_GIVE_UP_MS` past its due time. The notice names the subject only when `notice_show_subject` is on, since the notice can reach the desktop.
+export async function wake_snoozed(api: WakeApi, item: SnoozeItem, timing: WakeTiming = { now_ms: Date.now(), started_ms: 0 }): Promise<void> {
+    const snoozed_folder_still_there = (await folder_by_id(api, item.folder_id)) !== undefined;
     // The Inbox of the origin account, or the folder the message came from when the account has no Inbox (Local Folders can lack one).
     const [inbox] = await api.folders.query({ accountId: item.origin_account_id, specialUse: ["inbox"] });
-    const destination = inbox ?? (await api.folders.query({ folderId: item.origin_folder_id }))[0];
+    const destination = inbox ?? (await folder_by_id(api, item.origin_folder_id));
     if (destination === undefined) {
-        await notify_refusal(api, "A snoozed message could not return, because its account has no Inbox and its folder is gone. It stays in the Snoozed folder.");
+        await notify_refusal(api, snoozed_folder_still_there ? "A snoozed message could not return, because its account has no Inbox and its folder is gone. It stays in the Snoozed folder." : "A snoozed message did not return, because its Snoozed folder is gone and its account has no Inbox.");
         return;
     }
-    const waiting = (await query_all(api, item.header_message_id, item.folder_id))[0];
-    if (waiting !== undefined) await api.messages.move([waiting.id], destination.id);
+    // Every copy moves: two messages with one Message-ID share one item.
+    const waiting = (await waiting_copies(api, item, snoozed_folder_still_there)).filter((message) => message.folder?.id !== destination.id);
+    if (waiting.length > 0) await api.messages.move(waiting.map((message) => message.id), destination.id);
     // The move gives the message a new id, so the unread mark needs a fresh lookup.
-    const returned = (await query_all(api, item.header_message_id, destination.id))[0];
-    if (returned === undefined && waiting === undefined) {
-        await notify_refusal(api, "A snoozed message is no longer in the Snoozed folder, so it did not return.");
+    const returned = await query_all(api, item.header_message_id, destination.id);
+    if (returned.length === 0) {
+        if (timing.now_ms - item.due_ms < MISSING_MESSAGE_GIVE_UP_MS || !past_start_grace(timing.started_ms, timing.now_ms)) throw new Error("A snoozed message is in neither its Snoozed folder nor its Inbox yet. Trying again at the next tick.");
+        await notify_refusal(api, snoozed_folder_still_there ? "A snoozed message is no longer in the Snoozed folder, so it did not return." : "A snoozed message could not be found to return.");
         return;
     }
-    if (returned !== undefined) await api.messages.update(returned.id, { read: false });
-    await notify_refusal(api, `Snoozed message returned: ${(waiting ?? returned)?.subject ?? item.header_message_id}`);
+    for (const message of returned) await api.messages.update(message.id, { read: false });
+    const subject = returned[0]?.subject;
+    await notify_refusal(api, subject !== undefined && (await api.show_subject?.()) === true ? `Snoozed message returned: ${subject}` : "A snoozed message returned.");
 }
