@@ -39,6 +39,9 @@ test("sort.set takes enum args for by and order", () => {
     assert.equal(ok("sort.set", { by: "colour", order: "descending" }), false);
     assert.equal(ok("sort.set", { by: "date", order: "up" }), false);
     assert.equal(ok("sort.set", { by: "date" }), false);
+    for (const by of ["received", "priority"]) assert.equal(ok("sort.set", { by, order: "ascending" }), true, by);
+    assert.equal(ok("sort.set", { by: "current", order: "toggle" }), true);
+    assert.equal(ok("sort.set", { by: "size", order: "toggle" }), true);
 });
 
 test("search.threads needs text and pane.toggle needs a known pane", () => {
@@ -95,12 +98,43 @@ test("a window with no mail tab refuses and changes nothing", async () => {
     assert.equal(calls.filter((call) => call.startsWith("notify")).length, 1);
 });
 
-test("the view commands are bridge safe and only the fixed states and panes have keys", () => {
+test("the view commands are bridge safe and only the fixed states, panes and sorts have keys", () => {
     for (const id of ["filter.set", "search.threads", "sort.set", "pane.toggle"]) assert.equal(registry.get(id)?.bridge, true, id);
     const bound = Object.values(DEFAULT_KEYMAP.normal ?? {}).flatMap((binding) => (binding && !Array.isArray(binding) ? [binding] : []));
-    assert.equal(bound.some((binding) => binding.id === "search.threads" || binding.id === "sort.set"), false);
+    assert.equal(bound.some((binding) => binding.id === "search.threads"), false);
     assert.equal(bound.some((binding) => binding.id === "filter.set" && binding.args?.["state"] === "tag"), false);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
+});
+
+test("the sort keys name a column and the default order of that column", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    const planned: Record<string, [string, string]> = {
+        ",d": ["date", "descending"],
+        ",s": ["subject", "ascending"],
+        ",f": ["author", "ascending"],
+        ",z": ["size", "ascending"],
+        ",t": ["tags", "ascending"],
+        ",a": ["attachments", "ascending"],
+        ",u": ["unread", "ascending"],
+        ",o": ["current", "toggle"],
+    };
+    for (const [keys, [by, order]] of Object.entries(planned)) assert.deepEqual(normal[keys], { id: "sort.set", args: { by, order } }, keys);
+    assert.deepEqual(compile_default_keymap().warnings ?? [], []);
+});
+
+test("order toggle reads the current order at the key press and current keeps the column", async () => {
+    for (const [now, next] of [["ascending", "descending"], ["descending", "ascending"]] as const) {
+        const { run, calls } = view_fake({ id: 9, displayedFolder: INBOX, sortType: "subject", sortOrder: now });
+        await run("sort.set", { by: "current", order: "toggle" });
+        assert.ok(calls.includes(`mailTabs.update 9 {"sortType":"subject","sortOrder":"${next}"}`), now);
+    }
+    const named = view_fake({ id: 9, displayedFolder: INBOX, sortType: "subject", sortOrder: "ascending" });
+    await named.run("sort.set", { by: "date", order: "toggle" });
+    assert.ok(named.calls.includes('mailTabs.update 9 {"sortType":"date","sortOrder":"descending"}'));
+    const unknown = view_fake({ id: 9, displayedFolder: INBOX });
+    await unknown.run("sort.set", { by: "current", order: "toggle" });
+    assert.equal(unknown.calls.some((call) => call.startsWith("mailTabs.update")), false);
+    assert.equal(unknown.calls.filter((call) => call.startsWith("notify")).length, 1);
 });
 
 const NO_LIST_TABS: [string, MailTab][] = [

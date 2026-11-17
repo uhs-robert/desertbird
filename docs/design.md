@@ -72,7 +72,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.yank {field: content, subject, sender, address, message_id}` | `y y`, `y s`, `y f`, `y a`, `y i` | Standard | `messages.get`, `messages.getFull`, `navigator.clipboard.writeText` with the `clipboardWrite` permission. The `browser.clipboard` API only sets images. |
 | `folder.open {folder, special}` | `o`, `g o`, `g i`, `g t`, `g d`, `g s`, `g p`, `:open`, `:inbox` | Standard | `folders.query` with `specialUse`, `mailTabs.update` |
 | `filter.set {state: unread, all, starred, tag, attachment}` | `F u`, `F a`, `F s`, `F f`, `:filter` | Standard | `mailTabs.setQuickFilter` |
-| `sort.set {by, order}` | `:sort` | Standard | `mailTabs.update` |
+| `sort.set {by, order: ascending, descending, toggle}` | `, d`, `, s`, `, f`, `, z`, `, t`, `, a`, `, u`, `, o`, `:sort` | Standard | `mailTabs.update` |
 | `pane.toggle {pane: message, folder}` | `t m`, `t f` | Standard | `mailTabs.update` |
 | `tab.switch`, `tab.next`, `tab.prev`, `tab.close` | `T`, `:tab`, `<C-j>`, `<C-k>`, `<C-x>`, `<C-c>`, `q`, `<C-h>` | Standard | `tabs.*`. Phase 0 checks that `tabs.remove` closes the primary mail tab. If it does not, `tab.close` refuses there. Measured: it does not, so `tab.close` refuses there. |
 | `mark.set {slot}`, `mark.jump {slot}` | `M <key>`, `' <key>` | Standard | Folder marks in `storage.local`, `mailTabs.update` |

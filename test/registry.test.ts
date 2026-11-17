@@ -125,6 +125,8 @@ test("the view keys run the planned commands with the planned args", () => {
         Fa: { id: "filter.set", args: { state: "all" } },
         Fs: { id: "filter.set", args: { state: "starred" } },
         Ff: { id: "filter.set", args: { state: "attachment" } },
+        ",d": { id: "sort.set", args: { by: "date", order: "descending" } },
+        ",o": { id: "sort.set", args: { by: "current", order: "toggle" } },
         tm: { id: "pane.toggle", args: { pane: "message" } },
         tf: { id: "pane.toggle", args: { pane: "folder" } },
     };
