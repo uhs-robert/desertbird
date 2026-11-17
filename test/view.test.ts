@@ -197,6 +197,7 @@ function pane_fake(spec: (number | "+")[], current = 0) {
         selectedIndex: current,
         currentIndex: current,
         getRowAtIndex: () => null,
+        scrollBy: () => {},
         expandRowAtIndex: (index: number) => void calls.push(`expand ${index}`),
         collapseRowAtIndex: (index: number) => void calls.push(`collapse ${index}`),
     };
@@ -228,11 +229,16 @@ test("read_rows reports no rows when no view is loaded", () => {
     assert.deepEqual(read_rows({ ...pane, gDBView: null }, 0, 3, () => 1).rows, []);
 });
 
-test("scroll_row brings the row into existence and then aligns it to the chosen edge", () => {
-    for (const [position, block] of [["top", "start"], ["center", "center"], ["bottom", "end"]] as const) {
+test("scroll_row brings the row into existence, aligns it to the chosen edge and clears the sticky header", () => {
+    for (const [position, block, shift] of [["top", "start", -30], ["center", "center", -15], ["bottom", "end", -0]] as const) {
         const calls: string[] = [];
-        const tree = { scrollToIndex: (index: number) => void calls.push(`scrollToIndex ${index}`), getRowAtIndex: () => ({ scrollIntoView: (options: { block: string }) => void calls.push(`align ${options.block}`) }) };
+        const tree = {
+            table: { header: { clientHeight: 30 } },
+            scrollToIndex: (index: number) => void calls.push(`scrollToIndex ${index}`),
+            getRowAtIndex: () => ({ scrollIntoView: (options: { block: string }) => void calls.push(`align ${options.block}`) }),
+            scrollBy: (options: { top: number }) => void calls.push(`scrollBy ${options.top}`),
+        };
         scroll_row(tree as never, 40, position);
-        assert.deepEqual(calls, ["scrollToIndex 40", `align ${block}`], position);
+        assert.deepEqual(calls, ["scrollToIndex 40", `align ${block}`, `scrollBy ${shift}`], position);
     }
 });
