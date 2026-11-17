@@ -581,6 +581,11 @@ async function run_followup(instance) {
 async function run_steps(instance, { app, kind, shot }) {
   await instance.ask("show_folder", 20000, { path: "/Views" });
   await sleep(2000);
+  // Showing a folder through the API leaves the focus and the selection where they were, so focus the list and select the first row here.
+  await instance.press(["g"]);
+  await key_and_state(instance, ["e"], 1000);
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 1000);
   let state = await instance.ask("state");
   const listed = state.listed;
   const has = { u: (id, now) => now.flags[id]?.read === false, s: (id, now) => now.flags[id]?.flagged === true, a: (id) => id === "views-0@fixture.invalid" };

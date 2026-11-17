@@ -161,3 +161,19 @@ test("] U skips root folders and folders whose unread count Thunderbird cannot r
     assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query c", "show c", "select 9 900"]);
     assert.equal(fake.calls().includes("info r"), false);
 });
+
+test("with no row selected ] steps from before the first row and [ from after the last", async () => {
+    const flags = { 2: { flagged: true }, 5: { flagged: true } };
+    const forward = step_fake({ rows: 8, current: -1, flags });
+    await forward.run("step.starred", { direction: "next" });
+    assert.deepEqual(forward.calls(), ["select 9 102"]);
+    const backward = step_fake({ rows: 8, current: -1, flags });
+    await backward.run("step.starred", { direction: "previous" });
+    assert.deepEqual(backward.calls(), ["select 9 105"]);
+});
+
+test("[ with no row selected in a list of exactly one block finds the last row", async () => {
+    const fake = step_fake({ rows: 500, current: -1, flags: { 499: { unread: true } } });
+    await fake.run("step.unread", { direction: "previous", scope: "folder" });
+    assert.deepEqual(fake.calls(), ["select 9 599"]);
+});
