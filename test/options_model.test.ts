@@ -51,3 +51,12 @@ test("a binding the compiler skips blocks the save", () => {
     const built = build_user_keymap({ removed: [], rows: [{ keys: "Z", command: "no.such", args: "" }] });
     assert.ok("blocked" in built && built.blocked);
 });
+
+test("a user key that makes a default key skip does not block the save, and the message stays", () => {
+    const built = build_user_keymap({ removed: [], rows: [{ keys: "g", command: "msg.archive", args: "" }] });
+    assert.ok("blocked" in built);
+    if ("blocked" in built) {
+        assert.equal(built.blocked, false);
+        assert.ok(built.messages.some((message) => message.includes("skipped")));
+    }
+});

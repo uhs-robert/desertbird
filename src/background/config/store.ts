@@ -25,6 +25,8 @@ export interface Config {
     /** Every setting: the overrides over the defaults. */
     settings: Settings;
     user_keymap: UserKeymap;
+    /** The version stamp the data carries. Above `CONFIG_VERSION` means a newer add-on wrote it. */
+    stored_version: number;
 }
 
 export interface ConfigStore {
@@ -54,24 +56,41 @@ export function create_config_store(api: ConfigStorage, options: StoreOptions = 
     // A write leaves the version key alone: the next read stamps it after any migration, and a newer add-on's stamp is never lowered.
     async function load(): Promise<Config> {
         const stored: StoredConfig = await api.storage.local.get(CONFIG_KEYS);
-        const from_version = typeof stored[VERSION_KEY] === "number" ? stored[VERSION_KEY] : FIRST_VERSION;
+        const stamp = stored[VERSION_KEY];
+        const from_version = typeof stamp === "number" && Number.isInteger(stamp) && stamp >= FIRST_VERSION ? stamp : FIRST_VERSION;
         const result = migrate(stored, from_version, migrations);
-        if (result.changed || stored[VERSION_KEY] === undefined) {
-            await api.storage.local.set({ ...result.stored, [VERSION_KEY]: result.version });
+        // Only the version and the keys a migration changed go back. The rest was read before the await and an edit may have replaced it since.
+        const changed_keys = CONFIG_KEYS.filter((key) => key !== VERSION_KEY && JSON.stringify(result.stored[key]) !== JSON.stringify(stored[key]));
+        if (stamp !== result.version) {
+            await api.storage.local.set({ ...Object.fromEntries(changed_keys.map((key) => [key, result.stored[key]])), [VERSION_KEY]: result.version });
         }
         const setting_overrides = sanitize_settings(result.stored[SETTINGS_KEY], report);
-        return { setting_overrides, settings: settings_with_defaults(setting_overrides), user_keymap: sanitize_user_keymap(result.stored[USER_KEYMAP_KEY]) };
+        return { setting_overrides, settings: settings_with_defaults(setting_overrides), user_keymap: sanitize_user_keymap(result.stored[USER_KEYMAP_KEY]), stored_version: result.version };
     }
 
+    /** A newer add-on's data is only read. A write would put old-shape data under the newer stamp. */
+    async function refuse_newer(): Promise<void> {
+        const { stored_version } = await read();
+        if (stored_version > migrations.length + 1) throw new Error("the settings were saved by a newer DesertBird and are read only");
+    }
+
+    const read = async (): Promise<Config> => {
+        if (cached !== undefined) return cached;
+        const started_at = generation;
+        const config = await load();
+        if (generation === started_at) cached = config;
+        return config;
+    };
+
     return {
-        async read() {
-            if (cached !== undefined) return cached;
-            const started_at = generation;
-            const config = await load();
-            if (generation === started_at) cached = config;
-            return config;
+        read,
+        write_settings: async (overrides) => {
+            await refuse_newer();
+            await api.storage.local.set({ [SETTINGS_KEY]: overrides });
         },
-        write_settings: (overrides) => api.storage.local.set({ [SETTINGS_KEY]: overrides}),
-        write_user_keymap: (user_keymap) => api.storage.local.set({ [USER_KEYMAP_KEY]: user_keymap}),
+        write_user_keymap: async (user_keymap) => {
+            await refuse_newer();
+            await api.storage.local.set({ [USER_KEYMAP_KEY]: user_keymap });
+        },
     };
 }

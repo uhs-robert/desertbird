@@ -142,3 +142,33 @@ test("the scaffold ships no migration yet and the version matches", () => {
     assert.equal(MIGRATIONS.length, 0);
     assert.equal(CONFIG_VERSION, 1);
 });
+
+test("a stored version of 0, below 0 or not a whole number reads as the first version", async () => {
+    for (const bad of [0, -3, 1.5, "2", null]) {
+        const { api, stored } = stub_storage({ [VERSION_KEY]: bad, [SETTINGS_KEY]: { toast_ms: 5 } });
+        const config = await create_config_store(api).read();
+        assert.equal(config.settings.toast_ms, 5);
+        assert.equal(stored[VERSION_KEY], CONFIG_VERSION);
+    }
+});
+
+test("the write-back after a migration holds only the version and the keys the migration changed", async () => {
+    const steps: Migration[] = [(stored) => ({ ...stored, [USER_KEYMAP_KEY]: { normal: {} } })];
+    const { api, stored } = stub_storage({ [VERSION_KEY]: 1 });
+    const sets: Record<string, unknown>[] = [];
+    const set = api.storage.local.set;
+    api.storage.local.set = async (items) => (sets.push(items), set(items));
+    stored[SETTINGS_KEY] = { toast_ms: 1 };
+    await create_config_store(api, { migrations: steps }).read();
+    assert.deepEqual(Object.keys(sets[0]!).sort(), [USER_KEYMAP_KEY, VERSION_KEY].sort());
+});
+
+test("data from a newer version reports its version and refuses writes", async () => {
+    const newer = { [VERSION_KEY]: CONFIG_VERSION + 1, [SETTINGS_KEY]: { toast_ms: 7 } };
+    const { api, stored } = stub_storage({ ...newer });
+    const store = create_config_store(api);
+    assert.equal((await store.read()).stored_version, CONFIG_VERSION + 1);
+    await assert.rejects(store.write_settings({ toast_ms: 1 }), /newer DesertBird/);
+    await assert.rejects(store.write_user_keymap({ normal: {} }), /newer DesertBird/);
+    assert.deepEqual(stored, newer);
+});
