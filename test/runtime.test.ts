@@ -53,9 +53,12 @@ class FakeWindow implements KeyTarget {
     range: [number, number] | null = null;
     /** What the list is showing: a new object stands for another folder, a rebuilt view. */
     view = {};
+    /** The message key at a row where a test has inserted or removed a message. Other rows have their index as key. */
+    key_overrides: Record<number, number> = {};
     port(): ListPort {
+        const key_at = (index: number) => this.key_overrides[index] ?? index;
         return {
-            view_token: () => this.view,
+            marks: (anchor, end) => [this.view, key_at(anchor), key_at(end)],
             row_count: () => this.rows,
             selected_index: () => this.selected,
             select: (index) => void ((this.selected = index), (this.range = null)),
@@ -893,4 +896,38 @@ test("visual mode: a command collapses the selection to the current row, and a k
     press(window, "a", { target: { localName: "input" } });
     press(window, "j");
     assert.equal(window.range, null, "a key that went to a text field ended the mode");
+});
+
+test("visual mode: a message inserted inside an upward range drops the mode", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.rows = 20;
+    window.selected = 8;
+    press(window, "v");
+    press(window, "k");
+    press(window, "k");
+    assert.deepEqual(window.range, [6, 8]);
+    // A message arrives at row 7. The anchor message moves to row 9 and the current row stays at 6.
+    window.key_overrides = { 8: 7 };
+    press(window, "k");
+    assert.equal(window.range, null, "the range did not grow over the shifted rows");
+    assert.equal(window.selected, 5);
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [105]);
+});
+
+test("visual mode: a message removed inside an upward range drops the mode", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.rows = 20;
+    window.selected = 8;
+    press(window, "v");
+    press(window, "k");
+    press(window, "k");
+    window.key_overrides = { 8: 9 };
+    press(window, "k");
+    assert.equal(window.range, null);
+    assert.equal(window.selected, 5);
 });
