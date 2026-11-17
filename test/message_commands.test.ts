@@ -144,6 +144,12 @@ test("the identity is one the message was addressed to, in any account, over eve
     assert.deepEqual(await forwarded_with({ identities, messages: [{ id: 5, folder: a1, bccList: ["main@x.invalid"] }] }), ["compose.beginForward 5 main"]);
 });
 
+test("an address that is an identity in two accounts resolves to the message's own account", async () => {
+    const identities = [identity("other", "me@x.invalid", "a9"), identity("own", "me@x.invalid", "a1")];
+    assert.deepEqual(await forwarded_with({ identities, messages: [{ id: 5, folder: a1, recipients: ["me@x.invalid"] }] }), ["compose.beginForward 5 own"]);
+    assert.deepEqual(await forwarded_with({ identities, messages: [{ id: 5, folder: { accountId: "a3" }, recipients: ["me@x.invalid"] }] }), ["compose.beginForward 5 other"]);
+});
+
 test("with no addressed identity the message account's default identity wins", async () => {
     const identities = [identity("d", "d@x.invalid", "a9"), identity("first", "first@x.invalid", "a1"), identity("second", "second@x.invalid", "a1")];
     assert.deepEqual(await forwarded_with({ identities, default_account: { id: "a9" }, messages: [{ id: 5, folder: a1, recipients: ["nobody@x.invalid"] }] }), ["compose.beginForward 5 first"]);
