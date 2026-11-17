@@ -8,6 +8,8 @@ export const cmdline: CommandGroup = {
     commands: {
         "cmdline.open": {
             bridge: false,
+            // A `.` that reopened the line would only startle. The line has its own history.
+            repeatable: false,
             runs_in: "background",
             label: "Command line",
             intent: "Open the command line, with text already typed in if given.",

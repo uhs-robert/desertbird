@@ -97,7 +97,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `thread.open_conversation` | `g C` | Experiment | `app.command cmd_openConversation` |
 | `app.open_page {page}` | `g x`, `g T`, `g c` | Experiment | `app.open_page` |
 | `hint.pick {action}` | `f`, `;` | Experiment in chrome, standard in the message body | `hints.collect` and `hints.act`, content script hints |
-| Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime |
+| Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime. `.` replays the last motion or background command from runtime memory. A command with `repeatable: false` (`msg.delete`, `msg.archive`, `msg.move`) clears it instead |
 | Command line, which-key, badge, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |
 
 The table has 42 rows. 27 run without the Experiment (26 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.

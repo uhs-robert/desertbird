@@ -76,6 +76,7 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
 
 const step = (id: string, runs_in: "chrome" | "background") => ({ invocation: { id }, runs_in, count_rule: "repeat" as const });
 const leaf = (id: string, runs_in: "chrome" | "background") => ({ kind: "leaf" as const, steps: [step(id, runs_in)] });
+const unrepeatable = (id: string) => ({ kind: "leaf" as const, steps: [{ ...step(id, "background"), repeatable: false }] });
 const tree = () => ({
     version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION,
     root: {
@@ -86,6 +87,9 @@ const tree = () => ({
             x: leaf("msg.archive", "background"),
             q: leaf("motion.sideways", "chrome"),
             ":": leaf("cmdline.open", "background"),
+            ".": leaf("repeat.last", "chrome"),
+            r: leaf("msg.read", "background"),
+            D: unrepeatable("msg.delete"),
             g: { kind: "branch", children: { g: leaf("motion.top", "chrome") } },
             d: { kind: "branch", children: { d: leaf("msg.delete", "background") } },
         },
@@ -640,4 +644,71 @@ test("shutdown clears the hold", () => {
     runtime.install(tree());
     press(windows[0]!, "j");
     assert.equal(windows[0]!.selected, 1);
+});
+
+test("a dot replays the last motion, and a count replaces the count it ran with", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    press(windows[0]!, ".");
+    assert.equal(windows[0]!.selected, 2);
+    press(windows[0]!, "3");
+    press(windows[0]!, ".");
+    assert.equal(windows[0]!.selected, 5);
+    press(windows[0]!, "2");
+    press(windows[0]!, "j");
+    press(windows[0]!, ".");
+    assert.equal(windows[0]!.selected, 9);
+});
+
+test("a dot replays a background command with the selection at the dot", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "r");
+    windows[0]!.selected = 1;
+    press(windows[0]!, ".");
+    assert.deepEqual(emitted.map((invocation) => [invocation.command, invocation.messageIds]), [["msg.read", [100]], ["msg.read", [101]]]);
+});
+
+test("a dot never records itself and does nothing with no last run", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    assert.equal(press(windows[0]!, ".").cancelled, true);
+    assert.deepEqual(emitted, []);
+    press(windows[0]!, "r");
+    press(windows[0]!, ".");
+    press(windows[0]!, ".");
+    assert.equal(emitted.length, 3);
+});
+
+test("a command marked unrepeatable is not replayed and clears the last run", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    press(windows[0]!, "D");
+    press(windows[0]!, ".");
+    assert.equal(windows[0]!.selected, 1);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["msg.delete"]);
+});
+
+test("a dot that breaks a half-typed sequence ends it and then runs as a first key", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    press(windows[0]!, "g");
+    press(windows[0]!, ".");
+    assert.equal(windows[0]!.selected, 2);
+    press(windows[0]!, "g");
+    press(windows[0]!, "g");
+    assert.equal(windows[0]!.selected, 0);
+});
+
+test("a tab switch ends a half-typed sequence but not the last run", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    press(windows[0]!, "j");
+    press(windows[0]!, "g");
+    windows[0]!.select_tab();
+    press(windows[0]!, ".");
+    assert.equal(windows[0]!.selected, 2);
 });

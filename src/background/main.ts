@@ -4,7 +4,7 @@ import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.
 import type { KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, compile_message_keymap, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
-import { compile_effective_keymap, effective_keymap } from "./config/keymap.ts";
+import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
@@ -21,7 +21,7 @@ import type { RouterApi } from "./router.ts";
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
-const KEYMAP_RECORD_VERSION = 3;
+const KEYMAP_RECORD_VERSION = 4;
 
 interface KeymapRecord {
     record_version: number;
@@ -65,6 +65,7 @@ function is_current_record(value: unknown, source_hash: string): value is Keymap
 function tree_of(result: CompileResult): KeymapTree {
     for (const warning of result.warnings) console.warn(`desertbird keymap: ${warning}`);
     const root: KeymapTree["root"] = JSON.parse(JSON.stringify(result.compiled.modes.normal ?? { kind: "branch", children: {} }));
+    mark_unrepeatable(root as object);
     return { version: COMPILED_KEYMAP_VERSION, root };
 }
 

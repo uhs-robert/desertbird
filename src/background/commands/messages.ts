@@ -6,8 +6,8 @@ import type { CommandGroup } from "./define.ts";
 // `msg.tag` and `msg.move` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern rejects anything but a path.
 export const messages: CommandGroup = {
     commands: {
-        "msg.archive": { bridge: false, runs_in: "background", label: "Archive", intent: "Archive the selected messages.", run: scoped(archive) },
-        "msg.delete": { bridge: false, runs_in: "background", label: "Delete", intent: "Move the selected messages to Trash.", run: scoped(delete_messages) },
+        "msg.archive": { bridge: false, repeatable: false, runs_in: "background", label: "Archive", intent: "Archive the selected messages.", run: scoped(archive) },
+        "msg.delete": { bridge: false, repeatable: false, runs_in: "background", label: "Delete", intent: "Move the selected messages to Trash.", run: scoped(delete_messages) },
         "msg.read": {
             bridge: false,
             runs_in: "background",
@@ -36,6 +36,7 @@ export const messages: CommandGroup = {
         },
         "msg.move": {
             bridge: false,
+            repeatable: false,
             runs_in: "background",
             name: "move",
             label: "Move",
