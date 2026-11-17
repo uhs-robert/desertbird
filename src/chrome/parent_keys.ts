@@ -6,7 +6,7 @@ import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
 import type { KeysInstallArgs, KeysInvocation } from "../shared/protocol.ts";
 import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
-import { create_list_port, front_about_3pane } from "./view.ts";
+import { create_list_port, front_about_3pane, view_verbs } from "./view.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/keys";
@@ -62,6 +62,7 @@ export function get_keys_api(context: ExtensionContext) {
     return {
         keys: {
             install: guard("keys.install", ({ tree, holdCommands }: KeysInstallArgs): void => ensure_runtime(context).install(tree, holdCommands)),
+            ...view_verbs(context),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "keys.onInvocation",

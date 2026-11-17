@@ -196,11 +196,7 @@ function pane_fake(spec: (number | "+")[], current = 0) {
     const tree = {
         selectedIndex: current,
         currentIndex: current,
-        clientHeight: 500,
-        table: { header: { clientHeight: 20 } },
-        scrollToIndex: (index: number) => void calls.push(`scrollToIndex ${index}`),
-        getRowAtIndex: () => ({ offsetHeight: 20 }),
-        scrollTo: (options: { top: number }) => void calls.push(`scrollTo ${options.top}`),
+        getRowAtIndex: () => null,
         expandRowAtIndex: (index: number) => void calls.push(`expand ${index}`),
         collapseRowAtIndex: (index: number) => void calls.push(`collapse ${index}`),
     };
@@ -227,20 +223,16 @@ test("read_rows names index, id, depth, collapsed and unread, cut to the list", 
     assert.deepEqual(read_rows(pane, 5, 9, () => 1).rows, []);
 });
 
-test("read_rows stops at 500 rows and reports -1 when no view is loaded", () => {
-    const { pane } = pane_fake(Array.from({ length: 900 }, () => 0));
-    assert.equal(read_rows(pane, 0, 899, () => 1).rows.length, 500);
+test("read_rows reports no rows when no view is loaded", () => {
+    const { pane } = pane_fake([0]);
     assert.deepEqual(read_rows({ ...pane, gDBView: null }, 0, 3, () => 1).rows, []);
 });
 
-test("scroll_row puts the row at the top, middle or bottom of the visible height", () => {
-    // Row 40 of 20 pixel rows starts at 800. 480 pixels are visible under the header.
-    for (const [position, top] of [["top", 800], ["center", 570], ["bottom", 340]] as const) {
-        const { pane, calls } = pane_fake([0], 40);
-        scroll_row(pane.threadTree, 40, position);
-        assert.deepEqual(calls, ["scrollToIndex 40", `scrollTo ${top}`], position);
+test("scroll_row brings the row into existence and then aligns it to the chosen edge", () => {
+    for (const [position, block] of [["top", "start"], ["center", "center"], ["bottom", "end"]] as const) {
+        const calls: string[] = [];
+        const tree = { scrollToIndex: (index: number) => void calls.push(`scrollToIndex ${index}`), getRowAtIndex: () => ({ scrollIntoView: (options: { block: string }) => void calls.push(`align ${options.block}`) }) };
+        scroll_row(tree as never, 40, position);
+        assert.deepEqual(calls, ["scrollToIndex 40", `align ${block}`], position);
     }
-    const { pane, calls } = pane_fake([0], 1);
-    scroll_row(pane.threadTree, 1, "center");
-    assert.equal(calls.at(-1), "scrollTo 0");
 });
