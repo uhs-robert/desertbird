@@ -33,7 +33,8 @@ test("the app keys bind their commands and add no warning, and u undoes", () => 
     assert.deepEqual(normal["u"], { id: "msg.undo" });
     assert.deepEqual(normal["gC"], { id: "thread.open_conversation" });
     for (const [keys, page] of [["gx", "addons"], ["gT", "themes"], ["gc", "config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page } }, keys);
-    for (const [keys, pane] of [["gf", "folders"], ["ge", "threads"], ["gm", "message"], ["H", "folders"], ["<A-h>", "threads"], ["L", "threads"], ["<A-l>", "message"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane } }, keys);
+    for (const [keys, pane] of [["gf", "folders"], ["ge", "threads"], ["gm", "message"], ["<A-h>", "threads"], ["L", "threads"], ["<A-l>", "message"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane } }, keys);
+    assert.deepEqual(normal["H"], { id: "folder.collapse" });
     for (const id of ["pane.left", "pane.right"]) assert.ok(!Object.values(normal).some((binding) => binding !== null && typeof binding === "object" && "id" in binding && binding.id === id), id);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
@@ -83,4 +84,27 @@ test("pane.focus on a hidden pane or an empty message pane is refused with a mes
     const fake = app_fake(true, false);
     await fake.run("pane.focus", { pane: "folders" });
     assert.deepEqual(fake.calls, ["paneFocus folders", "notify That pane is hidden or shows no message."]);
+});
+
+test("H collapses in the folder pane and focuses the folder pane from any other", async () => {
+    const calls: string[] = [];
+    let in_folder_pane = true;
+    const api = {
+        keys: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) },
+        folderpane: { fold: async ({ extent }: { extent: string }) => (calls.push(`fold ${extent}`), in_folder_pane) },
+    } as unknown as RouterApi;
+    const run = () => create_router(registry, api).run({ command: "folder.collapse", args: {} as never, count: 1, windowId: 3, messageIds: [] });
+    await run();
+    in_folder_pane = false;
+    await run();
+    assert.deepEqual(calls, ["fold parent", "fold parent", "paneFocus folders"]);
+});
+
+test("H still focuses the folder pane when the folder script fails to load or is absent", async () => {
+    for (const folderpane of [{ fold: async () => Promise.reject(new Error("the folder script did not load")) }, undefined]) {
+        const calls: string[] = [];
+        const api = { keys: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) }, folderpane } as unknown as RouterApi;
+        await create_router(registry, api).run({ command: "folder.collapse", args: {} as never, count: 1, windowId: 3, messageIds: [] });
+        assert.deepEqual(calls, ["paneFocus folders"]);
+    }
 });

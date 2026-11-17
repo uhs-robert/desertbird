@@ -144,8 +144,10 @@ export interface OverlayClosed {
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
-    keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "folderTreeExpand", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
+    keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
+    // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
+    folderpane: { functions: ["fold"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -156,7 +158,6 @@ export interface KeysApi {
     viewThread(args: KeysViewThreadArgs): Promise<void>;
     viewAllThreads(args: KeysViewAllThreadsArgs): Promise<void>;
     viewScroll(args: KeysViewScrollArgs): Promise<void>;
-    folderTreeExpand(args: KeysFolderTreeExpandArgs): Promise<boolean>;
     paneFocus(args: KeysPaneFocusArgs): Promise<boolean>;
     appCommand(args: KeysAppCommandArgs): Promise<boolean>;
     appOpenPage(args: KeysAppOpenPageArgs): Promise<void>;
@@ -201,10 +202,16 @@ export interface KeysViewScrollArgs {
     position: "center" | "top" | "bottom";
 }
 
-/** Opens or closes the selected folder row. The answer is false, with nothing done, unless the folder pane has the focus. */
-export interface KeysFolderTreeExpandArgs {
+/** Folds the folder tree. The answer is false, with nothing done, unless the folder pane has the focus. `row` opens or closes the selected folder. `all` opens or closes every folder. `parent` ignores `open`: it closes the selected folder if it is open, else closes its parent and selects that. */
+export interface FolderpaneFoldArgs {
     windowId: number;
     open: boolean;
+    extent: "row" | "all" | "parent";
+}
+
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. */
+export interface FolderpaneApi {
+    fold(args: FolderpaneFoldArgs): Promise<boolean>;
 }
 
 export type Pane = "folders" | "threads" | "message";
