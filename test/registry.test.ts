@@ -15,6 +15,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
     reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom"] },
+    folders: { runs_in: "background", ids: ["folder.open", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
 };
 
 test("every group file has a table row and each row has a group", () => {

@@ -19,12 +19,19 @@ interface FakeOptions {
     accounts?: { id: string; type: string }[];
     /** The time `snooze.now` returns. */
     now?: Date;
+    /** The `storage.local` contents. Pass the same object to a second fake to model a background restart. */
+    storage?: Record<string, unknown>;
+    /** `mailTabs.update` of a displayed folder throws this after it showed the folder, as Thunderbird does on the first display of a folder. */
+    first_display_error?: string;
 }
 
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
-export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore } {
+export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore; displayed: () => MailFolder | undefined } {
     const calls: string[] = [];
     const snoozes = create_snooze_store({ storage: fake_storage().api });
+    const storage = options.storage ?? {};
+    let displayed = options.displayed;
+    const folder_listeners: ((tab: { id: number }, folder: MailFolder) => void)[] = [];
     const known = new Map((options.messages ?? []).map((message) => [message.id, { date: new Date(0), ...message }]));
     const api: RouterApi = {
         messages: {
@@ -61,12 +68,36 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
         folders: {
             query: async (query) => {
                 calls.push(`folders.query ${JSON.stringify(query)}`);
-                return (options.folders ?? []).filter((folder) => (query.path === undefined || folder.path === query.path) && (query.accountId === undefined || folder.accountId === query.accountId));
+                return (options.folders ?? []).filter((folder) => (query.path === undefined || folder.path === query.path) && (query.accountId === undefined || folder.accountId === query.accountId) && (query.specialUse === undefined || query.specialUse.some((use) => folder.specialUse?.includes(use))));
             },
             create: async (parent_id, name) => (calls.push(`folders.create ${parent_id} ${name}`), { id: `new-${name}`, accountId: "a1", path: `/${name}` }),
             markAsRead: async (folder_id) => void calls.push(`folders.markAsRead ${folder_id}`),
         },
-        mailTabs: { query: async (query) => (calls.push(`mailTabs.query ${query.windowId}`), options.displayed === undefined ? [{ id: 1 }] : [{ id: 1, displayedFolder: options.displayed }]), update: async () => undefined, setQuickFilter: async () => {} },
+        mailTabs: {
+            query: async (query) => (calls.push(`mailTabs.query ${query.windowId}`), displayed === undefined ? [{ id: 1 }] : [{ id: 1, displayedFolder: displayed }]),
+            update: async (tab_id: number, update: object) => {
+                if (!("displayedFolder" in update)) return undefined;
+                const folder = update.displayedFolder as MailFolder;
+                calls.push(`mailTabs.update ${tab_id} ${folder.id}`);
+                const changed = displayed?.id !== folder.id;
+                displayed = folder;
+                // Thunderbird fires the event only when the folder changes, and before the call returns.
+                if (changed) for (const listener of folder_listeners) listener({ id: tab_id }, folder);
+                if (options.first_display_error !== undefined) throw new Error(options.first_display_error);
+                return undefined;
+            },
+            setQuickFilter: async () => {},
+            onDisplayedFolderChanged: { addListener: (listener) => void folder_listeners.push(listener) },
+        },
+        storage: {
+            local: {
+                get: async (key) => (calls.push(`storage.get ${key}`), key in storage ? { [key]: structuredClone(storage[key]) } : {}),
+                set: async (items) => {
+                    calls.push(`storage.set ${Object.keys(items).join(",")}`);
+                    Object.assign(storage, structuredClone(items));
+                },
+            },
+        },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
         keys: options.experiment === false ? undefined : { install: async () => {}, onInvocation: { addListener: () => {}, removeListener: () => {} } },
         overlay:
@@ -82,7 +113,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             end: (window_id) => void calls.push(`cmdline.end ${window_id}`),
         },
     };
-    return { api, calls, snoozes };
+    return { api, calls, snoozes, displayed: () => displayed };
 }
 
 /** A fake of `alarms` that dies with the page: `restart()` clears every alarm and listener, as a Firefox restart does. `fire` runs the listeners like an alarm going off. */

@@ -708,6 +708,41 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   // One more d: it pairs with the d typed after the blur only if that d reached the app, so a window that never got focus back fails here. It also leaves no d pending.
   state = await key_and_state(instance, ["d"], 2500);
   check(app, kind, "the d after the blur counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before_blur + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
+
+  // db-folders-jumps: special folder keys, marks, the jump history and its chords. Local Folders holds an Inbox and a Trash and no Drafts or Sent.
+  const shown_folder = async (keys, wait_ms = 1500) => {
+    for (const key of keys.slice(0, -1)) await instance.press(typeof key === "string" ? [key] : key);
+    const last = keys.at(-1);
+    return (await key_and_state(instance, typeof last === "string" ? [last] : last, wait_ms)).mail_tab?.folder;
+  };
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  check(app, kind, "g i shows the Inbox", (await shown_folder(["g", "i"])) === "/Inbox");
+  await shown_folder(["M", "a"], 700);
+  check(app, kind, "g t shows Trash", (await shown_folder(["g", "t"])) === "/Trash");
+  check(app, kind, "' a returns to the Inbox marked with M a", (await shown_folder(["'", "a"])) === "/Inbox");
+  check(app, kind, "C-o walks back to Trash", (await shown_folder([CTRL("o")])) === "/Trash");
+  check(app, kind, "a second C-o walks back to the Inbox", (await shown_folder([CTRL("o")])) === "/Inbox");
+  check(app, kind, "C-i walks forward to Trash", (await shown_folder([CTRL("i")])) === "/Trash");
+  check(app, kind, "a second C-i walks forward to the Inbox", (await shown_folder([CTRL("i")])) === "/Inbox");
+  // Marks and the history live in storage: after DesertBird restarts they still work.
+  await instance.ask("reload_desertbird", 30000);
+  await sleep(4000);
+  check(app, kind, "g t after a DesertBird reload shows Trash", (await shown_folder(["g", "t"], 2500)) === "/Trash");
+  check(app, kind, "the mark survives the reload", (await shown_folder(["'", "a"], 2500)) === "/Inbox");
+  check(app, kind, "C-o after the reload walks back through the stored history", (await shown_folder([CTRL("o")], 2500)) === "/Trash");
+  // A special folder this account lacks changes nothing and the app stays up.
+  await shown_folder(["g", "i"], 1500);
+  check(app, kind, "g s with no Sent folder leaves the view where it was", (await shown_folder(["g", "s"], 1500)) === "/Inbox");
+  // The history rests on the display event, so measure it: an API display of a never shown folder throws in the API call and still fires the event.
+  await instance.ask("folder_events_start");
+  const first_display = await instance.ask("show_folder", 20000, { path: "/Views" });
+  await sleep(2000);
+  const events = (await instance.ask("folder_events_read")).events;
+  check(app, kind, "onDisplayedFolderChanged fires once for a folder the API shows for the first time", events.length === 1 && events[0].path === "/Views", `events ${JSON.stringify(events.map((event) => event.path))}`);
+  note(app, kind, "first display of /Views through the API", `update error ${first_display.update_error}, query right after ${first_display.query_error ?? first_display.shown_right_after}`);
+  check(app, kind, "g i after the API display shows the Inbox again", (await shown_folder(["g", "i"], 2000)) === "/Inbox");
+  check(app, kind, "the app survived the folder keys", instance.exited() === null);
 }
 
 async function run_no_identity(instance) {

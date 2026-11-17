@@ -170,6 +170,38 @@ async function open_message_window() {
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
   const [message] = (await browser.mailTabs.getSelectedMessages(mail_tab.id)).messages;
   return (await browser.messageDisplay.open({ location: "window", messageId: message.id }))?.windowId ?? null;
+
+// Folder history probe. folder_events_start records every onDisplayedFolderChanged event with a clock stamp, folder_events_read returns them.
+const folder_events = [];
+let folder_events_listening = false;
+function folder_events_start() {
+  folder_events.length = 0;
+  if (folder_events_listening) return;
+  folder_events_listening = true;
+  browser.mailTabs.onDisplayedFolderChanged.addListener((tab, folder) => folder_events.push({ at: Math.round(performance.now()), tab_id: tab?.id ?? null, account_id: folder?.accountId ?? null, path: folder?.path ?? null }));
+}
+
+const flat_folders = (folders) => folders.flatMap((folder) => [folder, ...flat_folders(folder.subFolders ?? [])]);
+
+// Shows a folder by path through mailTabs.update and reports what the call did: whether it threw, how long it took, and what a query right after shows.
+async function show_folder(path) {
+  const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+  const folder = flat_folders((await browser.accounts.list(true)).flatMap((account) => account.folders ?? [])).find((candidate) => candidate.path === path);
+  if (!folder) throw new Error(`no folder ${path}`);
+  const started = Math.round(performance.now());
+  let update_error = null;
+  await browser.mailTabs.update(mail_tab.id, { displayedFolder: folder }).catch((error) => { update_error = String(error); });
+  const returned = Math.round(performance.now());
+  let query_error = null;
+  let shown = null;
+  await browser.mailTabs.query({ active: true, currentWindow: true }).then(([tab]) => { shown = tab?.displayedFolder?.path ?? null; }).catch((error) => { query_error = String(error); });
+  return { started, returned, update_error, query_error, shown_right_after: shown };
+}
+
+// Looks a folder up by account id and path, as folder.open and the jump commands do.
+async function query_folder(args) {
+  const found = await browser.folders.query(args.query);
+  return { found: found.map((folder) => ({ id: folder.id, path: folder.path, account_id: folder.accountId, special_use: folder.specialUse ?? [] })) };
 }
 
 async function post(body) {
@@ -213,6 +245,15 @@ async function poll_forever() {
         await post({ seq: command.seq, cleared: true });
       } else if (["open_content_tab", "open_popup_window", "close_popup_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
+      } else if (command.name === "folder_events_start") {
+        folder_events_start();
+        await post({ seq: command.seq, started: true });
+      } else if (command.name === "folder_events_read") {
+        await post({ seq: command.seq, events: folder_events, now: Math.round(performance.now()) });
+      } else if (command.name === "show_folder") {
+        await post({ seq: command.seq, ...(await show_folder(command.args.path)) });
+      } else if (command.name === "query_folder") {
+        await post({ seq: command.seq, ...(await query_folder(command.args)) });
       } else if (command.name === "reload_desertbird") {
         await reload_desertbird();
         await post({ seq: command.seq, reloaded: true });
