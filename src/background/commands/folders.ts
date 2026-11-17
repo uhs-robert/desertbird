@@ -50,7 +50,7 @@ export const folders: CommandGroup = {
             runs_in: "background",
             label: "Collapse a folder, or focus the folder pane",
             intent: "Close a folder or its parent. From another pane, focus the folder pane.",
-            needs: ["folderpane.fold", "keys.paneFocus"],
+            needs: ["keys.paneFocus"],
             run: scoped<CollapseApi>(collapse_folder),
         },
         "mark.set": { bridge: false, runs_in: "background", label: "Set a mark", intent: "Remember the shown folder under a one-letter slot.", params: [SLOT_PARAM], run: scoped<FolderApi>(set_mark) },

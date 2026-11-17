@@ -761,9 +761,12 @@ async function run_panes(instance, { app, kind, shot }) {
 
   // <C-d> and <C-u> in the thread list move ten rows: the fixture list is ten threads, so the first row goes to the last and back.
   await keys(["L"]);
-  const first_row = first_selected(await keys(["g", "g"]));
+  const top_state = await keys(["g", "g"]);
+  const first_row = first_selected(top_state);
+  const row_ids = top_state.listed;
+  const expected_down = row_ids[Math.min(row_ids.indexOf(first_row) + 10, row_ids.length - 1)];
   const after_down = first_selected(await press_state(CTRL("d"), 1500));
-  check(app, kind, "<C-d> in the thread list moves the selection down", after_down !== null && after_down !== first_row, `selected ${first_row} then ${after_down}`);
+  check(app, kind, "<C-d> in the thread list moves the selection ten rows down", after_down !== null && after_down === expected_down, `selected ${first_row} then ${after_down}, expected ${expected_down} of ${row_ids.length} rows`);
   const after_up = first_selected(await press_state(CTRL("u"), 1500));
   check(app, kind, "<C-u> in the thread list moves the selection back up", after_up === first_row, `selected ${first_row} then ${after_down} then ${after_up}`);
   await shot("panes_ctrl_d_u", "the selection after <C-d> then <C-u>");

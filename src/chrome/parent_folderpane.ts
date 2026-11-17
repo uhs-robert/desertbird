@@ -1,4 +1,4 @@
-// The parent script of the `folderpane` API: the verbs that read or change the folder tree. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `folderpane`. Thunderbird loads it when the first call arrives, so the key script, which loads at startup, carries none of it. Later folder pane features (search) add their verbs here.
+// The parent script of the `folderpane` API: the verbs that read or change the folder tree. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `folderpane`. Thunderbird loads it when the first call arrives, so the key script, which loads at startup, carries none of it.
 
 import { focused_pane } from "./focus.ts";
 import { guard } from "./platform.ts";
@@ -34,17 +34,18 @@ function fold_folders(tree: FolderTreeLike, { open, extent }: Pick<FolderpaneFol
     if (extent === "row") {
         if (row) tree[open ? "expandRow" : "collapseRow"](row);
     } else if (extent === "all") {
-        // Document order lists a parent before its children. Closing a hidden row corrupts the tree, so a close walks backward and shuts the children first, and an open walks forward and shows each parent first.
+        // Document order lists a parent before its children, so a close walks backward and shuts the children first, while their parents still show them. A row inside a parent that is already closed stays as it is: Thunderbird keeps its open state for when the parent opens. An open walks forward and shows each parent first.
         for (let pass = 0; pass < MAX_FOLDER_DEPTH; pass++) {
             const rows = Array.from(tree.querySelectorAll(open ? "li.children.collapsed" : "li.children:not(.collapsed):not(.unselectable)"));
-            for (const each of open ? rows : rows.reverse()) tree[open ? "expandRow" : "collapseRow"](each);
+            for (const each of open ? rows : rows.reverse()) if (open || !each.parentNode?.closest("li.collapsed")) tree[open ? "expandRow" : "collapseRow"](each);
         }
     } else if (row?.classList.contains("children") && !row.classList.contains("collapsed")) tree.collapseRow(row);
     else {
         const parent = row?.parentNode?.closest("li:not(.unselectable)");
         if (!parent) return;
         tree.collapseRow(parent);
-        for (let index = 0; index < tree.rowCount; index++) if (tree.getRowAtIndex(index) === parent) tree.selectedIndex = index;
+        const rows = tree.rowCount;
+        for (let index = 0; index < rows; index++) if (tree.getRowAtIndex(index) === parent) return void (tree.selectedIndex = index);
     }
 }
 

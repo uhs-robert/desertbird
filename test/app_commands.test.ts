@@ -97,3 +97,12 @@ test("H collapses in the folder pane and focuses the folder pane from any other"
     await run();
     assert.deepEqual(calls, ["fold parent", "fold parent", "paneFocus folders"]);
 });
+
+test("H still focuses the folder pane when the folder script fails to load or is absent", async () => {
+    for (const folderpane of [{ fold: async () => Promise.reject(new Error("the folder script did not load")) }, undefined]) {
+        const calls: string[] = [];
+        const api = { keys: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) }, folderpane } as unknown as RouterApi;
+        await create_router(registry, api).run({ command: "folder.collapse", args: {} as never, count: 1, windowId: 3, messageIds: [] });
+        assert.deepEqual(calls, ["paneFocus folders"]);
+    }
+});

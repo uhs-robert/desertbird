@@ -7,45 +7,54 @@ interface FakeRow {
     name: string;
     children: FakeRow[];
     collapsed: boolean;
+    unselectable: boolean;
     parent: FakeRow | null;
     classList: { contains(name: string): boolean };
     parentNode: { closest(selector: string): FakeRow | null };
 }
 
-// A folder tree given as nested [name, children] pairs, all open. Visible rows are the ones whose ancestors are all open.
+// A folder tree given as nested [name, children] pairs, all open, inside the invisible wrapper row that Thunderbird puts around the accounts. The wrapper is no visible row, and closing it hides every row. A row is visible when no ancestor is closed.
 function folder_tree(shape: [string, unknown[]][]) {
     const all: FakeRow[] = [];
-    const build = (entries: [string, unknown[]][], parent: FakeRow | null): FakeRow[] =>
+    const build = (entries: [string, unknown[]][], parent: FakeRow | null, unselectable = false): FakeRow[] =>
         entries.map(([name, kids]) => {
             const row: FakeRow = {
                 name,
                 children: [],
                 collapsed: false,
+                unselectable,
                 parent,
-                classList: { contains: (cls) => (cls === "children" ? row.children.length > 0 : cls === "collapsed" && row.collapsed) },
-                parentNode: { closest: () => row.parent },
+                classList: { contains: (cls) => (cls === "children" ? row.children.length > 0 : cls === "collapsed" ? row.collapsed : cls === "unselectable" && row.unselectable) },
+                // `closest` here honors the two selectors the code uses: the nearest ancestor that is not the wrapper, and the nearest closed ancestor.
+                parentNode: {
+                    closest(selector: string) {
+                        for (let up = row.parent; up; up = up.parent) if (selector.includes(".collapsed") ? up.collapsed : !(selector.includes(":not(.unselectable)") && up.unselectable)) return up;
+                        return null;
+                    },
+                },
             };
             all.push(row);
             row.children = build(kids as [string, unknown[]][], row);
             return row;
         });
-    build(shape, null);
-    const visible = () => all.filter((row) => { for (let up = row.parent; up; up = up.parent) if (up.collapsed) return false; return true; });
-    let selected: FakeRow = all[0]!;
+    const wrapper = build([["wrapper", shape]], null, true)[0]!;
+    const real = () => all.filter((row) => row !== wrapper);
+    const visible = () => real().filter((row) => { for (let up = row.parent; up; up = up.parent) if (up.collapsed) return false; return true; });
+    let selected: FakeRow = real()[0]!;
     const tree = {
         get rowCount() { return visible().length; },
         get selectedIndex() { return visible().indexOf(selected); },
         set selectedIndex(index: number) { selected = visible()[index]!; },
         get selectedRow() { return selected; },
         getRowAtIndex: (index: number) => visible()[index],
-        querySelectorAll: (selector: string) => all.filter((row) => row.children.length > 0 && (selector.includes(":not") ? !row.collapsed : row.collapsed)),
+        querySelectorAll: (selector: string) => all.filter((row) => row.children.length > 0 && !(selector.includes(":not(.unselectable)") && row.unselectable) && (selector.includes(":not(.collapsed)") ? !row.collapsed : row.collapsed)),
         expandRow(row: FakeRow) { row.collapsed = false; },
         collapseRow(row: FakeRow) {
             row.collapsed = true;
             if (!visible().includes(selected)) selected = row;
         },
     };
-    return { tree, row: (name: string) => all.find((candidate) => candidate.name === name)!, select: (name: string) => void (selected = all.find((candidate) => candidate.name === name)!), selected: () => selected.name, open_state: () => all.map((row) => `${row.name}${row.collapsed ? "+" : ""}`).join(" ") };
+    return { tree, wrapper, row: (name: string) => all.find((candidate) => candidate.name === name)!, select: (name: string) => void (selected = all.find((candidate) => candidate.name === name)!), selected: () => selected.name, open_state: () => real().map((row) => `${row.name}${row.collapsed ? "+" : ""}`).join(" ") };
 }
 
 function window_with(tree: unknown, folder_focused: boolean) {
@@ -128,5 +137,31 @@ test("a call acts on the window it names, so a second window keeps its own tree"
     await fold({ windowId: 2, open: false, extent: "all" });
     assert.equal(first.open_state(), "Account Inbox Work Home Sent Local Trash");
     assert.equal(second.open_state(), "Account+ Inbox+ Work Home Sent Local+ Trash");
+    restore();
+});
+
+test("z M and H on an account leave the wrapper row open, or every row would vanish", async () => {
+    const fake = folder_tree(SHAPE);
+    const { fold, restore } = api_for(new Map([[1, window_with(fake.tree, true)]]));
+    await fold({ windowId: 1, open: false, extent: "all" });
+    assert.equal(fake.wrapper.collapsed, false);
+    fake.row("Account").collapsed = false;
+    fake.select("Local");
+    fake.row("Local").collapsed = true;
+    await fold({ windowId: 1, open: false, extent: "parent" });
+    assert.equal(fake.wrapper.collapsed, false);
+    assert.equal(fake.selected(), "Local");
+    restore();
+});
+
+test("z M leaves an open subfolder inside a closed parent alone", async () => {
+    const fake = folder_tree([["Account", [["Inbox", [["Work", [["Deep", []]]]]]]], ["Local", [["Trash", []]]]]);
+    const { fold, restore } = api_for(new Map([[1, window_with(fake.tree, true)]]));
+    fake.row("Inbox").collapsed = true;
+    const closed: string[] = [];
+    const collapse = fake.tree.collapseRow;
+    fake.tree.collapseRow = (row) => (closed.push(row.name), collapse(row));
+    await fold({ windowId: 1, open: false, extent: "all" });
+    assert.deepEqual(closed.sort(), ["Account", "Local"]);
     restore();
 });
