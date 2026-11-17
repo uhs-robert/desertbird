@@ -723,7 +723,9 @@ async function run_panes(instance, { app, kind, shot }) {
   state = await keys(["k"]);
   check(app, kind, "k in the folder pane moves the folder selection up", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
   state = await keys(["G"]);
-  check(app, kind, "G in the folder pane selects the last folder", ![null, "/Inbox", account_folder].includes(folder_of(state)), `folder ${folder_of(state)}`);
+  // Views is the last folder of the fixture. The thread list shows its messages, so the selection also opened the folder.
+  const views_listed = same([...state.listed].sort(), [...(state.folders["/Views"] ?? [])].sort());
+  check(app, kind, "G in the folder pane selects the last folder and the list shows it", folder_of(state) === "/Views" && views_listed, `folder ${folder_of(state)}, list shows the Views messages ${views_listed}`);
   await shot("panes_folder_G", "the last folder selected by G in the folder pane");
   state = await keys(["g", "g"]);
   check(app, kind, "g g in the folder pane selects the account row", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
@@ -784,13 +786,18 @@ async function run_panes(instance, { app, kind, shot }) {
   check(app, kind, "A-l with the message pane hidden leaves the focus in the thread list", message_pane_hidden && first_selected(state) !== list_row, `hidden ${message_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
   await keys(["t", "m"], 1500);
 
-  // A chord typed into a text field passes through to it: H types into the quick filter, and neither key moves the focus to another pane.
+  // A chord typed into a text field passes through to it: H types into the quick filter. After each chord an x typed next must still reach the field: no subject holds "Hx", so the list empties. Had the focus left for the list, x would archive instead.
   const listed_before = (await keys(["g", "g"])).listed.length;
   await instance.press(CTRL_SHIFT("k"));
   await sleep(800);
-  await press_state(["H"], 1500);
-  state = await press_state(ALT("l"), 1500);
-  check(app, kind, "H and A-l in the quick filter pass through: H filters the list and the folder stays", state.listed.length < listed_before && folder_of(state) === "/Inbox", `listed ${listed_before} then ${state.listed.length}, folder ${folder_of(state)}`);
+  state = await press_state(["H"], 1500);
+  check(app, kind, "H in the quick filter types into it: the list narrows and the folder stays", state.listed.length < listed_before && folder_of(state) === "/Inbox", `listed ${listed_before} then ${state.listed.length}, folder ${folder_of(state)}`);
+  state = await press_state(["x"], 1500);
+  check(app, kind, "after H the quick filter keeps the focus: x types into it", state.listed.length === 0, `listed ${state.listed.length}`);
+  await press_state(["-k", "BackSpace"], 1500);
+  await press_state(ALT("l"), 1500);
+  state = await press_state(["x"], 1500);
+  check(app, kind, "after A-l the quick filter keeps the focus: x types into it", state.listed.length === 0 && folder_of(state) === "/Inbox", `listed ${state.listed.length}, folder ${folder_of(state)}`);
   await shot("panes_quick_filter_H", "H typed into the quick filter");
   await instance.press(["-k", "Escape"]);
   await sleep(800);

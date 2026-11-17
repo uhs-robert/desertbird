@@ -49,8 +49,11 @@ export const innermost_focus = (document: FocusDocument): FocusNode | null => fo
 // `messageBrowser` holds about:message inside about:3pane, and `messagepane`, the message body, sits inside about:message.
 const READING_PANE_IDS = new Set(["messageBrowser", "messagepane"]);
 
-/** The pane that holds the focus, as its place on screen: 0 the folder pane, 1 the thread list, 2 the reading pane. Anything else in the mail tab, such as a column header, counts as the thread list. Plain numbers and not named constants, because each name costs bytes in the size-guarded parent bundle. */
-export const focused_pane = (document: FocusDocument): number => focus_chain(document).reduce((pane, node) => (node.id === "folderTree" ? 0 : READING_PANE_IDS.has(node.id ?? "") ? 2 : pane), 1);
+/** The pane that holds the focus, as its place on screen: 0 the folder pane, 1 the thread list, 2 the reading pane. Anything else in the mail tab, such as a column header, counts as the thread list. Plain numbers and not named constants, because each name costs bytes in the size-guarded parent bundle. The outermost pane element wins, so an element of the mail itself with the id `folderTree` stays in the reading pane. */
+export function focused_pane(document: FocusDocument): number {
+    const id = focus_chain(document).find((node) => node.id === "folderTree" || READING_PANE_IDS.has(node.id ?? ""))?.id;
+    return id === "folderTree" ? 0 : id ? 2 : 1;
+}
 
 /** Whether focus sits in the reading pane, whatever the element inside it. */
 export const in_reading_pane = (document: FocusDocument): boolean => focused_pane(document) === 2;
