@@ -7,25 +7,27 @@ interface FakeElement {
     box: { top: number; left: number; width: number; height: number };
     style: { display: string; visibility: string; opacity: string };
     covered: boolean;
+    tag: string;
     acted: string[];
     getBoundingClientRect(): FakeElement["box"];
     contains(other: unknown): boolean;
-    click(): void;
     focus(): void;
+    matches(selector: string): boolean;
 }
 
-function fake_element(name: string, overrides: Partial<Pick<FakeElement, "box" | "style" | "covered">> = {}): FakeElement {
+function fake_element(name: string, overrides: Partial<Pick<FakeElement, "box" | "style" | "covered" | "tag">> = {}): FakeElement {
     const element: FakeElement = {
         name,
         box: { top: 10, left: 10, width: 50, height: 20 },
         style: { display: "inline", visibility: "visible", opacity: "1" },
         covered: false,
+        tag: "a",
         acted: [],
         ...overrides,
         getBoundingClientRect: () => element.box,
         contains: (other) => other === element,
-        click: () => element.acted.push("click"),
         focus: () => element.acted.push("focus"),
+        matches: (selector) => (selector.includes(element.tag) || element.tag === "a") && element.tag !== "input",
     };
     return element;
 }
@@ -61,6 +63,7 @@ function fake_window(elements: FakeElement[]): { window: HintWindow; appended: (
     return { window, appended };
 }
 
+const opened: number[] = [];
 const typed = (letter: string) => ({ kind: "typed", letter }) as const;
 
 test("begin labels only the elements a mouse would hit", () => {
@@ -72,28 +75,41 @@ test("begin labels only the elements a mouse would hit", () => {
     const below = fake_element("below", { box: { top: 700, left: 10, width: 50, height: 20 } });
     const covered = fake_element("covered", { covered: true });
     const { window } = fake_window([shown, hidden, faded, none, flat, below, covered]);
-    const session = create_hint_session(window);
+    const session = create_hint_session(window, () => opened.push(1));
     assert.equal(session.begin(), 1);
     assert.equal(session.active(), true);
 });
 
 test("begin stays inactive and adds nothing when no element qualifies", () => {
     const { window, appended } = fake_window([fake_element("hidden", { style: { display: "none", visibility: "visible", opacity: "1" } })]);
-    const session = create_hint_session(window);
+    const session = create_hint_session(window, () => opened.push(1));
     assert.equal(session.begin(), 0);
     assert.equal(session.active(), false);
     assert.equal(appended.length, 0);
 });
 
+test("a picked form control gets the focus and no Enter", () => {
+    opened.length = 0;
+    const field = fake_element("field", { tag: "input" });
+    const { window } = fake_window([field]);
+    const session = create_hint_session(window, () => opened.push(1));
+    session.begin();
+    session.feed(typed("a"));
+    assert.deepEqual(field.acted, ["focus"]);
+    assert.deepEqual(opened, []);
+});
+
 test("a typed label acts on its element once and ends the session", () => {
+    opened.length = 0;
     const first = fake_element("first");
     const second = fake_element("second", { box: { top: 50, left: 10, width: 50, height: 20 } });
     const { window, appended } = fake_window([first, second]);
-    const session = create_hint_session(window);
+    const session = create_hint_session(window, () => opened.push(1));
     session.begin();
     session.feed(typed("s"));
     assert.deepEqual(first.acted, []);
-    assert.deepEqual(second.acted, [PICK_ACTION]);
+    assert.deepEqual(second.acted, ["focus"]);
+    assert.equal(opened.length, 1, "a link asks for the Enter once");
     assert.equal(session.active(), false);
     assert.equal(appended[0]!.removed, true);
 });
@@ -102,7 +118,7 @@ test("a letter that no label starts, and cancel, end the session with no pick", 
     for (const key of [typed("z"), { kind: "cancel" } as const]) {
         const only = fake_element("only");
         const { window, appended } = fake_window([only]);
-        const session = create_hint_session(window);
+        const session = create_hint_session(window, () => opened.push(1));
         session.begin();
         session.feed(key);
         assert.equal(session.active(), false);
@@ -114,7 +130,7 @@ test("a letter that no label starts, and cancel, end the session with no pick", 
 test("with many targets a label takes several letters and a partial label keeps the session open", () => {
     const elements = Array.from({ length: 12 }, (_, index) => fake_element(`link${index}`, { box: { top: 5 + index * 25, left: 10, width: 50, height: 20 } }));
     const { window } = fake_window(elements);
-    const session = create_hint_session(window);
+    const session = create_hint_session(window, () => opened.push(1));
     assert.equal(session.begin(), 12);
     session.feed(typed("a"));
     assert.equal(session.active(), true);
@@ -127,14 +143,12 @@ test("with many targets a label takes several letters and a partial label keeps 
 test("cancel removes the labels and a second begin starts fresh", () => {
     const only = fake_element("only");
     const { window, appended } = fake_window([only]);
-    const session = create_hint_session(window);
+    const session = create_hint_session(window, () => opened.push(1));
     session.begin();
     session.cancel();
     assert.equal(session.active(), false);
     assert.equal(appended[0]!.removed, true);
     session.begin();
     session.feed(typed("a"));
-    assert.deepEqual(only.acted, [PICK_ACTION]);
+    assert.deepEqual(only.acted, ["focus"]);
 });
-
-const PICK_ACTION = "focus";

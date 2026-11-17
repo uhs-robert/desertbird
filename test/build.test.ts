@@ -39,7 +39,7 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-const PARENT_NAMES = ["keys", "overlay"];
+const PARENT_NAMES = ["keys", "overlay", "hints"];
 const sources: Record<string, string> = {};
 const inputs: Record<string, string[]> = {};
 
@@ -116,7 +116,7 @@ test("the manifest injects the body script into message documents and the xpi ho
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/hints.schema.json", "experiment/hints.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
 });
 

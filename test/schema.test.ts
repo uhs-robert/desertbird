@@ -22,7 +22,7 @@ interface Namespace {
     events?: SchemaNode[];
 }
 
-const PARENTS = ["keys", "overlay"];
+const PARENTS = ["keys", "overlay", "hints"];
 const schema = PARENTS.flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
 const namespace_named = (name: string): Namespace => schema.find((entry) => entry.namespace === name)!;
 
@@ -41,7 +41,8 @@ test("the schema functions and events equal the parent exports", async () => {
     const context = { extension: { windowManager: { getWrapper: () => null }, messageManager: { convert: () => null } } };
     const keys_parent = await import("../src/chrome/parent_keys.ts");
     const overlay_parent = await import("../src/chrome/parent_overlay.ts");
-    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never) } as Record<string, Record<string, unknown>>;
+    const hints_parent = await import("../src/chrome/parent_hints.ts");
+    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
@@ -52,6 +53,7 @@ test("the schema functions and events equal the parent exports", async () => {
     }
     keys_parent.shutdown();
     overlay_parent.shutdown();
+    hints_parent.shutdown();
     platform.restore();
 });
 

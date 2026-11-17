@@ -35,6 +35,14 @@
                 "paths": [["overlay"]],
                 "script": "experiment/overlay.js"
             }
+        },
+        "hints": {
+            "schema": "experiment/hints.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["hints"]],
+                "script": "experiment/hints.js"
+            }
         }
     }
 }

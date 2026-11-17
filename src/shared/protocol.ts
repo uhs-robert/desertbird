@@ -131,6 +131,7 @@ export interface OverlayClosed {
 export const EXPERIMENT_VERBS = {
     keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "folderTreeExpand", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
+    hints: { functions: ["sendEnter"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -224,6 +225,20 @@ export interface OverlayApi {
     /** Puts the mode label at the start of the window's status bar, or removes it when the indicator is `off`. One window never holds two labels. */
     setModeLabel(args: OverlaySetModeLabelArgs): Promise<void>;
     onClosed: { addListener(listener: (closed: OverlayClosed) => void): void; removeListener(listener: (closed: OverlayClosed) => void): void };
+}
+
+/** Sends a trusted Enter to the focused element of the window. The key is fixed. */
+export interface HintsSendEnterArgs {
+    windowId: number;
+}
+
+export interface HintsApi {
+    sendEnter(args: HintsSendEnterArgs): Promise<void>;
+}
+
+/** The body script asks for the Enter that opens the link its hint pick focused. The window comes from the sender, never from this message. */
+export interface BodyOpenLinkRequest {
+    type: "body.open_link";
 }
 
 /** Messages from the command line page to the background, sent with `runtime.sendMessage`. The page learns its `windowId` from the address the overlay loaded it with. */

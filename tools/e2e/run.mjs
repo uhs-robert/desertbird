@@ -1680,7 +1680,7 @@ async function run_message_scripts(instance) {
     await sleep(600);
   }
 
-  // Hints: f labels the link on screen, the typed label clicks it, and the link target at the bottom of the mail scrolls into view.
+  // Hints: f labels the link on screen, the typed label opens it in one step (the Experiment sends a trusted Enter), and the link target at the bottom of the mail scrolls into view.
   await show_in_pane("reading-html");
   let hint_body = body_state(await instance.ask("state"));
   check(app, kind, "hints: the html message starts at the top", hint_body.scroll_y === 0, `scrollY ${hint_body.scroll_y}`);
@@ -1688,14 +1688,10 @@ async function run_message_scripts(instance) {
   await sleep(800);
   await shot("hint_labels", "reading pane with the hint label on the link");
   await instance.press(["a"]);
-  await sleep(600);
-  hint_body = body_state(await instance.ask("state"));
-  check(app, kind, "hints: f then a only focuses the link, the page has not scrolled yet", hint_body.scroll_y === 0, `scrollY ${hint_body.scroll_y}`);
-  await instance.press(["-k", "Return"]);
   await sleep(1500);
   hint_body = body_state(await instance.ask("state"));
-  check(app, kind, "hints: Enter then activates the link as a real click, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
-  // An external link whose text names another address. A hint pick focuses it and a real Enter reaches Thunderbird's own click handling, which warns about such a link. A script click would skip the warning. The shot hint_external_enter shows the Link Mismatch dialog on both apps' run when it works.
+  check(app, kind, "hints: f then a opens the link in one step, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
+  // An external link whose text names another address. The pick sends a trusted Enter, so Thunderbird's own click handling runs and warns about such a link. The shot hint_external_pick shows the Link Mismatch dialog when it works, and the pane stays on the message. A script click skips the warning (see the probe below).
   const href_before = hint_body.href;
   const windows_before = (await instance.ask("state")).windows.length;
   await instance.press(["g"]);
@@ -1704,17 +1700,15 @@ async function run_message_scripts(instance) {
   await sleep(800);
   await shot("hint_labels_two", "reading pane with two hint labels, one on each link");
   await instance.press(["s"]);
-  await sleep(600);
-  await instance.press(["-k", "Return"]);
   await sleep(2500);
-  await shot("hint_external_enter", "reading pane after the hint pick of the external link and Enter");
+  await shot("hint_external_pick", "reading pane after the one-step pick of the external link: the Link Mismatch dialog shows");
   state = await instance.ask("state");
   hint_body = body_state(state);
-  note(app, kind, "hints: Enter on the picked external link", `windows ${windows_before} then ${state.windows.length}, ${JSON.stringify(state.windows.map((window) => window.type))}, document ${hint_body.href === href_before ? "unchanged" : hint_body.href}`);
-  check(app, kind, "hints: Enter on the picked external link leaves the message in place", hint_body.href === href_before && hint_body.scroll_y < hint_body.inner_height, `document ${hint_body.href}, scrollY ${hint_body.scroll_y}`);
+  note(app, kind, "hints: one-step pick of the external link", `windows ${windows_before} then ${state.windows.length}, ${JSON.stringify(state.windows.map((window) => window.type))}, document ${hint_body.href === href_before ? "unchanged" : hint_body.href}; read the shot: the Link Mismatch dialog must show`);
+  check(app, kind, "hints: the one-step pick of the external link leaves the message in place", hint_body.href === href_before && hint_body.scroll_y < hint_body.inner_height, `document ${hint_body.href}, scrollY ${hint_body.scroll_y}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
-  // The probe behind the one-step pick: the same external link, clicked by a script (the helper's content script runs click() as the body script does). A dialog in this shot, as in hint_external_enter, means click() keeps Thunderbird's link-mismatch check.
+  // The probe behind the one-step pick: the same external link, clicked by a script (the helper's content script runs click() as the body script does). A dialog in this shot, as in hint_external_pick, means click() keeps Thunderbird's link-mismatch check.
   const click_answer = await instance.ask("click_link", 20000, { text: "bank.example" });
   await sleep(2500);
   await shot("hint_external_click", "reading pane after a scripted click() on the external link");

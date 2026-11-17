@@ -2,7 +2,7 @@
 
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
-import type { HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
+import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
@@ -75,6 +75,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     // The Experiment namespace is absent when it fails to load.
     keys?: KeysApi;
     overlay?: OverlayApi;
+    hints?: HintsApi;
 }
 
 declare const messenger: Messenger;
@@ -190,7 +191,7 @@ const cmdline = create_cmdline_service({
 });
 const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
-const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
+const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation), hints: messenger.hints });
 
 messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.

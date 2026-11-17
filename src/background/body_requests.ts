@@ -1,7 +1,7 @@
 // The requests of the body script, which runs in a message document. A key of that document whose command lives in the background (`/` opens the command line) arrives here.
 
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
-import type { BodyInvokeRequest, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { BodyInvokeRequest, BodyOpenLinkRequest, HintsApi, JsonValue, KeysInvocation } from "../shared/protocol.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 
@@ -15,6 +15,8 @@ export interface BodyRequestDeps {
     api: BodyRequestApi;
     /** The ids of the commands a message key binds. A request for any other command is dropped. */
     allowed: ReadonlySet<string>;
+    /** The Experiment that sends the Enter of a hint pick. Absent when it failed to load, and the pick then leaves the Enter to the user. */
+    hints?: Pick<HintsApi, "sendEnter"> | undefined;
     /** Runs one invocation through the router and its validator. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
@@ -47,7 +49,14 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         return {};
     }
 
+    // The Enter goes to the window of the sender and no other, so a mail that fakes this message can at worst press Enter on its own link.
+    async function open_link(sender: Sender): Promise<unknown> {
+        if (sender.tab?.windowId !== undefined) await deps.hints?.sendEnter({ windowId: sender.tab.windowId });
+        return {};
+    }
+
     return (message, sender) => {
+        if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
         const request = read_invoke(message);
         return request === undefined ? undefined : invoke(request, sender);
     };

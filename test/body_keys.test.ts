@@ -27,6 +27,9 @@ class StubElement {
     focus() {
         this.focuses++;
     }
+    matches() {
+        return true;
+    }
 }
 
 class StubNode {
@@ -394,8 +397,8 @@ test("a half-typed d does not survive the window losing the focus", async () => 
     assert.deepEqual(sent, [invoked("msg.delete")]);
 });
 
-test("f labels the links on screen and the typed label focuses the link", async () => {
-    const { window } = await started();
+test("f labels the links on screen and the typed label focuses the link and asks for the Enter", async () => {
+    const { window, sent } = await started();
     const links = [new StubElement(), new StubElement({ top: 40, left: 10, width: 50, height: 12 }), new StubElement({ top: 9000, left: 0, width: 50, height: 12 }), new StubElement({ top: 20, left: 0, width: 0, height: 0 })];
     window.elements = links;
     assert.deepEqual(window.press("f"), { cancelled: true, stopped: true });
@@ -403,6 +406,7 @@ test("f labels the links on screen and the typed label focuses the link", async 
     assert.deepEqual(labels, ["A", "S"], "only the two links that are visible on screen get a label");
     assert.deepEqual(window.press("s"), { cancelled: true, stopped: true });
     assert.deepEqual(links.map((link) => link.focuses), [0, 1, 0, 0]);
+    assert.deepEqual(sent, [{ type: "body.open_link" }], "the pick asks the background for a trusted Enter");
     assert.equal(window.appended[0]!.removed, true, "the labels go away after the pick");
     assert.equal(window.press("j").cancelled, true);
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after the pick");
