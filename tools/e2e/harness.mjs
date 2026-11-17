@@ -74,7 +74,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     profile_dir,
     out_dir,
     sink_port: sink.address().port,
-    // Queues a command for the helper add-on ("state" or "reload_desertbird") and returns its reply.
+    // Queues a command for the helper add-on ("state", "select_tab" and so on) and returns its reply.
     ask: async (name, timeout_ms = 20000, args = null) => {
       const wanted = ++seq;
       pending = { name, seq: wanted, args };
@@ -86,6 +86,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       throw new Error(`the helper add-on did not answer ${name}`);
     },
     exited: () => app_exit,
+    // Process id of the running app, so a check can prove a restart replaced the process.
+    app_pid: () => app_child.pid,
     // Quits the app and starts it again on the same profile, which is the only real restart of DesertBird: management.setEnabled is refused for an add-on in the profile folder.
     restart: async () => {
       try { process.kill(-app_child.pid, "SIGTERM"); } catch {}
