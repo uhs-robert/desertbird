@@ -1,5 +1,7 @@
 // The parent script of the `hints` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `hints`: `getAPI(context)` returns `get_hints_api(context)` and `onShutdown` calls `shutdown()`.
 
+import { focus_chain } from "./focus.ts";
+import type { FocusDocument } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
 import type { HintsSendEnterArgs } from "../shared/protocol.ts";
@@ -15,10 +17,20 @@ interface TextInputProcessor {
 }
 
 export interface EnterWindow {
+    document: FocusDocument;
     KeyboardEvent: new (type: string, init: { key: string; code: string; keyCode: number }) => unknown;
 }
 
 const WINDOW_TYPES = ["mail:3pane", "mail:messageWindow"];
+
+// What the Enter may land on, the same as the body script's pick. The focus can move between the pick and this call (a pane chord, a tab switch), and an Enter then would act on the mail window's own interface.
+const OPENABLE = "a[href], button";
+
+/** Whether the focus sits on a link or a button inside the message document, the one the pick focused. */
+function focus_is_picked_target(window: EnterWindow): boolean {
+    const chain = focus_chain(window.document);
+    return chain.some((node) => node.id === "messagepane") && chain.at(-1)?.matches?.(OPENABLE) === true;
+}
 
 /** Presses Enter through the text input processor, so the key is trusted and reaches the focused element, in this process or another. */
 function press_enter(window: EnterWindow): void {
@@ -42,6 +54,7 @@ export function get_hints_api(context: ExtensionContext) {
             sendEnter: guard("hints.sendEnter", ({ windowId }: HintsSendEnterArgs): void => {
                 const window = window_with_id(context, windowId);
                 if (window === null) throw new Error(`no window ${windowId}`);
+                if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
         },

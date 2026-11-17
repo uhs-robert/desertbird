@@ -27,7 +27,8 @@ function fake_element(name: string, overrides: Partial<Pick<FakeElement, "box" |
         getBoundingClientRect: () => element.box,
         contains: (other) => other === element,
         focus: () => element.acted.push("focus"),
-        matches: (selector) => (selector.includes(element.tag) || element.tag === "a") && element.tag !== "input",
+        // The real selector, so a tag added to or dropped from the openable list changes a result here.
+        matches: (selector) => selector.split(",").some((part) => part.trim().replace(/\[.*$/, "") === element.tag),
     };
     return element;
 }
@@ -86,6 +87,17 @@ test("begin stays inactive and adds nothing when no element qualifies", () => {
     assert.equal(session.begin(), 0);
     assert.equal(session.active(), false);
     assert.equal(appended.length, 0);
+});
+
+test("a picked button gets the focus and the Enter", () => {
+    opened.length = 0;
+    const button = fake_element("button", { tag: "button" });
+    const { window } = fake_window([button]);
+    const session = create_hint_session(window, () => opened.push(1));
+    session.begin();
+    session.feed(typed("a"));
+    assert.deepEqual(button.acted, ["focus"]);
+    assert.equal(opened.length, 1);
 });
 
 test("a picked form control gets the focus and no Enter", () => {

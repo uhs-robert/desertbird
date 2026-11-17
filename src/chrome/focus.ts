@@ -9,6 +9,7 @@ export interface FocusNode {
     isContentEditable?: boolean;
     shadowRoot?: { activeElement: FocusNode | null } | null;
     contentDocument?: FocusDocument | null;
+    matches?(selector: string): boolean;
 }
 
 interface MarkedRoot {
