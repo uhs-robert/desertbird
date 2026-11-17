@@ -12,7 +12,7 @@ The privileged part of the add-on. It runs as the parent script of the `keys` Ex
 | `overlay.ts` | Mount, replace and remove logic per window over `OverlayDeps`, so tests use fakes. A second mount replaces the first. A tab change or a closing window removes the overlay and fires `onClosed` |
 | `overlay_id.ts` | The element ids shared by the overlay parent and the key runtime |
 | `motions.ts` | The fixed motion table: `motion.down`, `motion.up`, `motion.top`, `motion.bottom`. Pure functions over a `ViewPort` |
-| `view.ts` | The thread list of `about:3pane` (`gDBView`, `threadTree`) behind a `ListPort`: the rows for the motions and the selected message ids for background commands. Also the check that the front tab is the mail tab |
+| `view.ts` | The thread list of `about:3pane` (`gDBView`, `threadTree`) behind a `ListPort`: the rows for the motions and the selected message ids for background commands. Also the check that the front tab is the mail tab, and `view_verbs`: the verbs `viewRows`, `viewThread`, `viewAllThreads` and `viewScroll` of the `keys` API, which read and move the list for background commands |
 
 Three files know Thunderbird's own markup, so a Thunderbird rename lands in one of them:
 - `view.ts`: `gDBView`, `getSelectedMsgHdrs`, `threadTree` and the tab mode `mail3PaneTab`.

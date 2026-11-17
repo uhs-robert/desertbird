@@ -40,7 +40,7 @@ export interface ViewApi {
 
 type ViewScope = HandlerScope<ViewApi>;
 
-async function active_mail_tab(scope: ViewScope): Promise<MailTab> {
+export async function active_mail_tab(scope: ViewScope): Promise<MailTab> {
     const [tab] = await while_loading(() => scope.api.mailTabs.query({ windowId: scope.window_id, active: true }));
     if (tab === undefined) throw new RuntimeRefusal("This window has no mail tab.");
     return tab;

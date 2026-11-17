@@ -87,6 +87,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 return undefined;
             },
             setQuickFilter: async () => {},
+            setSelectedMessages: async (tab_id, ids) => void calls.push(`mailTabs.setSelectedMessages ${tab_id} ${ids.join(",")}`),
             onDisplayedFolderChanged: { addListener: (listener) => void folder_listeners.push(listener) },
         },
         storage: {
@@ -99,7 +100,17 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             },
         },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
-        keys: options.experiment === false ? undefined : { install: async () => {}, onInvocation: { addListener: () => {}, removeListener: () => {} } },
+        keys:
+            options.experiment === false
+                ? undefined
+                : {
+                      install: async () => {},
+                      onInvocation: { addListener: () => {}, removeListener: () => {} },
+                      viewRows: async () => ({ current: -1, rows: [] }),
+                      viewThread: async () => {},
+                      viewAllThreads: async () => {},
+                      viewScroll: async () => {},
+                  },
         overlay:
             options.experiment === false
                 ? undefined
