@@ -6,6 +6,7 @@ import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
 import type { KeysApi, KeysInvocation, OverlayApi } from "../shared/protocol.ts";
 import type { CmdlineSessions } from "./cmdline/service.ts";
+import type { AttachmentsApi } from "./handlers/attachments.ts";
 import type { FolderApi } from "./handlers/folder_open.ts";
 import type { MessageApi } from "./handlers/message.ts";
 import type { UnsubscribeApi } from "./handlers/unsubscribe.ts";
@@ -17,7 +18,7 @@ import type { NotificationsApi } from "./notify.ts";
 import type { ScopedContext } from "./commands/index.ts";
 
 // An intersection, not an interface that extends each part: the parts share `folders`, `messages` and `mailTabs` with different members.
-export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "keys"> & {
+export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "keys"> & {
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
     overlay: OverlayApi | undefined;

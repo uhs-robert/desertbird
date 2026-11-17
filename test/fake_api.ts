@@ -19,6 +19,10 @@ interface FakeOptions {
     default_account?: { id: string } | null;
     /** The accounts `accounts.list` returns. */
     accounts?: { id: string; type: string }[];
+    /** The attachments `messages.listAttachments` returns per message id. */
+    attachments?: Record<number, { name: string; partName: string }[]>;
+    /** The end state of each download. Defaults to complete. */
+    download_state?: "complete" | "interrupted";
     /** The time `snooze.now` returns. */
     now?: Date;
     /** The `storage.local` contents. Pass the same object to a second fake to model a background restart. */
@@ -30,6 +34,8 @@ interface FakeOptions {
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
 export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore; displayed: () => MailFolder | undefined } {
     const calls: string[] = [];
+    let download_count = 0;
+    const download_listeners = new Set<Parameters<RouterApi["downloads"]["onChanged"]["addListener"]>[0]>();
     const snoozes = create_snooze_store({ storage: fake_storage().api });
     const storage = options.storage ?? {};
     let displayed = options.displayed;
@@ -46,6 +52,8 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 return message;
             },
             update: async (id, properties) => void calls.push(`messages.update ${id} ${JSON.stringify(properties)}`),
+            listAttachments: async (id) => (calls.push(`messages.listAttachments ${id}`), options.attachments?.[id] ?? []),
+            getAttachmentFile: async (id, part_name) => (calls.push(`messages.getAttachmentFile ${id} ${part_name}`), new Blob([`${id}/${part_name}`])),
             move: async (ids, folder_id) => void calls.push(`messages.move ${ids.join(",")} ${folder_id}`),
             query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
             continueList: async () => ({ messages: [] }),
@@ -103,6 +111,15 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             },
         },
         windows: { openDefaultBrowser: async (url) => void calls.push(`windows.openDefaultBrowser ${url}`) },
+        downloads: {
+            download: async (download) => {
+                calls.push(`download ${download.filename} saveAs=${download.saveAs} ${download.conflictAction}`);
+                const id = ++download_count;
+                queueMicrotask(() => download_listeners.forEach((listener) => listener({ id, state: { current: options.download_state ?? "complete" } })));
+                return id;
+            },
+            onChanged: { addListener: (listener) => void download_listeners.add(listener), removeListener: (listener) => void download_listeners.delete(listener) },
+        },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
         keys:
             options.experiment === false
