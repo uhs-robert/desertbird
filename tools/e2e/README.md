@@ -17,6 +17,8 @@ The follow-up checks set a reminder with `m f d`, read the stored record from th
 
 A reload or restart of DesertBird is a restart of the app on the same profile (`restart` in `harness.mjs`), because `management.setEnabled` is refused for an add-on in the profile folder and `src/` takes no test hook. `restart_app` in `run.mjs` records a check that the process id changed, so a skipped restart fails the run.
 
+`E2E_ONLY=hud` runs only the which-key, toast and help checks (`run_hud`), after the Inbox opens. `E2E_THEME=dark` or `light` starts the app with that built-in theme and puts the name in the hud screenshots. `E2E_CONSOLE=1` prints the app and add-on console to `app.log`. The hud checks compare the bottom 320 px of the window (`shot_region`): the same selection with no panel draws the same pixels.
+
 Betterbird is `/usr/bin/betterbird`. Override a binary with `--binary thunderbird=/path`. Scratch files go to `$E2E_DIR`, default `/tmp/desertbird-e2e/<app>/<profile kind>/`. `E2E_STARTUP_MS` (default 30000) is the wait after launch.
 
 | File | Role |
