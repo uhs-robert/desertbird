@@ -686,6 +686,9 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   await sleep(1500);
   state = await key_and_state(instance, ["d"], 2500);
   check(app, kind, "a d typed before a window blur does not pair with a d typed after it", (state.folders["/Trash"]?.length ?? 0) === trash_before_blur, `Trash holds ${state.folders["/Trash"]?.length ?? 0}, it held ${trash_before_blur}`);
+  // One more d: it pairs with the d typed after the blur only if that d reached the app, so a window that never got focus back fails here. It also leaves no d pending.
+  state = await key_and_state(instance, ["d"], 2500);
+  check(app, kind, "the d after the blur counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before_blur + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
 }
 
 async function run_no_identity(instance) {
