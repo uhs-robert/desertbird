@@ -440,3 +440,44 @@ test("a failed folder lookup for one account keeps the entry for the others", as
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@imap-trash"]);
 });
+
+test("two quick undos apply in stack order, even when the newer one waits longer", async () => {
+    const log = create_undo_log({ storage: fake_storage().api });
+    const item = (old: boolean) => ({ header_message_id: "m@x", folder_id: "inbox", old });
+    await log.record(async (keep) => keep({ kind: "state", field: "read", items: [item(false)] }));
+    await log.record(async (keep) => keep({ kind: "state", field: "read", items: [item(true)] }));
+    const applied: boolean[] = [];
+    const undo_once = (wait_ms: number) =>
+        log.undo_newest(
+            () => new Promise((resolve) => setTimeout(resolve, wait_ms)),
+            async (entry) => (applied.push((entry.items[0] as { old: boolean }).old), { left: [] }),
+        );
+    await Promise.all([undo_once(30), undo_once(0)]);
+    assert.deepEqual(applied, [true, false], "the newer change undoes first, so the message ends as it began");
+});
+
+test("a u pressed while the last entry waits queues behind it and gets that entry if it stays", async () => {
+    const log = create_undo_log({ storage: fake_storage().api });
+    await log.record(async (keep) => keep({ kind: "state", field: "read", items: [{ header_message_id: "m@x", folder_id: "inbox", old: false }] }));
+    const first = log.undo_newest(
+        () => new Promise((resolve) => setTimeout(resolve, 20)),
+        async (entry) => ({ left: entry.items, refused: true, refusal: "missing" }),
+    );
+    const second = await log.undo_newest(async () => {}, async () => ({ left: [] }));
+    await first;
+    assert.equal(second?.entry.refused, true, "the second u reached the refused entry, not an empty stack");
+});
+
+test("x runs while an undo waits for its copies", async () => {
+    const log = create_undo_log({ storage: fake_storage().api });
+    await log.record(async (keep) => keep({ kind: "state", field: "read", items: [{ header_message_id: "m@x", folder_id: "inbox", old: false }] }));
+    const order: string[] = [];
+    const undoing = log.undo_newest(
+        () => new Promise((resolve) => setTimeout(resolve, 30)),
+        async () => (order.push("undo"), { left: [] }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await log.record(async () => void order.push("record"));
+    await undoing;
+    assert.deepEqual(order, ["record", "undo"]);
+});

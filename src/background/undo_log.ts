@@ -59,7 +59,7 @@ export interface UndoLog {
     /** Runs `change` with the log held, then stores the last entry it passed to `keep`, even when it throws: a change that failed part way keeps what it did. The mail call goes inside, so a `u` pressed during it waits for the entry. */
     record(change: (keep: (entry: NewUndoEntry) => void) => Promise<void>): Promise<void>;
     /**
-     * Takes the newest entry no other undo has taken, runs `wait` on it without the log, then `undo` with the log held, and stores the outcome. The wait can last seconds, and an `x` pressed meanwhile must not wait with it. Two quick `u` presses take two entries.
+     * Runs after any undo before it. Takes the newest entry, runs `wait` on it without the log, then `undo` with the log held, and stores the outcome. The wait can last seconds, and an `x` pressed meanwhile must not wait with it.
      * Answers undefined when no entry is left to take, else the entry and the outcome.
      */
     undo_newest(wait: (entry: UndoEntry) => Promise<void>, undo: (entry: UndoEntry) => Promise<UndoOutcome>): Promise<{ entry: UndoEntry; outcome: UndoOutcome } | undefined>;
@@ -96,8 +96,8 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
     const store = create_record_store<UndoRecord>(api, { key: UNDO_STORAGE_KEY, empty: () => ({ record_version: UNDO_RECORD_VERSION, entries: [] }), migrate: migrate_undo_record });
     // The store queues its own reads and writes. This queue holds the log across a whole mail change or undo, which spans several API calls.
     let held: Promise<unknown> = Promise.resolve();
-    // The ids of the entries an undo has taken and not finished. It lives for the seconds of one undo, like the hold itself.
-    const taking = new Set<string>();
+    // Undos run one at a time in their own queue, so two quick `u` presses apply in stack order, and a `u` pressed during a wait gets the entry if it stays. Mail changes do not wait in this queue.
+    let undoing: Promise<unknown> = Promise.resolve();
     const hold = <R>(work: () => Promise<R>): Promise<R> => {
         const result = held.then(work);
         held = result.catch(() => {});
@@ -117,28 +117,25 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
                     }
                 }
             }),
-        async undo_newest(wait, undo) {
-            // Taken inside the hold, so a second `u` queued behind this read cannot take the same entry.
-            const taken = await hold(async () => {
-                const entry = (await store.read()).entries.findLast((other) => !taking.has(other.id));
-                if (entry !== undefined) taking.add(entry.id);
-                return entry;
-            });
-            if (taken === undefined) return undefined;
-            try {
-                await wait(taken);
-                return await hold(async () => {
-                    // The cap can drop the entry while the wait ran.
-                    const entry = (await store.read()).entries.find((other) => other.id === taken.id);
-                    if (entry === undefined) return undefined;
-                    const outcome = await undo(entry);
-                    const left = outcome.left.length === 0 ? undefined : ({ ...entry, items: outcome.left, ...(outcome.refused && { refused: true }) } as UndoEntry);
-                    await store.update((record) => ({ value: { ...record, entries: record.entries.flatMap((other) => (other.id !== entry.id ? [other] : left ? [left] : [])) }, result: undefined }));
-                    return { entry, outcome };
-                });
-            } finally {
-                taking.delete(taken.id);
-            }
+        undo_newest(wait, undo) {
+            const result = undoing.then(() => undo_one(wait, undo));
+            undoing = result.catch(() => {});
+            return result;
         },
     };
+
+    async function undo_one(wait: (entry: UndoEntry) => Promise<void>, undo: (entry: UndoEntry) => Promise<UndoOutcome>): Promise<{ entry: UndoEntry; outcome: UndoOutcome } | undefined> {
+        const taken = await hold(async () => (await store.read()).entries.at(-1));
+        if (taken === undefined) return undefined;
+        await wait(taken);
+        return hold(async () => {
+            // The cap can drop the entry while the wait ran.
+            const entry = (await store.read()).entries.find((other) => other.id === taken.id);
+            if (entry === undefined) return undefined;
+            const outcome = await undo(entry);
+            const left = outcome.left.length === 0 ? undefined : ({ ...entry, items: outcome.left, ...(outcome.refused && { refused: true }) } as UndoEntry);
+            await store.update((record) => ({ value: { ...record, entries: record.entries.flatMap((other) => (other.id !== entry.id ? [other] : left ? [left] : [])) }, result: undefined }));
+            return { entry, outcome };
+        });
+    }
 }
