@@ -101,8 +101,8 @@ function queue_install(drop_cache: boolean): void {
         .catch(report_failure);
 }
 
-// Exported so a feature adds its `on_due` listener before `start` runs below.
-export const scheduler = create_scheduler(messenger);
+// A feature adds its `on_due` listener here in main.ts, before the `start` call at the end.
+const scheduler = create_scheduler(messenger);
 
 const router = create_router(registry, { ...messenger, keys: messenger.keys });
 

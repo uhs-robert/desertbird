@@ -61,11 +61,11 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
 
 /** A fake of `alarms` that dies with the page: `restart()` clears every alarm and listener, as a Firefox restart does. `fire` runs the listeners like an alarm going off. */
 export function fake_alarms() {
-    let alarms = new Map<string, { when?: number; periodInMinutes?: number }>();
+    let alarms = new Map<string, { periodInMinutes?: number }>();
     let listeners: ((alarm: { name: string }) => void)[] = [];
     return {
         api: {
-            create: (name: string, info: { when?: number; periodInMinutes?: number }) => void alarms.set(name, info),
+            create: (name: string, info: { periodInMinutes?: number }) => void alarms.set(name, info),
             onAlarm: { addListener: (listener: (alarm: { name: string }) => void) => void listeners.push(listener) },
         },
         names: () => [...alarms.keys()].sort(),

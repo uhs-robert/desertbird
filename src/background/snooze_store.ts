@@ -24,12 +24,8 @@ export interface SnoozeStore {
     list(): Promise<SnoozeItem[]>;
     /** A message snoozed again replaces its earlier item. */
     add(item: SnoozeItem): Promise<void>;
-    /** The items due at `now_ms`. They stay stored until `remove`. */
-    due(now_ms: number): Promise<SnoozeItem[]>;
-    /** Removes the item when it is still stored with the same due time, so a message snoozed again while its wake ran keeps its new item. */
-    remove(item: SnoozeItem): Promise<void>;
     /**
-     * Runs `wake` on each due item and removes the item once `wake` succeeds. A failed wake keeps the item for the next tick. An item whose wake is still running is skipped, so ticks that overlap wake it once.
+     * Runs `wake` on each due item and removes the item once `wake` succeeds. A failed wake keeps the item for the next tick. An item whose wake is still running is skipped, and so is an item another tick removed or the user snoozed again since this tick read its list, so ticks that overlap wake an item once.
      * The item leaves the store after the wake, never before, so a wake that fails at start (the account is not online yet) is not lost. `wake` must be safe to repeat, because a quit during a wake repeats it at the next start.
      */
     wake_due(now_ms: number, wake: (item: SnoozeItem) => Promise<void>): Promise<void>;
@@ -53,18 +49,16 @@ const key_of = (item: SnoozeItem) => JSON.stringify([item.origin_account_id, ite
 export function create_snooze_store(api: RecordStorageApi): SnoozeStore {
     const store = create_record_store<SnoozeRecord>(api, { key: SNOOZE_STORAGE_KEY, empty: () => ({ record_version: SNOOZE_RECORD_VERSION, items: [] }), migrate: migrate_snooze_record });
     const waking = new Set<string>();
-    const due = async (now_ms: number) => (await store.read()).items.filter((item) => item.due_ms <= now_ms);
+    const is_stored = async (item: SnoozeItem) => (await store.read()).items.some((other) => same_message(other, item) && other.due_ms === item.due_ms);
     const remove = (item: SnoozeItem) =>
         store.update((record) => ({ value: { ...record, items: record.items.filter((other) => !(same_message(other, item) && other.due_ms === item.due_ms)) }, result: undefined }));
     return {
         list: async () => (await store.read()).items,
         add: (item) => store.update((record) => ({ value: { ...record, items: [...record.items.filter((other) => !same_message(other, item)), item] }, result: undefined })),
-        due,
-        remove,
         async wake_due(now_ms, wake) {
-            for (const item of await due(now_ms)) {
+            for (const item of (await store.read()).items.filter((stored) => stored.due_ms <= now_ms)) {
                 const key = key_of(item);
-                if (waking.has(key)) continue;
+                if (waking.has(key) || !(await is_stored(item))) continue;
                 waking.add(key);
                 try {
                     await wake(item);
