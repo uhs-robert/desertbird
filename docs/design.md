@@ -63,6 +63,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.junk` | `m j` | Standard | `messages.update` |
 | `msg.tag {tag}` | `m t`, `:tag` | Standard | `messages.update`, `messages.tags.list` |
 | `msg.move {folder}` | `m m`, `m p`, `:move` | Standard | `messages.move`, `folders.query` |
+| `msg.remind {after: one_day, three_days, one_week}`, `msg.remind_cancel` | `m f d`, `m f t`, `m f w`, `m f c` | Standard | `messages.get`, `messages.query`, `messages.getHeaders`, `messages.update`, `messages.tags.list`, `messages.tags.create`, `folders.query`, `notifications`, `messageDisplay.open`, `alarms`. A reminder on a message, checked when due: a later Inbox or Archives message (subfolders included) that names the anchor in `References` or `In-Reply-To` cancels it. Otherwise the anchor gets the `Follow up` tag and a notification that opens it on click. Items live in `storage.local`. |
 | `msg.snooze {until: later_today, tomorrow, weekend, monday}` | `m z l`, `m z t`, `m z w`, `m z m` | Standard | `messages.get`, `folders.query`, `folders.create`, `accounts.list`, `messages.move`, `messages.query`, `messages.update`, `alarms`. The message waits in a `Snoozed` folder of its own account (Local Folders when the account cannot hold subfolders) and the snoozed items live in `storage.local`. |
 | `msg.archive` | `x`, `:archive` | Standard | `messages.archive` |
 | `msg.delete` | `d d`, `:delete` | Standard | `messages.delete` |
@@ -101,7 +102,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `thread.open_conversation` | `g C` | Experiment | `app.command cmd_openConversation` |
 | `app.open_page {page}` | `g x`, `g T`, `g c` | Experiment | `app.open_page` |
 | `hint.pick {action}` | `f`, `;` | Experiment in chrome, standard in the message body | `hints.collect` and `hints.act`, content script hints |
-| Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime. `.` replays the last motion or background command from runtime memory. A command with `repeatable: false` (`msg.delete`, `msg.archive`, `msg.move`, `msg.snooze` and `cmdline.open`) clears it instead |
+| Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime. `.` replays the last motion or background command from runtime memory. A command with `repeatable: false` (`msg.delete`, `msg.archive`, `msg.move`, `msg.snooze`, `msg.remind`, `msg.remind_cancel` and `cmdline.open`) clears it instead |
 | Command line, which-key, badge, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |
 
 The table has 42 rows. 27 run without the Experiment (26 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.

@@ -1,4 +1,5 @@
 import { create_snooze_store } from "../src/background/snooze_store.ts";
+import { create_followup_store } from "../src/background/followup_store.ts";
 import type { SnoozeStore } from "../src/background/snooze_store.ts";
 import { create_quick_reply_store } from "../src/background/quick_reply_store.ts";
 import type { QuickReplyStore } from "../src/background/quick_reply_store.ts";
@@ -50,6 +51,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
     const snoozes = create_snooze_store({ storage: fake_storage().api });
     const quick_replies = create_quick_reply_store({ storage: fake_storage().api });
     void quick_replies.write_all(options.quick_replies ?? []);
+    const followups = create_followup_store({ storage: fake_storage().api });
     const storage = options.storage ?? {};
     let displayed = options.displayed;
     const folder_listeners: ((tab: { id: number }, folder: MailFolder) => void)[] = [];
@@ -75,7 +77,11 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
             continueList: async () => ({ messages: [] }),
             getFull: async (id) => (calls.push(`messages.getFull ${id}`), { ...(options.headers?.[id] && { headers: options.headers[id] }) }),
-            tags: { list: async () => (calls.push("messages.tags.list"), options.tags ?? []) },
+            tags: {
+                list: async () => (calls.push("messages.tags.list"), options.tags ?? []),
+                create: async (key, tag) => void calls.push(`messages.tags.create ${key} ${tag}`),
+            },
+            getHeaders: async (id) => (calls.push(`messages.getHeaders ${id}`), {}),
         },
         compose: {
             beginReply: async (id, type, details) => (calls.push(`compose.beginReply ${id} ${type} ${details.identityId}`), { id: 7 }),
@@ -96,6 +102,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
         },
         quick_replies,
         snooze: { items: snoozes, now: () => options.now ?? new Date(2026, 10, 18, 10, 15), create_timeout_ms: 50 },
+        followup: { items: followups, now: () => options.now ?? new Date(2026, 10, 18, 10, 15) },
         folders: {
             query: async (query) => {
                 calls.push(`folders.query ${JSON.stringify(query)}`);

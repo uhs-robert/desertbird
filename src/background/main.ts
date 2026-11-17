@@ -15,10 +15,13 @@ import { notify_refusal } from "./notify.ts";
 import { create_new_mail_notifier } from "./new_mail_notify.ts";
 import type { NewMailApi } from "./new_mail_notify.ts";
 import { create_router } from "./router.ts";
+import { fire_followup, open_followup_anchor, past_start_grace } from "./handlers/followup.ts";
+import type { FollowupOpenApi } from "./handlers/followup.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
 import { create_scheduler } from "./scheduler.ts";
 import type { SchedulerApi } from "./scheduler.ts";
 import { create_quick_reply_store } from "./quick_reply_store.ts";
+import { create_followup_store } from "./followup_store.ts";
 import { create_snooze_store } from "./snooze_store.ts";
 import type { RouterApi } from "./router.ts";
 
@@ -41,11 +44,11 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
     windows: BodyRequestApi["windows"] & RouterApi["windows"];
     messages: RouterApi["messages"] & NewMailApi["messages"];
-    notifications: RouterApi["notifications"] & NewMailApi["notifications"];
-    messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"];
+    notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
+    messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"] & FollowupOpenApi["messageDisplay"];
     runtime: { onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void } };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
@@ -132,6 +135,13 @@ const scheduler = create_scheduler(messenger);
 // One store instance for the whole page: each instance keeps its own write queue and memory copy.
 const snoozes = create_snooze_store(messenger);
 scheduler.on_due((now_ms) => snoozes.wake_due(now_ms, (item) => wake_snoozed(messenger, item)));
+const followups = create_followup_store(messenger);
+const started_ms = Date.now();
+// Follow-ups wait out the grace after start, so the folders have synced before a reply is looked for. The minute alarm then picks them up.
+scheduler.on_due((now_ms) => (past_start_grace(started_ms, now_ms) ? followups.fire_due(now_ms, (item, still_wanted) => fire_followup(messenger, item, still_wanted)) : undefined));
+messenger.notifications.onClicked.addListener((id) => {
+    open_followup_anchor(messenger, id).catch(console.error);
+});
 
 // The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
 const cmdline = create_cmdline_service({
@@ -143,7 +153,7 @@ const cmdline = create_cmdline_service({
     overlay: messenger.overlay,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
 
