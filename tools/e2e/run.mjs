@@ -432,6 +432,7 @@ async function run_default(instance) {
   await run_view_settings(instance, { app, kind });
   await shot("after_view_settings", "Views folder after the view setting keys");
   await run_cmdline(instance, { app, kind, shot });
+  await run_folders(instance);
 }
 
 // The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.
@@ -694,7 +695,6 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "a count typed before a tab switch is dropped, so k moves one row", listed_index(state) === last_row - 1, `row ${listed_index(state)} after k from row ${last_row}`);
   await instance.ask("remove_tab", 20000, { index: 1 });
   await sleep(1000);
-
   // A window blur ends the sequence too: d, another window takes focus and gives it back, then d. The popup takes focus when it opens, so the main window blurs.
   state = await key_and_state(instance, ["G"]);
   const trash_before_blur = (await instance.ask("state")).folders["/Trash"]?.length ?? 0;
@@ -709,6 +709,12 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   state = await key_and_state(instance, ["d"], 2500);
   check(app, kind, "the d after the blur counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before_blur + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
 
+}
+
+// Runs last in the default run, because it restarts the app.
+async function run_folders(instance) {
+  const app = instance.app;
+  const kind = "default";
   // db-folders-jumps: special folder keys, marks, the jump history and its chords. Local Folders holds an Inbox and a Trash and no Drafts or Sent.
   const shown_folder = async (keys, wait_ms = 1500) => {
     for (const key of keys.slice(0, -1)) await instance.press(typeof key === "string" ? [key] : key);
@@ -725,12 +731,17 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "a second C-o walks back to the Inbox", (await shown_folder([CTRL("o")])) === "/Inbox");
   check(app, kind, "C-i walks forward to Trash", (await shown_folder([CTRL("i")])) === "/Trash");
   check(app, kind, "a second C-i walks forward to the Inbox", (await shown_folder([CTRL("i")])) === "/Inbox");
-  // Marks and the history live in storage: after DesertBird restarts they still work.
-  await instance.ask("reload_desertbird", 30000);
-  await sleep(4000);
-  check(app, kind, "g t after a DesertBird reload shows Trash", (await shown_folder(["g", "t"], 2500)) === "/Trash");
-  check(app, kind, "the mark survives the reload", (await shown_folder(["'", "a"], 2500)) === "/Inbox");
-  check(app, kind, "C-o after the reload walks back through the stored history", (await shown_folder([CTRL("o")], 2500)) === "/Trash");
+  // Marks and the history live in storage. The helper's reload (management.setEnabled) is refused here, so this restarts the whole app on the same profile.
+  await shown_folder(["g", "t"]);
+  await shown_folder(["M", "b"], 700);
+  await instance.restart();
+  const start_folder = (await instance.ask("state")).mail_tab?.folder;
+  note(app, kind, "folder shown after the restart", String(start_folder));
+  // Betterbird starts on the Inbox while the stored cursor sits on Trash, so only the start record lets C-o return to Trash there.
+  check(app, kind, "g i after the restart shows the Inbox", (await shown_folder(["g", "i"], 2500)) === "/Inbox");
+  check(app, kind, "C-o after the restart walks back to Trash", (await shown_folder([CTRL("o")], 2500)) === "/Trash");
+  await shown_folder(["g", "i"], 2000);
+  check(app, kind, "the mark set before the restart survives it", (await shown_folder(["'", "b"], 2500)) === "/Trash");
   // A special folder this account lacks changes nothing and the app stays up.
   await shown_folder(["g", "i"], 1500);
   check(app, kind, "g s with no Sent folder leaves the view where it was", (await shown_folder(["g", "s"], 1500)) === "/Inbox");
@@ -742,12 +753,6 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "onDisplayedFolderChanged fires once for a folder the API shows for the first time", events.length === 1 && events[0].path === "/Views", `events ${JSON.stringify(events.map((event) => event.path))}`);
   note(app, kind, "first display of /Views through the API", `update error ${first_display.update_error}, query right after ${first_display.query_error ?? first_display.shown_right_after}`);
   check(app, kind, "g i after the API display shows the Inbox again", (await shown_folder(["g", "i"], 2000)) === "/Inbox");
-  // DesertBird starts on Trash, a folder its stored history never saw. g i then C-o must come back to it: no display event announces the folder shown at the start.
-  await instance.ask("reload_desertbird", 30000, { path: "/Trash" });
-  await sleep(4000);
-  check(app, kind, "the helper left Trash shown while DesertBird restarted", (await instance.ask("state")).mail_tab?.folder === "/Trash");
-  check(app, kind, "g i after a start on Trash shows the Inbox", (await shown_folder(["g", "i"], 2500)) === "/Inbox");
-  check(app, kind, "C-o returns to the folder shown at the start", (await shown_folder([CTRL("o")], 2500)) === "/Trash");
   check(app, kind, "the app survived the folder keys", instance.exited() === null);
 }
 

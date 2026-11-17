@@ -36,6 +36,12 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   let sink = null;
   let pending = null;
   let seq = 0;
+  let app_child = null;
+  const start_child_app = () => {
+    app_exit = null;
+    app_child = session.spawn_app([app_binary, "-profile", profile_dir, "-no-remote"], "app.log");
+    app_child.on("exit", (code, signal) => { app_exit = { code, signal }; });
+  };
   try {
     // The sink takes JSON the helper add-on posts to http://127.0.0.1:<sink_port>/<name>. read_state(name) returns the last one.
     // The helper also polls GET /poll for the next command, which ask() queues.
@@ -55,7 +61,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     await new Promise((resolve) => sink.listen(0, "127.0.0.1", resolve));
     // The app finds add-ons in the profile only at startup, so the helper goes in before the app starts.
     if (xpi_path) install_helper(work_dir, profile_dir, sink.address().port);
-    session.spawn_app([app_binary, "-profile", profile_dir, "-no-remote"], "app.log").on("exit", (code, signal) => { app_exit = { code, signal }; });
+    start_child_app();
     await sleep(startup_ms);
   } catch (error) {
     sink?.close();
@@ -80,6 +86,15 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       throw new Error(`the helper add-on did not answer ${name}`);
     },
     exited: () => app_exit,
+    // Quits the app and starts it again on the same profile, which is the only real restart of DesertBird: management.setEnabled is refused for an add-on in the profile folder.
+    restart: async () => {
+      try { process.kill(-app_child.pid, "SIGTERM"); } catch {}
+      for (let waited = 0; app_exit === null && waited < 15000; waited += 100) await sleep(100);
+      if (app_exit === null) try { process.kill(-app_child.pid, "SIGKILL"); } catch {}
+      await sleep(2000);
+      start_child_app();
+      await sleep(startup_ms);
+    },
     // The app log. The headless session has no notification service, so libnotify logs one warning on the first notification the app tries to show.
     app_log: () => (existsSync(join(work_dir, "app.log")) ? readFileSync(join(work_dir, "app.log"), "utf8") : ""),
     // A bare Shift first, so the compositor and the app agree on the modifier state before the real keys.

@@ -57,10 +57,8 @@ async function collect() {
   return state;
 }
 
-// With a folder path, the helper shows that folder while DesertBird is off, so DesertBird starts on a folder its stored history never saw.
-async function reload_desertbird(show_path) {
+async function reload_desertbird() {
   await browser.management.setEnabled(DESERTBIRD_ID, false);
-  if (show_path) await show_folder(show_path);
   await browser.management.setEnabled(DESERTBIRD_ID, true);
 }
 
@@ -257,7 +255,7 @@ async function poll_forever() {
       } else if (command.name === "query_folder") {
         await post({ seq: command.seq, ...(await query_folder(command.args)) });
       } else if (command.name === "reload_desertbird") {
-        await reload_desertbird(command.args?.path);
+        await reload_desertbird();
         await post({ seq: command.seq, reloaded: true });
       }
     } catch (error) {
