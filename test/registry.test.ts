@@ -8,6 +8,7 @@ import { DEFAULT_KEYMAP, GROUPS, registry } from "../src/background/commands/ind
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.reply"] },
+    view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -65,7 +66,6 @@ const PHASE_1_COMMANDS = [
 
 test("the phase 1 commands keep their keys, args, side and bridge value", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(Object.keys(normal).sort(), PHASE_1_COMMANDS.map((row) => row.keys).sort());
     for (const row of PHASE_1_COMMANDS) {
         const binding = normal[row.keys];
         assert.ok(binding && !Array.isArray(binding), row.id);
@@ -74,4 +74,26 @@ test("the phase 1 commands keep their keys, args, side and bridge value", () => 
         assert.equal(registry.get(row.id)?.runs_in, row.runs_in, row.id);
         assert.equal(registry.get(row.id)?.bridge, row.bridge, row.id);
     }
+});
+
+test("every default key runs a registered command and no key is bound in two groups", () => {
+    const per_group = Object.values(GROUPS).flatMap((group) => Object.keys(group.normal_keys));
+    assert.equal(new Set(per_group).size, per_group.length, "a key sits in two groups");
+    assert.equal(Object.keys(DEFAULT_KEYMAP.normal ?? {}).length, per_group.length);
+    for (const [keys, binding] of Object.entries(DEFAULT_KEYMAP.normal ?? {})) {
+        assert.ok(binding && !Array.isArray(binding) && registry.get(binding.id), keys);
+    }
+});
+
+test("the view keys run the planned commands with the planned args", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    const planned: Record<string, { id: string; args: Record<string, string> }> = {
+        Fu: { id: "filter.set", args: { state: "unread" } },
+        Fa: { id: "filter.set", args: { state: "all" } },
+        Fs: { id: "filter.set", args: { state: "starred" } },
+        Ff: { id: "filter.set", args: { state: "attachment" } },
+        tm: { id: "pane.toggle", args: { pane: "message" } },
+        tf: { id: "pane.toggle", args: { pane: "folder" } },
+    };
+    for (const [keys, binding] of Object.entries(planned)) assert.deepEqual(normal[keys], binding, keys);
 });

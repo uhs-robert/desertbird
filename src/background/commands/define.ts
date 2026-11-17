@@ -1,7 +1,7 @@
 import type { CommandInput } from "../../../vendor/desertfox/registry/define.ts";
 import type { CheckedArgs, CommandContext, CommandRun } from "../../../vendor/desertfox/command.ts";
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
-import type { HandlerScope } from "../handlers/message.ts";
+import type { HandlerScope, MessageApi } from "../handlers/message.ts";
 
 // Every command states `bridge` on purpose, because the bridge runs nothing by default and a forgotten field should not pass silently.
 export type CommandDefinition = CommandInput & { bridge: boolean };
@@ -15,4 +15,5 @@ export interface CommandGroup {
 /** The router calls `run` with the usual context plus the scope. The vendored `CommandRun` type has no room for it. */
 export type ScopedContext = CommandContext & HandlerScope;
 
-export const scoped = (handler: (scope: HandlerScope, args: CheckedArgs) => Promise<void>): CommandRun => (ctx, args) => handler(ctx as ScopedContext, args);
+/** A handler names the API subset it needs as `Api`. The router passes the whole API, which holds every subset. */
+export const scoped = <Api = MessageApi>(handler: (scope: HandlerScope<Api>, args: CheckedArgs) => Promise<void>): CommandRun => (ctx, args) => handler(ctx as unknown as HandlerScope<Api>, args);

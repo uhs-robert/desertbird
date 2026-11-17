@@ -69,9 +69,9 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     out_dir,
     sink_port: sink.address().port,
     // Queues a command for the helper add-on ("state" or "reload_desertbird") and returns its reply.
-    ask: async (name, timeout_ms = 20000) => {
+    ask: async (name, timeout_ms = 20000, args = null) => {
       const wanted = ++seq;
-      pending = { name, seq: wanted };
+      pending = { name, seq: wanted, args };
       for (let waited = 0; waited < timeout_ms; waited += 100) {
         const reply = existsSync(join(out_dir, "state_state.json")) ? JSON.parse(readFileSync(join(out_dir, "state_state.json"), "utf8")) : null;
         if (reply?.seq === wanted) return reply;

@@ -222,8 +222,10 @@ The probe read the rows from the `about:3pane` view (`gDBView`), which the API d
 | `filter.set` unread | `{unread: true}` | 33 | 33 (from `messages.query`) |
 | `filter.set` starred | `{flagged: true}` | 3 | 3 |
 | `filter.set` tag | `{tags: {mode: "any", tags: {$label1: true}}}` | 3 | 3 (three messages tagged) |
-| `filter.set` attachment | `{attachment: true}` | 0 | 0 (cannot fail: the fixture has no attachments) |
+| `filter.set` attachment | `{attachment: true}` | 0 | 0 (the Inbox fixture has no attachments, so this row cannot fail) |
 | `search.threads` text | `{text: {text: "Single 1", subject: true}}` | 11 | 11 (from a subject query) |
+
+The end-to-end run repeated the filters on Thunderbird 153.7.0 and Betterbird 153.7.0 in a `Views` folder of 6 messages, one of them with a real attachment. `{attachment: true}` showed 1 of 6 rows on both apps. Unread showed 3, starred 2, the `$label1` tag 2 and the text `Views 3` 1, and `{}` restored 6. No build older than 153.7.0 ran, so the Betterbird 153.2.0 floor for `filter.set` and `search.threads` is still an assumption.
 
 ### Native host manifests
 
@@ -268,6 +270,7 @@ The other rows were checked for presence only.
 - X11, other keyboard layouts and other platforms. Only Linux on Wayland with a US layout ran.
 - A signed add-on, and the review of Experiments on addons.thunderbird.net.
 - The look of the overlay panel beyond the empty box in the screenshot.
+- The quick filter on a Betterbird build older than 153.7.0.
 - The system folders for native host manifests, and one run of each scenario per app only.
 
 ### Reproduce
