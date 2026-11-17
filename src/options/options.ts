@@ -17,6 +17,8 @@ declare const messenger: ConfigStorage & RecordStorageApi;
 const store = create_config_store(messenger);
 const quick_reply_store = create_quick_reply_store(messenger);
 const quick_reply_inputs: HTMLTextAreaElement[] = [];
+// Stays false when the load failed, so a Save cannot write nine empty slots over the stored texts.
+let quick_replies_loaded = false;
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function make<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: Node[]): HTMLElementTagNameMap[K] {
@@ -104,12 +106,14 @@ function render_quick_replies(slots: string[]): void {
 }
 
 async function save_quick_replies(): Promise<void> {
+    if (!quick_replies_loaded) return say("The quick replies did not load, so they are not saved.", true);
     await quick_reply_store.write_all(quick_reply_inputs.map((input) => input.value));
     say("Saved quick replies.");
 }
 
 async function start(): Promise<void> {
     render_quick_replies(await quick_reply_store.read_all());
+    quick_replies_loaded = true;
     const config = await store.read();
     const edits = edits_from_user_keymap(config.user_keymap);
     for (const keys of edits.removed) removed_defaults.add(keys);
