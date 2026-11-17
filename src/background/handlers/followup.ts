@@ -6,7 +6,7 @@ import type { SpecialFolderApi, SpecialUse } from "./special_folder.ts";
 import { followup_due_ms } from "../followup_presets.ts";
 import type { FollowupPreset } from "../followup_presets.ts";
 import type { FollowupItem, FollowupStore, StillWanted } from "../followup_store.ts";
-import { notify_refusal } from "../notify.ts";
+import { notify_refusal, notify_result } from "../notify.ts";
 import type { NotificationsApi } from "../notify.ts";
 
 export const FOLLOWUP_TAG_KEY = "desertbirdfollowup";
@@ -96,7 +96,7 @@ export async function remind_messages(scope: HandlerScope<FollowupApi & Notifica
         await api.followup.items.add({ header_message_id, account_id, anchor_date_ms: message.date.getTime(), due_ms });
     });
     const count = scope.message_ids.length;
-    await notify_refusal(api, `Reminder set for ${count} message${count === 1 ? "" : "s"} on ${new Date(due_ms).toLocaleString()}, unless a reply arrives first.`);
+    await notify_result(api, `Reminder set for ${count} message${count === 1 ? "" : "s"} on ${new Date(due_ms).toLocaleString()}, unless a reply arrives first.`);
 }
 
 export async function cancel_followups(scope: HandlerScope<FollowupApi & NotificationsApi>): Promise<void> {
@@ -110,7 +110,8 @@ export async function cancel_followups(scope: HandlerScope<FollowupApi & Notific
         const tags = message.tags ?? [];
         if (tags.includes(FOLLOWUP_TAG_KEY)) await api.messages.update(id, { tags: tags.filter((key) => key !== FOLLOWUP_TAG_KEY) });
     });
-    await notify_refusal(api, cancelled === 0 ? "No pending reminder on the selected messages." : `Cancelled ${cancelled} reminder${cancelled === 1 ? "" : "s"}.`);
+    if (cancelled === 0) await notify_refusal(api, "No pending reminder on the selected messages.");
+    else await notify_result(api, `Cancelled ${cancelled} reminder${cancelled === 1 ? "" : "s"}.`);
 }
 
 async function find_anchor(api: FollowupFireApi, item: FollowupItem): Promise<MessageHeader | undefined> {
