@@ -63,6 +63,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `msg.junk` | `m j` | Standard | `messages.update` |
 | `msg.tag {tag}` | `m t`, `:tag` | Standard | `messages.update`, `messages.tags.list` |
 | `msg.move {folder}` | `m m`, `m p`, `:move` | Standard | `messages.move`, `folders.query` |
+| `msg.snooze {until: later_today, tomorrow, weekend, monday}` | `m z l`, `m z t`, `m z w`, `m z m` | Standard | `folders.create`, `messages.move`, `messages.query`, `messages.update`, `alarms`. The message waits in a `Snoozed` folder of its own account (Local Folders when the account cannot create one) and the due list lives in `storage.local`. |
 | `msg.archive` | `x`, `:archive` | Standard | `messages.archive` |
 | `msg.delete` | `d d`, `:delete` | Standard | `messages.delete` |
 | `msg.reply {to: sender, all, list}` | `r`, `R` | Standard | `compose.beginReply` |
@@ -99,7 +100,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime |
 | Command line, which-key, badge, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |
 
-The table has 41 rows. 26 run without the Experiment (25 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.
+The table has 42 rows. 27 run without the Experiment (26 Standard and one Standard if fast enough). 15 need it (13 Experiment and two mixed rows, hints and the overlay mount). The Experiment carries key capture, the thread view and focus.
 
 ## Decisions
 

@@ -373,3 +373,13 @@ Facts measured while the end-to-end sort key checks ran on Thunderbird 153.7 ESR
 
 - `mailTabs.update(tabId, {sortType: "received", sortOrder: "ascending"})` and the same with `"priority"` returned without an error. A following `mailTabs.query` reported the new `sortType`. `sort.set` takes both as `by` values.
 - `, d`, `, s`, `, f` and `, o` set the sort and the row order of the Views folder (6 messages) as the keys name it. `getListedMessages` returned the rows in the order of the view. `, o` flipped the order of the column the list had.
+## Snooze
+
+`msg.snooze` is built on standard MailExtension APIs. What was checked and what is left for a hand check:
+
+- The message waits in a `Snoozed` folder at the root of its own account. When `folders.create` fails there, the folder is created in Local Folders and the message moves across accounts. The wake finds the message by its Message-ID header in any folder whose path is `/Snoozed`, and sends it back to the Inbox of the account it came from.
+- `messages.move` gives the message a new id, so a snooze stores the Message-ID header and the origin account and never the numeric id. After the move back, the wake looks the message up again to mark it unread.
+- A snooze that comes due while Thunderbird is closed wakes at the next start. The add-on cannot wake a closed application. After a start, the run at start and a tick every minute catch every item that is due.
+- Firefox alarms do not survive a restart, so the add-on creates its one repeating alarm again on every start.
+- The end-to-end run covers the key, the folder creation and the move in Local Folders. The due time is hours away, so the wake is not run end to end. The unit tests drive it against a model mailbox that gives moved messages new ids.
+- Not measured, for a hand check: folder creation, the move and the wake on a real IMAP account (the message returns with the same Message-ID), the same flow on Betterbird, a wake after a wait of minutes and after a restart, the wake notification text, and the unread count in the folder pane after a wake.

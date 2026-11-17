@@ -9,8 +9,10 @@ import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/sto
 import type { Config } from "./config/store.ts";
 import { notify_refusal } from "./notify.ts";
 import { create_router } from "./router.ts";
+import { wake_snoozed } from "./handlers/snooze.ts";
 import { create_scheduler } from "./scheduler.ts";
 import type { SchedulerApi } from "./scheduler.ts";
+import { create_snooze_store } from "./snooze_store.ts";
 import type { RouterApi } from "./router.ts";
 
 const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
@@ -29,7 +31,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline">, Pick<SchedulerApi, "alarms"> {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze">, Pick<SchedulerApi, "alarms"> {
     runtime: { onMessage: { addListener(listener: (message: unknown) => Promise<unknown> | undefined): void } };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
@@ -109,6 +111,9 @@ function queue_install(drop_cache: boolean): void {
 
 // A feature adds its `on_due` listener here in main.ts, before the `start` call at the end.
 const scheduler = create_scheduler(messenger);
+// One store instance for the whole page: each instance keeps its own write queue and memory copy.
+const snoozes = create_snooze_store(messenger);
+scheduler.on_due((now_ms) => snoozes.wake_due(now_ms, (item) => wake_snoozed(messenger, item)));
 
 // The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
 const cmdline = create_cmdline_service({
@@ -120,7 +125,7 @@ const cmdline = create_cmdline_service({
     overlay: messenger.overlay,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, snooze: { items: snoozes, now: () => new Date() } });
 
 messenger.runtime.onMessage.addListener((message) => cmdline.handle(message));
 // The overlay left a window on its own (a tab change or a closed window), so the session for that window is dropped.

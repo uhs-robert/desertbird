@@ -11,6 +11,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: strin
     compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
+    snooze: { runs_in: "background", ids: ["msg.snooze"] },
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
 };
@@ -67,6 +68,10 @@ const MESSAGE_KEYS = [
     { id: "msg.reply", keys: "R", args: { to: "all" } },
     { id: "msg.forward", keys: "gF", args: undefined },
     { id: "msg.new", keys: "c", args: undefined },
+    { id: "msg.snooze", keys: "mzl", args: { until: "later_today" } },
+    { id: "msg.snooze", keys: "mzt", args: { until: "tomorrow" } },
+    { id: "msg.snooze", keys: "mzw", args: { until: "weekend" } },
+    { id: "msg.snooze", keys: "mzm", args: { until: "monday" } },
 ];
 
 test("the message and compose commands keep their default keys", () => {

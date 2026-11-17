@@ -387,6 +387,25 @@ async function run_default(instance) {
   check(app, kind, "m R marks every message of the shown folder read", was_unread && still_unread.length === 0, `an unread message existed: ${was_unread}, unread left in Inbox: ${still_unread.length}`);
   await shot("after_m_R", "Inbox with no unread count after m R");
 
+  // m z <preset> snoozes the selected message into a Snoozed folder of its account. The wake needs a clock run of minutes to hours, so it is a hand check.
+  state = await go_to_row(9);
+  const snooze_target = first_selected(state);
+  const homes_after_snooze = (state, id) => Object.entries(state.folders).filter(([, ids]) => ids.includes(id)).map(([path]) => path);
+  await instance.press(["m"]);
+  await instance.press(["z"]);
+  state = await key_and_state(instance, ["t"], 3000);
+  check(app, kind, "m z t moves the selected message to a Snoozed folder and out of the Inbox", same(homes_after_snooze(state, snooze_target), ["/Snoozed"]), `${snooze_target} is in ${JSON.stringify(homes_after_snooze(state, snooze_target))}`);
+  const snoozed_before = state.folders["/Snoozed"]?.length ?? 0;
+  state = await go_to_row(9);
+  const second_snooze_target = first_selected(state);
+  await instance.press(["m"]);
+  await instance.press(["z"]);
+  state = await key_and_state(instance, ["m"], 3000);
+  check(app, kind, "a second snooze reuses the Snoozed folder", same(homes_after_snooze(state, second_snooze_target), ["/Snoozed"]) && (state.folders["/Snoozed"]?.length ?? 0) === snoozed_before + 1, `${second_snooze_target} is in ${JSON.stringify(homes_after_snooze(state, second_snooze_target))}, Snoozed holds ${state.folders["/Snoozed"]?.length ?? 0}`);
+  gone.add(snooze_target);
+  gone.add(second_snooze_target);
+  await shot("after_snooze", "Inbox after two snoozes; the Snoozed folder holds both messages");
+
   // Compose keys. R replies to all, g F forwards, c writes a new message.
   const compose_of = (state) => state.windows.find((window) => window.type === "messageCompose");
   const compose_subject = (state) => compose_of(state)?.tabs.map((tab) => tab.subject).find((subject) => subject !== null && subject !== undefined);

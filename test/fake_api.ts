@@ -1,3 +1,5 @@
+import { create_snooze_store } from "../src/background/snooze_store.ts";
+import type { SnoozeStore } from "../src/background/snooze_store.ts";
 import type { RouterApi } from "../src/background/router.ts";
 import type { MailFolder } from "../src/background/handlers/displayed_folder.ts";
 import type { Identity } from "../src/background/handlers/identity.ts";
@@ -13,11 +15,16 @@ interface FakeOptions {
     displayed?: MailFolder;
     /** The default account. `null` means there is none. */
     default_account?: { id: string } | null;
+    /** The accounts `accounts.list` returns. */
+    accounts?: { id: string; type: string }[];
+    /** The time `snooze.now` returns. */
+    now?: Date;
 }
 
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
-export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[] } {
+export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: string[]; snoozes: SnoozeStore } {
     const calls: string[] = [];
+    const snoozes = create_snooze_store({ storage: fake_storage().api });
     const known = new Map((options.messages ?? []).map((message) => [message.id, { date: new Date(0), ...message }]));
     const api: RouterApi = {
         messages: {
@@ -31,6 +38,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             },
             update: async (id, properties) => void calls.push(`messages.update ${id} ${JSON.stringify(properties)}`),
             move: async (ids, folder_id) => void calls.push(`messages.move ${ids.join(",")} ${folder_id}`),
+            query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
             tags: { list: async () => (calls.push("messages.tags.list"), options.tags ?? []) },
         },
         compose: {
@@ -44,12 +52,17 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 return (options.identities ?? [{ id: "i1", email: "me@x.invalid", account_id: "a1" }]).filter((identity) => account_id === undefined || identity.account_id === account_id);
             },
         },
-        accounts: { getDefault: async () => (calls.push("accounts.getDefault"), options.default_account === undefined ? { id: "a1" } : options.default_account) },
+        accounts: {
+            getDefault: async () => (calls.push("accounts.getDefault"), options.default_account === undefined ? { id: "a1" } : options.default_account),
+            list: async () => (calls.push("accounts.list"), options.accounts ?? [{ id: "a1", type: "imap" }]),
+        },
+        snooze: { items: snoozes, now: () => options.now ?? new Date(2026, 10, 18, 10, 15) },
         folders: {
             query: async (query) => {
                 calls.push(`folders.query ${JSON.stringify(query)}`);
                 return (options.folders ?? []).filter((folder) => (query.path === undefined || folder.path === query.path) && (query.accountId === undefined || folder.accountId === query.accountId));
             },
+            create: async (parent_id, name) => (calls.push(`folders.create ${parent_id} ${name}`), { id: `new-${name}`, accountId: "a1", path: `/${name}` }),
             markAsRead: async (folder_id) => void calls.push(`folders.markAsRead ${folder_id}`),
         },
         mailTabs: { query: async (query) => (calls.push(`mailTabs.query ${query.windowId}`), options.displayed === undefined ? [{ id: 1 }] : [{ id: 1, displayedFolder: options.displayed }]), update: async () => undefined, setQuickFilter: async () => {} },
@@ -68,7 +81,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
             end: (window_id) => void calls.push(`cmdline.end ${window_id}`),
         },
     };
-    return { api, calls };
+    return { api, calls, snoozes };
 }
 
 /** A fake of `alarms` that dies with the page: `restart()` clears every alarm and listener, as a Firefox restart does. `fire` runs the listeners like an alarm going off. */
