@@ -79,10 +79,19 @@ async function show_first_unread(scope: StepScope, folder: MailFolder): Promise<
     await select_row(scope, { id: page.messages[0].id });
 }
 
+// With no row selected, `[` starts after the last row. The view gives no row count, so a full block means more rows follow.
+async function last_row_index(scope: StepScope): Promise<number> {
+    for (let first = 0; ; first += BLOCK) {
+        const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
+        if (rows.length < BLOCK) return first + rows.length - 1;
+    }
+}
+
 async function step(scope: StepScope, flag: RowFlag, args: CheckedArgs): Promise<void> {
     const forward = args["direction"] === "next";
     const { current } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
-    const target = await find_row(scope, flag, forward ? current + 1 : current - 1, forward, scope.count);
+    // With no row selected (`current` is -1) `]` starts before the first row, which `current + 1` already gives.
+    const target = await find_row(scope, flag, forward ? current + 1 : (current < 0 ? await last_row_index(scope) : current - 1), forward, scope.count);
     if (target) return select_row(scope, target);
     if (args["scope"] === "all_folders") {
         const folder = await folder_with_unread(scope, forward);
