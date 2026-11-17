@@ -10,6 +10,7 @@ import { clipboard } from "./clipboard.ts";
 import { cmdline } from "./cmdline.ts";
 import { compose } from "./compose.ts";
 import { folders } from "./folders.ts";
+import { help } from "./help.ts";
 import { followup } from "./followup.ts";
 import { messages } from "./messages.ts";
 import { new_mail } from "./new_mail.ts";
@@ -25,7 +26,7 @@ import { unsubscribe } from "./unsubscribe.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help };
 
 export const registry = create_registry();
 
