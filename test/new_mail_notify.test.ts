@@ -145,6 +145,14 @@ test("notify.toggle flips the setting both ways and says which", async () => {
     assert.equal((data[SETTINGS_KEY] as { notify_new_mail: boolean }).notify_new_mail, false);
 });
 
+test("notify.toggle says which way as a result toast in the command's window", async () => {
+    const { api } = harness();
+    const toasts: [number, boolean][] = [];
+    Object.assign(api, { toasts: { toast: async (window_id: number, _text: string, is_error: boolean) => (toasts.push([window_id, is_error]), true) } });
+    await registry.get("notify.toggle")!.run!({ api, window_id: 4, message_ids: [], count: 1 } as never, {} as never);
+    assert.deepEqual(toasts, [[4, false]]);
+});
+
 test("notify.toggle keeps the other settings", async () => {
     const { api, data } = harness({ [SETTINGS_KEY]: { toast_ms: 7 } });
     await registry.get("notify.toggle")!.run!({ api, window_id: 1, message_ids: [], count: 1 } as never, {} as never);

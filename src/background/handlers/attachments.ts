@@ -112,5 +112,5 @@ export async function save_attachments(scope: AttachmentsScope, args: CheckedArg
     const plural = started === 1 ? "" : "s";
     const where = save_as ? "." : ` to Downloads/${folders.length === 1 ? folders[0] : ROOT_FOLDER}.`;
     const lost = failed > 0 ? ` ${failed} did not save.` : "";
-    await notify_result(api, `Saving ${started} attachment${plural}${where}${lost}${left_out}`);
+    await notify_result(api, `Saving ${started} attachment${plural}${where}${lost}${left_out}`, scope.window_id);
 }
