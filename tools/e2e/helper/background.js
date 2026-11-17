@@ -220,6 +220,10 @@ async function poll_forever() {
         const [tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
         const selected = await all_messages(await browser.mailTabs.getSelectedMessages(tab.id));
         await post({ seq: command.seq, folder: tab.displayedFolder?.path ?? null, ids: selected.map((message) => message.headerMessageId) });
+      } else if (command.name === "folder_unread") {
+        const counts = {};
+        for (const folder of await browser.folders.query({})) counts[folder.path] = { special: folder.specialUse ?? [], virtual: folder.isVirtual ?? false, info: await browser.folders.getFolderInfo(folder.id).then((info) => info.unreadMessageCount, (error) => String(error)) };
+        await post({ seq: command.seq, counts });
       } else if (command.name === "open_message_window") {
         await post({ seq: command.seq, opened: await open_message_window() });
       } else if (command.name === "close_message_windows") {

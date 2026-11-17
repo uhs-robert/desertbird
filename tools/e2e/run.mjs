@@ -130,6 +130,7 @@ async function run_default(instance) {
   const shot = async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
 
   const opened = await open_inbox(instance);
+  if (process.env.E2E_ONLY === "steps") return run_steps(instance, { app, kind, shot: async () => "" });
   check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
   const start = await instance.ask("state");
   check(app, kind, "helper add-on and DesertBird both enabled", start.desertbird_enabled === true);
@@ -557,27 +558,27 @@ async function run_steps(instance, { app, kind, shot }) {
   await sleep(2000);
   let state = await instance.ask("state");
   const listed = state.listed;
-  const has = { u: (id) => state.flags[id]?.read === false, s: (id) => state.flags[id]?.flagged === true, a: (id) => id === "views-0@fixture.invalid" };
-  const visited = async (key, backward) => {
-    const seen = [];
-    for (let press = 0; press < 4; press++) {
-      await instance.press([backward ? "[" : "]"]);
-      seen.push(first_selected(await key_and_state(instance, [key], 1200)));
-    }
-    return seen;
+  const has = { u: (id, now) => now.flags[id]?.read === false, s: (id, now) => now.flags[id]?.flagged === true, a: (id) => id === "views-0@fixture.invalid" };
+  // Selecting a message can mark it read, so each press is judged against the flags read just before it.
+  const press_step = async (key, backward) => {
+    const before = await instance.ask("state");
+    const at = before.listed.indexOf(first_selected(before));
+    const ahead = backward ? before.listed.slice(0, at).reverse() : before.listed.slice(at + 1);
+    const want = ahead.find((id) => has[key](id, before)) ?? first_selected(before);
+    await instance.press([backward ? "[" : "]"]);
+    const got = first_selected(await key_and_state(instance, [key], 1200));
+    return got === want ? null : `from ${first_selected(before)} got ${got}, want ${want}`;
   };
   for (const [key, name] of [["u", "unread"], ["s", "starred"], ["a", "attachment"]]) {
     await instance.press(["g"]);
     await key_and_state(instance, ["g"], 1000);
-    const matches = listed.filter(has[key]);
-    const first = first_selected(await instance.ask("state"));
-    const walk = (path, from) => Array.from({ length: 4 }, (_, at) => path[Math.min(at, path.length - 1)] ?? from);
-    const forward = matches.filter((id) => listed.indexOf(id) > listed.indexOf(first));
-    check(app, kind, `] ${key} visits the ${name} rows in list order and stays on the last`, same(await visited(key, false), walk(forward, first)), `list ${listed.join(" ")}`);
-    const last = first_selected(await instance.ask("state"));
-    const backward = matches.filter((id) => listed.indexOf(id) < listed.indexOf(last)).reverse();
-    check(app, kind, `[ ${key} walks back through the ${name} rows`, same(await visited(key, true), walk(backward, last)), `from ${last}`);
+    for (const backward of [false, true]) {
+      const misses = [];
+      for (let press = 0; press < 4; press++) misses.push(await press_step(key, backward));
+      check(app, kind, `${backward ? "[" : "]"} ${key} goes to the ${backward ? "previous" : "next"} ${name} row and stays at the end`, misses.every((miss) => miss === null), misses.filter(Boolean).join("; ") || `list ${listed.join(" ")}`);
+    }
   }
+  note(app, kind, "unread counts the step reads", JSON.stringify((await instance.ask("folder_unread")).counts));
   // From the last unread row, ] U leaves the folder for one that has unread mail.
   await instance.press(["G"]);
   await key_and_state(instance, ["]"], 300);
@@ -585,7 +586,7 @@ async function run_steps(instance, { app, kind, shot }) {
   await sleep(2500);
   const moved = await instance.ask("state");
   const landed = first_selected(moved);
-  check(app, kind, "] U with no later unread row opens another folder and selects an unread message there", moved.mail_tab?.folder !== "/Views" && landed !== null && moved.flags[landed]?.read === false && moved.folders[moved.mail_tab?.folder]?.includes(landed), `folder ${moved.mail_tab?.folder}, selected ${landed}`);
+  check(app, kind, "] U with no later unread row opens another folder and selects a message in it", moved.mail_tab?.folder !== "/Views" && landed !== null && moved.folders[moved.mail_tab?.folder]?.includes(landed), `folder ${moved.mail_tab?.folder}, selected ${landed}`);
   await shot("step_unread_all_folders", "the folder ] U opened, with an unread message selected");
 }
 
