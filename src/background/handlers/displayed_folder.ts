@@ -6,7 +6,6 @@ export interface MailFolder {
     path: string;
     specialUse?: string[];
     isVirtual?: boolean;
-    canAddSubfolders?: boolean;
     isUnified?: boolean;
 }
 

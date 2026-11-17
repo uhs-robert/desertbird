@@ -23,14 +23,14 @@ interface StoredMessage {
 }
 
 /** A small mailbox that keeps what the real API does: a move gives the message a new id and puts it in the target folder. */
-function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: string[]; hang_create_in?: string[]; namespace_in?: string[]; create_delay_ms?: number; page_size?: number; write_delay_ms?: number; inbox_lookup_failures?: number } = {}) {
+function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: string[]; hang_create_in?: string[]; namespace_in?: string[]; create_delay_ms?: number; page_size?: number; empty_first_page?: boolean; no_inbox_in?: string[]; write_delay_ms?: number; inbox_lookup_failures?: number } = {}) {
     const storage = fake_storage({}, options.write_delay_ms ?? 0);
     const store = create_snooze_store({ storage: storage.api });
     const folders: (MailFolder & { isRoot?: boolean })[] = [
-        { id: "imap-root", accountId: "imap", path: "/", isRoot: true, canAddSubfolders: !options.cannot_create_in?.includes("imap") },
+        { id: "imap-root", accountId: "imap", path: "/", isRoot: true },
         { id: "imap-sent", accountId: "imap", path: "/Sent", specialUse: ["sent"] },
         { id: "imap-inbox", accountId: "imap", path: "/INBOX", specialUse: ["inbox"] },
-        { id: "local-root", accountId: "local", path: "/", isRoot: true, canAddSubfolders: !options.cannot_create_in?.includes("local") },
+        { id: "local-root", accountId: "local", path: "/", isRoot: true },
         { id: "local-inbox", accountId: "local", path: "/Inbox", specialUse: ["inbox"] },
     ];
     const messages: StoredMessage[] = [];
@@ -62,7 +62,7 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
             query: async (query: { headerMessageId: string; folderId?: string }) => {
                 const matches = messages.filter((message) => message.header === query.headerMessageId && (query.folderId === undefined || message.folder_id === query.folderId)).map(header_of);
                 const size = options.page_size ?? matches.length + 1;
-                const pages: MessageHeader[][] = [];
+                const pages: MessageHeader[][] = options.empty_first_page ? [[]] : [];
                 for (let start = 0; start < matches.length; start += size) pages.push(matches.slice(start, start + size));
                 if (pages.length === 0) pages.push([]);
                 const list_id = `list-${lists.size}`;
@@ -77,12 +77,13 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
             update: async (id: number, properties: { read: boolean }) => void (messages.find((message) => message.id === id)!.read = properties.read),
         },
         folders: {
-            query: async (query: { accountId?: string; path?: string; isRoot?: boolean; specialUse?: string[] }) => {
+            // `canAddSubfolders` filters root folders and never appears on a returned folder, as in the real API.
+            query: async (query: { accountId?: string; path?: string; isRoot?: boolean; specialUse?: string[]; canAddSubfolders?: boolean; folderId?: string }) => {
                 if (query.specialUse?.includes("inbox") && inbox_lookup_failures > 0) {
                     inbox_lookup_failures--;
                     throw new Error("the folder tree is not loaded yet");
                 }
-                return folders.filter((folder) => (query.accountId === undefined || folder.accountId === query.accountId) && (query.path === undefined || folder.path === query.path) && (query.isRoot === undefined || folder.isRoot === query.isRoot) && (query.specialUse === undefined || query.specialUse.some((use) => folder.specialUse?.includes(use))));
+                return folders.filter((folder) => (query.folderId === undefined || folder.id === query.folderId) && (query.canAddSubfolders === undefined || !options.cannot_create_in?.includes(folder.accountId) === query.canAddSubfolders) && !(query.specialUse?.includes("inbox") && options.no_inbox_in?.includes(folder.accountId)) && (query.accountId === undefined || folder.accountId === query.accountId) && (query.path === undefined || folder.path === query.path) && (query.isRoot === undefined || folder.isRoot === query.isRoot) && (query.specialUse === undefined || query.specialUse.some((use) => folder.specialUse?.includes(use))));
             },
             create: async (parent_id: string, name: string) => {
                 const parent = folders.find((folder) => folder.id === parent_id)!;
@@ -118,7 +119,7 @@ test("a snooze creates the Snoozed folder in the message's account, moves the me
     await snooze(box, [message.id]);
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
     assert.deepEqual(box.log, ["create imap Snoozed", "move <a@x> imap-inbox -> imap-Snoozed"]);
-    assert.deepEqual(await box.store.list(), [{ header_message_id: "<a@x>", origin_account_id: "imap", folder_id: "imap-Snoozed", due_ms: tomorrow_8 }]);
+    assert.deepEqual(await box.store.list(), [{ header_message_id: "<a@x>", origin_account_id: "imap", folder_id: "imap-Snoozed", origin_folder_id: "imap-inbox", due_ms: tomorrow_8 }]);
     assert.match(box.notices[0]!, /^Snoozed 1 message until /);
 });
 
@@ -185,7 +186,7 @@ test("a wake returns the message to the origin account's Inbox as unread, notifi
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.equal(box.messages[0]?.read, false);
     assert.deepEqual(await box.store.list(), []);
-    assert.deepEqual(box.notices, ["Snoozed message back in the Inbox: Subject of <a@x>"]);
+    assert.deepEqual(box.notices, ["Snoozed message returned: Subject of <a@x>"]);
 });
 
 test("a wake from the Local Folders fallback returns the message to the origin account", async () => {
@@ -242,15 +243,37 @@ test("a repeat of a wake that already moved the message only marks it unread and
     assert.equal(box.messages[0]?.read, false);
 });
 
-test("an account that is gone keeps the message in Snoozed and drops the item with a notification", async () => {
-    const box = mailbox();
+test("an account with no Inbox gets the message back in the folder it came from", async () => {
+    const box = mailbox({ no_inbox_in: ["imap"] });
+    const message = box.add("<a@x>", "imap-sent");
+    await snooze(box, [message.id]);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>"), ["imap-sent"]);
+    assert.equal(box.messages[0]?.read, false);
+    assert.deepEqual(await box.store.list(), []);
+});
+
+test("an account with no Inbox and no origin folder drops the item with a notification and leaves the message in Snoozed", async () => {
+    const box = mailbox({ no_inbox_in: ["imap"] });
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
     const [item] = await box.store.list();
     box.notices.length = 0;
-    await wake_snoozed(box.api, { ...item!, origin_account_id: "removed" });
+    await wake_snoozed(box.api, { ...item!, origin_folder_id: "removed-folder" });
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
-    assert.match(box.notices[0]!, /account is gone/);
+    assert.match(box.notices[0]!, /no Inbox and its folder is gone/);
+});
+
+test("a wake whose Snoozed folder no longer exists drops the item with a notification and does not retry", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    box.notices.length = 0;
+    const missing_folder = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(missing_folder);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(await box.store.list(), []);
+    assert.match(box.notices.at(-1)!, /Snoozed folder is gone/);
 });
 
 test("a refused create or a create that never settles refuses the snooze, leaves the message in place and does not fall back", async () => {
@@ -298,11 +321,19 @@ test("a Snoozed folder under INBOX is found again, and the wake reads the stored
     assert.deepEqual([box.where("<a@x>"), box.where("<b@x>")], [["imap-inbox"], ["imap-inbox"]]);
 });
 
-test("the wake finds the waiting message on the second page, behind a copy in another folder", async () => {
-    const box = mailbox({ page_size: 1 });
-    const sent_copy = box.add("<a@x>", "imap-sent");
+test("the wake reads past an empty first page to find the waiting message", async () => {
+    const box = mailbox({ empty_first_page: true });
     const message = box.add("<a@x>");
-    void sent_copy;
+    await snooze(box, [message.id]);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
+    assert.deepEqual(await box.store.list(), []);
+});
+
+test("a copy in another folder is never taken, even when pages hold one match each", async () => {
+    const box = mailbox({ page_size: 1 });
+    box.add("<a@x>", "imap-sent");
+    const message = box.add("<a@x>");
     await snooze(box, [message.id]);
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "imap-sent"]);
@@ -385,7 +416,7 @@ test("a tick during start does not wake the message twice", async () => {
     await started;
     await settle();
     assert.deepEqual(box.log, ["move <a@x> imap-Snoozed -> imap-inbox"]);
-    assert.equal(box.notices.filter((notice) => notice.startsWith("Snoozed message back")).length, 1);
+    assert.equal(box.notices.filter((notice) => notice.startsWith("Snoozed message returned")).length, 1);
 });
 
 test("msg.snooze is registered with its four presets, runs in the background and is not bridge safe", async () => {
