@@ -41,6 +41,22 @@ test("an empty storage reads as the defaults and gets its version stamped", asyn
     assert.equal(stored[VERSION_KEY], CONFIG_VERSION);
 });
 
+test("the mode label shows in every mode by default, in the classic style", async () => {
+    const { api } = stub_storage({});
+    const { settings } = await create_config_store(api).read();
+    assert.equal(settings.mode_indicator, "always");
+    assert.equal(settings.mode_indicator_style, "classic");
+});
+
+test("a stored not_normal and a stored style stay, and a bad style is ignored", async () => {
+    const { api } = stub_storage({ [SETTINGS_KEY]: { mode_indicator: "not_normal", mode_indicator_style: "badge" } });
+    const { settings } = await create_config_store(api).read();
+    assert.equal(settings.mode_indicator, "not_normal");
+    assert.equal(settings.mode_indicator_style, "badge");
+    const { api: other } = stub_storage({ [SETTINGS_KEY]: { mode_indicator_style: "pill" } });
+    assert.equal((await create_config_store(other, { report: () => {} }).read()).settings.mode_indicator_style, "classic");
+});
+
 test("written settings and bindings read back, with the settings over the defaults", async () => {
     const { api } = stub_storage();
     const store = create_config_store(api);
