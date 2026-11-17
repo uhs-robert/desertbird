@@ -17,6 +17,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message"], background_ids: ["search.message"] },
     folders: { runs_in: "background", ids: ["folder.open", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
     unsubscribe: { runs_in: "background", ids: ["msg.unsubscribe"] },
+    attachments: { runs_in: "background", ids: ["msg.save_attachments"] },
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"] },
 };
 

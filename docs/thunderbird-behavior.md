@@ -456,3 +456,13 @@ Measured with the end-to-end run on the fixture Inbox (ten threads of four, open
 - The tree has no call that places a row: `scrollToIndex` only brings it into view. The verb calls it first (only rows near the view have an element), then `scrollIntoView` on the row, then `scrollBy` back by the sticky column header height read at run time (all of it for top, half for center, none for bottom). Without the move, `z t` hid the row under the header in the Betterbird table view.
 - With the move, `z t`, `z z` and `z b` put the row at the top, middle and bottom of the list on both apps, in the Betterbird table view and the Thunderbird card view, in a list tall enough for several rows. The list clamps at its ends: a row near the start cannot reach the middle or bottom, a row near the end cannot reach the top.
 - In a view grouped by its sort column, a group header row reports the message key of its first member, so the header and that member have the same id.
+
+## Save attachments
+
+Taken from the API schemas. Not yet measured on a running Thunderbird or Betterbird, so each point is a hand check.
+
+- `downloads.download` resolves when the download starts, not when it ends. The handler keeps the blob URL until `downloads.onChanged` reports `complete` or `interrupted`, so a large file is not cut short.
+- `filename` is relative to the Downloads directory, so the add-on cannot write elsewhere.
+- `messages.listAttachments` lists attachments only. The handler does not tell an inline image from an attached one, because the API reports no disposition.
+- Thunderbird's "always ask where to save" setting may override the folder and show a dialog. A canceled dialog counts as not saved.
+- Hand checks: the bytes of a saved file against the fixture attachment, a tens-of-MB attachment, Betterbird, and a mail with a hostile file name.
