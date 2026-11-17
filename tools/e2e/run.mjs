@@ -124,11 +124,11 @@ async function run_threads(instance, { app, kind, shot }) {
   await keys(["g", "g"]);
 }
 
-// A hash of the bottom 320 px of the window, the hud's box, without the scrollbar strip on the right.
+// A hash of the bottom 80 px of the window, where the panel, the toasts and the badge draw, without the scrollbar strip. Higher up a message pane can still be loading.
 async function hud_pixels(instance, name) {
   const { createHash } = await import("node:crypto");
   const { readFileSync } = await import("node:fs");
-  return createHash("sha256").update(readFileSync(await instance.shot_region(name, "0,400 1260x320"))).digest("hex");
+  return createHash("sha256").update(readFileSync(await instance.shot_region(name, "0,640 1260x80"))).digest("hex");
 }
 
 async function run_default(instance) {
@@ -700,7 +700,8 @@ async function run_hud(instance, { app, kind, shot }) {
   const pixels_of = (name) => hud_pixels(instance, `${app}_${name}_${theme}`);
   await instance.press(["g"]);
   await instance.press(["g"]);
-  await sleep(1000);
+  // A toast from an earlier step lasts up to 6 s, and it would change the reference pixels when it expires.
+  await sleep(7000);
   const bare = await pixels_of("hud_bare");
   // g is a prefix key: after the which-key delay (300 ms) the panel lists the keys that can follow.
   await instance.press(["g"]);
