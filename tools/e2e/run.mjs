@@ -760,8 +760,13 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["q"]);
   await sleep(800);
   await instance.click(130, displayed === "/Views" ? 224 : 252);
-  await sleep(1500);
-  check(app, kind, "a click under the toast reaches the folder pane", (await instance.ask("state")).mail_tab?.folder !== displayed, `displayed folder was ${displayed}`);
+  // The folder change is polled for up to 8 s, so a slow repaint is not a failure, while a click the hud swallows never changes the folder.
+  let folder_after = displayed;
+  for (const deadline = Date.now() + 8000; folder_after === displayed && Date.now() < deadline; ) {
+    await sleep(250);
+    folder_after = (await instance.ask("state")).mail_tab?.folder;
+  }
+  check(app, kind, "a click under the toast reaches the folder pane", folder_after !== displayed, `displayed folder was ${displayed}, after ${folder_after}`);
   await sleep(6000);
   // ? opens the help page in a tab.
   await instance.press(["?"]);

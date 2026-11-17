@@ -111,6 +111,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       const pointer = (...args) => execFileSync("wlrctl", ["pointer", ...args], { env: session.env });
       pointer("move", "-3000", "-3000");
       pointer("move", String(x), String(y));
+      // The app needs the pointer motion before the button, or a press right after the move can miss the row under it.
+      await new Promise((done) => setTimeout(done, 300));
       pointer("click", "left");
     },
     // A screenshot of a region, "x,y WxH" as grim reads it. A region that leaves out the scrollbar draws the same twice when nothing in it changed.
