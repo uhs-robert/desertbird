@@ -25,6 +25,9 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
 // The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard was 18004 plus 372 rounded up to 18400. The thread verbs of the view API took it from 18358 on main to 20501 bytes, so it was 18400 plus 2143 rounded up to 20600. Visual mode and the row flags took the build from 20501 on main to 21451 (950 bytes). The guard for a stale range (the end row and view the mode last set, and the collapse after a command) made it 21785. The message keys at both ends of the range made it 21996 (1495 bytes over main), so it was 20600 plus 1495 rounded up to 22100. The which-key report of the typed prefix added 305 bytes, so it was 22100 plus 305 rounded up to 22500. The folder row, pane focus, command and page verbs made it 24085 (1784 bytes over main's 22301), so it was 22500 plus 1784 rounded up to 24300. The report of visual mode to the mode label made it 24374 (289 bytes over main), so it was 24300 plus 289 rounded up to 24600. Pane focus by chord and left or right, and the motions in the folder pane, made it 25492 (1118 bytes over main's 24374), so it is 24600 plus 1118 rounded up to the next 100. AGENTS.md records the same number.
 const PARENT_MAX_BYTES = 25800;
 
+// The size guard of the folder pane bundle (`experiment/folderpane.js`), which Thunderbird loads on the first folder pane call and not at startup: its first measured size (4891 bytes) plus 20 percent made 5869, rounded up to 5900. AGENTS.md records the same number.
+const FOLDERPANE_MAX_BYTES = 5900;
+
 // The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard is 15879 rounded up to 15900. AGENTS.md records the same number.
 const CONTENT_MAX_BYTES = 15900;
 
@@ -33,6 +36,7 @@ const CONTENT_MAX_BYTES = 15900;
 const PARENTS = [
     { name: "keys", entry: "src/chrome/parent_keys.ts" },
     { name: "overlay", entry: "src/chrome/parent_overlay.ts" },
+    { name: "folderpane", entry: "src/chrome/parent_folderpane.ts" },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,
@@ -95,8 +99,9 @@ for (const file of ["help.html", "help.css"]) copyFileSync(join(root, "src", "he
 copyFileSync(join(root, "src", "manifest.json"), join(out_dir, "manifest.json"));
 
 for (const [name, bytes] of parent_sizes) {
-    if (bytes > PARENT_MAX_BYTES) {
-        console.error(`build: experiment/${name}.js is ${bytes} bytes, over the ${PARENT_MAX_BYTES} byte chrome runtime budget`);
+    const max_bytes = name === "folderpane" ? FOLDERPANE_MAX_BYTES : PARENT_MAX_BYTES;
+    if (bytes > max_bytes) {
+        console.error(`build: experiment/${name}.js is ${bytes} bytes, over the ${max_bytes} byte chrome runtime budget`);
         process.exit(1);
     }
 }

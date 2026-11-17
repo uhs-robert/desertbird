@@ -9,7 +9,7 @@ import type { ViewRow } from "../src/shared/protocol.ts";
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
 
 // A row spec is its depth, with "+" for a closed thread. Row ids are index + 100.
-function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[], in_folder_pane = false) {
+function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[], in_folder_pane = false, fold_fails = false) {
     const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: ids?.[index] ?? index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false, flags: 0 }));
     const calls: string[] = [];
     const keys = {
@@ -17,16 +17,22 @@ function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: num
         viewThread: async ({ row, open }: { row: number; open: boolean }) => void calls.push(`viewThread ${row} ${open}`),
         viewAllThreads: async ({ open }: { open: boolean }) => void calls.push(`viewAllThreads ${open}`),
         viewScroll: async ({ row, position }: { row: number; position: string }) => void calls.push(`viewScroll ${row} ${position}`),
-        folderTreeExpand: async ({ open }: { open: boolean }) => (calls.push(`folderTreeExpand ${open}`), in_folder_pane),
+    };
+    const folderpane = {
+        fold: async ({ open, extent }: { open: boolean; extent: string }) => {
+            calls.push(`fold ${extent} ${open}`);
+            if (fold_fails) throw new Error("the folder script did not load");
+            return in_folder_pane;
+        },
     };
     const mailTabs = {
         query: async () => [{ id: 9 }],
         setSelectedMessages: async (tab_id: number, ids: number[]) => void calls.push(`select ${tab_id} ${ids.join(",")}`),
     };
     const notifications = { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") };
-    const api = { keys, mailTabs, notifications } as unknown as RouterApi;
+    const api = { keys, folderpane, mailTabs, notifications } as unknown as RouterApi;
     const run = (command: string, args: Record<string, unknown> = {}) => create_router(registry, api).run({ command, args: args as never, count, windowId: 3, messageIds: [] });
-    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows") && !call.startsWith("folderTreeExpand")), all: calls };
+    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows") && !call.startsWith("fold ")), all: calls };
 }
 
 test("the thread commands check their typed args", () => {
@@ -159,5 +165,44 @@ test("h and l in the folder pane close and open the selected folder row and leav
     const fake = list_fake([0, 1, 0], 0, 1, undefined, true);
     await fake.run("motion.left");
     await fake.run("motion.right");
-    assert.deepEqual(fake.all, ["folderTreeExpand false", "folderTreeExpand true"]);
+    assert.deepEqual(fake.all, ["fold row false", "fold row true"]);
+});
+
+test("z M and z R in the folder pane fold every folder and leave the thread list alone", async () => {
+    const fake = list_fake([0, 1, 0], 0, 1, undefined, true);
+    await fake.run("thread.fold_all", { open: false });
+    await fake.run("thread.fold_all", { open: true });
+    assert.deepEqual(fake.all, ["fold all false", "fold all true"]);
+});
+
+test("z M in the thread list folds the threads", async () => {
+    const fake = list_fake([0, 1, 0], 0);
+    await fake.run("thread.fold_all", { open: false });
+    assert.deepEqual(fake.calls(), ["viewAllThreads false"]);
+});
+
+test("a folder script that fails to load leaves h, l and z M working on the thread list", async () => {
+    const fake = list_fake([0, 1, 0], 0, 1, undefined, false, true);
+    await fake.run("thread.fold_all", { open: false });
+    await fake.run("motion.left");
+    assert.deepEqual(fake.calls(), ["viewAllThreads false", "viewThread 0 false"]);
+});
+
+test("<C-d> and <C-u> move ten rows, stay inside the list and keep the end", async () => {
+    const depths = Array.from({ length: 25 }, () => 0);
+    const down = list_fake(depths, 3);
+    await down.run("view.half_page", { direction: "next" });
+    assert.deepEqual(down.calls(), ["select 9 113"]);
+    const end = list_fake(depths, 20);
+    await end.run("view.half_page", { direction: "next" });
+    assert.deepEqual(end.calls(), ["select 9 124"]);
+    const up = list_fake(depths, 12);
+    await up.run("view.half_page", { direction: "previous" });
+    assert.deepEqual(up.calls(), ["select 9 102"]);
+    const top = list_fake(depths, 4);
+    await top.run("view.half_page", { direction: "previous" });
+    assert.deepEqual(top.calls(), ["select 9 100"]);
+    const stay = list_fake(depths, 24);
+    await stay.run("view.half_page", { direction: "next" });
+    assert.deepEqual(stay.calls(), []);
 });
