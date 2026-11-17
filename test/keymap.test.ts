@@ -39,6 +39,8 @@ test("each default key reaches its command with the side that runs it", () => {
         [["m", "R"], "folder.read_all", "background"],
         [["m", "s"], "msg.flag", "background"],
         [["m", "j"], "msg.junk", "background"],
+        [["m", "z", "l"], "msg.snooze", "background"],
+        [["m", "z", "w"], "msg.snooze", "background"],
         [["g", "F"], "msg.forward", "background"],
         [["c"], "msg.new", "background"],
     ];
