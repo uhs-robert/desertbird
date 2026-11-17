@@ -218,7 +218,7 @@ export interface OverlayApi {
     mount(args: OverlayMountArgs): Promise<void>;
     /** Removes the overlay and returns the focus to the thread list. Does nothing when no overlay is mounted. */
     unmount(args: OverlayUnmountArgs): Promise<void>;
-    /** Puts the mode label at the start of the window's status bar, or removes it for `none`. One window never holds two labels. */
+    /** Puts the mode label at the start of the window's status bar, or removes it when the indicator is `off`. One window never holds two labels. */
     setModeLabel(args: OverlaySetModeLabelArgs): Promise<void>;
     onClosed: { addListener(listener: (closed: OverlayClosed) => void): void; removeListener(listener: (closed: OverlayClosed) => void): void };
 }

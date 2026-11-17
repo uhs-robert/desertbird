@@ -42,7 +42,7 @@ Registry changes from DesertFox:
 
 This list is the whole privileged surface. Each verb takes typed args and is checked against the Experiment schema.
 
-- `keys.install {tree, settings}`, `keys.set_mode {mode}` and the `keys.onInvocation` event: the chrome runtime matches keys locally and sends only finished invocations.
+- `keys.install {tree, settings}`, `keys.set_mode {mode}` and the `keys.onInvocation` event: the chrome runtime matches keys locally and sends finished invocations, the typed prefix of a half-typed sequence (`pending`) and the start and end of visual mode (`mode`).
 - `view.rows {first, last}`: built as `keys.viewRows`, with `keys.viewThread`, `keys.viewAllThreads` and `keys.viewScroll` for the three below, so no second Experiment bundle is needed. `viewRows` also returns the current row. The visible thread rows with index, message id, depth, collapsed, unread and the message flags word. `view.select {anchor, end}`, `view.scroll {row, position}`, `view.thread {row, open}` and `view.all_threads {open}`.
 - `folder_tree.expand {open}`: built as `keys.folderTreeExpand`. It opens or closes the selected row of the folder pane and answers false, doing nothing, unless the folder pane has the focus, which is how `h` and `l` tell the two panes apart. It takes no folder because the selected row is the cursor and `h` and `l` are the only callers. `folder_tree.select {folder}` waits for `search.folders`.
 - `pane.focus {pane}`: built as `keys.paneFocus`, where pane is `folders`, `threads` or `message`.

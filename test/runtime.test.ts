@@ -120,6 +120,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
     const pending: KeysPending[] = [];
     // The visual mode changes the runtime told the background.
     const modes: KeysMode["mode"][] = [];
+    const mode_windows: number[] = [];
     let time = 0;
     let window_listener: WindowListener<FakeWindow> | null = null;
     let registers = 0;
@@ -143,11 +144,11 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
             window.blur_listeners.add(listener);
             return () => void window.blur_listeners.delete(listener);
         },
-        window_id_of: () => 7,
+        window_id_of: (window) => 7 + windows.indexOf(window),
         now: () => time,
-        emit: (event) => void ("keys" in event ? pending.push(event) : "mode" in event ? modes.push(event.mode) : emitted.push(event)),
+        emit: (event) => void ("keys" in event ? pending.push(event) : "mode" in event ? (modes.push(event.mode), mode_windows.push(event.windowId)) : emitted.push(event)),
     };
-    return { modes, advance: (ms: number) => void (time += ms), windows, emitted, pending, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
+    return { modes, mode_windows, advance: (ms: number) => void (time += ms), windows, emitted, pending, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
 }
 
 test("a motion key runs in the chrome and is cancelled", () => {
@@ -1026,4 +1027,16 @@ test("visual mode is told once on v and once when it ends, by Escape, v, a comma
     window.blur();
     assert.equal(modes.at(-1), "normal");
     assert.equal(modes.length, 10);
+});
+
+test("visual mode that another window ends is reported to the window that started it", () => {
+    const { windows, modes, mode_windows, runtime, load } = setup();
+    runtime.install(tree());
+    const other = new FakeWindow();
+    windows.push(other);
+    load(other);
+    press(windows[0]!, "v");
+    other.select_tab();
+    assert.deepEqual(modes, ["visual", "normal"]);
+    assert.deepEqual(mode_windows, [7, 7], "the end goes to the window that heard the start");
 });

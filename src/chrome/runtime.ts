@@ -72,10 +72,14 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         was = keys.length;
     };
 
-    // Whether the background last heard that visual mode is on. Only a change is sent, and the label in the status bar reads it.
-    let visual_told = false;
+    // The window the background last heard visual mode start in, or null. The anchor is shared by all windows, so another window can end the mode, and the end goes to the window that heard the start. Only a change is sent.
+    let visual_told: Window | null = null;
     const tell_visual = (w: Window) => {
-        if ((visual_anchor >= 0) !== visual_told) deps.emit({ command: "mode", mode: (visual_told = !visual_told) ? "visual" : "normal", windowId: deps.window_id_of(w) });
+        const on = visual_anchor >= 0;
+        if (on === (visual_told !== null)) return;
+        const told = visual_told ?? w;
+        visual_told = on ? w : null;
+        deps.emit({ command: "mode", mode: on ? "visual" : "normal", windowId: deps.window_id_of(told) });
     };
 
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
