@@ -15,19 +15,20 @@ class FakeWindow implements KeyTarget {
     in_mail_tab = true;
     in_reading_pane = false;
     menu_open = false;
-    strip_listeners = new Set<() => void>();
-    strip = {
-        addEventListener: (_type: string, listener: () => void) => void this.strip_listeners.add(listener),
-        removeEventListener: (_type: string, listener: () => void) => void this.strip_listeners.delete(listener),
-    };
-    document = { getElementById: (id: string) => (id === "tabmail-tabs" ? this.strip : { tabInfo: [], currentTabInfo: null }) };
+    document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }) };
     selected = 0;
     rows = 10;
-    addEventListener(_type: "keydown", listener: (event: KeydownEvent) => void) {
+    addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
+    addEventListener(type: string, listener: (event: KeydownEvent) => void) {
+        if (type === "TabSelect") return void this.tab_listeners.add(listener as () => void);
         this.adds++;
         this.listeners.add(listener);
     }
-    removeEventListener(_type: "keydown", listener: (event: KeydownEvent) => void) {
+    removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
+    removeEventListener(type: string, listener: (event: KeydownEvent) => void) {
+        if (type === "TabSelect") return void this.tab_listeners.delete(listener as () => void);
         this.listeners.delete(listener);
     }
     /** A tab switch with no key: a click on the tab bar. */
@@ -102,7 +103,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         window_id_of: () => 7,
         emit: (invocation) => void emitted.push(invocation),
     };
-    return { windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window) };
+    return { windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
 }
 
 test("a motion key runs in the chrome and is cancelled", () => {
@@ -452,7 +453,7 @@ test("a half-typed sequence does not survive a tab switch by mouse, by Ctrl+Tab 
     }
 });
 
-test("a tab switch also drops a pending count, and an unloaded window stops listening", () => {
+test("a tab switch also drops a pending count, and shutdown stops the listening", () => {
     const { windows, emitted, runtime } = setup();
     runtime.install(tree());
     const window = windows[0]!;
@@ -464,13 +465,23 @@ test("a tab switch also drops a pending count, and an unloaded window stops list
     assert.equal(window.tab_listeners.size, 0);
 });
 
-test("the parent listens for TabSelect on the tab strip of each window and stops on shutdown", async () => {
+test("the parent listens for TabSelect on each window and stops on shutdown", async () => {
     const window = new FakeWindow();
     const platform = stub_platform([window]);
     const keys_parent = await import("../src/chrome/parent_keys.ts");
     await keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys.install({ tree: tree(), settings: {} });
-    assert.equal(window.strip_listeners.size, 1);
+    assert.equal(window.tab_listeners.size, 1);
     keys_parent.shutdown();
-    assert.equal(window.strip_listeners.size, 0);
+    assert.equal(window.tab_listeners.size, 0);
     platform.restore();
+});
+
+test("an unloaded window stops listening while another keeps its listener", () => {
+    const { windows, runtime, load, unload } = setup();
+    runtime.install(tree());
+    const other = new FakeWindow();
+    load(other);
+    unload(other);
+    assert.equal(other.tab_listeners.size, 0);
+    assert.equal(windows[0]!.tab_listeners.size, 1);
 });

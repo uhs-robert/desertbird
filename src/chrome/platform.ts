@@ -1,7 +1,7 @@
 // The Thunderbird globals the Experiment parent reads, and the guard every verb runs through. Nothing here keeps state.
 // Platform modules load through `ChromeUtils.importESModule` inside functions, never at the top, so node tests load the parents with stub globals.
 
-import type { KeyTarget } from "./runtime.ts";
+import type { KeydownEvent, KeyTarget } from "./runtime.ts";
 import type { FocusDocument } from "./focus.ts";
 import type { TabmailLike } from "./view.ts";
 
@@ -9,6 +9,10 @@ declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
 declare const Services: { wm: { getEnumerator(type: string | null): Iterable<MainWindow> } };
 
 export interface MainWindow extends KeyTarget {
+    addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
+    removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     document: FocusDocument & { getElementById(id: string): unknown };
 }
 
@@ -37,14 +41,6 @@ export function load_platform(): Platform {
 }
 
 export const open_main_windows = (): MainWindow[] => Array.from(Services.wm.getEnumerator(MAIN_WINDOW_TYPE));
-
-export interface TabStripLike {
-    addEventListener(type: "TabSelect", listener: () => void): void;
-    removeEventListener(type: "TabSelect", listener: () => void): void;
-}
-
-// `tabmail.tabContainer` reads undefined from the Experiment on Thunderbird 153.7 (measured), so the strip is looked up by its id. It fires `TabSelect` on every change of the front tab, also one made through the API.
-export const tab_strip_of = (window: MainWindow): TabStripLike | null => window.document.getElementById("tabmail-tabs") as TabStripLike | null;
 
 export const tabmail_of = (window: MainWindow): TabmailLike | null => window.document.getElementById("tabmail") as TabmailLike | null;
 
