@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EXPERIMENT_VERBS, type KeysInvocation } from "../src/shared/protocol.ts";
+import { BODY_SCRIPT_LIVE_ATTRIBUTE, EXPERIMENT_VERBS, KEYMAP_STORAGE_KEY, type KeysInvocation } from "../src/shared/protocol.ts";
 
 test("the Experiment exposes the fixed verb table", () => {
     assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install"]);
@@ -11,4 +11,14 @@ test("the Experiment exposes the fixed verb table", () => {
 test("an invocation payload is plain data", () => {
     const invocation: KeysInvocation = { command: "msg.delete", args: {}, count: 1, windowId: 1, messageIds: [4, 5] };
     assert.deepEqual(JSON.parse(JSON.stringify(invocation)), invocation);
+});
+
+test("the handoff and storage names the body script and the chrome runtime share are fixed strings", () => {
+    assert.equal(BODY_SCRIPT_LIVE_ATTRIBUTE, "data-desertbird-keys");
+    assert.equal(KEYMAP_STORAGE_KEY, "desertbird_compiled_keymap");
+});
+
+test("the handoff is no Experiment verb: the body script talks to the chrome runtime through a document attribute", () => {
+    assert.deepEqual(EXPERIMENT_VERBS.keys.events, ["onInvocation"]);
+    assert.match(BODY_SCRIPT_LIVE_ATTRIBUTE, /^data-[a-z-]+$/);
 });

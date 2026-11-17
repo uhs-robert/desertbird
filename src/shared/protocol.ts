@@ -13,6 +13,16 @@ export interface KeymapTree {
     root: JsonValue;
 }
 
+/** The storage key of the record the background keeps: the compiled keymaps and the hash of the bindings they came from. The body script reads its tree from here. */
+export const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
+
+/**
+ * The handoff between the body script and the chrome runtime. The body script sets this attribute on the root element of the message document once it holds its keymap and listens for keys.
+ * The runtime reads it through the document of the `messagepane` browser. While it is set, the runtime leaves the reading-pane keys to the body script and no longer swallows them.
+ * The handoff is a marker and not an Experiment verb, so the verb table stays fixed. A mail can carry the same attribute in its own markup. That costs nothing but Thunderbird's single-key shortcuts firing in that mail.
+ */
+export const BODY_SCRIPT_LIVE_ATTRIBUTE = "data-desertbird-keys";
+
 /** The key matcher reads no setting: it walks the tree alone. The object stays so a setting can join without a new verb shape. */
 export type MatcherSettings = Record<string, never>;
 

@@ -118,7 +118,7 @@ Each chord was pressed 5 times with no cancel and 5 times with a cancel. The can
 
 The message body browser (`messagepane`) and the `about:message` browser were `isRemoteBrowser` false, with a `contentDocument` that the parent process could read. This held for a plain text message and for an HTML message, on both apps. The overlay browser, which the probe made `remote` with `remoteType` `extension`, was remote and the parent could not read its document.
 
-This contradicts the design's statement that the message body "runs in a content process the chrome listener cannot see". For local mail, a chrome listener in the parent process sees keys in the message body (`top_capture` with target `body` in the table above). Open point for the design: does the message pane need a content script for keys at all, or only for hints, find and anything that reads the body? Content that is not local mail (a feed article, a web page, remote content) was not measured and can differ.
+This contradicts the design's statement that the message body "runs in a content process the chrome listener cannot see". For local mail, a chrome listener in the parent process sees keys in the message body (`top_capture` with target `body` in the table above). Open point for the design: does the message pane need a content script for keys at all, or only for hints, find and anything that reads the body? Content that is not local mail (a feed article, a web page) was not measured and can differ. Remote content and sandboxed HTML in local mail were measured later, see Message scripts.
 
 ### Keys in compose
 
@@ -384,3 +384,23 @@ Facts measured while the end-to-end sort key checks ran on Thunderbird 153.7 ESR
 - The end-to-end run covers the key, the folder creation and the move in Local Folders. The due time is hours away, so the wake is not run end to end. The unit tests drive it against a model mailbox that gives moved messages new ids.
 - A wake whose Inbox lookup fails keeps its item and tries again at the next tick. 
 - Not measured, for a hand check: folder creation on a server with an `INBOX.` namespace, the move and the wake on a real IMAP account (the message returns with the same Message-ID), the same flow on Betterbird, a wake after a wait of minutes and after a restart, the wake notification text, and the unread count in the folder pane after a wake.
+
+## Message scripts: keys in a message document
+
+Facts measured while the end-to-end message checks ran on Thunderbird 153.7 ESR and Betterbird 153.7.0. Both apps gave the same result. The e2e kinds `message` and `message_remote` rerun them.
+
+### Where the script runs
+
+- The manifest key `message_display_scripts` injects a script into each message document: the reading pane, a message tab and a message window. Thunderbird injects it when about:message reports `MsgLoading`. The script ran in the top frame of all three, on every message it showed.
+- The script runs only with the permission `messagesModify`. Without it, Thunderbird drops the injection with no error and the script never loads. This was the first result of the e2e run: the script never marked its document until the permission was in the manifest.
+- The script reads `browser.storage.local` and `browser.storage.onChanged`. Both work in a message document.
+- The script ran in a plain text mail, an HTML mail, an HTML mail with a remote image, and an HTML mail with a sandboxed `iframe` and a `script` element. It ran with remote content blocked (the default, where a banner shows above the body) and with remote content allowed (`mailnews.message_display.disable_remote_image` false). The reading pane scrolled one line on `j` in every case.
+- The scrolled element is the document: `window.scrollBy` and `window.scrollTo` moved the message in all three places. `scrollHeight` of the root element is the page height.
+
+### Keys
+
+- Keys in the message body reach the script's capture listener on the window of the message document, as long as no listener above it cancels them. The chrome runtime's capture listener on the main window sees them first. It cancelled the plain printable keys of the reading pane until the script marked the document live. With the mark set, `j`, `k`, `<C-d>`, `<C-u>`, `gg`, `G` and counts all scrolled in the pane.
+- A message tab and a message window need no handoff: the chrome runtime does not hook them, so their keys reach the script directly.
+- With the script live, `r` typed in the reading pane opened no compose window. The script cancels every plain printable key, as the chrome runtime did.
+- `Escape` is not cancelled, so Thunderbird still acts on it. In the reading pane and a message tab it ended a pending count. In a message window the `j` after it did not scroll, which fits Thunderbird closing the window on Escape. That was not checked directly, so the e2e run skips the Escape check there.
+- The handoff is an attribute on the root element of the message document. The chrome runtime reads it through the `contentDocument` of the `messagepane` browser, which is readable (see Message pane process). Focus in the message header leaves the body document out of the focus chain, so the runtime keeps swallowing there.

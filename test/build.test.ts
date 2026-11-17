@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const PARENT_MAX_BYTES = Number(/PARENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const CONTENT_MAX_BYTES = Number(/CONTENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
 const PARENT_ALLOWED_INPUTS = [
@@ -16,8 +17,12 @@ const PARENT_ALLOWED_INPUTS = [
     /^vendor\/desertfox\/prefix_tree\.ts$/,
     /^vendor\/desertfox\/register_names\.ts$/,
     /^src\/chrome\/[a-z_]+\.ts$/,
-    /^src\/shared\/protocol\.ts$/,
+    // The tree reader both sides share, and the handoff names. Neither reaches the registry.
+    /^src\/shared\/(keymap_tree|protocol)\.ts$/,
 ];
+
+// The body script bundle may take the same matcher side and the shared files, plus its own folder and the typing check of the chrome runtime. It never takes the registry or the background.
+const CONTENT_ALLOWED_INPUTS = [...PARENT_ALLOWED_INPUTS, /^src\/content\/[a-z_]+\.ts$/];
 
 const BANNED_IN_PARENT: [string, RegExp][] = [
     ["eval", /\beval\b/],
@@ -86,6 +91,27 @@ test("each manifest entry names its own script and schema", () => {
 
 test("AGENTS.md records the size guard", () => {
     assert.ok(readFileSync(join(root, "AGENTS.md"), "utf8").includes(`${PARENT_MAX_BYTES} bytes`));
+});
+
+test("the body script bundle takes only the matcher side, the shared files and its own folder", () => {
+    const bundle_inputs = Object.keys((JSON.parse(readFileSync(join(out_dir, "meta/message_display.json"), "utf8")) as { inputs: object }).inputs);
+    assert.ok(bundle_inputs.length > 0);
+    for (const input of bundle_inputs) assert.ok(CONTENT_ALLOWED_INPUTS.some((allowed) => allowed.test(input)), `${input} is not allowed in the body script bundle`);
+    assert.deepEqual(bundle_inputs.filter((input) => /registry/.test(input) || input.startsWith("src/background/")), []);
+});
+
+test("the body script bundle stays within its size guard", () => {
+    assert.ok(CONTENT_MAX_BYTES > 0 && CONTENT_MAX_BYTES < 100000);
+    const size = readFileSync(join(out_dir, "content/message_display.js")).length;
+    assert.ok(size <= CONTENT_MAX_BYTES, `message_display.js is ${size} bytes, over ${CONTENT_MAX_BYTES}`);
+});
+
+test("the manifest injects the body script into message documents and the xpi holds it", () => {
+    const manifest = JSON.parse(readFileSync(join(out_dir, "manifest.json"), "utf8")) as { message_display_scripts: { js: string[] }[] };
+    const files = manifest.message_display_scripts.flatMap((entry) => entry.js);
+    assert.deepEqual(files, ["content/message_display.js"]);
+    const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
+    for (const file of files) assert.ok(listing.includes(file), file);
 });
 
 test("the xpi holds the manifest and every file it names", () => {

@@ -25,6 +25,9 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
 // The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. AGENTS.md records the same number.
 const PARENT_MAX_BYTES = 18004;
 
+// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent. AGENTS.md records the same number.
+const CONTENT_MAX_BYTES = 10633;
+
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
 const PARENTS = [
@@ -53,6 +56,7 @@ const shared_options = {
 rmSync(out_dir, { recursive: true, force: true });
 mkdirSync(join(out_dir, "experiment"), { recursive: true });
 mkdirSync(join(out_dir, "overlay"), { recursive: true });
+mkdirSync(join(out_dir, "content"), { recursive: true });
 mkdirSync(join(out_dir, "meta"), { recursive: true });
 
 const background = await build({ ...shared_options, entryPoints: ["src/background/main.ts"], outfile: join(out_dir, "background.js") });
@@ -65,6 +69,10 @@ for (const parent of PARENTS) {
     parent_sizes.push([parent.name, statSync(outfile).size]);
 }
 writeFileSync(join(out_dir, "meta", "background.json"), JSON.stringify(background.metafile));
+const message_display_file = join(out_dir, "content", "message_display.js");
+const message_display = await build({ ...shared_options, entryPoints: ["src/content/message_display.ts"], outfile: message_display_file });
+writeFileSync(join(out_dir, "meta", "message_display.json"), JSON.stringify(message_display.metafile));
+const message_display_bytes = statSync(message_display_file).size;
 
 // The options page is an extension page: it bundles the settings code and the command table, and stays out of the parent bundle.
 mkdirSync(join(out_dir, "options"), { recursive: true });
@@ -84,5 +92,10 @@ for (const [name, bytes] of parent_sizes) {
     }
 }
 
-execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "options", "overlay"], { cwd: out_dir });
-console.log(`build: ${out_dir} (${parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`).join(", ")})`);
+if (message_display_bytes > CONTENT_MAX_BYTES) {
+    console.error(`build: content/message_display.js is ${message_display_bytes} bytes, over the ${CONTENT_MAX_BYTES} byte message script budget`);
+    process.exit(1);
+}
+
+execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay"], { cwd: out_dir });
+console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`].join(", ")})`);

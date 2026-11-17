@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
+import { body_script_is_live, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID } from "../src/chrome/overlay_id.ts";
+import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
 
 const element = (localName: string, extra: Partial<FocusNode> = {}): FocusNode => ({ localName, ...extra });
 const document_of = (active: FocusNode | null) => ({ activeElement: active });
@@ -103,4 +104,39 @@ test("a key while the overlay's browser has focus is typing, so no command runs 
     const overlay = element("browser", { id: OVERLAY_BROWSER_ID });
     assert.equal(is_typing({ target: overlay }, document_of(overlay)), true);
     assert.equal(is_typing({ target: element("div") }, document_of(overlay)), true);
+});
+
+test("the body script is live when the message body document under the focus carries the marker", () => {
+    const body = element("body");
+    const live_root = { hasAttribute: (name: string) => name === BODY_SCRIPT_LIVE_ATTRIBUTE };
+    const pane_with = (root: { hasAttribute(name: string): boolean } | null) => {
+        const message_pane = element("browser", { id: "messagepane", contentDocument: { activeElement: null, body, documentElement: root } });
+        const message_browser = element("browser", { id: "messageBrowser", contentDocument: { activeElement: message_pane } });
+        return document_of(element("browser", { contentDocument: { activeElement: message_browser } }));
+    };
+    assert.equal(body_script_is_live(pane_with(live_root)), true);
+    assert.equal(body_script_is_live(pane_with({ hasAttribute: () => false })), false);
+    assert.equal(body_script_is_live(pane_with(null)), false);
+    assert.equal(body_script_is_live(document_of(null)), false);
+});
+
+test("focus in the message header is not in the body document, whose marker is then out of the chain", () => {
+    const header = element("div", { id: "messageHeader" });
+    const message_browser = element("browser", { id: "messageBrowser", contentDocument: { activeElement: header, documentElement: { hasAttribute: () => false } } });
+    const three_pane = element("browser", { contentDocument: { activeElement: message_browser } });
+    assert.equal(in_reading_pane(document_of(three_pane)), true);
+    assert.equal(body_script_is_live(document_of(three_pane)), false);
+});
+
+test("focus inside a frame of the mail is not a live body: the body script does not see a key from a subframe, so the swallow stays", () => {
+    const frame_field = element("body");
+    const frame = element("iframe", { contentDocument: { activeElement: frame_field, documentElement: { hasAttribute: () => false } } });
+    const mail_document = { activeElement: frame, body: element("body"), documentElement: { hasAttribute: (name: string) => name === BODY_SCRIPT_LIVE_ATTRIBUTE } };
+    const message_pane = element("browser", { id: "messagepane", contentDocument: mail_document });
+    const message_browser = element("browser", { id: "messageBrowser", contentDocument: { activeElement: message_pane } });
+    const three_pane = element("browser", { contentDocument: { activeElement: message_browser } });
+    assert.equal(in_reading_pane(document_of(three_pane)), true);
+    assert.equal(body_script_is_live(document_of(three_pane)), false);
+    mail_document.activeElement = element("a");
+    assert.equal(body_script_is_live(document_of(three_pane)), true);
 });

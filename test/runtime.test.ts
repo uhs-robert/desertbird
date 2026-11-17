@@ -15,6 +15,7 @@ class FakeWindow implements KeyTarget {
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
+    body_script_live = false;
     menu_open = false;
     has_focus = true;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
@@ -109,6 +110,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
         menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
+        body_script_is_live: (window) => window.body_script_live,
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
             return () => void window.tab_listeners.delete(listener);
@@ -309,6 +311,34 @@ test("in the reading pane plain printable keys are swallowed and run nothing, na
     for (const key of ["Enter", "Escape", "ArrowDown", "Tab", " "]) assert.equal(press(window, key).cancelled, false, key);
     assert.equal(press(window, "j", { ctrlKey: true }).cancelled, false);
     assert.equal(press(window, "j", { target: { localName: "input" } }).cancelled, false);
+});
+
+test("with the body script live, reading-pane keys are no longer swallowed and still run nothing in the list", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.in_reading_pane = true;
+    window.body_script_live = true;
+    for (const key of ["j", "x", "m", "G"]) assert.equal(press(window, key).cancelled, false, key);
+    assert.equal(window.selected, 0);
+    assert.deepEqual(emitted, []);
+    // The marker only covers the reading pane: in the list the keys run as before.
+    window.in_reading_pane = false;
+    assert.equal(press(window, "j").cancelled, true);
+    assert.equal(window.selected, 1);
+});
+
+test("a half-typed sequence in the list does not finish after a visit to a live reading pane", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "d");
+    window.in_reading_pane = true;
+    window.body_script_live = true;
+    press(window, "j");
+    window.in_reading_pane = false;
+    press(window, "d");
+    assert.deepEqual(emitted, []);
 });
 
 test("a count reaches a chrome motion", () => {
