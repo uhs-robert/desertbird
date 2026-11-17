@@ -496,3 +496,23 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird (t
 - Hand check: a reply archived into a year subfolder of Archives cancels the reminder.
 - The `Follow up` tag is created on first use, which needs the `messagesTags` permission.
 - The notification id holds the account and the Message-ID header of the anchor. A click looks the anchor up and opens it in a tab.
+
+
+## Step keys and visual mode
+
+Measured with the end-to-end run on Thunderbird 153.7.0 ESR (`E2E_SCALE=1`: the 10,000-message Big folder, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the last key to the selection change, polled through the helper's light `selection` command. Polling has a granularity of about 100 ms, and the `j` baseline is 218 ms, so the cost of a step is the number minus that.
+
+| Key | Time |
+| --- | --- |
+| `j` (baseline) | 218 ms |
+| `] u`, next unread one row away | 319 ms |
+| `] s`, next starred up to 25 rows away | 318 ms |
+| `2000 ] u`, a pass over about 6,000 rows (13 blocks of 500) | 3327 ms |
+| `] U` with unread rows ahead | 317 ms |
+| `] U` from the last row of Big, no unread ahead: 52 folder counts, one query, a folder change | 219 ms |
+
+- `keys.viewRows` costs about 0.25 s per block of 500 rows in a folder of 10,000, so a step that finds its match nearby takes one block. A count reads each block once.
+- `folders.getFolderInfo` throws "An unexpected error occurred" for a folder Thunderbird has not opened yet, and a different error for a root folder. The step reads a failing count as none.
+- `messages.query` with `messagesPerPage: 1` and `autoPaginationTimeout: 0` can return an empty first page with a list id. The step follows it with `continueList`.
+- Selecting a message in the thread list marks it read when the message pane shows it, so an unread step that walks the list leaves the rows it visited read.
+- `threadTree.selectedIndices = [...]` followed by `threadTree.currentIndex = end` selects a range with the current row at its end. `_selectRange(anchor, end)` of the tree sets the current row to the anchor.
