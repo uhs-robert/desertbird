@@ -728,11 +728,11 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["g"]);
   await sleep(1200);
   check(app, kind, "g then g with the panel up closes it", (await pixels_of("hud_after_complete")) === bare);
-  // A key that leads nowhere cancels the sequence before the delay: no panel ever shows.
+  // A key that leads nowhere cancels the sequence before the delay: no panel ever shows. The key is w, which nothing binds, alone or after g (g s opens the Sent folder). A prefix key such as z would start a new sequence and show its own panel.
   await instance.press(["g"]);
-  await instance.press(["z"]);
+  await instance.press(["w"]);
   await sleep(1500);
-  check(app, kind, "g z before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
+  check(app, kind, "g w before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
   // q on the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
   await instance.press(["q"]);
   await sleep(1000);
