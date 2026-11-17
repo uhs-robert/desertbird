@@ -382,7 +382,7 @@ async function run_default(instance) {
   const junk_before = Object.values((await instance.ask("state")).flags).filter((flags) => flags.junk).length;
   state = await key_and_state(instance, ["j"], 2500);
   const junked = Object.entries(state.flags).filter(([, flags]) => flags.junk).map(([id]) => id);
-  check(app, kind, "j with focus in the message body does nothing (no junk, selection unchanged)", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}`);
+  check(app, kind, "j with focus in the message body neither junks nor moves the selection", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}`);
   await shot("after_reading_pane_j", "state after j with focus in the message body");
   // Shift+F6 goes back one pane. j then moves one row, which proves the j above ran one pane after the list, in the message body.
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
@@ -894,10 +894,10 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["w"]);
   await sleep(1500);
   check(app, kind, "g w before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
-  // q on the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
-  await instance.press(["q"]);
+  // C-j with only the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
+  await instance.press(CTRL("j"));
   await sleep(1000);
-  await shot(`hud_toast_${theme}`, "a toast: q on the main mail tab is refused");
+  await shot(`hud_toast_${theme}`, "a toast: C-j with one tab is refused");
   check(app, kind, "a refused command shows a toast", (await pixels_of("hud_toast_pixels")) !== bare);
   await sleep(7000);
   check(app, kind, "the toast is gone after toast_error_ms", (await pixels_of("hud_toast_gone")) === bare);
@@ -1087,12 +1087,11 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const kind = "default";
   const tabs_of = async () => main_window_tabs(await instance.ask("state"));
 
-  // q on the only mail tab: tabs.remove does nothing there, so the command refuses with a notification and the tab stays.
-  // The tab steps below run while this toast still shows, as they did with a notification, so the run waits neither before nor after.
+  // q on the only mail tab: tabs.remove does nothing there, so q moves the focus to the thread list, shows no toast and the tab stays.
   const refused_q = await toast_cycle(instance, `${app}_q`, ["q"], [], { wait_out_toasts: false });
   let state = refused_q.state;
   check(app, kind, "q on the only mail tab leaves it open", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}`);
-  check(app, kind, "q on the only mail tab shows the refusal as a toast", refused_q.shown, "the toast strip differs while the toast shows");
+  check(app, kind, "q on the only mail tab shows no refusal toast", !refused_q.shown, "the toast strip differs while a toast shows");
 
   // What the tabs API reports for the first mail tab and for a second one.
   const second = await instance.ask("open_mail_tab");
@@ -1166,12 +1165,15 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "C-j reaches the message tab from the mail tab", active_index(state) === 1 && message_tab_count === 2, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
   state = await key_and_state(instance, CTRL("k"), 1500);
   note(app, kind, "C-k from a message tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  // q in the mail tab closes nothing: the main tab stays and the tab count holds.
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(1000);
-  const closed = await instance.ask("remove_tab", 20000, { index: 1 });
+  state = await key_and_state(instance, ["q"], 1500);
+  check(app, kind, "q in the mail tab closes no tab", main_window_tabs(state).length === message_tab_count && active_index(state) === 0, `tabs ${main_window_tabs(state).length}, active ${active_index(state)}`);
+  await instance.ask("select_tab", 20000, { index: 1 });
   await sleep(1000);
-  state = await instance.ask("state");
-  check(app, kind, "tabs.remove closes a message tab", closed.removed === true && main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
+  state = await key_and_state(instance, ["q"], 1500);
+  check(app, kind, "q closes the message tab it is typed in", main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
 
   // db-sequence-reset: a d typed before a tab switch with no key between (a click) does not pair with a d typed after it.
   await instance.ask("open_content_tab");
@@ -1550,6 +1552,28 @@ async function run_message_scripts(instance) {
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await sleep(600);
 
+  // The mail keys run on the shown message while the body has the focus. m s flags it, and q hands the focus back to the thread list.
+  const plain_id = "reading-plain@fixture.invalid";
+  // wtype drops the second key of a pair typed in one call, so m and s go in two presses.
+  const flag_keys = async () => {
+    await instance.press(["m"]);
+    await sleep(200);
+    return key_and_state(instance, ["s"], 2000);
+  };
+  const flagged_ids = (snapshot) => Object.entries(snapshot.flags).filter(([, flags]) => flags.flagged).map(([id]) => id);
+  await show_in_pane("reading-plain");
+  state = await flag_keys();
+  check(app, kind, "pane: m s flags the shown message", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
+  await flag_keys();
+  const tabs_in_pane = main_window_tabs(state).length;
+  state = await key_and_state(instance, ["q"], 1500);
+  check(app, kind, "pane: q closes no tab", main_window_tabs(state).length === tabs_in_pane, `tabs ${main_window_tabs(state).length}`);
+  const selected_before_j = first_selected(state);
+  state = await key_and_state(instance, ["j"], 1500);
+  check(app, kind, "pane: after q the thread list has the focus, so j moves the selection", first_selected(state) !== selected_before_j, `selected ${selected_before_j} then ${first_selected(state)}`);
+  await instance.press(["g"]);
+  await key_and_state(instance, ["e"], 1200);
+
   // A message tab: the message opens in a new tab and the keys go to it.
   await show_in_pane("reading-plain");
   await instance.ask("open_message_tab");
@@ -1559,6 +1583,22 @@ async function run_message_scripts(instance) {
   await shot("message_tab", "message in its own tab");
   await scroll_keys("message tab");
   await find_checks("message tab");
+  // The tab shows reading-plain while the list selects another message, so a key that read the list would flag the wrong one.
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  await instance.ask("select:reading-html@fixture.invalid", 30000);
+  await sleep(1500);
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(1500);
+  state = await flag_keys();
+  check(app, kind, "message tab: m s flags the message of the tab, not the list selection", flagged_ids(state).includes(plain_id) && !flagged_ids(state).includes("reading-html@fixture.invalid"), `flagged ${JSON.stringify(flagged_ids(state))}`);
+  await flag_keys();
+  state = await key_and_state(instance, CTRL("k"), 1500);
+  check(app, kind, "message tab: C-k switches to the mail tab", active_index(state) === 0, `active ${active_index(state)}`);
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(1500);
+  state = await key_and_state(instance, ["q"], 1500);
+  check(app, kind, "message tab: q closes the tab", main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
   await instance.ask("reset_tabs");
   await sleep(1500);
 
@@ -1578,6 +1618,13 @@ async function run_message_scripts(instance) {
   const before_refusal = body_state(await instance.ask("state")).scroll_y;
   const after_refusal = body_state(await key_and_state(instance, ["j"], 1000)).scroll_y;
   check(app, kind, "message window: / opens no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
+  state = await flag_keys();
+  check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
+  await flag_keys();
+  state = await key_and_state(instance, CTRL("j"), 1500);
+  check(app, kind, "message window: C-j changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+  state = await key_and_state(instance, ["q"], 2500);
+  check(app, kind, "message window: q closes the window", !state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await instance.ask("close_message_windows");
   await sleep(1500);
   check(app, kind, "the app survived", instance.exited() === null);

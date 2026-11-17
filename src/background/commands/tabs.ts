@@ -3,7 +3,7 @@ import type { TabsApi } from "../handlers/tabs.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// Keys run in the mail tab only, so these keys work from there and nowhere else.
+// These keys work in the mail tab, the reading pane, a message tab and a message window. In a message window there is no other tab, so `tab.next` and `tab.prev` refuse there.
 export const tabs: CommandGroup = {
     commands: {
         "tab.next": { bridge: true, runs_in: "background", label: "Next tab", count: "repeat", intent: "Switch to the next tab. It wraps from the last tab to the first.", run: scoped<TabsApi>(next_tab) },
@@ -17,7 +17,7 @@ export const tabs: CommandGroup = {
             params: [{ name: "tab", type: "string", main: true, rest: true }],
             run: scoped<TabsApi>(switch_tab),
         },
-        "tab.close": { bridge: false, runs_in: "background", label: "Close tab", intent: "Close the current tab. The main mail tab stays open.", run: scoped<TabsApi>(close_tab) },
+        "tab.close": { bridge: false, runs_in: "background", label: "Close tab", intent: "Close the current tab, or the message window. On the main mail tab it moves the focus to the thread list.", needs: ["keys.paneFocus"], run: scoped<TabsApi>(close_tab) },
     },
     normal_keys: {
         "<C-j>": { id: "tab.next" },

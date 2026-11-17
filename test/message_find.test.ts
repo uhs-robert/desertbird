@@ -87,13 +87,34 @@ const sender = { tab: { id: 5, windowId: 9 } };
 const open_line = { type: "body.invoke", command: "cmdline.open", args: { text: "find " }, count: 1 };
 
 test("only the commands a message key binds are allowed", () => {
-    assert.deepEqual([...message_background_commands()], ["cmdline.open", "pane.focus"]);
+    const allowed = message_background_commands();
+    for (const id of ["cmdline.open", "pane.focus", "msg.archive", "msg.delete", "msg.reply", "msg.yank", "tab.close", "tab.next", "tab.prev"]) assert.ok(allowed.has(id), id);
+    for (const id of ["motion.down", "folder.read_all", "thread.expand", "app.open_page", "step.unread"]) assert.equal(allowed.has(id), false, id);
 });
 
 test("body.invoke runs the command on the window and the messages of the sender, not on ones the message names", async () => {
     const { handle, ran } = body_requests("normal");
     await handle({ ...open_line, windowId: 1, messageIds: [99] }, sender);
     assert.deepEqual(ran, [{ command: "cmdline.open", args: { text: "find " }, count: 1, windowId: 9, messageIds: [11, 12] }]);
+});
+
+test("body.invoke runs a mail command on the displayed message of the sender's window", async () => {
+    const { handle, ran } = body_requests("messageDisplay");
+    await handle({ type: "body.invoke", command: "msg.delete", args: {}, count: 1 }, sender);
+    await handle({ type: "body.invoke", command: "tab.close", args: {}, count: 1 }, sender);
+    assert.deepEqual(ran, [
+        { command: "msg.delete", args: {}, count: 1, windowId: 9, messageIds: [11, 12] },
+        { command: "tab.close", args: {}, count: 1, windowId: 9, messageIds: [11, 12] },
+    ]);
+});
+
+test("a mail key with no displayed message refuses with a notification and acts on nothing", async () => {
+    const base = fake_api();
+    const router = create_router(registry, base.api);
+    const refusing = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => ({ type: "normal" }) }, notifications: { create: async (_id, notification) => (base.calls.push(`notify ${notification.message}`), "n1") } }, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
+    for (const command of ["msg.delete", "msg.archive"]) await refusing({ type: "body.invoke", command, args: {}, count: 1 }, sender);
+    assert.equal(notifications(base.calls).length, 2);
+    assert.equal(base.calls.some((call) => /messages\.(delete|archive)/.test(call)), false);
 });
 
 test("body.invoke refuses a message window with a notification and runs nothing", async () => {
@@ -105,7 +126,7 @@ test("body.invoke refuses a message window with a notification and runs nothing"
 
 test("body.invoke drops a command no message key binds, a request with no tab and a malformed request", async () => {
     const { handle, ran } = body_requests("normal");
-    await handle({ ...open_line, command: "msg.delete" }, sender);
+    await handle({ ...open_line, command: "folder.read_all" }, sender);
     await handle({ ...open_line, command: "motion.down" }, sender);
     await handle(open_line, {});
     assert.deepEqual(ran, []);
