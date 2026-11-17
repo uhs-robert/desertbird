@@ -11,6 +11,7 @@ import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 class FakeWindow implements KeyTarget {
     listeners = new Set<(event: KeydownEvent) => void>();
     tab_listeners = new Set<() => void>();
+    blur_listeners = new Set<(event: { target: unknown }) => void>();
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
@@ -20,20 +21,28 @@ class FakeWindow implements KeyTarget {
     rows = 10;
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
-    addEventListener(type: string, listener: (event: KeydownEvent) => void) {
+    addEventListener(type: "blur", listener: (event: { target: unknown }) => void, capture: boolean): void;
+    addEventListener(type: string, listener: (event: any) => void) {
+        if (type === "blur") return void this.blur_listeners.add(listener);
         if (type === "TabSelect") return void this.tab_listeners.add(listener as () => void);
         this.adds++;
         this.listeners.add(listener);
     }
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
-    removeEventListener(type: string, listener: (event: KeydownEvent) => void) {
+    removeEventListener(type: "blur", listener: (event: { target: unknown }) => void, capture: boolean): void;
+    removeEventListener(type: string, listener: (event: any) => void) {
+        if (type === "blur") return void this.blur_listeners.delete(listener);
         if (type === "TabSelect") return void this.tab_listeners.delete(listener as () => void);
         this.listeners.delete(listener);
     }
     /** A tab switch with no key: a click on the tab bar. */
     select_tab() {
         for (const listener of [...this.tab_listeners]) listener();
+    }
+    /** The window loses focus, for example on an alt-tab. */
+    blur() {
+        for (const listener of [...this.blur_listeners]) listener({ target: this });
     }
     port(): ListPort {
         return { row_count: () => this.rows, selected_index: () => this.selected, select: (index) => void (this.selected = index), selected_message_ids: () => [100 + this.selected] };
@@ -101,6 +110,10 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
             return () => void window.tab_listeners.delete(listener);
+        },
+        on_window_blur: (window, listener) => {
+            window.blur_listeners.add(listener);
+            return () => void window.blur_listeners.delete(listener);
         },
         window_id_of: () => 7,
         now: () => time,
@@ -468,14 +481,32 @@ test("a tab switch also drops a pending count, and shutdown stops the listening"
     assert.equal(window.tab_listeners.size, 0);
 });
 
+test("a window blur drops a half-typed sequence and a pending count, and shutdown stops the listening", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "3");
+    window.blur();
+    press(window, "x");
+    assert.equal(emitted[0]?.count, 1);
+    press(window, "g");
+    window.blur();
+    press(window, "g");
+    assert.equal(emitted.length, 1);
+    runtime.shutdown();
+    assert.equal(window.blur_listeners.size, 0);
+});
+
 test("the parent listens for TabSelect on each window and stops on shutdown", async () => {
     const window = new FakeWindow();
     const platform = stub_platform([window]);
     const keys_parent = await import("../src/chrome/parent_keys.ts");
     await keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys.install({ tree: tree(), settings: {}, holdCommands: [] });
     assert.equal(window.tab_listeners.size, 1);
+    assert.equal(window.blur_listeners.size, 1);
     keys_parent.shutdown();
     assert.equal(window.tab_listeners.size, 0);
+    assert.equal(window.blur_listeners.size, 0);
     platform.restore();
 });
 

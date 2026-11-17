@@ -42,6 +42,14 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             return () => window.removeEventListener("TabSelect", listener, true);
         },
         now: () => Date.now(),
+        on_window_blur(window, listener) {
+            // Capture on the window also sees blurs of inner elements, which are only a focus move inside the window. A blur counts when its target is the window or its document, or when the document no longer has focus (the app reports the blur on the focused element when the whole window deactivates).
+            const on_blur = (event: { target: unknown }) => {
+                if (event.target === window || event.target === window.document || !window.document.hasFocus()) listener();
+            };
+            window.addEventListener("blur", on_blur, true);
+            return () => window.removeEventListener("blur", on_blur, true);
+        },
         window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {
             for (const listener of invocation_listeners) listener(invocation);
