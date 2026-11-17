@@ -1,9 +1,16 @@
 // The command line page. It draws the line and the completion rows and reads keys. Parsing, completion and running live in the background: this page sends the text and shows the answer.
 
 import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult } from "../shared/protocol.ts";
-import { apply_pick, move_highlight, name_parts } from "./line_edit.ts";
+import { apply_pick, create_history_cursor, move_highlight, name_parts, record_entry } from "./line_edit.ts";
+import type { HistoryCursor } from "./line_edit.ts";
 
-declare const messenger: { runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> } };
+declare const messenger: {
+    runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
+    storage: { local: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> } };
+};
+
+// The history sits in storage.local, oldest first. The page writes it before it sends the line, because a run that succeeds unmounts this page and a write after the answer could be lost.
+const HISTORY_KEY = "desertbird_cmdline_history";
 
 const window_id = Number(new URLSearchParams(location.search).get("window"));
 const input = document.getElementById("input") as HTMLInputElement;
@@ -17,6 +24,10 @@ let latest_request = 0;
 let closing = false;
 // Set before the send, so a second Enter while the answer is on its way sends nothing.
 let running = false;
+let history: string[] = [];
+let history_cursor: HistoryCursor = create_history_cursor(history);
+// Up and Down walk the history until the user types or uses a completion key. After that they move the highlight, as in DesertFox.
+let walking_history = true;
 
 const send = <Answer>(message: CmdlineRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
 
@@ -60,7 +71,28 @@ async function refresh_completion(): Promise<void> {
     show_status(completion.usage ?? "", false);
 }
 
+async function load_history(): Promise<void> {
+    const stored = (await messenger.storage.local.get(HISTORY_KEY))[HISTORY_KEY];
+    history = Array.isArray(stored) ? stored.filter((entry): entry is string => typeof entry === "string") : [];
+    history_cursor = create_history_cursor(history);
+}
+
+function step_history(direction: 1 | -1): void {
+    const entry = direction === -1 ? history_cursor.older(input.value) : history_cursor.newer();
+    if (entry === undefined) return;
+    input.value = entry;
+    input.setSelectionRange(entry.length, entry.length);
+    refresh_completion().catch(report_failure);
+}
+
+function step_highlight(step: 1 | -1): void {
+    walking_history = false;
+    highlighted = move_highlight(highlighted, step, completion.rows.length);
+    draw_rows();
+}
+
 function accept_row(): void {
+    walking_history = false;
     const row = completion.rows[highlighted < 0 ? 0 : highlighted];
     if (!row) return;
     const picked = apply_pick(input.value, { start: completion.start, end: completion.end, insert: row.insert });
@@ -73,6 +105,9 @@ async function run_line(): Promise<void> {
     if (running) return;
     running = true;
     try {
+        history = record_entry(history, input.value);
+        history_cursor = create_history_cursor(history);
+        await messenger.storage.local.set({ [HISTORY_KEY]: history });
         const result = await send<CmdlineRunResult>({ type: "cmdline.run", windowId: window_id, text: input.value });
         if (result.ok) closing = true;
         else show_status(result.message, true);
@@ -106,14 +141,22 @@ window.addEventListener(
             accept_row();
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            highlighted = move_highlight(highlighted, event.key === "ArrowDown" ? 1 : -1, completion.rows.length);
-            draw_rows();
+            const step = event.key === "ArrowDown" ? 1 : -1;
+            if (walking_history || completion.rows.length === 0) step_history(step);
+            else step_highlight(step);
+        } else if (event.ctrlKey && (event.key === "n" || event.key === "p")) {
+            event.preventDefault();
+            step_highlight(event.key === "n" ? 1 : -1);
         }
     },
     true,
 );
 
-input.addEventListener("input", () => void refresh_completion().catch(report_failure));
+input.addEventListener("input", () => {
+    walking_history = false;
+    history_cursor = create_history_cursor(history);
+    refresh_completion().catch(report_failure);
+});
 
 async function start(): Promise<void> {
     const hello = await send<CmdlineHello>({ type: "cmdline.hello", windowId: window_id });
@@ -122,6 +165,7 @@ async function start(): Promise<void> {
         close_line();
         return;
     }
+    await load_history();
     input.value = hello.text;
     window.focus();
     input.focus();

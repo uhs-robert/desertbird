@@ -31,3 +31,38 @@ export function name_parts(name: string, positions: readonly number[]): { text: 
     });
     return parts;
 }
+
+export interface HistoryCursor {
+    /** The older entry, or undefined at the oldest. `current` is the text in the line, kept as the draft on the first step back. */
+    older(current: string): string | undefined;
+    /** The newer entry, or the draft after the newest, or undefined when already at the draft. */
+    newer(): string | undefined;
+}
+
+/** Walks `entries` (oldest first). The cursor lives for one open line. */
+export function create_history_cursor(entries: readonly string[]): HistoryCursor {
+    let position = entries.length;
+    let draft = "";
+    return {
+        older(current) {
+            if (position === 0) return undefined;
+            if (position === entries.length) draft = current;
+            position -= 1;
+            return entries[position];
+        },
+        newer() {
+            if (position >= entries.length) return undefined;
+            position += 1;
+            return position === entries.length ? draft : entries[position];
+        },
+    };
+}
+
+export const HISTORY_LIMIT = 100;
+
+/** The history after a run: the line moves to the newest place, a repeat is not kept twice and the oldest fall off. A blank line adds nothing. */
+export function record_entry(entries: readonly string[], line: string): string[] {
+    const text = line.trim();
+    if (text === "") return [...entries];
+    return [...entries.filter((entry) => entry !== text), text].slice(-HISTORY_LIMIT);
+}
