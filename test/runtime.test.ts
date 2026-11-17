@@ -51,8 +51,11 @@ class FakeWindow implements KeyTarget {
     }
     /** The rows `select_range` selected, or null when one row is selected. */
     range: [number, number] | null = null;
+    /** What the list is showing: a new object stands for another folder, a rebuilt view. */
+    view = {};
     port(): ListPort {
         return {
+            view_token: () => this.view,
             row_count: () => this.rows,
             selected_index: () => this.selected,
             select: (index) => void ((this.selected = index), (this.range = null)),
@@ -825,4 +828,69 @@ test("the list port selects a range and makes its end the current row", () => {
     port.select_range(5, 3);
     assert.deepEqual(tree_fake.selectedIndices, [3, 4, 5]);
     assert.equal(tree_fake.currentIndex, 3);
+});
+
+test("visual mode: a click on another row drops the mode, so j does not extend across the gap", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.rows = 50;
+    window.selected = 2;
+    press(window, "v");
+    press(window, "j");
+    window.selected = 20;
+    window.range = null;
+    press(window, "j");
+    assert.equal(window.selected, 21);
+    assert.equal(window.range, null, "the range did not reach back to the old anchor");
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [121]);
+});
+
+test("visual mode: rows that shift above the range drop the mode", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 5;
+    press(window, "v");
+    press(window, "j");
+    // A message arrives at the top: Thunderbird keeps the selection on the same messages, one row lower.
+    window.selected = 7;
+    window.range = [6, 7];
+    press(window, "j");
+    assert.equal(window.range, null, "the old anchor row, now the message above the range, stays out");
+    assert.equal(window.selected, 8);
+});
+
+test("visual mode: a change of folder drops the mode even when the current row is the same", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.rows = 50;
+    window.selected = 40;
+    press(window, "v");
+    press(window, "j");
+    window.view = {};
+    window.range = null;
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [141], "x acts on the one row and not on a range over the new folder");
+    press(window, "j");
+    assert.equal(window.range, null);
+});
+
+test("visual mode: a command collapses the selection to the current row, and a key in a text field ends the mode", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, "v");
+    press(window, "j");
+    press(window, "x");
+    assert.equal(window.range, null, "the range is gone once x has taken it");
+    assert.equal(window.selected, 3);
+    press(window, "v");
+    press(window, "j");
+    press(window, "a", { target: { localName: "input" } });
+    press(window, "j");
+    assert.equal(window.range, null, "a key that went to a text field ended the mode");
 });

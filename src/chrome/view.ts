@@ -64,6 +64,8 @@ export interface ListPort extends ViewPort {
     selected_message_ids(): number[];
     /** Selects every row from `anchor` to `end` and makes `end` the current row, so a motion goes on from there. */
     select_range(anchor: number, end: number): void;
+    /** Changes when the list shows another folder or is rebuilt. */
+    view_token(): unknown;
 }
 
 /** The MailExtension id of a message header, or null when the extension cannot name it. */
@@ -87,6 +89,7 @@ export function create_list_port(about_3pane: About3PaneLike, message_id_of: Mes
             tree.selectedIndex = index;
             tree.scrollToIndex?.(index);
         },
+        view_token: () => about_3pane.gDBView,
         select_range(anchor, end) {
             const first = Math.min(anchor, end);
             tree.selectedIndices = Array.from({ length: Math.abs(end - anchor) + 1 }, (_, offset) => first + offset);
