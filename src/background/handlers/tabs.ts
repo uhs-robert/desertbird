@@ -1,5 +1,8 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
+import type { HandlerScope } from "./message.ts";
+
+type TabsScope = HandlerScope<TabsApi>;
 
 /** A tab as `tabs.query` returns it. Only the members the handlers read are listed. */
 export interface TabInfo {
@@ -15,12 +18,6 @@ export interface TabsApi {
         update(tab_id: number, properties: { active: true }): Promise<unknown>;
         remove(tab_id: number): Promise<void>;
     };
-}
-
-export interface TabsScope {
-    api: TabsApi;
-    /** The window of the key press. It is -1 when the Experiment could not name the window. */
-    window_id: number;
 }
 
 // The tab list comes back in tab-bar order. The sort keeps the wrap-around right if an implementation ever returns another order.
