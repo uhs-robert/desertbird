@@ -71,7 +71,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
 - `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `experiment/keys.js`, `experiment/overlay.js`, their schemas, `overlay/`, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when the parent bundle passes the size budget.
-- `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, grim, zip, unzip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
+- `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, wlrctl, grim, zip, unzip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
 
 ## Planning
 
