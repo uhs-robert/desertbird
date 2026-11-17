@@ -4,7 +4,7 @@ import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { HandlerScope, MessageApi } from "../handlers/message.ts";
 
 // Every command states `bridge` on purpose, because the bridge runs nothing by default and a forgotten field should not pass silently.
-// `repeatable: false` keeps `.` from replaying the command. Commands that trash or move mail set it, so a stray `.` never repeats them on the next selection.
+// `repeatable: false` keeps `.` from replaying the command. A command that moves mail where `u` cannot follow (`msg.move`, which takes a typed folder, and `msg.snooze`) sets it, so a stray `.` never repeats it on the next selection. `u` undoes `msg.delete` and `msg.archive`, so `.` repeats them.
 export type CommandDefinition = CommandInput & { bridge: boolean; repeatable?: false };
 
 /** One group file: its commands by id, and the default normal-mode keys that run them. `message_keys` bind in the message document and not in the mail tab. */
