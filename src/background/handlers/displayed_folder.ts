@@ -5,6 +5,7 @@ export interface MailFolder {
     accountId: string;
     path: string;
     specialUse?: string[];
+    isRoot?: boolean;
     isVirtual?: boolean;
     isUnified?: boolean;
 }
