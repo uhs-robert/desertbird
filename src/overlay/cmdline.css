@@ -26,3 +26,10 @@ body { display: flex; flex-direction: column; font: 14px sans-serif; border-top:
 #line { flex: none; display: flex; padding: 4px 8px; gap: 4px; }
 #prompt { font-family: monospace; color: var(--accent); }
 #input { flex: 1; font: 14px monospace; border: 0; outline: 0; background: transparent; color: inherit; }
+/* A search line draws only its note and input, at the bottom, so the list under it stays visible while it narrows. The page is transparent there, and the two rows carry the surface. */
+body.search { background: transparent; }
+html:has(body.search) { background: transparent; }
+body.search #rows { display: none; }
+body.search { justify-content: flex-end; border-top: 0; }
+body.search #status { background: var(--surface); border-top: 2px solid var(--accent); }
+body.search #line { background: var(--surface); }

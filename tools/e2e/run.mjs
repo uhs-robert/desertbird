@@ -159,6 +159,7 @@ async function run_default(instance) {
   // E2E_ONLY=hud runs the which-key, toast and help checks alone, for a quick run of that part.
   if (process.env.E2E_ONLY === "hud") return run_hud(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "cmdline") return run_cmdline(instance, { app, kind, shot });
+  if (process.env.E2E_ONLY === "search") return run_search(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
   await run_mode_label(instance, { app, kind, shot });
 
@@ -512,6 +513,7 @@ async function run_default(instance) {
   await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, "the app survived the compose keys", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
+  await run_search(instance, { app, kind, shot });
   await run_view_settings(instance, { app, kind });
   await shot("after_view_settings", "Views folder after the view setting keys");
   await run_cmdline(instance, { app, kind, shot });
@@ -1124,7 +1126,8 @@ async function run_hud(instance, { app, kind, shot }) {
   }
   check(app, kind, "a click under the toast reaches the folder pane", folder_after !== displayed, `displayed folder was ${displayed}, after ${folder_after}`);
   await sleep(6000);
-  // ? opens the help page in a tab.
+  // g ? opens the help page in a tab. ? is a backward search now.
+  await instance.press(["g"]);
   await instance.press(["?"]);
   await sleep(2500);
   await shot(`hud_help_${theme}`, "the help page");
@@ -1140,6 +1143,79 @@ async function run_hud(instance, { app, kind, shot }) {
 
 // The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.
 // Focus back in the list is measured with Thunderbird's own Down key: it moves the list selection only while the list has focus, and the overlay is gone from the focus chain by then.
+// / and ? search the thread list with the Quick Filter: rows narrow while typing, Escape restores, Enter keeps the filter and selects, n and N step. The fixture subjects "Single 1" and "Single 10".."Single 19" give 11 rows in the Inbox.
+async function run_search(instance, { app, kind, shot }) {
+  const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
+  const open_search = async (key, text) => {
+    await instance.press([key]);
+    await sleep(1200);
+    await instance.press([text]);
+    await sleep(1200);
+  };
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 600);
+  const full = (await instance.ask("state")).listed.length;
+  await open_search("/", "Single 1");
+  let state = await instance.ask("state");
+  check(app, kind, "/ then text narrows the list while the line is open", state.listed.length > 0 && state.listed.length < full, `listed ${state.listed.length} of ${full}`);
+  await shot("search_typing", "the search line at the bottom with the narrowed list above it");
+  await instance.press(["-k", "Escape"]);
+  await sleep(1200);
+  state = await instance.ask("state");
+  check(app, kind, "Escape restores the earlier list", state.listed.length === full, `listed ${state.listed.length}, expected ${full}`);
+  await shot("search_escaped", "the full list after Escape, with no search line");
+  const before_j = selection_of(await instance.ask("state"));
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "after Escape a bound key runs again", selection_of(state) !== "" && selection_of(state) !== before_j, `selected ${before_j} then ${selection_of(state)}`);
+
+  // The typed text sits on top of the filter that was set before.
+  await instance.press(["F"]);
+  await key_and_state(instance, ["u"], 1200);
+  const unread = (await instance.ask("state")).listed.length;
+  await open_search("/", "Single");
+  await instance.press(["-k", "Escape"]);
+  await sleep(1200);
+  state = await instance.ask("state");
+  check(app, kind, "Escape after F u restores the unread list", state.listed.length === unread, `listed ${state.listed.length}, expected ${unread}`);
+  await instance.press(["F"]);
+  await key_and_state(instance, ["a"], 1200);
+
+  await open_search("/", "Single 1");
+  const narrowed = (await instance.ask("state")).listed;
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  const first = selection_of(state);
+  check(app, kind, "Enter keeps the narrowed list and selects its first row", state.listed.length === narrowed.length && first === narrowed[0], `listed ${state.listed.length}, selected ${first}, first ${narrowed[0]}`);
+  await shot("search_entered", "the narrowed list with the first row selected and the match count as a toast");
+  state = await key_and_state(instance, ["n"], 1000);
+  check(app, kind, "n selects the next row", selection_of(state) === narrowed[1], `selected ${selection_of(state)}, expected ${narrowed[1]}`);
+  state = await key_and_state(instance, ["N"], 1000);
+  check(app, kind, "N goes back one row", selection_of(state) === narrowed[0], `selected ${selection_of(state)}, expected ${narrowed[0]}`);
+  state = await key_and_state(instance, ["N"], 1000);
+  check(app, kind, "N from the first row wraps to the last", selection_of(state) === narrowed.at(-1), `selected ${selection_of(state)}, expected ${narrowed.at(-1)}`);
+
+  // Escape ended nothing here: the filter stays, so clear it, then n narrows it again from the register.
+  await instance.press(["F"]);
+  await key_and_state(instance, ["a"], 1200);
+  state = await key_and_state(instance, ["n"], 1500);
+  check(app, kind, "n after the filter was cleared narrows the list to the register again", state.listed.length === narrowed.length, `listed ${state.listed.length}, expected ${narrowed.length}`);
+
+  await instance.press(["F"]);
+  await key_and_state(instance, ["a"], 1200);
+  await instance.press(["?"]);
+  await sleep(1200);
+  await instance.press(["Single 1"]);
+  await sleep(1200);
+  await shot("search_backward", "the backward search line with the ? prompt");
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "? then Enter selects the last matching row", selection_of(state) === narrowed.at(-1), `selected ${selection_of(state)}, expected ${narrowed.at(-1)}`);
+  await instance.press(["F"]);
+  await key_and_state(instance, ["a"], 1200);
+}
+
 async function run_cmdline(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
   let state = await instance.ask("state");

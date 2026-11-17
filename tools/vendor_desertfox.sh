@@ -10,19 +10,19 @@ set -euo pipefail
 
 PIN_SHA=33a68a009791563e5ba57999e43b5c8d45c8ca6d
 UPSTREAM_DIR=src/shared
-# A file under `completion/` comes from `src/cmdline/completion/` upstream, and so does `history_cursor.ts` (`src/cmdline/`). Every other file mirrors `src/shared/`.
+# A file under `completion/` comes from `src/cmdline/completion/` upstream, and so does `history_cursor.ts` (`src/cmdline/`). `find_match.ts` comes from `src/content/caret/`. Every other file mirrors `src/shared/`.
 COPIED_FILES=(
   keys/token.ts keys/notation.ts keys/matcher.ts keys/compiler.ts
   register_names.ts prefix_tree.ts command.ts invocation.ts keymap.ts bundles.ts score.ts
   registry/define.ts registry/check_args.ts registry/check_shape.ts registry/params.ts registry/summary.ts
   registry/command_line.ts registry/usage.ts registry/print_command.ts registry/single_quote.ts
-  completion/tokenize.ts history_cursor.ts
+  completion/tokenize.ts history_cursor.ts find_match.ts
   themes.ts theme_names.ts theme/roles.ts theme/tokens.ts theme/contrast.ts theme/derive.ts theme/theme_file.ts theme/load.ts
 )
 
 upstream_path_of() {
   local file=$1
-  if [[ $file == completion/* || $file == history_cursor.ts ]]; then echo "src/cmdline/$file"; else echo "$UPSTREAM_DIR/$file"; fi
+  if [[ $file == completion/* || $file == history_cursor.ts ]]; then echo "src/cmdline/$file"; elif [[ $file == find_match.ts ]]; then echo "src/content/caret/$file"; else echo "$UPSTREAM_DIR/$file"; fi
 }
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

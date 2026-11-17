@@ -20,6 +20,10 @@
               "surface": {
                 "type": "string",
                 "enum": ["cmdline", "hud"]
+              },
+              "clickThrough": {
+                "type": "boolean",
+                "optional": true
               }
             }
           }

@@ -47,8 +47,8 @@ test("the user's bindings change the listed keys: a rebound key moves and an unb
     assert.deepEqual(archive?.keys.map((key) => key.keys), ["X"]);
 });
 
-test("help.open is bound to ? and opens the page in the key's window", async () => {
-    assert.deepEqual(all_entries().find((entry) => entry.id === "help.open")?.keys, [{ keys: "?", args: "", where: "" }]);
+test("help.open is bound to g? and opens the page in the key's window", async () => {
+    assert.deepEqual(all_entries().find((entry) => entry.id === "help.open")?.keys, [{ keys: "g?", args: "", where: "" }]);
     const calls: string[] = [];
     const api = {
         runtime: { getURL: (path: string) => `moz-extension://x/${path}` },

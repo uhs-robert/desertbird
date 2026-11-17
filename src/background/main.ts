@@ -1,12 +1,15 @@
 // Background entry. Compiles the default keymap once, keeps it in storage and hands it to the Experiment on every start.
 
-import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
+import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
+import { keep_filters } from "./handlers/view.ts";
+import { create_search_register } from "./search/register.ts";
+import { create_search_service } from "./search/service.ts";
 import { publish_theme } from "./theme/publish.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
@@ -15,7 +18,7 @@ import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
 import { start_jump_history } from "./handlers/jump_history.ts";
 import { create_body_requests } from "./body_requests.ts";
 import type { BodyRequestApi } from "./body_requests.ts";
-import { notify_refusal } from "./notify.ts";
+import { notify_refusal, notify_result } from "./notify.ts";
 import { create_new_mail_notifier } from "./new_mail_notify.ts";
 import type { NewMailApi } from "./new_mail_notify.ts";
 import { create_router } from "./router.ts";
@@ -63,6 +66,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
         };
     tabs: { onActivated: { addListener(listener: () => void): void } };
     messages: RouterApi["messages"] & NewMailApi["messages"];
+    mailTabs: RouterApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> };
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
     messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"] & FollowupOpenApi["messageDisplay"];
     runtime: {
@@ -71,6 +75,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
+        session?: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
     };
     // The Experiment namespace is absent when it fails to load.
@@ -179,6 +184,17 @@ const hud = create_hud_service({
 // The command line and the commands that open it mount through this, so a toast sits above the command line box while it is open.
 const command_line_overlay = messenger.overlay && lifting_toasts(messenger.overlay, hud);
 
+// Session storage survives a restart of this page and not of the application, like the window state it copies. It is absent on a build without it, and the memory copy works alone then.
+keep_filters(messenger.storage.session);
+
+// The search of `/` and `?`. It holds the live search of a window and reads the `/` register from storage, so `n` works after a restart.
+const search = create_search_service({
+    api: messenger,
+    register: create_search_register(messenger.storage.local),
+    timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
+    say: (window_id, text, is_error) => (is_error ? notify_refusal : notify_result)({ ...messenger, toasts: hud }, text, window_id),
+});
+
 // The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
 const cmdline = create_cmdline_service({
     registry,
@@ -188,9 +204,11 @@ const cmdline = create_cmdline_service({
     },
     overlay: command_line_overlay,
     history: create_cmdline_history(messenger.storage.local),
+    search_history: create_cmdline_history(messenger.storage.local, SEARCH_HISTORY_STORAGE_KEY),
+    search,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation), hints: messenger.hints });
 

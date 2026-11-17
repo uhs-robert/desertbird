@@ -26,6 +26,5 @@ export const cmdline: CommandGroup = {
         mm: { id: "cmdline.open", args: { text: "move " } },
         Ft: { id: "cmdline.open", args: { text: "filter --tag --tag=" } },
         T: { id: "cmdline.open", args: { text: "tab " } },
-        "/": { id: "cmdline.open", args: { text: "search " } },
     },
 };

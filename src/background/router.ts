@@ -6,6 +6,7 @@ import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
 import type { HintsApi, KeysApi, KeysInvocation, OverlayApi } from "../shared/protocol.ts";
 import type { CmdlineSessions } from "./cmdline/service.ts";
+import type { SearchSessions } from "./search/service.ts";
 import type { AttachmentsApi } from "./handlers/attachments.ts";
 import type { FolderApi } from "./handlers/folder_open.ts";
 import type { FollowupApi } from "./handlers/followup.ts";
@@ -27,6 +28,7 @@ export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & Fo
     overlay: OverlayApi | undefined;
     hints?: HintsApi | undefined;
     cmdline: CmdlineSessions;
+    search: SearchSessions;
 };
 
 const is_experiment_namespace = (name: string): name is keyof typeof EXPERIMENT_VERBS => Object.hasOwn(EXPERIMENT_VERBS, name);
