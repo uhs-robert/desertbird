@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { registry } from "../src/background/commands/index.ts";
 import { create_config_store, SETTINGS_KEY } from "../src/background/config/store.ts";
-import { NOTIFICATION_MAP_KEY, create_new_mail_notifier } from "../src/background/new_mail_notify.ts";
+import { create_new_mail_notifier } from "../src/background/new_mail_notify.ts";
+import type { ConfigStorage } from "../src/background/config/store.ts";
 import type { NewMailApi } from "../src/background/new_mail_notify.ts";
 
 type Header = { id: number; author?: string; subject?: string; read?: boolean; junk?: boolean };
@@ -13,9 +14,9 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 function harness(data: Record<string, unknown> = {}, options: { existing?: number[] } = {}) {
     const calls: string[] = [];
     const storage_listeners: ((changes: Record<string, unknown>, area: string) => void)[] = [];
-    const listeners = { mail: [] as ((folder: { type?: string }, list: { messages: Header[] }) => void)[], clicked: [] as ((id: string) => void)[], closed: [] as ((id: string) => void)[] };
+    const listeners = { mail: [] as ((folder: { specialUse?: string[] }, list: { messages: Header[] }) => void)[], clicked: [] as ((id: string) => void)[], closed: [] as ((id: string) => void)[] };
     const known = new Set(options.existing ?? []);
-    const api: NewMailApi = {
+    const api: NewMailApi & ConfigStorage = {
         messages: {
             get: async (id) => {
                 if (!known.has(id)) throw new Error(`Message not found: ${id}.`);
@@ -51,8 +52,8 @@ function harness(data: Record<string, unknown> = {}, options: { existing?: numbe
         calls,
         listeners,
         config_store,
-        deliver: async (messages: Header[], folder_type = "inbox") => {
-            listeners.mail.forEach((listener) => listener({ type: folder_type }, { messages }));
+        deliver: async (messages: Header[], special_use = "inbox") => {
+            listeners.mail.forEach((listener) => listener({ specialUse: [special_use] }, { messages }));
             await settle();
         },
         click: async (id: string) => {
@@ -85,13 +86,12 @@ test("read, junk and non-inbox mail is skipped", async () => {
 });
 
 test("three messages give three notifications, four give one batch", async () => {
-    const { deliver, calls, data } = harness({ ...on });
+    const { deliver, calls } = harness({ ...on });
     await deliver([mail(1), mail(2), mail(3)]);
     assert.equal(calls.length, 3);
     calls.length = 0;
     await deliver([mail(4), mail(5), mail(6), mail(7)]);
     assert.deepEqual(calls, ["create desertbird-new-mail-batch-4 New mail | 4 new messages"]);
-    assert.deepEqual((data[NOTIFICATION_MAP_KEY] as Record<string, number[]>)["desertbird-new-mail-batch-4"], [4, 5, 6, 7]);
 });
 
 test("the batch counts only wanted messages", async () => {
@@ -100,19 +100,12 @@ test("the batch counts only wanted messages", async () => {
     assert.equal(calls.length, 3);
 });
 
-test("the listeners register once, and a restart on the same storage registers its own once", async () => {
-    const first = harness({ ...on });
-    assert.deepEqual([first.listeners.mail.length, first.listeners.clicked.length, first.listeners.closed.length], [1, 1, 1]);
-    const second = harness(first.data);
-    assert.deepEqual([second.listeners.mail.length, second.listeners.clicked.length, second.listeners.closed.length], [1, 1, 1]);
-});
-
 test("a click opens the message and takes the notification down", async () => {
     const { deliver, click, calls } = harness({ ...on }, { existing: [1] });
     await deliver([mail(1)]);
     calls.length = 0;
     await click("desertbird-new-mail-1");
-    assert.deepEqual(calls, ["open 1", "clear desertbird-new-mail-1"]);
+    assert.deepEqual(calls, ["clear desertbird-new-mail-1", "open 1"]);
 });
 
 test("a click opens the first message of a batch", async () => {
@@ -120,57 +113,13 @@ test("a click opens the first message of a batch", async () => {
     await deliver([mail(4), mail(5), mail(6), mail(7)]);
     calls.length = 0;
     await click("desertbird-new-mail-batch-4");
-    assert.equal(calls[0], "open 4");
-});
-
-test("a click after a background restart reads the map from storage", async () => {
-    const before = harness({ ...on }, { existing: [1] });
-    await before.deliver([mail(1)]);
-    const after = harness(before.data, { existing: [1] });
-    await after.click("desertbird-new-mail-1");
-    assert.deepEqual(after.calls, ["open 1", "clear desertbird-new-mail-1"]);
-});
-
-test("a click on a deleted message says so and opens nothing", async () => {
-    const { deliver, click, calls } = harness({ ...on }, { existing: [] });
-    await deliver([mail(1)]);
-    calls.length = 0;
-    await click("desertbird-new-mail-1");
-    assert.deepEqual(calls, ["create - DesertBird | That message no longer exists."]);
+    assert.deepEqual(calls, ["clear desertbird-new-mail-batch-4", "open 4"]);
 });
 
 test("a click on an id the map does not know does nothing", async () => {
     const { click, calls } = harness({ ...on });
     await click("someone-else");
     assert.deepEqual(calls, []);
-});
-
-test("closing a notification drops its map entry", async () => {
-    const { deliver, listeners, data } = harness({ ...on });
-    await deliver([mail(1), mail(2)]);
-    listeners.closed.forEach((listener) => listener("desertbird-new-mail-1"));
-    await settle();
-    assert.deepEqual(Object.keys(data[NOTIFICATION_MAP_KEY] as object), ["desertbird-new-mail-2"]);
-});
-
-test("two events at once keep both map entries", async () => {
-    const { listeners, data } = harness({ ...on });
-    listeners.mail.forEach((listener) => {
-        listener({ type: "inbox" }, { messages: [mail(1)] });
-        listener({ type: "inbox" }, { messages: [mail(2)] });
-    });
-    await settle();
-    assert.deepEqual(Object.keys(data[NOTIFICATION_MAP_KEY] as object).sort(), ["desertbird-new-mail-1", "desertbird-new-mail-2"]);
-});
-
-test("turning the setting off clears the open notifications and the map", async () => {
-    const { deliver, api, calls, data } = harness({ ...on });
-    await deliver([mail(1), mail(2)]);
-    calls.length = 0;
-    await api.storage.local.set({ [SETTINGS_KEY]: { notify_new_mail: false } });
-    await settle();
-    assert.deepEqual(calls.sort(), ["clear desertbird-new-mail-1", "clear desertbird-new-mail-2"]);
-    assert.deepEqual(data[NOTIFICATION_MAP_KEY], {});
 });
 
 test("a settings change that leaves it on clears nothing", async () => {
@@ -200,4 +149,57 @@ test("notify.toggle keeps the other settings", async () => {
     const { api, data } = harness({ [SETTINGS_KEY]: { toast_ms: 7 } });
     await registry.get("notify.toggle")!.run!({ api, window_id: 1, message_ids: [], count: 1 } as never, {} as never);
     assert.deepEqual(data[SETTINGS_KEY], { toast_ms: 7, notify_new_mail: true });
+});
+
+test("a click on a deleted message clears the notification, and a second click does nothing", async () => {
+    const { deliver, click, calls } = harness({ ...on }, { existing: [] });
+    await deliver([mail(1)]);
+    calls.length = 0;
+    await click("desertbird-new-mail-1");
+    assert.deepEqual(calls, ["clear desertbird-new-mail-1", "create - DesertBird | That message no longer exists."]);
+    calls.length = 0;
+    await click("desertbird-new-mail-1");
+    assert.deepEqual(calls, []);
+});
+
+test("a closed notification no longer opens on a click", async () => {
+    const { deliver, listeners, click, calls } = harness({ ...on }, { existing: [1] });
+    await deliver([mail(1)]);
+    listeners.closed.forEach((listener) => listener("desertbird-new-mail-1"));
+    calls.length = 0;
+    await click("desertbird-new-mail-1");
+    assert.deepEqual(calls, []);
+});
+
+test("turning the setting off clears the open notifications", async () => {
+    const { deliver, api, calls, click } = harness({ ...on }, { existing: [1, 2] });
+    await deliver([mail(1), mail(2)]);
+    calls.length = 0;
+    await api.storage.local.set({ [SETTINGS_KEY]: { notify_new_mail: false } });
+    await settle();
+    assert.deepEqual(calls.sort(), ["clear desertbird-new-mail-1", "clear desertbird-new-mail-2"]);
+    calls.length = 0;
+    await click("desertbird-new-mail-1");
+    assert.deepEqual(calls, []);
+});
+
+test("the setting turning off between two creates stops the second", async () => {
+    const { listeners, api, calls } = harness({ ...on });
+    const real_create = api.notifications.create;
+    api.notifications.create = async (id, options) => {
+        const result = await real_create(id, options);
+        await api.storage.local.set({ [SETTINGS_KEY]: { notify_new_mail: false } });
+        await settle();
+        return result;
+    };
+    listeners.mail.forEach((listener) => listener({ specialUse: ["inbox"] }, { messages: [mail(1), mail(2)] }));
+    await settle();
+    await settle();
+    assert.equal(calls.filter((line) => line.startsWith("create")).length, 1);
+});
+
+test("a folder that is not the Inbox is skipped", async () => {
+    const { deliver, calls } = harness({ ...on });
+    await deliver([mail(1)], "trash");
+    assert.deepEqual(calls, []);
 });
