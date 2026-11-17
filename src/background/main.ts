@@ -4,6 +4,7 @@ import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
@@ -180,6 +181,7 @@ const cmdline = create_cmdline_service({
         tags: async () => (await messenger.messages.tags.list()).map((entry) => entry.tag),
     },
     overlay: command_line_overlay,
+    history: create_cmdline_history(messenger.storage.local),
     run: (invocation) => router.run(invocation),
 });
 const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });

@@ -1089,6 +1089,52 @@ async function run_cmdline(instance, { app, kind, shot }) {
   check(app, kind, "m t then Work tags the selected message", target !== undefined && (state.flags[target]?.tags ?? []).includes("$label2"), `${target} tags ${JSON.stringify(state.flags[target]?.tags)}`);
   await instance.press([":"]);
   await sleep(1200);
+  await instance.press(["fil"]);
+  await sleep(600);
+  await shot("cmdline_completions", "the line with fil typed: the matching rows above it, the box as wide as the window");
+  await instance.press(["-k", "Tab"]);
+  await sleep(600);
+  await shot("cmdline_after_tab", "the line after Tab: the box keeps its size and position");
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+
+  // C-n and C-p belong to the line. Thunderbird binds them to a new message and to print, so a leak shows as a new window.
+  const windows_before_ctrl = (await instance.ask("state")).windows;
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["f"]);
+  await sleep(500);
+  await instance.press(["-M", "ctrl", "-k", "n", "-m", "ctrl"]);
+  await sleep(600);
+  await instance.press(["-M", "ctrl", "-k", "p", "-m", "ctrl"]);
+  await sleep(1000);
+  await shot("cmdline_ctrl_n_p", "the line after C-n and C-p: a row went into the line and no other window opened");
+  const windows_after_ctrl = (await instance.ask("state")).windows;
+  check(app, kind, "C-n and C-p in the open line open no window", same(windows_before_ctrl, windows_after_ctrl) && instance.exited() === null, `windows before ${windows_before_ctrl.length}, after ${windows_after_ctrl.length}`);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+
+  // History: two sorts run, then a fresh line recalls them newest first, so Up twice is the older sort.
+  for (const order of ["descending", "ascending"]) {
+    await instance.press([":"]);
+    await sleep(1200);
+    await instance.press([`sort --date --${order}`]);
+    await instance.press(["-k", "Return"]);
+    await sleep(1500);
+  }
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["-k", "Up"]);
+  await sleep(500);
+  await instance.press(["-k", "Up"]);
+  await sleep(500);
+  await shot("cmdline_history_recall", "the line after Up twice: the older sort command is in the input");
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "Up twice in a fresh line recalls the older command and Enter runs it", state.mail_tab?.sort_order === "descending", `sort ${state.mail_tab?.sort_type} ${state.mail_tab?.sort_order}`);
+  await instance.press([":"]);
+  await sleep(1200);
   await instance.press(["bogus"]);
   await instance.press(["-k", "Return"]);
   await sleep(800);

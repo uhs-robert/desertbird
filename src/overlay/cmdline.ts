@@ -1,9 +1,15 @@
 // The command line page. It draws the line and the completion rows and reads keys. Parsing, completion and running live in the background: this page sends the text and shows the answer.
 
 import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult } from "../shared/protocol.ts";
-import { apply_pick, move_highlight, name_parts } from "./line_edit.ts";
+import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
+import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
+import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "./line_edit.ts";
 
-declare const messenger: { runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> } };
+declare const messenger: {
+    runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
+    storage: { local: { get(key: string): Promise<Record<string, unknown>> }; onChanged: { addListener(listener: (changes: Record<string, unknown>, area: string) => void): void } };
+};
 
 const window_id = Number(new URLSearchParams(location.search).get("window"));
 const input = document.getElementById("input") as HTMLInputElement;
@@ -17,6 +23,11 @@ let latest_request = 0;
 let closing = false;
 // Set before the send, so a second Enter while the answer is on its way sends nothing.
 let running = false;
+// A copy of the stored history, oldest first. The background writes the list when a line runs, and the copy refills on `storage.onChanged`.
+let history: string[] = [];
+let history_cursor: HistoryCursor = create_history_cursor(history);
+// Up and Down walk the history until the user types or uses a completion key. After that they move the highlight, as in DesertFox.
+let walking_history = true;
 
 const send = <Answer>(message: CmdlineRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
 
@@ -60,8 +71,48 @@ async function refresh_completion(): Promise<void> {
     show_status(completion.usage ?? "", false);
 }
 
-function accept_row(): void {
-    const row = completion.rows[highlighted < 0 ? 0 : highlighted];
+async function load_history(): Promise<void> {
+    history = await read_history(async () => (await messenger.storage.local.get(CMDLINE_HISTORY_STORAGE_KEY))[CMDLINE_HISTORY_STORAGE_KEY]);
+    history_cursor = create_history_cursor(history);
+}
+
+function step_history(direction: 1 | -1): void {
+    const entry = direction === -1 ? history_cursor.prev(input.value) : history_cursor.next();
+    if (entry === undefined) return;
+    input.value = entry;
+    input.setSelectionRange(entry.length, entry.length);
+    refresh_completion().catch(report_failure);
+}
+
+function step_highlight(step: 1 | -1): void {
+    highlighted = move_highlight(highlighted, step, completion.rows.length);
+    draw_rows();
+}
+
+// While C-n and C-p preview rows, the rows and the text they apply to stay as they were. A new completion would reset the highlight to the first row. Typing or Tab ends the preview.
+let preview_base: string | null = null;
+
+function preview_row(step: 1 | -1): void {
+    walking_history = false;
+    if (completion.rows.length === 0) return;
+    preview_base ??= input.value;
+    highlighted = cycle_index(highlighted, step, completion.rows.length);
+    const picked = apply_pick(preview_base, { start: completion.start, end: completion.end, insert: completion.rows[highlighted]!.insert });
+    input.value = picked.text;
+    input.setSelectionRange(picked.caret, picked.caret);
+    draw_rows();
+}
+
+/** Puts a row into the line. Tab takes the highlighted row, or the first. */
+function accept_row(index: number): void {
+    walking_history = false;
+    if (preview_base !== null) {
+        // The preview already put the row in. Tab keeps it and asks for the rows of the new text.
+        preview_base = null;
+        refresh_completion().catch(report_failure);
+        return;
+    }
+    const row = completion.rows[index];
     if (!row) return;
     const picked = apply_pick(input.value, { start: completion.start, end: completion.end, insert: row.insert });
     input.value = picked.text;
@@ -103,17 +154,30 @@ window.addEventListener(
             run_line().catch(report_failure);
         } else if (event.key === "Tab") {
             event.preventDefault();
-            accept_row();
+            accept_row(highlighted < 0 ? 0 : highlighted);
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            highlighted = move_highlight(highlighted, event.key === "ArrowDown" ? 1 : -1, completion.rows.length);
-            draw_rows();
+            const step = event.key === "ArrowDown" ? 1 : -1;
+            if (arrow_target(walking_history, completion.rows.length) === "history") step_history(step);
+            else step_highlight(step);
+        } else if (event.ctrlKey && (event.key === "n" || event.key === "p")) {
+            event.preventDefault();
+            preview_row(event.key === "n" ? 1 : -1);
         }
     },
     true,
 );
 
-input.addEventListener("input", () => void refresh_completion().catch(report_failure));
+messenger.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && CMDLINE_HISTORY_STORAGE_KEY in changes) load_history().catch(report_failure);
+});
+
+input.addEventListener("input", () => {
+    walking_history = false;
+    preview_base = null;
+    history_cursor = create_history_cursor(history);
+    refresh_completion().catch(report_failure);
+});
 
 async function start(): Promise<void> {
     const hello = await send<CmdlineHello>({ type: "cmdline.hello", windowId: window_id });
@@ -127,6 +191,8 @@ async function start(): Promise<void> {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
     await refresh_completion();
+    // After the line is ready: a slow or failed read must not hold up typing.
+    await load_history();
 }
 
 start().catch(report_failure);

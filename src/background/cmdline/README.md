@@ -3,6 +3,7 @@
 | File | Role |
 | --- | --- |
 | `completion.ts` | The rows of the list at the caret: commands, flags of the typed command, and values (static lists, folder paths, tag names). Built on the vendored `completion/tokenize.ts` (where the caret is) and `score.ts` (ranking). Only commands that run in the background and are not `completion: "hidden"` are listed |
+| `history.ts` | The history list in `storage.local`: `record` adds a line in a chain of writes, so two lines recorded together both stay. The service records every line the page sends to `cmdline.run` and does not wait for the write |
 | `service.ts` | One session per window: the opening text and the messages selected when the line opened. Answers the page's messages, and on `cmdline.run` parses, checks the args, closes the overlay and runs the command through the router with the stored message ids |
 
 ## Rules

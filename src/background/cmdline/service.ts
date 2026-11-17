@@ -6,6 +6,7 @@ import { parse_command_line } from "../../../vendor/desertfox/registry/command_l
 import type { Registry } from "../../../vendor/desertfox/registry/define.ts";
 import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, JsonValue, KeysInvocation, OverlayApi } from "../../shared/protocol.ts";
 import { create_completer } from "./completion.ts";
+import type { CmdlineHistory } from "./history.ts";
 import type { ValueSources } from "./completion.ts";
 
 /** What the line acts on. The messages are the ones selected when it opened: nothing can change the selection while the overlay has the keys. */
@@ -26,6 +27,8 @@ export interface CmdlineDeps {
     sources: ValueSources;
     /** Absent when the Experiment failed to load. */
     overlay: OverlayApi | undefined;
+    /** Keeps the lines that were run. A failed write is logged and never stops the command. */
+    history: CmdlineHistory;
     /** Runs one invocation through the router. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
@@ -84,6 +87,8 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
         // The session is claimed before anything awaits, so a second Enter before the page closes finds none and runs nothing.
         if (sessions.get(window_id) !== session) return { ok: false, message: "The command line is not open." };
         sessions.delete(window_id);
+        // Not awaited: the write may be slow or fail, and the line runs either way.
+        deps.history.record(text).catch((error: unknown) => console.error("desertbird:", error));
         const checked = await parse_and_check(text);
         if (!checked.ok || !("id" in checked)) {
             // A line that is not a command keeps the line open, so the session comes back.

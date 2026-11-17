@@ -8,8 +8,6 @@
     --error_surface: #fdecea;
     --error_text: #7a1010;
     --error_edge: #b3261e;
-    /* The box is pinned to the window bottom, over the status bar. */
-    --clear_of_status_bar: 32px;
 }
 @media (prefers-color-scheme: dark) {
     :root {
@@ -25,7 +23,8 @@
 }
 html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-serif; color: var(--text); overflow: hidden; }
 #which_key, #toasts > div { background: var(--surface); color: var(--text); border: 1px solid var(--edge); box-sizing: border-box; }
-#which_key { position: absolute; left: 12px; bottom: var(--clear_of_status_bar); max-width: 70%; padding: 6px 10px 8px; }
+/* Positions and sizes follow DesertFox: both sit at the bottom right and the panel draws over a toast. */
+#which_key { position: absolute; right: 16px; bottom: 44px; z-index: 2; max-width: calc(100vw - 32px); max-height: calc(100vh - 98px); overflow: auto; padding: 6px 10px 8px; }
 #which_key .title { color: var(--muted); border-bottom: 1px solid var(--edge); padding-bottom: 3px; margin-bottom: 4px; font-size: 12px; }
 #which_key .rows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(8, auto); column-gap: 24px; }
 #which_key .row { white-space: nowrap; }
@@ -33,7 +32,7 @@ html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-s
 #which_key .group { color: var(--muted); }
 #which_key.round { border-radius: 8px; }
 #which_key.chamfer { clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
-#toasts { position: absolute; right: 12px; bottom: calc(var(--clear_of_status_bar) + 32px); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; max-width: 45%; }
+#toasts { position: absolute; right: 16px; bottom: 48px; z-index: 1; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; max-width: 40ch; }
 #toasts > div { padding: 6px 10px; border-left: 4px solid var(--accent); overflow-wrap: anywhere; }
 #toasts > div.error { background: var(--error_surface); color: var(--error_text); border-color: var(--error_edge); border-left-color: var(--error_edge); }
 /* The command line box is 280 px high and sits over the bottom of the window, so toasts go above it. */
