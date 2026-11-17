@@ -741,7 +741,15 @@ async function run_panes(instance, { app, kind, shot }) {
   await sleep(1500);
   await keys(["g", "e"]);
 
-  // u runs Thunderbird's own undo. A delete by the native Delete key registers an undo step. d d and the API delete do not.
+  // :undo runs Thunderbird's own undo and has no default key. A delete by the native Delete key registers an undo step. d d and the API delete do not.
+  const undo = async () => {
+    await instance.press([":"]);
+    await sleep(1200);
+    await instance.press(["undo"]);
+    await instance.press(["-k", "Return"]);
+    await sleep(3000);
+    return instance.ask("state");
+  };
   await keys(["g", "t"]);
   await keys(["g", "i"], 2500);
   await keys(["g", "g"]);
@@ -749,8 +757,8 @@ async function run_panes(instance, { app, kind, shot }) {
   let victim = first_selected(await keys(["j"]));
   state = await keys(["d", "d"], 3000);
   const after_delete = messages_in_inbox(state);
-  state = await keys(["u"], 3000);
-  note(app, kind, "u after d d", `${victim} in Trash before u ${after_delete < 60}, back in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  state = await undo();
+  note(app, kind, ":undo after d d", `${victim} in Trash before :undo ${after_delete < 60}, back in the Inbox after :undo ${in_folder(state, victim, "/Inbox")}`);
   await keys(["g", "e"]);
   await keys(["g", "g"]);
   victim = first_selected(await keys(["j"]));
@@ -758,11 +766,11 @@ async function run_panes(instance, { app, kind, shot }) {
   await sleep(4000);
   state = await instance.ask("state");
   const deleted = !in_folder(state, victim, "/Inbox");
-  state = await keys(["u"], 3000);
-  check(app, kind, "u after a native Delete moves the message back to the Inbox", deleted && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox before u ${deleted}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  state = await undo();
+  check(app, kind, ":undo after a native Delete moves the message back to the Inbox", deleted && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox before :undo ${deleted}, in the Inbox after :undo ${in_folder(state, victim, "/Inbox")}`);
   const inbox_before = messages_in_inbox(state);
-  state = await keys(["u"], 3000);
-  check(app, kind, "a second u with nothing left to undo changes no mail", messages_in_inbox(state) === inbox_before && in_folder(state, victim, "/Inbox"), `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
+  state = await undo();
+  check(app, kind, "a second :undo with nothing left to undo changes no mail", messages_in_inbox(state) === inbox_before && in_folder(state, victim, "/Inbox"), `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
 }
 
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.
