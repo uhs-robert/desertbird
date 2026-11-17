@@ -1,5 +1,6 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
+import type { KeysApi } from "../../shared/protocol.ts";
 import type { HandlerScope } from "./message.ts";
 
 type TabsScope = HandlerScope<TabsApi>;
@@ -18,6 +19,11 @@ export interface TabsApi {
         update(tab_id: number, properties: { active: true }): Promise<unknown>;
         remove(tab_id: number): Promise<void>;
     };
+    windows: {
+        get(window_id: number): Promise<{ type?: string }>;
+        remove(window_id: number): Promise<void>;
+    };
+    keys: KeysApi;
 }
 
 // The tab list comes back in tab-bar order. The sort keeps the wrap-around right if an implementation ever returns another order.
@@ -57,11 +63,12 @@ export async function switch_tab(scope: TabsScope, args: CheckedArgs): Promise<v
     await activate(scope, picked);
 }
 
-// `tabs.remove` on the first tab does nothing and reports no error, also when it is the only tab (measured). So the handler refuses there instead of looking like it worked.
+// `tabs.remove` on the first tab does nothing and reports no error, also when it is the only tab (measured). So the handler does not call it there. A message window has one tab at index 0 and closes as a window. On the main mail tab `q` has no tab to close, so it moves the focus to the thread list, which is where `q` leaves a message in the reading pane.
 export async function close_tab(scope: TabsScope): Promise<void> {
+    if (scope.window_id >= 0 && (await scope.api.windows.get(scope.window_id)).type !== "normal") return scope.api.windows.remove(scope.window_id);
     const active = (await tabs_of_window(scope)).find((tab) => tab.active);
     if (active === undefined) throw new RuntimeRefusal("No tab is active.");
+    if (active.index === 0) return scope.api.keys.paneFocus({ windowId: scope.window_id, pane: "threads" });
     if (active.id === undefined) throw new RuntimeRefusal("The tab has no id, so it cannot be closed.");
-    if (active.index === 0) throw new RuntimeRefusal("The main mail tab cannot be closed.");
     await scope.api.tabs.remove(active.id);
 }

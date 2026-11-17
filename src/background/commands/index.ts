@@ -49,8 +49,16 @@ export function compile_default_keymap(): CompileResult {
     return compile_keymap(DEFAULT_KEYMAP, {}, resolve_command);
 }
 
-// The keys of the message document. The body script walks this tree, not the one of the mail tab.
-export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, ...Object.values(GROUPS).map((group) => group.message_keys)) };
+// The groups whose mail keys also work while a message has the focus. They act on the displayed messages, which the body request reads from the sender tab. Every other group needs the thread list or the mail tab, so its keys stay out.
+const MESSAGE_MAIL_GROUPS = [messages, compose, clipboard, followup, snooze, tabs, cmdline];
+
+// Keys of those groups that still need the list: `mR` reads the folder of the list, `Ft` filters it.
+const LIST_ONLY_KEYS: ReadonlySet<string> = new Set(["mR", "Ft"]);
+
+const mail_keys_for_message = Object.fromEntries(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => !LIST_ONLY_KEYS.has(keys)));
+
+// The keys of the message document. The body script walks this tree, not the one of the mail tab. The reading keys come last, so `j`, `k`, `/` and the rest keep their message meaning.
+export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, mail_keys_for_message, ...Object.values(GROUPS).map((group) => group.message_keys)) };
 
 export function compile_message_keymap(): CompileResult {
     return compile_keymap(MESSAGE_KEYMAP, {}, resolve_command);

@@ -15,7 +15,7 @@ interface FakeTab {
 /** A tab bar: the first tab is the main mail tab. `active` is the index of the active tab. */
 const bar = (active: number, titles: string[]): FakeTab[] => titles.map((title, index) => ({ id: 10 + index, index, active: index === active, title, window_id: 3 }));
 
-function with_tabs(tabs: FakeTab[]) {
+function with_tabs(tabs: FakeTab[], window_type = "normal") {
     const calls: string[] = [];
     // Each update moves the active mark, as the real API does, so a repeated step reads the state the step before left.
     const move_active = (id: number) => tabs.forEach((tab) => void (tab.active = tab.id === id));
@@ -25,13 +25,18 @@ function with_tabs(tabs: FakeTab[]) {
         remove: async (id: number) => void calls.push(`tabs.remove ${id}`),
     };
     // The tab commands read only `tabs` and the router only `notifications`, so the rest of the messenger is absent.
-    const api = { tabs: tabs_api, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") }, keys: undefined };
+    const windows = {
+        get: async (id: number) => (calls.push(`windows.get ${id}`), { type: window_type }),
+        remove: async (id: number) => void calls.push(`windows.remove ${id}`),
+    };
+    const keys = { paneFocus: async (args: object) => void calls.push(`paneFocus ${JSON.stringify(args)}`) };
+    const api = { tabs: tabs_api, windows, keys, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") } };
     return { api: api as unknown as RouterApi, calls };
 }
 
 const invoke = (command: string, args: Record<string, string> = {}, count = 1) => ({ command, args, count, windowId: 3, messageIds: [] });
 const run = (api: RouterApi, command: string, args?: Record<string, string>, count?: number) => create_router(registry, api).run(invoke(command, args, count));
-const writes = (calls: string[]) => calls.filter((call) => call.startsWith("tabs.update") || call.startsWith("tabs.remove"));
+const writes = (calls: string[]) => calls.filter((call) => call.startsWith("tabs.update") || call.startsWith("tabs.remove") || call.startsWith("windows.remove"));
 const notifications = (calls: string[]) => calls.filter((call) => call.startsWith("notify"));
 
 test("tab.next selects the next tab of the key's window and wraps from the last to the first", async () => {
@@ -85,13 +90,21 @@ test("tab.close removes the active tab when it is not the first", async () => {
     assert.deepEqual(notifications(calls), []);
 });
 
-test("tab.close refuses on the main mail tab, alone or with others, and never calls tabs.remove", async () => {
+test("tab.close on the main mail tab moves the focus to the thread list and never calls tabs.remove", async () => {
     for (const titles of [["Mail"], ["Mail", "Docs"]]) {
         const { api, calls } = with_tabs(bar(0, titles));
         await run(api, "tab.close");
         assert.deepEqual(writes(calls), [], titles.join());
-        assert.deepEqual(notifications(calls), ["notify The main mail tab cannot be closed."], titles.join());
+        assert.ok(calls.includes('paneFocus {"windowId":3,"pane":"threads"}'), titles.join());
+        assert.deepEqual(notifications(calls), [], titles.join());
     }
+});
+
+test("tab.close in a message window removes the window and not the tab", async () => {
+    const { api, calls } = with_tabs(bar(0, ["Message"]), "messageDisplay");
+    await run(api, "tab.close");
+    assert.deepEqual(writes(calls), ["windows.remove 3"]);
+    assert.deepEqual(notifications(calls), []);
 });
 
 test("a window the Experiment could not name falls back to the current window", async () => {
