@@ -142,6 +142,100 @@
             }
           }
         ]
+      },
+      {
+        "name": "folderTreeExpand",
+        "type": "function",
+        "async": true,
+        "description": "Opens or closes the selected folder row. Answers false, with nothing done, unless the folder pane has the focus.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "open": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "paneFocus",
+        "type": "function",
+        "async": true,
+        "description": "Moves the focus to the folder pane, the thread list or the message pane.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "pane": {
+                "type": "string",
+                "enum": [
+                  "folders",
+                  "threads",
+                  "message"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "appCommand",
+        "type": "function",
+        "async": true,
+        "description": "Runs one of two Thunderbird commands by name. Answers false when Thunderbird has the command disabled.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "cmd_undo",
+                  "cmd_openConversation"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "appOpenPage",
+        "type": "function",
+        "async": true,
+        "description": "Opens one of three fixed pages in a tab. The parent holds the addresses.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "string",
+                "enum": [
+                  "addons",
+                  "themes",
+                  "config"
+                ]
+              }
+            }
+          }
+        ]
       }
     ],
     "events": [

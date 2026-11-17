@@ -44,10 +44,10 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 
 - `keys.install {tree, settings}`, `keys.set_mode {mode}` and the `keys.onInvocation` event: the chrome runtime matches keys locally and sends only finished invocations.
 - `view.rows {first, last}`: built as `keys.viewRows`, with `keys.viewThread`, `keys.viewAllThreads` and `keys.viewScroll` for the three below, so no second Experiment bundle is needed. `viewRows` also returns the current row. The visible thread rows with index, message id, depth, collapsed, unread and the message flags word. `view.select {anchor, end}`, `view.scroll {row, position}`, `view.thread {row, open}` and `view.all_threads {open}`.
-- `folder_tree.expand {folder, open}` and `folder_tree.select {folder}`.
-- `pane.focus {pane}`, where pane is `folders`, `threads` or `message`.
-- `app.command {name}`: one name from a fixed allowlist of Thunderbird commands (`cmd_undo`, `cmd_openConversation` and the few others the table names). Never a free string.
-- `app.open_page {page}`: one key of a fixed table (`addons`, `themes`, `config`), never a URL. The counterpart of the DesertFox host verb `open_firefox_page`.
+- `folder_tree.expand {open}`: built as `keys.folderTreeExpand`. It opens or closes the selected row of the folder pane and answers false, doing nothing, unless the folder pane has the focus, which is how `h` and `l` tell the two panes apart. It takes no folder because the selected row is the cursor and `h` and `l` are the only callers. `folder_tree.select {folder}` waits for `search.folders`.
+- `pane.focus {pane}`: built as `keys.paneFocus`, where pane is `folders`, `threads` or `message`.
+- `app.command {name}`: built as `keys.appCommand`. One name from a fixed allowlist of two Thunderbird commands, `cmd_undo` and `cmd_openConversation`. It answers false when Thunderbird has the command disabled. Never a free string.
+- `app.open_page {page}`: built as `keys.appOpenPage`. One key of a fixed table (`addons`, `themes`, `config`), never a URL. The counterpart of the DesertFox host verb `open_firefox_page`.
 - `hints.collect {docs}` and `hints.act {id, action}`: hint targets in the chrome documents. The message and compose content scripts hold their own hints.
 - `overlay.mount` and `overlay.unmount`: the extension page that draws the command line, which-key, badge and toasts in the chrome window.
 
@@ -90,17 +90,17 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `compose.edit_external` | `e`, `<C-e>`, `:edit` | Standard | `compose.getComposeDetails` and `setComposeDetails`, host `editor_start` and `editor_collect` |
 | `config.reload`, `help.open` | `:reload`, `:help` | Standard | Background, extension page |
 | `motion.down`, `motion.up` | `j`, `k` | Experiment | Chrome runtime, `view.rows` and `view.select`. The thread list order, with collapsed threads, is only in the view. |
-| `motion.left`, `motion.right` | `h`, `l` | Experiment | `view.thread`, `folder_tree.expand`. Built for the thread list: `h` goes from a reply to its root or closes the thread, `l` opens a closed thread or goes to the first reply. The folder pane half waits for `folder_tree.expand`. |
+| `motion.left`, `motion.right` | `h`, `l` | Experiment | `view.thread`, `folder_tree.expand`. Built for the thread list: `h` goes from a reply to its root or closes the thread, `l` opens a closed thread or goes to the first reply. In the folder pane they close and open the selected folder row through `folder_tree.expand`: the handler asks it first and goes on to the thread logic only when the folder pane does not have the focus. |
 | `motion.top`, `motion.bottom`, `page.down`, `page.up` | `g g`, `G`, `<C-d>`, `<C-u>` | Experiment | Chrome runtime |
 | `view.reposition {position: center, top, bottom}` | `z z`, `z t`, `z b` | Experiment | `view.scroll`. Built. |
 | `thread.fold_all {open}` | `z M`, `z R` | Experiment | `view.all_threads`. Built. |
 | `step.thread_root {direction: next, previous}` | `] t`, `[ t` | Experiment | `view.rows` depth. The API gives no thread tree. Built: the background reads rows in blocks of 50 and selects the root with `mailTabs.setSelectedMessages`. |
 | `visual.toggle` | `v` | Experiment | Built in the chrome runtime as modal key state: the anchor row. `j`, `k`, `g g` and `G` extend the selection from it. A background command (`x`, `d d`, `m s`) reads the range as its selection and ends the mode. `v` again or Escape ends it and keeps the current row. Escape is taken only while the mode is on. The actions stay standard and keep `repeatable: false` where they move or delete mail. |
-| `pane.focus {pane}` | `g f`, `g e`, `g m`, `<A-h>`, `<A-l>`, `<S-h>`, `<S-l>` | Experiment | `pane.focus` |
-| `search.folders {query}` | `/` in the folder pane | Experiment | `folder_tree.select`. Matching is standard. |
-| `msg.undo` | `u` | Experiment | `app.command cmd_undo` |
-| `thread.open_conversation` | `g C` | Experiment | `app.command cmd_openConversation` |
-| `app.open_page {page}` | `g x`, `g T`, `g c` | Experiment | `app.open_page` |
+| `pane.focus {pane}` | `g f`, `g e`, `g m`, `<A-h>`, `<A-l>`, `<S-h>`, `<S-l>` | Experiment | `pane.focus`. Built for `g f`, `g e` and `g m`. `g f` and `g e` also bind in the message document, because the body script takes every key while the message pane has the focus. The four relative keys wait: one `pane` value cannot say left or right. |
+| `search.folders {query}` | `/` in the folder pane | Experiment | `folder_tree.select`. Matching is standard. Not built: `/` is bound in the thread list and the key map has no per-pane binding. |
+| `msg.undo` | `u` | Experiment | `app.command cmd_undo`. Built, `repeatable: false` and `bridge: false`. It undoes only what Thunderbird recorded an undo step for. A delete by the native Delete key is undone. `d d` and the API delete are not, so `u` after them undoes nothing. See [`thunderbird-behavior.md`](thunderbird-behavior.md), Panes, undo and pages. |
+| `thread.open_conversation` | `g C` | Experiment | `app.command cmd_openConversation`. Built. Thunderbird enables the command only for a message in its search index, so with indexing off it refuses with a message. |
+| `app.open_page {page}` | `g x`, `g T`, `g c` | Experiment | `app.open_page`. Built. |
 | `hint.pick {action}` | `f`, `;` | Experiment in chrome, standard in the message body | `hints.collect` and `hints.act`, content script hints |
 | Key capture, counts, `.`, modes, `<Esc>` | `0`-`9`, `.`, `esc` | Experiment | Chrome runtime. `.` replays the last motion or background command from runtime memory. A command with `repeatable: false` (`msg.delete`, `msg.archive`, `msg.move`, `msg.snooze`, `msg.remind`, `msg.remind_cancel` and `cmdline.open`) clears it instead |
 | Command line, which-key, badge, toasts | `:` | Experiment for the mount only | `overlay.mount`. The page itself is a normal extension page. |

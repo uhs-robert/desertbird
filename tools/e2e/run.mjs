@@ -151,6 +151,7 @@ async function run_default(instance) {
 
   const opened = await open_inbox(instance);
   if (process.env.E2E_ONLY === "steps") return run_steps(instance, { app, kind, shot: async () => "" });
+  if (process.env.E2E_ONLY === "panes") return run_panes(instance, { app, kind, shot });
   check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
   const start = await instance.ask("state");
   check(app, kind, "helper add-on and DesertBird both enabled", start.desertbird_enabled === true);
@@ -516,6 +517,7 @@ async function run_default(instance) {
   await run_followup(instance);
   await run_steps(instance, { app, kind, shot });
   await run_visual(instance, { app, kind, shot });
+  await run_panes(instance, { app, kind, shot });
 }
 
 // The stored follow-up record bytes of each add-on, read from the profile. The add-on's `storage.local` is an IndexedDB file there, and the helper add-on cannot read another add-on's storage. The database and its log are copied first, so the read sees the committed state and leaves the file alone. IndexedDB encodes the key with each character one code higher, and the value is compressed, which keeps long runs of an id as copies. So the check looks for the first 20 characters of the id.
@@ -673,6 +675,82 @@ async function run_visual(instance, { app, kind, shot }) {
   check(app, kind, ". after x in visual mode archives nothing", state.folders["/Inbox"]?.length === after_x, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
   await shot("visual_after_x", "Inbox after x archived the range");
   check(app, kind, "the app survived visual mode", instance.exited() === null);
+}
+
+// Pane focus, folder row folds, undo and the fixed pages. Native Down moves the selection of the pane that has focus, so it tells which pane a key focused.
+async function run_panes(instance, { app, kind, shot }) {
+  const folder_of = (state) => state.mail_tab?.folder ?? null;
+  const press_state = (args, wait_ms = 1200) => key_and_state(instance, args, wait_ms);
+  const down = () => press_state(["-k", "Down"]);
+  const up = () => press_state(["-k", "Up"]);
+  const keys = async (sequence, wait_ms = 1200) => {
+    for (const key of sequence.slice(0, -1)) await instance.press([key]);
+    return press_state([sequence.at(-1)], wait_ms);
+  };
+  const tabs_of = (state) => state.windows.flatMap((window) => window.tabs.map((tab) => tab.raw.url ?? tab.title));
+  const in_folder = (state, id, path) => state.folders[path]?.includes(id) === true;
+
+  await keys(["g", "e"]);
+  await keys(["g", "g"]);
+  await keys(["g", "f"]);
+  let state = await down();
+  check(app, kind, "g f puts the focus in the folder pane: Down moves the folder, not the list", folder_of(state) === "/Trash", `folder ${folder_of(state)}`);
+  await up();
+  // The row above the Inbox is the account row. h closes it, so Down finds no row below. l opens it, so Down reaches the Inbox.
+  state = await up();
+  const account_folder = folder_of(state);
+  await keys(["h"]);
+  await shot("panes_h", "the account row closed by h in the folder pane");
+  state = await down();
+  check(app, kind, "h in the folder pane closes the selected row, so Down stays on it", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
+  await up();
+  await keys(["l"]);
+  await shot("panes_l", "the account row opened by l in the folder pane");
+  state = await down();
+  check(app, kind, "l in the folder pane opens the selected row, so Down reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
+
+  const list_before = first_selected(await keys(["g", "e"]));
+  state = await down();
+  check(app, kind, "g e puts the focus in the thread list: Down moves the selection and not the folder", first_selected(state) !== list_before && folder_of(state) === "/Inbox", `selected ${list_before} then ${first_selected(state)}, folder ${folder_of(state)}`);
+  await keys(["G"]);
+  const message_before = first_selected(await keys(["g", "m"]));
+  state = await down();
+  check(app, kind, "g m puts the focus in the message pane: Down leaves the selection alone", first_selected(state) === message_before, `selected ${message_before} then ${first_selected(state)}`);
+  await shot("panes_gm", "the message pane focused by g m");
+  await keys(["g", "e"]);
+
+  // Each page opens in a tab of the window. The reset closes it so the next key runs in the mail tab.
+  for (const [key, page, address] of [["x", "addons", "about:addons"], ["T", "themes", "about:addons"], ["c", "config", "about:config"]]) {
+    state = await keys(["g", key], 3000);
+    check(app, kind, `g ${key} opens the ${page} page in a tab`, tabs_of(state).includes(address), `tabs ${tabs_of(state).join(" ")}`);
+    await shot(`panes_g${key}`, `the page g ${key} opened`);
+    await instance.ask("reset_tabs");
+    await sleep(1500);
+    await keys(["g", "e"]);
+  }
+  state = await keys(["g", "C"], 2500);
+  note(app, kind, "g C", `tabs after: ${tabs_of(state).length}; the conversation command is ${tabs_of(state).length > 1 ? "enabled and opened a tab" : "disabled with no search index, so it opened nothing"}`);
+
+  // u runs Thunderbird's own undo. A delete by the native Delete key registers an undo step. d d and the API delete do not.
+  await keys(["g", "t"]);
+  await keys(["g", "i"], 2500);
+  await keys(["g", "g"]);
+  const messages_in_inbox = (current) => current.folders["/Inbox"].length;
+  let victim = first_selected(await keys(["j"]));
+  state = await keys(["d", "d"], 3000);
+  const after_delete = messages_in_inbox(state);
+  state = await keys(["u"], 3000);
+  note(app, kind, "u after d d", `${victim} in Trash before u ${after_delete < 60}, back in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  victim = first_selected(state);
+  await instance.press(["-k", "Delete"]);
+  await sleep(4000);
+  state = await instance.ask("state");
+  const deleted = !in_folder(state, victim, "/Inbox");
+  state = await keys(["u"], 3000);
+  check(app, kind, "u after a native Delete moves the message back to the Inbox", deleted && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox before u ${deleted}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  const inbox_before = messages_in_inbox(state);
+  state = await keys(["u"], 3000);
+  check(app, kind, "a second u with nothing left to undo changes no mail", messages_in_inbox(state) === inbox_before && in_folder(state, victim, "/Inbox"), `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
 }
 
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.
@@ -1326,6 +1404,21 @@ async function run_message_scripts(instance) {
   await sleep(800);
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "pane: after focus returns to the list, j moves the list again", first_selected(state) !== pane_message && first_selected(state) !== null, `selected ${first_selected(state)}`);
+
+  // The body script takes every key while the message pane has the focus, so g e and g f there ask the background to move the focus. Native Down tells which pane has it.
+  state = await show_in_pane("reading-plain");
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["e"], 1500);
+  const list_row = first_selected(state);
+  state = await key_and_state(instance, ["-k", "Down"], 1200);
+  check(app, kind, "pane: g e in the message body focuses the thread list, so Down moves the selection", first_selected(state) !== list_row && first_selected(state) !== null, `selected ${list_row} then ${first_selected(state)}`);
+  state = await show_in_pane("reading-plain");
+  const folder_before = state.mail_tab?.folder;
+  await instance.press(["g"]);
+  await key_and_state(instance, ["f"], 1500);
+  state = await key_and_state(instance, ["-k", "Down"], 1200);
+  check(app, kind, "pane: g f in the message body focuses the folder pane, so Down moves the folder", state.mail_tab?.folder !== folder_before, `folder ${folder_before} then ${state.mail_tab?.folder}`);
+  await key_and_state(instance, ["-k", "Up"], 1200);
 
   // HTML mail, remote content and a sandboxed frame. The measurement the design asked for: does the script run there?
   for (const id of READING_FOLDER_MESSAGES.slice(1)) {

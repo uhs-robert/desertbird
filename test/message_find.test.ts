@@ -87,7 +87,7 @@ const sender = { tab: { id: 5, windowId: 9 } };
 const open_line = { type: "body.invoke", command: "cmdline.open", args: { text: "find " }, count: 1 };
 
 test("only the commands a message key binds are allowed", () => {
-    assert.deepEqual([...message_background_commands()], ["cmdline.open"]);
+    assert.deepEqual([...message_background_commands()], ["cmdline.open", "pane.focus"]);
 });
 
 test("body.invoke runs the command on the window and the messages of the sender, not on ones the message names", async () => {

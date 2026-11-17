@@ -12,10 +12,12 @@ The privileged part of the add-on. It runs as the parent script of the `keys` Ex
 | `overlay.ts` | Mount, replace and remove logic per window over `OverlayDeps`, so tests use fakes. A second mount replaces the first. A tab change or a closing window removes the overlay and fires `onClosed` |
 | `overlay_id.ts` | The element ids shared by the overlay parent and the key runtime. The hud has ids of its own |
 | `motions.ts` | The fixed motion table: `motion.down`, `motion.up`, `motion.top`, `motion.bottom`. Pure functions over a `ViewPort` |
-| `view.ts` | The thread list of `about:3pane` (`gDBView`, `threadTree`) behind a `ListPort`: the rows for the motions and the selected message ids for background commands. Also the check that the front tab is the mail tab, and `view_verbs`: the verbs `viewRows`, `viewThread`, `viewAllThreads` and `viewScroll` of the `keys` API, which read and move the list for background commands. `viewRows` also returns the message flags word of each row, which the step commands read. `ListPort.select_range` sets a range for visual mode |
+| `app_verbs.ts` | The verbs `folderTreeExpand`, `paneFocus`, `appCommand` and `appOpenPage` of the `keys` API. Each reads its target from a fixed table (pane focus targets, the two allowed command names with their controller, the three pages with their addresses), so no caller passes a function name or an address. `folderTreeExpand` acts only while the folder pane has the focus and answers whether it did |
+| `view.ts` | The thread list of `about:3pane` (`gDBView`, `threadTree`) behind a `ListPort`: the rows for the motions and the selected message ids for background commands. Also the check that the front tab is the mail tab, and `mail_pane_of`, which names a window by id and returns the `about:3pane` of its front mail tab, and `view_verbs`: the verbs `viewRows`, `viewThread`, `viewAllThreads` and `viewScroll` of the `keys` API, which read and move the list for background commands. `viewRows` also returns the message flags word of each row, which the step commands read. `ListPort.select_range` sets a range for visual mode |
 
-Three files know Thunderbird's own markup, so a Thunderbird rename lands in one of them:
+Four files know Thunderbird's own markup, so a Thunderbird rename lands in one of them:
 - `view.ts`: `gDBView`, `getSelectedMsgHdrs`, `threadTree` and the tab mode `mail3PaneTab`.
+- `app_verbs.ts`: `folderTree` (`selectedRow`, `expandRow`, `collapseRow`), `messageBrowser`, `commandController`, `DefaultController`, `openAddonsMgr`, `openContentTab` and `browsingContext.topChromeWindow`.
 - `focus.ts`: the element ids `messageBrowser` and `messagepane`, the element names `search-textbox` and `menulist`, and the popup `state`.
 - `platform.ts` and `parent_keys.ts`: `#tabmail`, the `messenger.xhtml` URL and the window type `mail:3pane`.
 

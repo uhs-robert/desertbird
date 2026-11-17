@@ -5,6 +5,7 @@ import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult, ResolveCommand } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
+import { app } from "./app.ts";
 import { attachments } from "./attachments.ts";
 import { clipboard } from "./clipboard.ts";
 import { cmdline } from "./cmdline.ts";
@@ -26,7 +27,7 @@ import { unsubscribe } from "./unsubscribe.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app };
 
 export const registry = create_registry();
 
