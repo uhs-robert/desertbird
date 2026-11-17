@@ -16,7 +16,7 @@ export interface OverlayDeps<Window> {
     on_window_unload(window: Window, listener: () => void): () => void;
     /** Calls `listener` on each Escape key of the window. Returns the way to stop listening. */
     on_escape(window: Window, listener: () => void): () => void;
-    emit_closed(window_id: number): void;
+    emit_closed(window_id: number, surface: OverlaySurface): void;
 }
 
 export interface OverlayHost {
@@ -27,9 +27,13 @@ export interface OverlayHost {
 
 interface Mounted {
     window_id: number;
+    surface: OverlaySurface;
     remove(): void;
     stop_listening(): void;
 }
+
+// The command line takes the keyboard, so it leaves on Escape or a tab change and gives the focus back. The hud never takes it, so neither of those removes it and its removal moves no focus.
+const takes_keyboard = (surface: OverlaySurface): boolean => surface === "cmdline";
 
 const is_surface = (value: unknown): value is OverlaySurface => (OVERLAY_SURFACES as readonly unknown[]).includes(value);
 
@@ -40,20 +44,22 @@ function checked_window_id(args: { windowId: unknown }): number {
 }
 
 export function create_overlay_host<Window extends object>(deps: OverlayDeps<Window>): OverlayHost {
-    const mounted = new Map<Window, Mounted>();
+    const mounted = new Map<Window, Map<OverlaySurface, Mounted>>();
 
     function take_down(window: Window, entry: Mounted): void {
         entry.stop_listening();
         entry.remove();
-        mounted.delete(window);
+        const of_window = mounted.get(window);
+        of_window?.delete(entry.surface);
+        if (of_window?.size === 0) mounted.delete(window);
     }
 
-    // The overlay left on its own. The focus goes back to the list only when the window lives on: a tab change leaves it to the tab.
+    // The surface left on its own. The focus goes back to the list only when the window lives on and the surface held the keyboard: a tab change leaves it to the tab.
     function close_by_itself(window: Window, entry: Mounted, window_is_closing: boolean): void {
-        if (mounted.get(window) !== entry) return;
+        if (mounted.get(window)?.get(entry.surface) !== entry) return;
         take_down(window, entry);
-        if (!window_is_closing) deps.focus_thread_list(window);
-        deps.emit_closed(entry.window_id);
+        if (!window_is_closing && takes_keyboard(entry.surface)) deps.focus_thread_list(window);
+        deps.emit_closed(entry.window_id, entry.surface);
     }
 
     return {
@@ -62,32 +68,34 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             if (!is_surface(args.surface)) throw new Error(`unknown surface ${String(args.surface)}`);
             const window = deps.window_with_id(window_id);
             if (window === null) throw new Error(`no main window has id ${window_id}`);
-            // A second mount replaces the first, so the page starts clean and one window never holds two overlays.
-            const earlier = mounted.get(window);
+            // A second mount replaces the first, so the page starts clean and one window never holds two of a surface.
+            const earlier = mounted.get(window)?.get(args.surface);
             if (earlier) take_down(window, earlier);
-            const remove = deps.create(window, args.surface, window_id);
-            const entry: Mounted = { window_id, remove, stop_listening: () => {} };
-            const stop_tab = deps.on_tab_select(window, () => close_by_itself(window, entry, false));
-            const stop_unload = deps.on_window_unload(window, () => close_by_itself(window, entry, true));
-            // The page closes itself on Escape. This is the way out when the page never loaded and nothing answers the key.
-            const stop_escape = deps.on_escape(window, () => close_by_itself(window, entry, false));
-            entry.stop_listening = () => {
-                stop_tab();
-                stop_unload();
-                stop_escape();
-            };
-            mounted.set(window, entry);
+            const surface = args.surface;
+            const remove = deps.create(window, surface, window_id);
+            const entry: Mounted = { window_id, surface, remove, stop_listening: () => {} };
+            const stops = [deps.on_window_unload(window, () => close_by_itself(window, entry, true))];
+            if (takes_keyboard(surface)) {
+                stops.push(deps.on_tab_select(window, () => close_by_itself(window, entry, false)));
+                // The page closes itself on Escape. This is the way out when the page never loaded and nothing answers the key.
+                stops.push(deps.on_escape(window, () => close_by_itself(window, entry, false)));
+            }
+            entry.stop_listening = () => stops.forEach((stop) => stop());
+            if (!mounted.has(window)) mounted.set(window, new Map());
+            mounted.get(window)?.set(surface, entry);
         },
         unmount(args) {
             const window_id = checked_window_id(args);
-            for (const [window, entry] of mounted) {
-                if (entry.window_id !== window_id) continue;
+            if (!is_surface(args.surface)) throw new Error(`unknown surface ${String(args.surface)}`);
+            for (const [window, of_window] of [...mounted]) {
+                const entry = of_window.get(args.surface);
+                if (entry?.window_id !== window_id) continue;
                 take_down(window, entry);
-                deps.focus_thread_list(window);
+                if (takes_keyboard(entry.surface)) deps.focus_thread_list(window);
             }
         },
         shutdown() {
-            for (const [window, entry] of [...mounted]) take_down(window, entry);
+            for (const [window, of_window] of [...mounted]) for (const entry of [...of_window.values()]) take_down(window, entry);
         },
     };
 }

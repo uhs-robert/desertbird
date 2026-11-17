@@ -36,6 +36,8 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         runtime: { onMessage: { addListener: () => {} } },
         notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) }, onClosed: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         messages: { onNewMailReceived: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
+        tabs: { onActivated: { addListener: () => {} } },
+        windows: { getAll: async () => [], onCreated: { addListener: () => {} }, onRemoved: { addListener: () => {} }, onFocusChanged: { addListener: () => {} } },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
         mailTabs: { query: async () => [], onDisplayedFolderChanged: { addListener: () => {} } },
     };

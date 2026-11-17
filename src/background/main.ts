@@ -1,9 +1,11 @@
 // Background entry. Compiles the default keymap once, keeps it in storage and hands it to the Experiment on every start.
 
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY } from "../shared/protocol.ts";
-import type { KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
+import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
+import type { HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
+import { NORMAL_MODE, create_hud_service } from "./hud/service.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -45,11 +47,22 @@ interface StorageChange {
 }
 
 interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
-    windows: BodyRequestApi["windows"] & RouterApi["windows"];
+    windows: BodyRequestApi["windows"] &
+        RouterApi["windows"] & {
+            getAll(query: { windowTypes: string[] }): Promise<{ id?: number }[]>;
+            onCreated: { addListener(listener: (window: { id?: number; type?: string }) => void): void };
+            onRemoved: { addListener(listener: (window_id: number) => void): void };
+            /** Fires with -1 when no window of the application has the focus. */
+            onFocusChanged: { addListener(listener: (window_id: number) => void): void };
+        };
+    tabs: { onActivated: { addListener(listener: () => void): void } };
     messages: RouterApi["messages"] & NewMailApi["messages"];
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
     messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"] & FollowupOpenApi["messageDisplay"];
-    runtime: { onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void } };
+    runtime: {
+        onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void };
+        sendMessage(message: HudChanged): Promise<unknown>;
+    };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
         onChanged: { addListener(listener: (changes: Record<string, StorageChange>, area: string) => void): void };
@@ -143,6 +156,17 @@ messenger.notifications.onClicked.addListener((id) => {
     open_followup_anchor(messenger, id).catch(console.error);
 });
 
+// The hud shows the which-key panel, the toasts and the mode badge. Its state is a few seconds of interface state per window and lives in memory only, like the command line session.
+const NO_WINDOW = -1;
+const hud = create_hud_service({
+    overlay: messenger.overlay,
+    read_settings: async () => (await config_store.read()).settings,
+    read_root: async () => (await load_record()).tree.root as TreeBranch,
+    send_changed: (windowId) => void messenger.runtime.sendMessage({ type: "hud.changed", windowId }).catch(() => {}),
+    mode_of: () => NORMAL_MODE,
+    timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
+});
+
 // The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
 const cmdline = create_cmdline_service({
     registry,
@@ -153,27 +177,44 @@ const cmdline = create_cmdline_service({
     overlay: messenger.overlay,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });
+const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: messenger.overlay, cmdline, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
 
-messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? body_requests(message, sender));
-// The overlay left a window on its own (a tab change or a closed window), so the session for that window is dropped.
-messenger.overlay?.onClosed.addListener(({ windowId }) => cmdline.end(windowId));
+messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
+// A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
+messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? cmdline.end(windowId) : hud.forget(windowId)));
 
 start_jump_history(messenger);
 
 // Top level, so each page start registers the listeners again.
 create_new_mail_notifier(messenger, async () => (await config_store.read()).settings.notify_new_mail).register();
 
-messenger.keys?.onInvocation.addListener((invocation) => {
-    router.run(invocation).catch(console.error);
+messenger.keys?.onInvocation.addListener((event) => {
+    if ("keys" in event) hud.on_keys_event(event).catch(console.error);
+    else router.run(event).catch(console.error);
 });
+
+// A half-typed sequence the key runtime cannot see end: a tab change, or the window losing the focus.
+messenger.tabs.onActivated.addListener(() => hud.close_which_key());
+messenger.windows.onFocusChanged.addListener((window_id) => hud.close_which_key(window_id === NO_WINDOW ? undefined : window_id));
+
+const track_window = (window: { id?: number; type?: string }) => {
+    if (window.id !== undefined && (window.type === undefined || window.type === "normal")) hud.track(window.id).catch(console.error);
+};
+messenger.windows.onCreated.addListener(track_window);
+messenger.windows.onRemoved.addListener((window_id) => hud.forget(window_id));
+messenger.windows.getAll({ windowTypes: ["normal"] }).then((open) => open.forEach(track_window), console.error);
 
 messenger.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !(KEYMAP_STORAGE_KEY in changes || USER_KEYMAP_KEY in changes || SETTINGS_KEY in changes)) return;
     cached_record = undefined;
     queue_install(true);
+});
+
+// Registered after the config store's own listener, so the settings are refilled by the time the hud reads them.
+messenger.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && SETTINGS_KEY in changes) hud.settings_changed().catch(console.error);
 });
 
 queue_install(false);

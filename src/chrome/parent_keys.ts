@@ -4,7 +4,7 @@ import { in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
-import type { KeysInstallArgs, KeysInvocation } from "../shared/protocol.ts";
+import type { KeysInstallArgs, KeysEvent } from "../shared/protocol.ts";
 import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
 import { create_list_port, front_about_3pane, view_verbs } from "./view.ts";
 
@@ -14,7 +14,7 @@ const WINDOW_LISTENER_ID = "desertbird@uhs-robert/keys";
 const NO_WINDOW_ID = -1;
 
 // The invocation listeners belong to the event the background subscribes to.
-const invocation_listeners = new Set<(invocation: KeysInvocation) => void>();
+const invocation_listeners = new Set<(invocation: KeysEvent) => void>();
 let runtime: Runtime | null = null;
 
 function ensure_runtime(context: ExtensionContext): Runtime {
@@ -67,7 +67,7 @@ export function get_keys_api(context: ExtensionContext) {
                 context,
                 name: "keys.onInvocation",
                 register: (fire) => {
-                    const listener = (invocation: KeysInvocation) => fire.async(invocation);
+                    const listener = (invocation: KeysEvent) => fire.async(invocation);
                     invocation_listeners.add(listener);
                     return () => invocation_listeners.delete(listener);
                 },

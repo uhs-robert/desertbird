@@ -1,0 +1,40 @@
+:root {
+    color-scheme: light dark;
+    --surface: #f8f9fb;
+    --text: #1f2328;
+    --muted: #4a5159;
+    --accent: #0a4db3;
+    --edge: #8c959f;
+    --error_surface: #fdecea;
+    --error_text: #7a1010;
+    --error_edge: #b3261e;
+    /* The box is pinned to the window bottom, over the status bar. */
+    --clear_of_status_bar: 32px;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --surface: #23262b;
+        --text: #e8eaed;
+        --muted: #b4bac2;
+        --accent: #8ab4f8;
+        --edge: #6b7480;
+        --error_surface: #4a1d1d;
+        --error_text: #ffd9d6;
+        --error_edge: #f28b82;
+    }
+}
+html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-serif; color: var(--text); overflow: hidden; }
+#which_key, #toasts > div, #badge { background: var(--surface); color: var(--text); border: 1px solid var(--edge); box-sizing: border-box; }
+#which_key { position: absolute; left: 12px; bottom: var(--clear_of_status_bar); max-width: 70%; padding: 6px 10px 8px; }
+#which_key .title { color: var(--accent); font-weight: 700; margin-bottom: 4px; }
+#which_key .rows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(8, auto); column-gap: 24px; }
+#which_key .row { white-space: nowrap; }
+#which_key .key { display: inline-block; min-width: 3.5em; font: 700 14px monospace; color: var(--accent); }
+#which_key .group { color: var(--muted); }
+#which_key.round { border-radius: 8px; }
+#which_key.chamfer { clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+#toasts { position: absolute; right: 12px; bottom: calc(var(--clear_of_status_bar) + 32px); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; max-width: 45%; }
+#toasts > div { padding: 6px 10px; border-left: 4px solid var(--accent); overflow-wrap: anywhere; }
+#toasts > div.error { background: var(--error_surface); color: var(--error_text); border-color: var(--error_edge); border-left-color: var(--error_edge); }
+#badge { position: absolute; right: 12px; bottom: var(--clear_of_status_bar); padding: 2px 10px; font: 700 12px monospace; letter-spacing: 0.08em; color: var(--accent); }
+[hidden] { display: none !important; }
