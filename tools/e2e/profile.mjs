@@ -114,11 +114,13 @@ const mail_account_inbox = () =>
 export function build_profile(profile_dir, { kind = "default" } = {}) {
   rmSync(profile_dir, { recursive: true, force: true });
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
-  const folder_dir = write_fixtures(profile_dir);
+  // E2E_SCALE=1 adds the 10,000-message Big folder and keeps the 50 Bulk folders, for the step timing run.
+  const scale = process.env.E2E_SCALE === "1";
+  const folder_dir = write_fixtures(profile_dir, { big: scale });
   writeFileSync(join(folder_dir, "Views"), views_text());
   write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
-  for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
+  if (!scale) for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
   const mail_dir = join(profile_dir, "Mail", "pop.invalid");
   if (kind === "mail_account") {
     mkdirSync(mail_dir, { recursive: true });

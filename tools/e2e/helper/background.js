@@ -215,6 +215,11 @@ async function poll_forever() {
       } else if (command.name?.startsWith("select:")) {
         await select_message(command.name.slice(7));
         await post({ seq: command.seq, selected: true });
+      } else if (command.name === "selection") {
+        // A light read for timing: the shown folder and the selected ids, with none of the folder listing that "state" does.
+        const [tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+        const selected = await all_messages(await browser.mailTabs.getSelectedMessages(tab.id));
+        await post({ seq: command.seq, folder: tab.displayedFolder?.path ?? null, ids: selected.map((message) => message.headerMessageId) });
       } else if (command.name === "open_message_window") {
         await post({ seq: command.seq, opened: await open_message_window() });
       } else if (command.name === "close_message_windows") {
