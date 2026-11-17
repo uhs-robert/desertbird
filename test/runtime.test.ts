@@ -11,18 +11,19 @@ import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 class FakeWindow implements KeyTarget {
     listeners = new Set<(event: KeydownEvent) => void>();
     tab_listeners = new Set<() => void>();
-    blur_listeners = new Set<(event: { target: unknown }) => void>();
+    blur_listeners = new Set<() => void>();
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
     menu_open = false;
-    document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }) };
+    has_focus = true;
+    document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
     selected = 0;
     rows = 10;
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
-    addEventListener(type: "blur", listener: (event: { target: unknown }) => void, capture: boolean): void;
-    addEventListener(type: string, listener: (event: any) => void) {
+    addEventListener(type: "blur", listener: () => void, capture: boolean): void;
+    addEventListener(type: string, listener: (event?: any) => void) {
         if (type === "blur") return void this.blur_listeners.add(listener);
         if (type === "TabSelect") return void this.tab_listeners.add(listener as () => void);
         this.adds++;
@@ -30,8 +31,8 @@ class FakeWindow implements KeyTarget {
     }
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
-    removeEventListener(type: "blur", listener: (event: { target: unknown }) => void, capture: boolean): void;
-    removeEventListener(type: string, listener: (event: any) => void) {
+    removeEventListener(type: "blur", listener: () => void, capture: boolean): void;
+    removeEventListener(type: string, listener: (event?: any) => void) {
         if (type === "blur") return void this.blur_listeners.delete(listener);
         if (type === "TabSelect") return void this.tab_listeners.delete(listener as () => void);
         this.listeners.delete(listener);
@@ -40,9 +41,10 @@ class FakeWindow implements KeyTarget {
     select_tab() {
         for (const listener of [...this.tab_listeners]) listener();
     }
-    /** The window loses focus, for example on an alt-tab. */
-    blur() {
-        for (const listener of [...this.blur_listeners]) listener({ target: this });
+    /** A blur event. `window_lost_focus` is whether the whole window deactivated (an alt-tab) or focus only moved between elements inside it. */
+    blur(window_lost_focus = true) {
+        this.has_focus = !window_lost_focus;
+        for (const listener of [...this.blur_listeners]) listener();
     }
     port(): ListPort {
         return { row_count: () => this.rows, selected_index: () => this.selected, select: (index) => void (this.selected = index), selected_message_ids: () => [100 + this.selected] };
@@ -507,6 +509,29 @@ test("the parent listens for TabSelect on each window and stops on shutdown", as
     keys_parent.shutdown();
     assert.equal(window.tab_listeners.size, 0);
     assert.equal(window.blur_listeners.size, 0);
+    platform.restore();
+});
+
+test("the parent resets on a blur only when the window lost focus, not when focus moved inside it", async () => {
+    const window = new FakeWindow();
+    // A mail tab in front with a thread list, so the parent finds a list port and the keys run.
+    const about_3pane = { threadTree: { currentIndex: 0 }, gDBView: { rowCount: 5, getSelectedMsgHdrs: () => [] } };
+    window.document.getElementById = () => ({ currentTabInfo: { mode: { name: "mail3PaneTab" }, chromeBrowser: { contentWindow: about_3pane } } }) as never;
+    const platform = stub_platform([window]);
+    const keys_parent = await import("../src/chrome/parent_keys.ts");
+    const keys = keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
+    const emitted: KeysInvocation[] = [];
+    (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void emitted.push(invocation));
+    await keys.install({ tree: tree(), settings: {} });
+    press(window, "3");
+    window.blur(false);
+    press(window, "x");
+    assert.equal(emitted[0]?.count, 3);
+    press(window, "3");
+    window.blur(true);
+    press(window, "x");
+    assert.equal(emitted[1]?.count, 1);
+    keys_parent.shutdown();
     platform.restore();
 });
 

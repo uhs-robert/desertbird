@@ -43,9 +43,9 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         },
         now: () => Date.now(),
         on_window_blur(window, listener) {
-            // Capture on the window also sees blurs of inner elements, which are only a focus move inside the window. A blur counts when its target is the window or its document, or when the document no longer has focus (the app reports the blur on the focused element when the whole window deactivates).
-            const on_blur = (event: { target: unknown }) => {
-                if (event.target === window || event.target === window.document || !window.document.hasFocus()) listener();
+            // The blur lands on the focused element when the whole window deactivates, so the target does not tell a window blur from a focus move inside it. Focus does.
+            const on_blur = () => {
+                if (!window.document.hasFocus()) listener();
             };
             window.addEventListener("blur", on_blur, true);
             return () => window.removeEventListener("blur", on_blur, true);

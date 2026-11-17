@@ -12,11 +12,11 @@ export interface MainWindow extends KeyTarget {
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     addEventListener(type: "unload", listener: () => void, options: { once: true }): void;
-    addEventListener(type: "blur", listener: (event: { target: unknown }) => void, capture: boolean): void;
+    addEventListener(type: "blur", listener: () => void, capture: boolean): void;
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     removeEventListener(type: "unload", listener: () => void): void;
-    removeEventListener(type: "blur", listener: (event: { target: unknown }) => void, capture: boolean): void;
+    removeEventListener(type: "blur", listener: () => void, capture: boolean): void;
     document: FocusDocument & { getElementById(id: string): unknown; hasFocus(): boolean };
 }
 
