@@ -72,6 +72,41 @@ async function key_and_state(instance, args, wait_ms = 700) {
 const first_selected = (state) => state.selected[0]?.header_id ?? null;
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
+// Thread keys on the fixture Inbox, whose ten threads of four open collapsed. Each key reads its result from the selection, since the fold state has no helper query.
+async function run_threads(instance, { app, kind, shot }) {
+  const keys = async (sequence, wait_ms = 1500) => {
+    for (const key of sequence.slice(0, -1)) await instance.press([key]);
+    return first_selected(await key_and_state(instance, [sequence.at(-1)], wait_ms));
+  };
+  const id_of = (thread, position) => `inbox-t${thread}-m${position}@fixture.invalid`;
+  const expect = (name, got, want) => check(app, kind, name, got === want, `selected ${got}, expected ${want}`);
+  await keys(["g", "g"]);
+  expect("l opens the collapsed thread and j then enters it", (await keys(["l"]), await keys(["j"])), id_of(0, 1));
+  expect("h on a reply selects its thread root", await keys(["h"]), id_of(0, 0));
+  await keys(["h"]);
+  expect("h on a root closes the thread, so j skips its replies", await keys(["j"]), id_of(1, 0));
+  expect("] t goes to the next thread root", await keys(["]", "t"]), id_of(2, 0));
+  expect("[ t from a root goes to the root before", await keys(["[", "t"]), id_of(1, 0));
+  await keys(["l"]);
+  await keys(["j"]);
+  expect("[ t from a reply goes to its own root", await keys(["[", "t"]), id_of(1, 0));
+  await keys(["h"]);
+  await keys(["z", "R"]);
+  await keys(["g", "g"]);
+  expect("z R opens every thread", await keys(["j"]), id_of(0, 1));
+  await keys(["z", "M"]);
+  await keys(["g", "g"]);
+  expect("z M closes every thread", await keys(["j"]), id_of(1, 0));
+  await keys(["G"]);
+  for (const [name, sequence] of [["top", ["z", "t"]], ["center", ["z", "z"]], ["bottom", ["z", "b"]]]) {
+    await keys(["g", "g"]);
+    await keys(["1", "5", "j"]);
+    await keys(sequence);
+    await shot(`z_${name}`, `15 rows down, then z ${sequence[1]}: the current row sits at the ${name} of the thread list`);
+  }
+  await keys(["g", "g"]);
+}
+
 async function run_default(instance) {
   const app = instance.app;
   const kind = "default";
@@ -82,6 +117,7 @@ async function run_default(instance) {
   const start = await instance.ask("state");
   check(app, kind, "helper add-on and DesertBird both enabled", start.desertbird_enabled === true);
   await shot("inbox_opened");
+  await run_threads(instance, { app, kind, shot });
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
   let state;
