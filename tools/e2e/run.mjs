@@ -2,8 +2,10 @@
 //   node tools/e2e/run.mjs [thunderbird|betterbird]... [--xpi path] [--binary app=path]
 // With no --xpi it only proves the setup: each app starts in a fresh profile and one screenshot is taken.
 // Scratch files go to $E2E_DIR (default /tmp/desertbird-e2e). Thunderbird comes from tools/measure/fetch_thunderbird.sh. Betterbird is /usr/bin/betterbird.
-import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
 
@@ -487,6 +489,63 @@ async function run_default(instance) {
   await shot("after_view_settings", "Views folder after the view setting keys");
   await run_cmdline(instance, { app, kind, shot });
   await run_folders(instance);
+  await run_followup(instance);
+}
+
+// The stored follow-up record bytes of each add-on, read from the profile. The add-on's `storage.local` is an IndexedDB file there, and the helper add-on cannot read another add-on's storage. The database and its log are copied first, so the read sees the committed state and leaves the file alone. IndexedDB encodes the key with each character one code higher, and the value is compressed, which keeps long runs of an id as copies. So the check looks for the first 20 characters of the id.
+function stored_followup_records(profile_dir) {
+  const encoded_key = Buffer.from("desertbird_followups", "latin1").map((byte) => byte + 1);
+  const records = [];
+  const root = join(profile_dir, "storage", "default");
+  if (!existsSync(root)) return records;
+  for (const entry of readdirSync(root).filter((name) => name.startsWith("moz-extension"))) {
+    const idb = join(root, entry, "idb");
+    if (!existsSync(idb)) continue;
+    for (const file of readdirSync(idb).filter((name) => name.endsWith(".sqlite"))) {
+      const copy_dir = mkdtempSync(join(tmpdir(), "db-e2e-idb-"));
+      try {
+        for (const suffix of ["", "-wal"]) if (existsSync(join(idb, file + suffix))) copyFileSync(join(idb, file + suffix), join(copy_dir, `copy.sqlite${suffix}`));
+        const database = new DatabaseSync(join(copy_dir, "copy.sqlite"), { readOnly: true });
+        for (const row of database.prepare("select key, data from object_data").all()) if (Buffer.from(row.key).subarray(1).equals(encoded_key)) records.push(Buffer.from(row.data));
+        database.close();
+      } finally {
+        rmSync(copy_dir, { recursive: true, force: true });
+      }
+    }
+  }
+  return records;
+}
+
+// m f d sets a follow-up reminder and tags nothing yet. m f c cancels. The due fire needs a clock run of a day and `src/` takes no test hook, so the fire is a hand check. The persisted reminder is read from the profile, and a real restart keeps it.
+async function run_followup(instance) {
+  const app = instance.app;
+  const kind = "default";
+  let state = await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["j"]);
+  const target = first_selected(state);
+  const tags_before = JSON.stringify(state.flags[target]?.tags ?? []);
+  const id_start = Buffer.from(target.slice(0, 20));
+  const holds_target = () => stored_followup_records(instance.profile_dir).some((record) => record.includes(id_start));
+  await instance.press(["m"]);
+  await instance.press(["f"]);
+  state = await key_and_state(instance, ["d"], 3000);
+  check(app, kind, "m f d tags nothing yet and the app stays up", JSON.stringify(state.flags[target]?.tags ?? []) === tags_before && instance.exited() === null, `tags ${tags_before} then ${JSON.stringify(state.flags[target]?.tags ?? [])}`);
+  await sleep(2000);
+  check(app, kind, "m f d stores a reminder for the message in the profile", holds_target(), `${target} in the stored record`);
+  await restart_app(instance, app, kind, "reminder");
+  check(app, kind, "the reminder is still stored after the restart", holds_target());
+  await open_inbox(instance, 7, { expanded: true });
+  await instance.ask(`select:${target}`, 30000);
+  await sleep(700);
+  state = await instance.ask("state");
+  check(app, kind, "the reminded message is selected again after the restart", first_selected(state) === target, `selected ${first_selected(state)}, expected ${target}`);
+  await instance.press(["m"]);
+  await instance.press(["f"]);
+  state = await key_and_state(instance, ["c"], 3000);
+  await sleep(2000);
+  check(app, kind, "m f c after the restart leaves the tags alone and the app up", JSON.stringify(state.flags[target]?.tags ?? []) === tags_before && instance.exited() === null, `tags ${JSON.stringify(state.flags[target]?.tags ?? [])}`);
+  check(app, kind, "m f c drops the stored reminder", !holds_target(), `${target} is ${holds_target() ? "still" : "no longer"} in the stored record`);
 }
 
 // The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.

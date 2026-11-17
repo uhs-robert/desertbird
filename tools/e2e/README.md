@@ -13,6 +13,8 @@ With `--xpi` the run installs DesertBird and the helper add-on, prints one PASS,
 
 The run opens the Inbox with keys only: seven Tabs reach the Local Folders row, Right expands it, Down opens the Inbox and F6 moves focus to the thread list. With a message shown, one F6 from the list reaches the message body and Shift+F6 returns. F6 cycles the folder pane, the thread list, the message body, the spaces toolbar and the global search on both apps, measured through the focus chain. Counted Tabs are not used: on Betterbird three Tabs from the folder pane end on a column header.
 
+The follow-up checks set a reminder with `m f d`, read the stored record from the IndexedDB file of the add-on in the profile (the helper cannot read another add-on's storage), restart the app, and cancel with `m f c`. The due fire needs a clock run of a day and `src/` takes no test hook, so it is a hand check.
+
 A reload or restart of DesertBird is a restart of the app on the same profile (`restart` in `harness.mjs`), because `management.setEnabled` is refused for an add-on in the profile folder and `src/` takes no test hook. `restart_app` in `run.mjs` records a check that the process id changed, so a skipped restart fails the run.
 
 Betterbird is `/usr/bin/betterbird`. Override a binary with `--binary thunderbird=/path`. Scratch files go to `$E2E_DIR`, default `/tmp/desertbird-e2e/<app>/<profile kind>/`. `E2E_STARTUP_MS` (default 30000) is the wait after launch.

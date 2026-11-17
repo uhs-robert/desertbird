@@ -9,6 +9,7 @@ import type { FollowupApi, FollowupFireApi, FollowupOpenApi } from "../src/backg
 import type { MessageHeader } from "../src/background/handlers/message.ts";
 import { CATCH_UP_ALARM, create_scheduler } from "../src/background/scheduler.ts";
 import { fake_alarms, fake_api, fake_storage } from "./fake_api.ts";
+import { create_new_mail_notifier } from "../src/background/new_mail_notify.ts";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 
 const NOW = new Date(2026, 10, 18, 10, 15);
@@ -414,4 +415,45 @@ test("a reply archived into a year subfolder of Archives cancels the reminder", 
     await box.store.add(item_of("<a@x>"));
     await fire_due(box, NOW.getTime() + DAY);
     assert.deepEqual(box.notices, []);
+});
+
+test("a click on a follow-up notice and a click on a new-mail notice each open only their own message", async () => {
+    const box = mailbox();
+    const anchor = box.add("<a@x>");
+    const created: string[] = [];
+    const clicked: ((id: string) => void)[] = [];
+    const new_mail: ((folder: { specialUse: string[] }, list: { messages: { id: number; subject: string }[] }) => void)[] = [];
+    const opened: number[] = [];
+    const known_new_mail_ids = [900];
+    const shared_notifications = {
+        create: async (id: string | undefined, notification: unknown) => (created.push(id!), box.api.notifications.create(id as never, notification as never)),
+        clear: async () => true,
+        onClicked: { addListener: (listener: (id: string) => void) => void clicked.push(listener) },
+        onClosed: { addListener: () => {} },
+    };
+    const open = async ({ messageId }: { messageId: number }) => void opened.push(messageId);
+    create_new_mail_notifier(
+        {
+            messages: { get: async (id: number) => (known_new_mail_ids.includes(id) ? { id } : Promise.reject(new Error("gone"))), onNewMailReceived: { addListener: (listener) => void new_mail.push(listener as never) } },
+            messageDisplay: { open },
+            notifications: shared_notifications,
+            storage: { onChanged: { addListener: () => {} } },
+        },
+        async () => true,
+    ).register();
+    // The wiring of main.ts: the follow-up click handler is its own listener.
+    clicked.push((id) => void open_followup_anchor({ messages: box.api.messages, messageDisplay: { open } }, id));
+    new_mail.forEach((listener) => listener({ specialUse: ["inbox"] }, { messages: [{ id: 900, subject: "new" }] }));
+    await settle();
+    await box.store.add(item_of("<a@x>"));
+    await box.store.fire_due(NOW.getTime() + DAY, (item, still_wanted) => fire_followup({ ...box.api, notifications: shared_notifications } as never, item, still_wanted));
+    const [new_mail_id, followup_id] = created as [string, string];
+    assert.match(new_mail_id, /^desertbird-new-mail-/);
+    assert.match(followup_id, /^desertbird-followup:/);
+    clicked.forEach((listener) => listener(followup_id));
+    await settle();
+    assert.deepEqual(opened, [anchor.id]);
+    clicked.forEach((listener) => listener(new_mail_id));
+    await settle();
+    assert.deepEqual(opened, [anchor.id, 900]);
 });
