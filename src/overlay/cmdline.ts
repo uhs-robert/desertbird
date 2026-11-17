@@ -5,7 +5,7 @@ import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts"
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
-import { apply_pick, arrow_target, cycle_index, move_highlight, name_parts, read_history } from "./line_edit.ts";
+import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
@@ -28,6 +28,10 @@ const history_key = (): string => (search_direction ? SEARCH_HISTORY_STORAGE_KEY
 let latest_search = 0;
 
 let completion: CmdlineCompletion = { rows: [], start: 0, end: 0 };
+// The text and caret the current completion was computed for. Enter uses a row only while the line still matches them.
+let completion_for = { text: "", caret: 0 };
+// The newest completion request, so Enter can wait for the answer to the text it runs.
+let latest_refresh: Promise<void> = Promise.resolve();
 let highlighted = -1;
 // A later answer replaces an earlier one that arrives after it.
 let latest_request = 0;
@@ -48,10 +52,11 @@ function show_status(text: string, is_error: boolean): void {
 }
 
 function draw_rows(): void {
+    const shown = shown_highlight(highlighted, completion.rows.length, completion.highlight_first);
     rows_element.replaceChildren(
         ...completion.rows.map((row, index) => {
             const item = document.createElement("li");
-            item.classList.toggle("selected", index === highlighted);
+            item.classList.toggle("selected", index === shown);
             const name = document.createElement("span");
             name.className = "name";
             for (const part of name_parts(row.name, row.positions)) {
@@ -69,14 +74,22 @@ function draw_rows(): void {
             return item;
         }),
     );
-    rows_element.children[highlighted]?.scrollIntoView({ block: "nearest" });
+    rows_element.children[shown]?.scrollIntoView({ block: "nearest" });
 }
 
-async function refresh_completion(): Promise<void> {
+function refresh_completion(): Promise<void> {
+    latest_refresh = request_completion();
+    return latest_refresh;
+}
+
+async function request_completion(): Promise<void> {
     const request = ++latest_request;
-    const answer = await send<CmdlineCompletion>({ type: "cmdline.complete", windowId: window_id, text: input.value, caret: input.selectionStart ?? input.value.length });
+    const text = input.value;
+    const caret = input.selectionStart ?? text.length;
+    const answer = await send<CmdlineCompletion>({ type: "cmdline.complete", windowId: window_id, text, caret });
     if (request !== latest_request || closing) return;
     completion = answer;
+    completion_for = { text, caret };
     highlighted = -1;
     draw_rows();
     show_status(completion.usage ?? "", false);
@@ -106,7 +119,7 @@ function step_history(direction: 1 | -1): void {
 }
 
 function step_highlight(step: 1 | -1): void {
-    highlighted = move_highlight(highlighted, step, completion.rows.length);
+    highlighted = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
     draw_rows();
 }
 
@@ -141,11 +154,20 @@ function accept_row(index: number): void {
     refresh_completion().catch(report_failure);
 }
 
+function line_to_run(): string {
+    const answer = { for_text: completion_for.text, for_caret: completion_for.caret, ...completion };
+    return enter_text(input.value, input.selectionStart ?? input.value.length, answer, highlighted, preview_base !== null);
+}
+
 async function run_line(): Promise<void> {
     if (running) return;
     running = true;
     try {
-        const result = await send<CmdlineRunResult>({ type: search_direction ? "cmdline.search_commit" : "cmdline.run", windowId: window_id, text: input.value });
+        if (!search_direction) {
+            await settle_latest(() => latest_refresh);
+            if (closing) return;
+        }
+        const result = await send<CmdlineRunResult>({ type: search_direction ? "cmdline.search_commit" : "cmdline.run", windowId: window_id, text: line_to_run() });
         if (result.ok) closing = true;
         else show_status(result.message, true);
     } finally {

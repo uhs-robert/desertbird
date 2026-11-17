@@ -23,6 +23,8 @@ export const cmdline: CommandGroup = {
     normal_keys: {
         ":": { id: "cmdline.open" },
         mt: { id: "cmdline.open", args: { text: "tag " } },
+        o: { id: "cmdline.open", args: { text: "open " } },
+        go: { id: "cmdline.open", args: { text: "open " } },
         mm: { id: "cmdline.open", args: { text: "move " } },
         Ft: { id: "cmdline.open", args: { text: "filter --tag --tag=" } },
         T: { id: "cmdline.open", args: { text: "tab " } },

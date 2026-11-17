@@ -1325,6 +1325,28 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await instance.press(["-k", "Escape"]);
   await sleep(800);
   check(app, kind, "the app survived the command line", instance.exited() === null);
+
+  // Enter takes the highlighted row: a fuzzy word picks a folder without Tab.
+  await instance.ask("show_folder", 20000, { path: "/Views" });
+  await sleep(1500);
+  await instance.press(["o"]);
+  await sleep(1200);
+  // Enter follows the letters at once, so the answer for the last letter may still be on its way.
+  await instance.press(["inb"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(2000);
+  state = await instance.ask("state");
+  check(app, kind, "o then inb Enter shows the highlighted folder, the Inbox", state.mail_tab?.folder === "/Inbox", `folder ${state.mail_tab?.folder}`);
+  state = await key_and_state(instance, ["j"], 800);
+  const moved = state.selected[0]?.header_id;
+  await instance.press(["m"]);
+  await instance.press(["m"]);
+  await sleep(1200);
+  await instance.press(["vie"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(2500);
+  state = await instance.ask("state");
+  check(app, kind, "m m then vie Enter moves the message to the highlighted folder, /Views", moved !== undefined && state.folders["/Views"]?.includes(moved) === true && state.folders["/Inbox"]?.includes(moved) !== true, `${moved} in Views ${state.folders["/Views"]?.includes(moved)}, in Inbox ${state.folders["/Inbox"]?.includes(moved)}`);
 }
 
 // The view settings, read as row counts of the Views folder (6 messages: 3 unread, 2 starred, 1 with an attachment, 2 tagged).
