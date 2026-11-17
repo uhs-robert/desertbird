@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, shown_highlight } from "../src/overlay/line_edit.ts";
+import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -61,9 +61,35 @@ test("the first row is shown highlighted only when the completion asks for it", 
     assert.equal(shown_highlight(2, 3, true), 2);
 });
 
-test("Enter swaps the typed word for the picked row, unless a preview already did", () => {
-    const pick = { start: 5, end: 9, insert: "/Projects " };
-    assert.equal(enter_text("move proj", pick, false), "move /Projects ");
-    assert.equal(enter_text("move /Projects ", pick, true), "move /Projects ");
-    assert.equal(enter_text("move proj", undefined, false), "move proj");
+const answer_for = (for_text: string, for_caret: number, extra: object = {}) => ({ for_text, for_caret, rows: [{ insert: "/Projects " }, { insert: "/Projects/2026 " }], start: 5, end: for_text.length, highlight_first: true, ...extra });
+
+test("Enter swaps the typed word for the first row, unless a preview already did", () => {
+    assert.equal(enter_text("move proj", 9, answer_for("move proj", 9), -1, false), "move /Projects ");
+    assert.equal(enter_text("move /Projects ", 15, answer_for("move proj", 9), -1, true), "move /Projects ");
+});
+
+test("Enter ignores an answer for older text or another caret", () => {
+    // Fast `o inb` Enter: the answer for `o i` must not splice into `open inb`.
+    assert.equal(enter_text("open inb", 8, answer_for("open i", 6), -1, false), "open inb");
+    // Tab then a fast Enter: the answer for `move proj` must not splice into `move /Projects `.
+    assert.equal(enter_text("move /Projects ", 15, answer_for("move proj", 9), -1, false), "move /Projects ");
+    assert.equal(enter_text("move arc", 8, answer_for("move pro", 8), -1, false), "move arc");
+    assert.equal(enter_text("move proj", 5, answer_for("move proj", 9), -1, false), "move proj");
+});
+
+test("Enter takes a row reached with Down even when the completion did not highlight the first", () => {
+    const answer = answer_for("move /Archive", 13, { highlight_first: undefined });
+    assert.equal(enter_text("move /Archive", 13, answer, -1, false), "move /Archive");
+    assert.equal(enter_text("move /Archive", 13, answer, 1, false), "move /Projects/2026 ");
+});
+
+test("settle_latest waits for a refresh started while it waited", async () => {
+    const order: string[] = [];
+    let latest: Promise<void> = new Promise((resolve) => setTimeout(() => { order.push("first"); resolve(); }, 5));
+    const first = latest;
+    first.then(() => { latest = new Promise((resolve) => setTimeout(() => { order.push("second"); resolve(); }, 5)); }).catch(() => undefined);
+    await settle_latest(() => latest);
+    assert.deepEqual(order, ["first", "second"]);
+    const failed = Promise.reject(new Error("failed"));
+    await settle_latest(() => failed);
 });

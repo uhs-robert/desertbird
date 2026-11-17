@@ -1331,9 +1331,8 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await sleep(1500);
   await instance.press(["o"]);
   await sleep(1200);
+  // Enter follows the letters at once, so the answer for the last letter may still be on its way.
   await instance.press(["inb"]);
-  await sleep(800);
-  await shot("cmdline_open_inb", "the line `open inb` with the first folder row highlighted");
   await instance.press(["-k", "Return"]);
   await sleep(2000);
   state = await instance.ask("state");
@@ -1344,7 +1343,6 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await instance.press(["m"]);
   await sleep(1200);
   await instance.press(["vie"]);
-  await sleep(800);
   await instance.press(["-k", "Return"]);
   await sleep(2500);
   state = await instance.ask("state");

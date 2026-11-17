@@ -60,7 +60,28 @@ export function shown_highlight(highlighted: number, row_count: number, highligh
     return highlight_first === true && row_count > 0 ? 0 : -1;
 }
 
-/** The text Enter runs. When the completion highlights a row, Enter takes it in place of the typed word. A row C-n or C-p already put in the line is in the text. */
-export function enter_text(text: string, pick: Pick | undefined, previewed: boolean): string {
-    return pick === undefined || previewed ? text : apply_pick(text, pick).text;
+/** A completion answer with the text and caret it was computed for. */
+export interface Answered {
+    for_text: string;
+    for_caret: number;
+    rows: { insert: string }[];
+    start: number;
+    end: number;
+    highlight_first?: boolean | undefined;
+}
+
+/** The text Enter runs. Enter takes the row the user moved to, else the first row when the completion asks for that, in place of the typed word. An answer for older text or another caret is ignored, because its span no longer fits the line. A row C-n or C-p already put in the line is in the text. */
+export function enter_text(text: string, caret: number, answer: Answered, highlighted: number, previewed: boolean): string {
+    if (previewed || answer.for_text !== text || answer.for_caret !== caret) return text;
+    const row = answer.rows[shown_highlight(highlighted, answer.rows.length, answer.highlight_first)];
+    return row === undefined ? text : apply_pick(text, { start: answer.start, end: answer.end, insert: row.insert }).text;
+}
+
+/** Waits until no newer refresh has started, so the answer in hand is for the text now in the line. */
+export async function settle_latest(latest: () => Promise<unknown>): Promise<void> {
+    let waited: Promise<unknown>;
+    do {
+        waited = latest();
+        await waited.catch(() => undefined);
+    } while (waited !== latest());
 }
