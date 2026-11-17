@@ -7,8 +7,10 @@ import { DEFAULT_KEYMAP, GROUPS, registry } from "../src/background/commands/ind
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background"; ids: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom"] },
-    messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.reply"] },
+    messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move"] },
+    compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
+    clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
 };
 
@@ -54,7 +56,31 @@ test("msg.reply checks its args in the one validator", () => {
     assert.equal(check_args(archive, { to: "sender" }).ok, false);
 });
 
-/** The phase 1 commands as shipped: their default key, args, side and bridge value. A refactor of the table must keep every row. */
+/** The phase 2 message and compose keys. `msg.tag` and `msg.move` have none until the command line exists. */
+const MESSAGE_KEYS = [
+    { id: "msg.read", keys: "mr", args: { state: "read" } },
+    { id: "msg.read", keys: "mu", args: { state: "unread" } },
+    { id: "folder.read_all", keys: "mR", args: undefined },
+    { id: "msg.flag", keys: "ms", args: undefined },
+    { id: "msg.junk", keys: "mj", args: undefined },
+    { id: "msg.reply", keys: "R", args: { to: "all" } },
+    { id: "msg.forward", keys: "gF", args: undefined },
+    { id: "msg.new", keys: "c", args: undefined },
+];
+
+test("the message and compose commands keep their default keys", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    for (const row of MESSAGE_KEYS) {
+        const binding = normal[row.keys];
+        assert.ok(binding && !Array.isArray(binding), row.keys);
+        assert.equal(binding.id, row.id, row.keys);
+        assert.deepEqual(binding.args, row.args, row.keys);
+    }
+    const bound_ids = Object.values(normal).map((binding) => (binding && !Array.isArray(binding) ? binding.id : ""));
+    assert.equal(bound_ids.includes("msg.tag") || bound_ids.includes("msg.move"), false);
+});
+
+/** The commands as shipped: their default key, args, side and bridge value. A refactor of the table must keep every row. */
 const PHASE_1_COMMANDS = [
     { id: "motion.down", keys: "j", args: undefined, runs_in: "chrome", bridge: true },
     { id: "motion.up", keys: "k", args: undefined, runs_in: "chrome", bridge: true },
@@ -63,6 +89,12 @@ const PHASE_1_COMMANDS = [
     { id: "msg.archive", keys: "x", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.delete", keys: "dd", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.reply", keys: "r", args: { to: "sender" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "yy", args: { field: "content" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "ys", args: { field: "subject" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "yf", args: { field: "sender" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "ya", args: { field: "address" }, runs_in: "background", bridge: false },
+    { id: "msg.yank", keys: "yi", args: { field: "message_id" }, runs_in: "background", bridge: false },
+    { id: "msg.open", keys: "<C-l>", args: undefined, runs_in: "background", bridge: false },
 ];
 
 test("the phase 1 commands keep their keys, args, side and bridge value", () => {

@@ -7,7 +7,7 @@ import { while_loading } from "../src/background/handlers/loading.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
 import type { RouterApi } from "../src/background/router.ts";
 
-const INBOX = { accountId: "a1", path: "/Inbox" };
+const INBOX = { id: "f-inbox", accountId: "a1", path: "/Inbox" };
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
 const invoke = (command: string, args: Record<string, string>) => ({ command, args, count: 1, windowId: 3, messageIds: [] });
 
@@ -105,7 +105,7 @@ test("the view commands are bridge safe and only the fixed states and panes have
 
 const NO_LIST_TABS: [string, MailTab][] = [
     ["several folders selected", { id: 9, displayedFolder: null }],
-    ["Account Central", { id: 9, displayedFolder: { accountId: "a1", path: "/", isRoot: true } }],
+    ["Account Central", { id: 9, displayedFolder: { id: "f-root", accountId: "a1", path: "/", isRoot: true } }],
 ];
 
 test("filter, search and sort refuse when no message list is shown", async () => {

@@ -33,6 +33,14 @@ test("each default key reaches its command with the side that runs it", () => {
         [["x"], "msg.archive", "background"],
         [["d", "d"], "msg.delete", "background"],
         [["r"], "msg.reply", "background"],
+        [["R"], "msg.reply", "background"],
+        [["m", "r"], "msg.read", "background"],
+        [["m", "u"], "msg.read", "background"],
+        [["m", "R"], "folder.read_all", "background"],
+        [["m", "s"], "msg.flag", "background"],
+        [["m", "j"], "msg.junk", "background"],
+        [["g", "F"], "msg.forward", "background"],
+        [["c"], "msg.new", "background"],
     ];
     for (const [tokens, id, runs_in] of expected) {
         const { step } = matched_step(...tokens);

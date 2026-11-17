@@ -47,7 +47,7 @@ async function collect() {
     const entry = { id: window.id, type: window.type, tabs: [] };
     for (const tab of window.tabs ?? []) {
       const detail = window.type === "messageCompose" ? await browser.compose.getComposeDetails(tab.id).catch(() => null) : null;
-      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
+      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
     }
     state.windows.push(entry);
   }
@@ -101,6 +101,40 @@ async function api_view(args) {
   if (args.update) await browser.mailTabs.update(mail_tab.id, args.update);
 }
 
+// Test-only read of the clipboard text. A write that failed in DesertBird leaves the earlier text, so the runner clears it first.
+async function clipboard_text(set_to) {
+  if (set_to !== undefined) await navigator.clipboard.writeText(set_to);
+  return set_to === undefined ? await navigator.clipboard.readText() : null;
+}
+
+// messages.query by Message-ID found nothing on a fresh profile, and messages.list of a folder that was never shown is empty, because Thunderbird parses a folder when it first opens it.
+// So the lookup shows each folder in the mail tab first, then walks the folders like state does.
+async function find_message(header_id, folders, mail_tab_id) {
+  for (const folder of folders) {
+    await browser.mailTabs.update(mail_tab_id, { displayedFolder: folder }).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const found = (await all_messages(await browser.messages.list(folder.id))).find((message) => message.headerMessageId === header_id);
+    if (found) return found;
+    const nested = await find_message(header_id, folder.subFolders ?? [], mail_tab_id);
+    if (nested) return nested;
+  }
+  return null;
+}
+async function find_in_accounts(header_id) {
+  const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+  return find_message(header_id, (await browser.accounts.list(true)).flatMap((account) => account.folders ?? []), mail_tab.id);
+}
+
+// Shows the folder of the message with this Message-ID in the mail tab and selects the message, so a key acts on it without folder-pane navigation.
+async function select_message(header_id) {
+  const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+  const message = await find_in_accounts(header_id);
+  if (!message) throw new Error(`no message ${header_id}`);
+  await browser.mailTabs.update(mail_tab.id, { displayedFolder: message.folder }).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await browser.mailTabs.setSelectedMessages(mail_tab.id, [message.id]);
+}
+
 // Tab commands for the tab checks. They drive tabs the way a mouse click does, with no key.
 async function tab_command(command) {
   const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
@@ -135,6 +169,9 @@ async function poll_forever() {
       else if (command.name === "api_archive" || command.name === "api_delete") {
         await act_on_selected(command.name);
         await post({ seq: command.seq, acted: command.name });
+      } else if (command.name?.startsWith("select:")) {
+        await select_message(command.name.slice(7));
+        await post({ seq: command.seq, selected: true });
       } else if (command.name === "close_compose") {
         await close_compose_windows();
         await post({ seq: command.seq, closed: true });
@@ -144,6 +181,15 @@ async function poll_forever() {
       } else if (command.name === "api_view") {
         await api_view(command.args);
         await post({ seq: command.seq, applied: true });
+      } else if (command.name === "probe_plain_text") {
+        const utils = browser.messengerUtilities;
+        const converted = utils?.convertToPlainText ? await utils.convertToPlainText("<html><head><title>T</title></head><body><p>It&#39;s &eacute;</p><table><tr><td>A</td><td>B</td></tr></table></body></html>") : null;
+        await post({ seq: command.seq, has_utils: Boolean(utils), has_convert: Boolean(utils?.convertToPlainText), converted });
+      } else if (command.name === "read_clipboard") {
+        await post({ seq: command.seq, text: await clipboard_text() });
+      } else if (command.name === "clear_clipboard") {
+        await clipboard_text("");
+        await post({ seq: command.seq, cleared: true });
       } else if (["open_content_tab", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
       } else if (command.name === "reload_desertbird") {
