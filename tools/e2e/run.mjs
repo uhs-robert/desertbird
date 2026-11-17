@@ -440,8 +440,11 @@ async function run_view_settings(instance, check_in) {
   await instance.ask("api_view", 20000, { filter: {} });
   await sleep(1500);
   check(app, kind, "clearing with {} restores 6 rows", (await instance.ask("state")).listed.length === 6);
-  // The Views messages rise in date, subject and sender with their number, so each sort key shows as the row order.
-  const views_rows = (order) => (order === "ascending" ? [0, 1, 2, 3, 4, 5] : [5, 4, 3, 2, 1, 0]).map((index) => `views-${index}@fixture.invalid`);
+  // The Views messages rise in date and subject with their number, and the sender names follow the order in profile.mjs, so each sort key shows as the row order.
+  const views_rows = (by, order) => {
+    const ascending = by === "author" ? [2, 4, 0, 3, 5, 1] : [0, 1, 2, 3, 4, 5];
+    return (order === "ascending" ? ascending : [...ascending].reverse()).map((index) => `views-${index}@fixture.invalid`);
+  };
   for (const [name, keys, sort_type, sort_order] of [
     ["date", ["d"], "date", "descending"],
     ["subject", ["s"], "subject", "ascending"],
@@ -452,7 +455,7 @@ async function run_view_settings(instance, check_in) {
     await instance.press([","]);
     state = await key_and_state(instance, keys, 1200);
     check(app, kind, `, ${keys[0]} (${name}) sets ${sort_type} ${sort_order}`, state.mail_tab?.sort_type === sort_type && state.mail_tab?.sort_order === sort_order, `sortType ${state.mail_tab?.sort_type}, sortOrder ${state.mail_tab?.sort_order}`);
-    check(app, kind, `, ${keys[0]} (${name}) orders the rows`, same(state.listed, views_rows(sort_order)), state.listed.join(" "));
+    check(app, kind, `, ${keys[0]} (${name}) orders the rows`, same(state.listed, views_rows(sort_type, sort_order)), state.listed.join(" "));
   }
   // Measurement for the sort.set `by` enum: does mailTabs.update accept these two column names?
   for (const sort_type of ["received", "priority"]) {
