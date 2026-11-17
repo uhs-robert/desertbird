@@ -5,6 +5,9 @@ import type { CommandGroup } from "./define.ts";
 
 const UNTAGGED_STATES = ["unread", "all", "starred", "attachment"];
 
+// A sort key names its order because the column alone leaves it open: dates read newest first and every other column reads smallest first.
+const sort_key = (by: string, order: string) => ({ id: "sort.set", args: { by, order } });
+
 // All four change only what the list shows, never mail, so `bridge` is true.
 export const view: CommandGroup = {
     commands: {
@@ -51,7 +54,7 @@ export const view: CommandGroup = {
                 {
                     name: "by",
                     type: "enum",
-                    values: ["date", "subject", "author", "recipient", "size", "flagged", "unread", "attachments", "tags"],
+                    values: ["date", "subject", "author", "recipient", "size", "flagged", "unread", "attachments", "tags", "received", "priority", "current"],
                     description: {
                         date: "Sort by the date sent.",
                         subject: "Sort by the subject.",
@@ -62,9 +65,17 @@ export const view: CommandGroup = {
                         unread: "Sort by the read state.",
                         attachments: "Sort by the attachment.",
                         tags: "Sort by the tag.",
+                        received: "Sort by the date received.",
+                        priority: "Sort by the priority.",
+                        current: "Keep the column the list is sorted by now.",
                     },
                 },
-                { name: "order", type: "enum", values: ["ascending", "descending"], description: { ascending: "Put the smallest or oldest first.", descending: "Put the largest or newest first." } },
+                {
+                    name: "order",
+                    type: "enum",
+                    values: ["ascending", "descending", "toggle"],
+                    description: { ascending: "Put the smallest or oldest first.", descending: "Put the largest or newest first.", toggle: "Reverse the order the list has now." },
+                },
             ],
             run: scoped<ViewApi>(set_sort),
         },
@@ -82,6 +93,14 @@ export const view: CommandGroup = {
         Fa: { id: "filter.set", args: { state: "all" } },
         Fs: { id: "filter.set", args: { state: "starred" } },
         Ff: { id: "filter.set", args: { state: "attachment" } },
+        ",d": sort_key("date", "descending"),
+        ",s": sort_key("subject", "ascending"),
+        ",f": sort_key("author", "ascending"),
+        ",z": sort_key("size", "ascending"),
+        ",t": sort_key("tags", "ascending"),
+        ",a": sort_key("attachments", "ascending"),
+        ",u": sort_key("unread", "ascending"),
+        ",o": sort_key("current", "toggle"),
         tm: { id: "pane.toggle", args: { pane: "message" } },
         tf: { id: "pane.toggle", args: { pane: "folder" } },
     },

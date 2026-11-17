@@ -17,6 +17,8 @@ export interface MailTab {
     id: number;
     displayedFolder?: (MailFolder & { isRoot?: boolean }) | null;
     viewType?: string;
+    sortType?: string;
+    sortOrder?: string;
     folderPaneVisible?: boolean;
     messagePaneVisible?: boolean;
 }
@@ -73,11 +75,14 @@ export async function search_threads(scope: ViewScope, args: CheckedArgs): Promi
 // A view grouped by its sort column cannot group by size or by read state. Thunderbird swaps in date without an error, so the handler refuses first.
 const NOT_GROUPABLE_SORTS = ["size", "unread"];
 
+// `current` and `toggle` read the tab here, at the key press, because the user can also change the sort with the mouse and no stored flag would know.
 export async function set_sort(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    const by = args["by"] as string;
+    const by = args["by"] === "current" ? tab.sortType : (args["by"] as string);
+    if (by === undefined) throw new RuntimeRefusal("The list has no sort column to keep.");
     if (tab.viewType === "groupedBySortType" && NOT_GROUPABLE_SORTS.includes(by)) throw new RuntimeRefusal(`This view is grouped by its sort column, which cannot group by ${by}.`);
-    await scope.api.mailTabs.update(tab.id, { sortType: by, sortOrder: args["order"] as string });
+    const order = args["order"] === "toggle" ? (tab.sortOrder === "ascending" ? "descending" : "ascending") : (args["order"] as string);
+    await scope.api.mailTabs.update(tab.id, { sortType: by, sortOrder: order });
 }
 
 // The pane state is read here, at the key press, because the user can also toggle a pane with the mouse and no stored flag would know.

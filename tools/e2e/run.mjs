@@ -415,7 +415,7 @@ async function run_default(instance) {
 }
 
 // The view settings, read as row counts of the Views folder (6 messages: 3 unread, 2 starred, 1 with an attachment, 2 tagged).
-// The tag, search and sort forms have no default key, so the helper applies the same arguments the handlers send, straight through the API.
+// The tag and search forms have no default key, so the helper applies the same arguments the handlers send, straight through the API.
 async function run_view_settings(instance, check_in) {
   const { app, kind } = check_in;
   const prepared = await instance.ask("prepare_views", 30000);
@@ -440,11 +440,27 @@ async function run_view_settings(instance, check_in) {
   await instance.ask("api_view", 20000, { filter: {} });
   await sleep(1500);
   check(app, kind, "clearing with {} restores 6 rows", (await instance.ask("state")).listed.length === 6);
-  await instance.ask("api_view", 20000, { update: { sortType: "subject", sortOrder: "descending" } });
-  await sleep(1000);
-  state = await instance.ask("state");
-  note(app, kind, "sort.set arguments through the API", `sortType ${state.mail_tab?.sort_type}, sortOrder ${state.mail_tab?.sort_order}`);
-  check(app, kind, "the sort arguments sort.set sends take effect", state.mail_tab?.sort_type === "subject" && state.mail_tab?.sort_order === "descending");
+  // The Views messages rise in date, subject and sender with their number, so each sort key shows as the row order.
+  const views_rows = (order) => (order === "ascending" ? [0, 1, 2, 3, 4, 5] : [5, 4, 3, 2, 1, 0]).map((index) => `views-${index}@fixture.invalid`);
+  for (const [name, keys, sort_type, sort_order] of [
+    ["date", ["d"], "date", "descending"],
+    ["subject", ["s"], "subject", "ascending"],
+    ["current column, order toggled", ["o"], "subject", "descending"],
+    ["author", ["f"], "author", "ascending"],
+    ["current column, order toggled", ["o"], "author", "descending"],
+  ]) {
+    await instance.press([","]);
+    state = await key_and_state(instance, keys, 1200);
+    check(app, kind, `, ${keys[0]} (${name}) sets ${sort_type} ${sort_order}`, state.mail_tab?.sort_type === sort_type && state.mail_tab?.sort_order === sort_order, `sortType ${state.mail_tab?.sort_type}, sortOrder ${state.mail_tab?.sort_order}`);
+    check(app, kind, `, ${keys[0]} (${name}) orders the rows`, same(state.listed, views_rows(sort_order)), state.listed.join(" "));
+  }
+  // Measurement for the sort.set `by` enum: does mailTabs.update accept these two column names?
+  for (const sort_type of ["received", "priority"]) {
+    const answer = await instance.ask("api_view", 20000, { update: { sortType: sort_type, sortOrder: "ascending" } });
+    await sleep(800);
+    state = await instance.ask("state");
+    note(app, kind, `mailTabs.update sortType ${sort_type}`, `${answer.error ? `error ${answer.error}` : "accepted"}, tab then reports sortType ${state.mail_tab?.sort_type}`);
+  }
   const panes = (current) => `${current.mail_tab?.message_pane_visible}/${current.mail_tab?.folder_pane_visible}`;
   const before = await instance.ask("state");
   await instance.press(["t"]);
