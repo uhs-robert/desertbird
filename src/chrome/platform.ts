@@ -1,7 +1,7 @@
 // The Thunderbird globals the Experiment parent reads, and the guard every verb runs through. Nothing here keeps state.
 // Platform modules load through `ChromeUtils.importESModule` inside functions, never at the top, so node tests load the parents with stub globals.
 
-import type { KeyTarget } from "./runtime.ts";
+import type { KeydownEvent, KeyTarget } from "./runtime.ts";
 import type { FocusDocument } from "./focus.ts";
 import type { TabmailLike } from "./view.ts";
 
@@ -9,6 +9,10 @@ declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
 declare const Services: { wm: { getEnumerator(type: string | null): Iterable<MainWindow> } };
 
 export interface MainWindow extends KeyTarget {
+    addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
+    removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     document: FocusDocument & { getElementById(id: string): unknown };
 }
 

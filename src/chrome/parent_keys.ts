@@ -36,6 +36,11 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
         menu_is_open: (window: MainWindow) => menu_is_open(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
+        on_tab_select(window, listener) {
+            // On the window and not on the tab strip: at startup the strip does not exist yet when the window is hooked (measured), and a capture listener on the window sees the event from any element below it.
+            window.addEventListener("TabSelect", listener, true);
+            return () => window.removeEventListener("TabSelect", listener, true);
+        },
         window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {
             for (const listener of invocation_listeners) listener(invocation);

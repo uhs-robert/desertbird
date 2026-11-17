@@ -74,7 +74,7 @@ test("d then x drops the stray d and reads x as a first key", () => {
 });
 
 test("d then an unbound key matches nothing", () => {
-    assert.equal(type_keys("d", "q").kind_, "no_match");
+    assert.equal(type_keys("d", "w").kind_, "no_match");
 });
 
 test("the tree survives the structured clone the Experiment boundary applies", () => {

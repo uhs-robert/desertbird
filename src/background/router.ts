@@ -37,7 +37,7 @@ export function create_router(registry: Registry, api: RouterApi) {
         if (!checked.ok) throw new RuntimeRefusal(checked.error);
         if (missing_experiment_verb(api, command.needs ?? []) !== undefined) throw new RuntimeRefusal(`${command.label} needs the DesertBird Experiment, which is not loaded.`);
         // The ids are the selection at the key press. A read of the selection now could see the row a later `j` moved to.
-        const context: ScopedContext = { tab_id: undefined, window_id: invocation.windowId, frame_id: 0, mode: "normal", api, message_ids: invocation.messageIds };
+        const context: ScopedContext = { tab_id: undefined, window_id: invocation.windowId, frame_id: 0, mode: "normal", api, message_ids: invocation.messageIds, count: invocation.count };
         await command.run(context, checked.args);
     }
 

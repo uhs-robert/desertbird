@@ -20,6 +20,7 @@ function fake(parts: MessagePart = MULTIPART, message_ids = [4]) {
     const scope: ClipboardScope = {
         message_ids,
         window_id: 1,
+        count: 1,
         api: {
             messages: {
                 get: async (id) => (calls.push(`get ${id}`), { id, subject: "Hello", author: "Ann Lee <ann@example.org>", headerMessageId: "abc@example.org" }),

@@ -52,6 +52,8 @@ export interface HandlerScope<Api = MessageApi> {
     api: Api;
     window_id: number;
     message_ids: number[];
+    /** The count typed before the key, 1 when none. A command reads it only when its definition says `count: "repeat"`. */
+    count: number;
 }
 
 // Thunderbird itself keeps a row selected after an archive or a delete (the next message, or the previous one at the end of the list), so the add-on reselects nothing.

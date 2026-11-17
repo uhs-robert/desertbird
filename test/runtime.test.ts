@@ -10,6 +10,7 @@ import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 
 class FakeWindow implements KeyTarget {
     listeners = new Set<(event: KeydownEvent) => void>();
+    tab_listeners = new Set<() => void>();
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
@@ -17,12 +18,22 @@ class FakeWindow implements KeyTarget {
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }) };
     selected = 0;
     rows = 10;
-    addEventListener(_type: "keydown", listener: (event: KeydownEvent) => void) {
+    addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
+    addEventListener(type: string, listener: (event: KeydownEvent) => void) {
+        if (type === "TabSelect") return void this.tab_listeners.add(listener as () => void);
         this.adds++;
         this.listeners.add(listener);
     }
-    removeEventListener(_type: "keydown", listener: (event: KeydownEvent) => void) {
+    removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
+    removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
+    removeEventListener(type: string, listener: (event: KeydownEvent) => void) {
+        if (type === "TabSelect") return void this.tab_listeners.delete(listener as () => void);
         this.listeners.delete(listener);
+    }
+    /** A tab switch with no key: a click on the tab bar. */
+    select_tab() {
+        for (const listener of [...this.tab_listeners]) listener();
     }
     port(): ListPort {
         return { row_count: () => this.rows, selected_index: () => this.selected, select: (index) => void (this.selected = index), selected_message_ids: () => [100 + this.selected] };
@@ -85,10 +96,14 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         is_typing_target: (_window, event) => (event.target as { localName: string }).localName === "input",
         menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
+        on_tab_select: (window, listener) => {
+            window.tab_listeners.add(listener);
+            return () => void window.tab_listeners.delete(listener);
+        },
         window_id_of: () => 7,
         emit: (invocation) => void emitted.push(invocation),
     };
-    return { windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window) };
+    return { windows, emitted, runtime: create_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
 }
 
 test("a motion key runs in the chrome and is cancelled", () => {
@@ -415,4 +430,58 @@ test("a count reaches a bound chord", () => {
     press(windows[0]!, "3");
     press_ctrl(windows[0]!, "j");
     assert.equal(emitted[0]?.count, 3);
+});
+
+test("a half-typed sequence does not survive a tab switch by mouse, by Ctrl+Tab or by a bound tab chord", () => {
+    const switches: [string, (window: FakeWindow) => void][] = [
+        ["a click on another tab and back", (window) => window.select_tab()],
+        ["Ctrl+Tab", (window) => void press(window, "Tab", { ctrlKey: true })],
+        ["Ctrl+PageDown", (window) => void press(window, "PageDown", { ctrlKey: true })],
+        ["a bound tab chord", (window) => void press(window, "j", { ctrlKey: true })],
+    ];
+    for (const [name, switch_tab] of switches) {
+        const { windows, emitted, runtime } = setup();
+        runtime.install(chord_tree());
+        const window = windows[0]!;
+        press(window, "d");
+        switch_tab(window);
+        press(window, "d");
+        const deletes = () => emitted.filter((invocation) => invocation.command === "msg.delete").length;
+        assert.equal(deletes(), 0, `${name}: the second d starts over`);
+        press(window, "d");
+        assert.equal(deletes(), 1, `${name}: a fresh d d still deletes`);
+    }
+});
+
+test("a tab switch also drops a pending count, and shutdown stops the listening", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "3");
+    window.select_tab();
+    press(window, "x");
+    assert.equal(emitted[0]?.count, 1);
+    runtime.shutdown();
+    assert.equal(window.tab_listeners.size, 0);
+});
+
+test("the parent listens for TabSelect on each window and stops on shutdown", async () => {
+    const window = new FakeWindow();
+    const platform = stub_platform([window]);
+    const keys_parent = await import("../src/chrome/parent_keys.ts");
+    await keys_parent.get_keys_api({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys.install({ tree: tree(), settings: {} });
+    assert.equal(window.tab_listeners.size, 1);
+    keys_parent.shutdown();
+    assert.equal(window.tab_listeners.size, 0);
+    platform.restore();
+});
+
+test("an unloaded window stops listening while another keeps its listener", () => {
+    const { windows, runtime, load, unload } = setup();
+    runtime.install(tree());
+    const other = new FakeWindow();
+    load(other);
+    unload(other);
+    assert.equal(other.tab_listeners.size, 0);
+    assert.equal(windows[0]!.tab_listeners.size, 1);
 });

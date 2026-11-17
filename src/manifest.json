@@ -13,7 +13,7 @@
         "scripts": ["background.js"],
         "persistent": true
     },
-    "permissions": ["accountsFolders", "accountsRead", "clipboardWrite", "compose", "messagesDelete", "messagesMove", "messagesRead", "messagesTagsList", "messagesUpdate", "notifications", "storage"],
+    "permissions": ["accountsFolders", "accountsRead", "clipboardWrite", "compose", "messagesDelete", "messagesMove", "messagesRead", "messagesTagsList", "messagesUpdate", "notifications", "storage", "tabs"],
     "experiment_apis": {
         "keys": {
             "schema": "experiment/keys.schema.json",

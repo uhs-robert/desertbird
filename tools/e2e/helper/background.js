@@ -47,7 +47,7 @@ async function collect() {
     const entry = { id: window.id, type: window.type, tabs: [] };
     for (const tab of window.tabs ?? []) {
       const detail = window.type === "messageCompose" ? await browser.compose.getComposeDetails(tab.id).catch(() => null) : null;
-      entry.tabs.push({ id: tab.id, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
+      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null });
     }
     state.windows.push(entry);
   }
@@ -135,6 +135,27 @@ async function select_message(header_id) {
   await browser.mailTabs.setSelectedMessages(mail_tab.id, [message.id]);
 }
 
+// Tab commands for the tab checks. They drive tabs the way a mouse click does, with no key.
+async function tab_command(command) {
+  const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+  const tabs = window.tabs;
+  if (command.name === "open_content_tab") return { opened: (await browser.tabs.create({ url: "about:blank" })).id };
+  if (command.name === "open_mail_tab") return { opened: (await browser.mailTabs.create({})).id };
+  if (command.name === "move_first_tab") return { moved: await browser.tabs.move(tabs[0].id, { index: 1 }).then((moved) => moved.map((tab) => tab.index)) };
+  if (command.name === "open_message_tab") {
+    const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
+    const [message] = (await browser.mailTabs.getSelectedMessages(mail_tab.id)).messages;
+    return { opened: (await browser.messageDisplay.open({ location: "tab", messageId: message.id, active: true }))?.id ?? null };
+  }
+  if (command.name === "select_tab") return { updated: (await browser.tabs.update(tabs[command.args.index].id, { active: true })).id };
+  if (command.name === "reset_tabs") {
+    for (const tab of tabs.slice(1)) await browser.tabs.remove(tab.id);
+    return { reset: true };
+  }
+  if (command.name === "remove_tab") return { removed: await browser.tabs.remove(tabs[command.args.index].id).then(() => true) };
+  throw new Error(`unknown tab command ${command.name}`);
+}
+
 async function post(body) {
   await fetch(`${SINK_URL}/state`, { method: "POST", body: JSON.stringify(body) });
 }
@@ -169,6 +190,8 @@ async function poll_forever() {
       } else if (command.name === "clear_clipboard") {
         await clipboard_text("");
         await post({ seq: command.seq, cleared: true });
+      } else if (["open_content_tab", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
+        await post({ seq: command.seq, ...(await tab_command(command)) });
       } else if (command.name === "reload_desertbird") {
         await reload_desertbird();
         await post({ seq: command.seq, reloaded: true });

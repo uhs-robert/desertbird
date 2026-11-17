@@ -307,6 +307,7 @@ async function run_default(instance) {
   await sleep(500);
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
+  await run_tabs(instance, { check, note, shot, key_and_state });
 
   // <C-l> on a collapsed thread root (several messages) refuses and opens no tab. On one message it opens a tab.
   const tab_count = (current) => current.windows.filter((window) => window.type === "normal").flatMap((window) => window.tabs).length;
@@ -459,6 +460,134 @@ async function run_view_settings(instance, check_in) {
   state = await key_and_state(instance, ["f"]);
   check(app, kind, "a second t f restores the folder pane", state.mail_tab?.folder_pane_visible === before.mail_tab?.folder_pane_visible);
   check(app, kind, "the view keys changed no mail", instance.exited() === null);
+}
+
+const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
+const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
+const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
+
+// Tab commands. The helper add-on opens, selects and closes tabs through the API, since wtype has no mouse.
+async function run_tabs(instance, { check, note, shot, key_and_state }) {
+  const app = instance.app;
+  const kind = "default";
+  const tabs_of = async () => main_window_tabs(await instance.ask("state"));
+
+  // q on the only mail tab: tabs.remove does nothing there, so the command refuses with a notification and the tab stays.
+  const log_offset = instance.app_log().length;
+  let state = await key_and_state(instance, ["q"], 2500);
+  check(app, kind, "q on the only mail tab leaves it open", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}`);
+  check(app, kind, "q on the only mail tab shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), "evidence is the libnotify warning in the app log");
+
+  // What the tabs API reports for the first mail tab and for a second one.
+  const second = await instance.ask("open_mail_tab");
+  await sleep(2500);
+  state = await instance.ask("state");
+  check(app, kind, "a second mail tab opens", main_window_tabs(state).length === 2, `reply ${JSON.stringify(second)}`);
+  note(app, kind, "tab properties", JSON.stringify(main_window_tabs(state).map((tab) => tab.raw)));
+  // q closes a second mail tab: the one tab a key can be pressed in and tabs.remove can close.
+  state = await key_and_state(instance, ["q"], 2000);
+  check(app, kind, "q closes a second mail tab", main_window_tabs(state).length === 1, `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}${tab.active ? "*" : ""}`))}`);
+  await instance.ask("open_mail_tab");
+  await sleep(2500);
+  // The tabs API gives no property that marks the first mail tab. Can the API move it off index 0?
+  const moved = await instance.ask("move_first_tab");
+  await sleep(1000);
+  state = await instance.ask("state");
+  note(app, kind, "tabs.move of the first mail tab to index 1", `reply ${JSON.stringify(moved)}, tab ids by index now ${JSON.stringify(main_window_tabs(state).map((tab) => tab.id))}`);
+  await instance.ask("reset_tabs");
+  await sleep(1500);
+
+  // Measured facts for tabs other than the mail tab.
+  const content = await instance.ask("open_content_tab");
+  await sleep(1500);
+  state = await instance.ask("state");
+  note(app, kind, "content tab opened", `id ${content.opened}, tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}${tab.active ? "*" : ""}`))}`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  state = await instance.ask("state");
+  check(app, kind, "tabs.update makes the mail tab active again", active_index(state) === 0, `active index ${active_index(state)}`);
+  await shot("mail_tab_again", "main window back on the mail tab after the content tab opened");
+
+  // A bound chord runs, and Thunderbird's own action for it does not happen. C-j opens Saved Files by default, C-k moves focus to the global search.
+  const before_chord = main_window_tabs(await instance.ask("state"));
+  state = await key_and_state(instance, CTRL("j"), 1500);
+  check(app, kind, "C-j switches to the next tab", active_index(state) === 1, `active index ${active_index(state)}`);
+  check(app, kind, "C-j does not open Saved Files, which is Thunderbird's own action for it", main_window_tabs(state).length === before_chord.length && !main_window_tabs(state).some((tab) => /saved/i.test(`${tab.title} ${tab.type}`)), `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}:${tab.title}`))}`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+
+  // C-k runs from the mail tab only. With a content tab beside it, C-k from the mail tab wraps to the last tab.
+  state = await key_and_state(instance, CTRL("k"), 1500);
+  check(app, kind, "C-k switches to the previous tab, wrapping to the last", active_index(state) === main_window_tabs(state).length - 1, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  await shot("after_ctrl_k", "the content tab in front after C-k from the mail tab");
+
+  // From the content tab no key works: record what a key does there.
+  const log_before_content_key = instance.app_log().length;
+  state = await key_and_state(instance, CTRL("j"), 1500);
+  note(app, kind, "C-j from a content tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}, tab types ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}, log grew ${instance.app_log().length - log_before_content_key} bytes`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+
+  // Thunderbird's own C-j ran there and opened Saved Files, so the helper closes every extra tab. Then a fresh content tab measures tabs.remove away from the mail tab.
+  await instance.ask("reset_tabs");
+  await sleep(1000);
+  await instance.ask("open_content_tab");
+  await sleep(1500);
+  const removed = await instance.ask("remove_tab", 20000, { index: 1 });
+  await sleep(1000);
+  state = await instance.ask("state");
+  check(app, kind, "tabs.remove closes a content tab", removed.removed === true && main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
+
+  // A message tab: open one for the selected message, switch to it, and measure a key there.
+  await instance.ask("open_message_tab");
+  await sleep(2000);
+  state = await instance.ask("state");
+  note(app, kind, "message tab opened", `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}${tab.active ? "*" : ""}`))}`);
+  const message_tab_count = main_window_tabs(state).length;
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  state = await key_and_state(instance, CTRL("j"), 1500);
+  check(app, kind, "C-j reaches the message tab from the mail tab", active_index(state) === 1 && message_tab_count === 2, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  state = await key_and_state(instance, CTRL("k"), 1500);
+  note(app, kind, "C-k from a message tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  const closed = await instance.ask("remove_tab", 20000, { index: 1 });
+  await sleep(1000);
+  state = await instance.ask("state");
+  check(app, kind, "tabs.remove closes a message tab", closed.removed === true && main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
+
+  // db-sequence-reset: a d typed before a tab switch with no key between (a click) does not pair with a d typed after it.
+  await instance.ask("open_content_tab");
+  await sleep(1500);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  await key_and_state(instance, ["g"]);
+  state = await key_and_state(instance, ["G"]);
+  const trash_before = (await instance.ask("state")).folders["/Trash"]?.length ?? 0;
+  await instance.press(["d"]);
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(800);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  state = await key_and_state(instance, ["d"], 2500);
+  check(app, kind, "a d typed before a tab switch does not pair with a d typed after it", (state.folders["/Trash"]?.length ?? 0) === trash_before, `Trash holds ${state.folders["/Trash"]?.length ?? 0}, it held ${trash_before}`);
+  // One more d: it pairs with the d typed after the switch only if that d reached the app, so a lost first key fails here.
+  state = await key_and_state(instance, ["d"], 2500);
+  check(app, kind, "the d after the switch counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
+  // A count is part of the half-typed state too: 3, a tab switch and back, then k moves one row. Three rows means the count survived. No move means the key was lost.
+  const listed_index = (snapshot) => snapshot.listed.indexOf(first_selected(snapshot));
+  state = await key_and_state(instance, ["G"]);
+  const last_row = listed_index(state);
+  await instance.press(["3"]);
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(800);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  state = await key_and_state(instance, ["k"], 1500);
+  check(app, kind, "a count typed before a tab switch is dropped, so k moves one row", listed_index(state) === last_row - 1, `row ${listed_index(state)} after k from row ${last_row}`);
+  await instance.ask("remove_tab", 20000, { index: 1 });
+  await sleep(1000);
 }
 
 async function run_no_identity(instance) {
