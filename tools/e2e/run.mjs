@@ -132,9 +132,10 @@ async function hud_pixels(instance, name) {
 }
 
 // Waits out earlier toasts, presses the key, then reads the toast strip while a toast shows and again after it expired. A toast is proven by the strip differing while it shows and matching the strip from before once the toast time is over.
-async function toast_cycle(instance, name, press_args) {
+async function toast_cycle(instance, name, press_args, lead_keys = []) {
   await sleep(7000);
   const before = await hud_pixels(instance, `${name}_before`);
+  for (const key of lead_keys) await instance.press([key]);
   const state = await key_and_state(instance, press_args, 1500);
   const during = await hud_pixels(instance, `${name}_during`);
   await sleep(6000);
@@ -1203,12 +1204,10 @@ async function run_quick_replies(instance) {
   report.shots.push({ app, kind, path: await instance.shot(`${app}_after_gr1_${kind}`), name: `after_gr1_${kind}`, line: "compose window with the quick reply above the quote" });
   await instance.ask("close_compose");
   await sleep(1500);
-  await instance.press(["g"]);
-  await instance.press(["r"]);
-  const log_offset = instance.app_log().length;
-  state = await key_and_state(instance, ["2"], 3000);
-  check(app, kind, "g r 2 on an empty slot opens no compose window", !state.windows.some((window) => window.type === "messageCompose"));
-  check(app, kind, "g r 2 on an empty slot shows the refusal (a notification was attempted)", /libnotify/.test(instance.app_log().slice(log_offset)), "evidence is the libnotify warning in the app log");
+  const refused_slot = await toast_cycle(instance, `${app}_gr2_${kind}`, ["2"], ["g", "r"]);
+  check(app, kind, "g r 2 on an empty slot opens no compose window", !refused_slot.state.windows.some((window) => window.type === "messageCompose"));
+  check(app, kind, "g r 2 on an empty slot shows the refusal as a toast", refused_slot.shown, "the toast strip differs while the toast shows");
+  check(app, kind, "the toast of g r 2 is gone after toast_error_ms", refused_slot.gone, "the toast strip matches the strip from before");
   check(app, kind, "the app survived the quick reply keys", instance.exited() === null);
 }
 
