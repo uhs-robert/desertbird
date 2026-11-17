@@ -162,11 +162,11 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                       viewThread: async () => {},
                       viewAllThreads: async () => {},
                       viewScroll: async () => {},
-                      folderTreeExpand: async () => false,
                       paneFocus: async () => true,
                       appCommand: async () => true,
                       appOpenPage: async () => {},
                   },
+        folderpane: options.experiment === false ? undefined : { fold: async () => false },
         overlay:
             options.experiment === false
                 ? undefined

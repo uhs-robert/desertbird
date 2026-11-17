@@ -1,0 +1,25 @@
+[
+  {
+    "namespace": "folderpane",
+    "description": "Folder pane verbs. The script loads when the first verb is called.",
+    "functions": [
+      {
+        "name": "fold",
+        "type": "function",
+        "async": true,
+        "description": "Opens or closes the selected folder row (row), every folder row (all), or closes the selected folder or else its parent and selects that (parent). Answers false, with nothing done, unless the folder pane has the focus.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" },
+              "open": { "type": "boolean" },
+              "extent": { "type": "string", "enum": ["row", "all", "parent"] }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

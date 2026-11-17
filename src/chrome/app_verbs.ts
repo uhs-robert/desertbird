@@ -1,4 +1,4 @@
-// The `keys` verbs that move the focus between panes, open or close a folder row, run a Thunderbird command and open a fixed page. Each table below is the whole set a verb can reach: the schema enum names the keys, and no caller passes a function name or an address.
+// The `keys` verbs that move the focus between panes, run a Thunderbird command and open a fixed page. Each table below is the whole set a verb can reach: the schema enum names the keys, and no caller passes a function name or an address.
 
 import { focused_pane } from "./focus.ts";
 import type { MainWindow, ExtensionContext } from "./platform.ts";
@@ -6,7 +6,7 @@ import { guard } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
 import type { ThreadVerbPane } from "./view.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
-import type { KeysAppCommandArgs, KeysAppOpenPageArgs, KeysFolderTreeExpandArgs, KeysPaneFocusArgs } from "../shared/protocol.ts";
+import type { KeysAppCommandArgs, KeysAppOpenPageArgs, KeysPaneFocusArgs } from "../shared/protocol.ts";
 
 interface Controller {
     isCommandEnabled(name: string): boolean;
@@ -16,9 +16,6 @@ interface Controller {
 export interface FolderTreeLike {
     rowCount: number;
     selectedIndex: number;
-    selectedRow: unknown;
-    expandRow(row: unknown): void;
-    collapseRow(row: unknown): void;
     focus(): void;
 }
 
@@ -63,12 +60,6 @@ const PANE_NAMES = ["folders", "threads", "message"];
 export function app_verbs(context: ExtensionContext) {
     const pane_of = (window_id: number) => mail_pane_of(context, window_id) as AppPane;
     return {
-        folderTreeExpand: guard("keys.folderTreeExpand", ({ windowId, open }: KeysFolderTreeExpandArgs): boolean => {
-            const pane = pane_of(windowId);
-            const in_folder_pane = focused_pane(pane.browsingContext.topChromeWindow.document) === 0;
-            if (in_folder_pane && pane.folderTree.selectedRow) pane.folderTree[open ? "expandRow" : "collapseRow"](pane.folderTree.selectedRow);
-            return in_folder_pane;
-        }),
         paneFocus: guard("keys.paneFocus", ({ windowId, pane }: KeysPaneFocusArgs): boolean => {
             const about_3pane = pane_of(windowId);
             const focused = focused_pane(about_3pane.browsingContext.topChromeWindow.document);
