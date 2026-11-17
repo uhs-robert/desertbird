@@ -31,6 +31,8 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
         { id: "imap-sent", accountId: "imap", path: "/Sent", specialUse: ["sent"] },
         { id: "imap-inbox", accountId: "imap", path: "/INBOX", specialUse: ["inbox"] },
         { id: "imap-other", accountId: "imap", path: "/Other" },
+        { id: "other-inbox", accountId: "other", path: "/INBOX", specialUse: ["inbox"] },
+        { id: "other-misc", accountId: "other", path: "/Misc" },
         { id: "imap-archive", accountId: "imap", path: "/Archive", specialUse: ["archives"] },
         { id: "local-root", accountId: "local", path: "/", isRoot: true },
         { id: "local-inbox", accountId: "local", path: "/Inbox", specialUse: ["inbox"] },
@@ -201,26 +203,61 @@ test("a wake from the Local Folders fallback returns the message to the origin a
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
-test("a message in neither folder keeps the item for a bounded number of ticks, then drops it with a notification", async () => {
+test("a message in neither folder keeps the item until 30 minutes past due, then drops it with a notification", async () => {
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
     box.messages.length = 0;
     box.notices.length = 0;
     box.log.length = 0;
+    const wake_at = (now_ms: number, started_ms = 0) => box.store.wake_due(now_ms, (item) => wake_snoozed(box.api, item, { now_ms, started_ms }));
     const original_error = console.error;
     console.error = () => {};
     try {
-        for (let tick = 0; tick < 29; tick++) await box.store.wake_due(tomorrow_8 + tick * MINUTE, (item) => wake_snoozed(box.api, item));
+        await wake_at(tomorrow_8 + 29 * MINUTE);
+        assert.equal((await box.store.list()).length, 1);
+        // Past 30 minutes, but the page started a minute ago, so the account may not have synced.
+        await wake_at(tomorrow_8 + 31 * MINUTE, tomorrow_8 + 30 * MINUTE);
         assert.equal((await box.store.list()).length, 1);
         assert.deepEqual(box.notices, []);
-        await box.store.wake_due(tomorrow_8 + 29 * MINUTE, (item) => wake_snoozed(box.api, item));
+        await wake_at(tomorrow_8 + 31 * MINUTE);
     } finally {
         console.error = original_error;
     }
     assert.deepEqual(box.notices, ["A snoozed message is no longer in the Snoozed folder, so it did not return."]);
     assert.deepEqual(box.log, []);
     assert.deepEqual(await box.store.list(), []);
+});
+
+test("a lookup error other than a missing folder keeps the item and shows no notice", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    box.notices.length = 0;
+    const unloaded: WakeApi = { ...box.api, folders: { ...box.api.folders, query: async (query) => (query.folderId === "imap-Snoozed" ? Promise.reject(new Error("the folder tree is not loaded yet")) : box.api.folders.query(query)) } };
+    const original_error = console.error;
+    console.error = () => {};
+    try {
+        await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(unloaded, item, { now_ms: tomorrow_8 + 60 * MINUTE, started_ms: 0 }));
+    } finally {
+        console.error = original_error;
+    }
+    assert.equal((await box.store.list()).length, 1);
+    assert.deepEqual(box.notices, []);
+    assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
+});
+
+test("a gone Snoozed folder leaves a copy in another account and a Starred-like folder alone", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    box.messages[0]!.folder_id = "imap-other";
+    box.add("<a@x>", "other-inbox");
+    box.add("<a@x>", "other-misc");
+    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(gone);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "other-inbox", "other-misc"]);
 });
 
 test("a message that shows up in the Snoozed folder after a missed tick still returns", async () => {
@@ -371,15 +408,9 @@ test("a wake whose Snoozed folder no longer exists drops the item with a notific
     const missing_folder = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(missing_folder);
     box.messages.length = 0;
-    const original_error = console.error;
-    console.error = () => {};
-    try {
-        for (let tick = 0; tick < 30; tick++) await box.store.wake_due(tomorrow_8 + tick * MINUTE, (found) => wake_snoozed(box.api, found));
-    } finally {
-        console.error = original_error;
-    }
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, { now_ms: tomorrow_8 + 60 * MINUTE, started_ms: 0 }));
     assert.deepEqual(await box.store.list(), []);
-    assert.match(box.notices.at(-1)!, /Snoozed folder is gone/);
+    assert.match(box.notices.at(-1)!, /could not be found to return/);
 });
 
 test("a refused create or a create that never settles refuses the snooze, leaves the message in place and does not fall back", async () => {

@@ -149,10 +149,10 @@ function queue_install(drop_cache: boolean): void {
 const scheduler = create_scheduler(messenger);
 // One store instance for the whole page: each instance keeps its own write queue and memory copy.
 const show_subject = async () => (await config_store.read()).settings.notice_show_subject;
-const snoozes = create_snooze_store(messenger);
-scheduler.on_due((now_ms) => snoozes.wake_due(now_ms, (item) => wake_snoozed({ ...messenger, show_subject }, item)));
-const followups = create_followup_store(messenger);
 const started_ms = Date.now();
+const snoozes = create_snooze_store(messenger);
+scheduler.on_due((now_ms) => snoozes.wake_due(now_ms, (item) => wake_snoozed({ ...messenger, show_subject }, item, { now_ms, started_ms })));
+const followups = create_followup_store(messenger);
 // Follow-ups wait out the grace after start, so the folders have synced before a reply is looked for. The minute alarm then picks them up.
 scheduler.on_due((now_ms) => (past_start_grace(started_ms, now_ms) ? followups.fire_due(now_ms, (item, still_wanted) => fire_followup({ ...messenger, show_subject }, item, still_wanted)) : undefined));
 messenger.notifications.onClicked.addListener((id) => {
