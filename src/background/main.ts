@@ -8,6 +8,7 @@ import { compile_effective_keymap, effective_keymap } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
+import { start_jump_history } from "./handlers/jump_history.ts";
 import { notify_refusal } from "./notify.ts";
 import { create_router } from "./router.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
@@ -137,6 +138,8 @@ const router = create_router(registry, { ...messenger, keys: messenger.keys, ove
 messenger.runtime.onMessage.addListener((message) => cmdline.handle(message));
 // The overlay left a window on its own (a tab change or a closed window), so the session for that window is dropped.
 messenger.overlay?.onClosed.addListener(({ windowId }) => cmdline.end(windowId));
+
+start_jump_history(messenger);
 
 messenger.keys?.onInvocation.addListener((invocation) => {
     router.run(invocation).catch(console.error);

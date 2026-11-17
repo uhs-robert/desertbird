@@ -404,3 +404,27 @@ Facts measured while the end-to-end message checks ran on Thunderbird 153.7 ESR 
 - With the script live, `f` typed in the reading pane moved no selection and `s` starred no message. The script cancels every plain printable key, as the chrome runtime did.
 - `Escape` is not cancelled, so Thunderbird still acts on it. In the reading pane and a message tab it ended a pending count. In a message window the `j` after it did not scroll, which fits Thunderbird closing the window on Escape. That was not checked directly, so the e2e run skips the Escape check there.
 - The handoff is an attribute on the root element of the message document. The chrome runtime reads it through the `contentDocument` of the `messagepane` browser, which is readable (see Message pane process). Only the document that holds the end of the focus chain counts. Focus in the message header or in a frame inside the mail leaves the marked document out, so the runtime keeps swallowing there. The script runs in the top frame only, so a key typed in a frame never reaches it.
+
+
+## Phase 2: folders and jumps
+
+Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper add-on (`folder_events_start`, `folder_events_read`, `show_folder`, `query_folder`). Both apps gave the same result in one run each. The fixture is Local Folders with an Inbox, a Trash that is an empty mbox, and mbox folders that hold messages.
+
+### Display event
+
+- `mailTabs.onDisplayedFolderChanged(tab, folder)` fires for a folder that `mailTabs.update({displayedFolder})` shows, and for a folder the user picks in the folder tree (Up and Down in the tree). `folder` carries `accountId` and `path`.
+- The event fires in the same millisecond that the `update` call returns. It does not wait for the call's promise to be read.
+- It does not fire when the call names the folder that is already shown.
+
+### First display of a folder
+
+- `mailTabs.update` throws "An unexpected error occurred" on the first display of a folder that holds messages and was never shown in the session (`/Views`, `/Html`). The folder shows and the display event still fires.
+- A folder shown for the first time that is an empty mbox (`/Trash`) did not throw. A folder shown before did not throw.
+- A `mailTabs.query` right after the failed call threw the same text for `/Views`, which was the first folder shown through the API in the session, and returned the new folder for `/Html`. So the query right after the error is not reliable evidence either way, and a handler that treats the error as success must accept both outcomes.
+- The call to the folder already shown returns with no error.
+
+### Folder lookup
+
+- `folders.query({accountId, path})` and `folders.query({path})` return the folder. A path that does not exist returns an empty list, not an error.
+- `folders.query({specialUse: ["inbox"]})` finds the Inbox. Local Folders has no Drafts, Sent or Archives folder until one exists on disk, so `specialUse` for those returns an empty list.
+- Not measured: a folder renamed or deleted on a server, and a first display on a real IMAP folder.
