@@ -17,6 +17,8 @@ Read the design for an area before you change it. Read a folder's README before 
 | Build entry points, bundling, the parent size guard | [`tools/build.mjs`](tools/build.mjs) |
 | Background page: command groups, router, handlers | [`src/background/README.md`](src/background/README.md) |
 | Chrome runtime: Experiment parent, motions, view access | [`src/chrome/README.md`](src/chrome/README.md) |
+| Settings and user bindings in `storage.local`, version key, migrations | [`src/background/config/README.md`](src/background/config/README.md) |
+| Options page: settings form and key bindings editor | [`src/options/README.md`](src/options/README.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
 | Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |
 | Measured Thunderbird and Betterbird behavior the design rests on | [`docs/thunderbird-behavior.md`](docs/thunderbird-behavior.md) |

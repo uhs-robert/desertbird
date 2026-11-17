@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>DesertBird options</title>
+    <link rel="stylesheet" href="options.css">
+</head>
+<body>
+    <h1>DesertBird</h1>
+    <section>
+        <h2>Settings</h2>
+        <form id="settings_form"></form>
+    </section>
+    <section>
+        <h2>Key bindings</h2>
+        <p>Your bindings are normal-mode keys. A binding with the keys of a default replaces it. Unbind removes a default.</p>
+        <table id="bindings_table"></table>
+        <button type="button" id="add_binding">Add binding</button>
+    </section>
+    <p id="status" role="status"></p>
+    <button type="button" id="save">Save</button>
+    <script src="options.js"></script>
+</body>
+</html>
