@@ -213,9 +213,9 @@ async function run_default(instance) {
   check(app, kind, "after the restart, the Inbox opens with keys", (await open_inbox(instance, 7, { expanded: true })) === "/Inbox");
   state = await key_and_state(instance, ["g"]);
   state = await key_and_state(instance, ["g"]);
-  const top_after_reload = first_selected(state);
+  const top_after_restart = first_selected(state);
   state = await key_and_state(instance, ["j"]);
-  check(app, kind, "after reload, g g reaches the top and one j moves exactly one row", top_after_reload === rows[0] && first_selected(state) === rows[1], `top ${top_after_reload}, after j ${first_selected(state)}, expected ${rows[1]}`);
+  check(app, kind, "after the restart, g g reaches the top and one j moves exactly one row", top_after_restart === rows[0] && first_selected(state) === rows[1], `top ${top_after_restart}, after j ${first_selected(state)}, expected ${rows[1]}`);
 
   // x and d d at two places: the middle of the list and the last row. The note says which row Thunderbird leaves selected.
   const gone = new Set();
@@ -764,7 +764,7 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
 
 }
 
-// Runs last in the default run, because it restarts the app.
+// Restarts the app, so it goes after the checks that need the session as it is.
 async function run_folders(instance) {
   const app = instance.app;
   const kind = "default";
