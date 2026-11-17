@@ -28,9 +28,9 @@ test("app.open_page and pane.focus take only the names the table lists", () => {
     assert.equal(ok("pane.focus", { pane: "compose" }), false);
 });
 
-test("the app keys bind their commands and add no warning, and undo has no default key", () => {
+test("the app keys bind their commands and add no warning, and u undoes", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.equal(normal["u"], undefined);
+    assert.deepEqual(normal["u"], { id: "msg.undo" });
     assert.deepEqual(normal["gC"], { id: "thread.open_conversation" });
     for (const [keys, page] of [["gx", "addons"], ["gT", "themes"], ["gc", "config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page } }, keys);
     for (const [keys, pane] of [["gf", "folders"], ["ge", "threads"], ["gm", "message"], ["H", "folders"], ["<A-h>", "threads"], ["L", "threads"], ["<A-l>", "message"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane } }, keys);
@@ -46,18 +46,20 @@ test("msg.undo changes mail, so the bridge refuses it and . never repeats it", (
 
 test("each command calls only the chrome verb its needs lists", async () => {
     const fake = app_fake();
-    await fake.run("msg.undo");
     await fake.run("thread.open_conversation");
     await fake.run("app.open_page", { page: "themes" });
     await fake.run("pane.focus", { pane: "message" });
-    assert.deepEqual(fake.calls, ["appCommand cmd_undo", "appCommand cmd_openConversation", "appOpenPage themes", "paneFocus message"]);
-    assert.deepEqual(registry.get("msg.undo")?.needs, ["keys.appCommand"]);
+    assert.deepEqual(fake.calls, ["appCommand cmd_openConversation", "appOpenPage themes", "paneFocus message"]);
+});
+
+test("msg.undo needs no chrome verb: it reads DesertBird's own log, not Thunderbird's undo", () => {
+    assert.equal(registry.get("msg.undo")?.needs, undefined);
 });
 
 test("a command Thunderbird has disabled is refused with a message", async () => {
     const fake = app_fake(false);
-    await fake.run("msg.undo");
-    assert.deepEqual(fake.calls, ["appCommand cmd_undo", "notify Nothing to undo."]);
+    await fake.run("thread.open_conversation");
+    assert.deepEqual(fake.calls, ["appCommand cmd_openConversation", "notify Thunderbird cannot open a conversation for this selection."]);
 });
 
 test("the pane chords bind in the message document too, so focus can leave the message by them", () => {

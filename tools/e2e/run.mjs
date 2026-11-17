@@ -669,7 +669,7 @@ async function run_visual(instance, { app, kind, shot }) {
   check(app, kind, "m s in visual mode flags every message of the range", flagged_after.every(Boolean), `before ${flagged_before.join()}, after ${flagged_after.join()}`);
   state = await keys(["j"]);
   check(app, kind, "the command ended visual mode, so j selects one row", state.selected.length === 1, `selected ${state.selected.length}`);
-  // x archives the range once and `.` does not archive again.
+  // x archives the range once. `.` then archives once more, the one row selected at the dot, since u can undo it.
   await keys(["g", "g"]);
   await keys(["v"]);
   await keys(["j"]);
@@ -678,8 +678,8 @@ async function run_visual(instance, { app, kind, shot }) {
   const in_inbox = archive_range.filter((id) => state.folders["/Inbox"]?.includes(id));
   check(app, kind, "x in visual mode archives the whole range", archive_range.length === 3 && in_inbox.length === 0, `range ${archive_range.join(" ")}, still in the Inbox ${in_inbox.join(" ")}`);
   const after_x = state.folders["/Inbox"]?.length;
-  state = await keys(["."], 2000);
-  check(app, kind, ". after x in visual mode archives nothing", state.folders["/Inbox"]?.length === after_x, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
+  state = await keys(["."], 3000);
+  check(app, kind, ". after x in visual mode archives the one selected row", state.folders["/Inbox"]?.length === after_x - 1, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
   await shot("visual_after_x", "Inbox after x archived the range");
   check(app, kind, "the app survived visual mode", instance.exited() === null);
 }
@@ -831,8 +831,8 @@ async function run_panes(instance, { app, kind, shot }) {
   await sleep(1500);
   await keys(["g", "e"]);
 
-  // :undo runs Thunderbird's own undo and has no default key. A delete by the native Delete key registers an undo step. d d and the API delete do not.
-  const undo = async () => {
+  // u and :undo run DesertBird's own undo log. d d, x and the API delete record a step there. A delete by the native Delete key is Thunderbird's, so u leaves it alone.
+  const undo_typed = async () => {
     await instance.press([":"]);
     await sleep(1200);
     await instance.press(["undo"]);
@@ -846,9 +846,42 @@ async function run_panes(instance, { app, kind, shot }) {
   const messages_in_inbox = (current) => current.folders["/Inbox"].length;
   let victim = first_selected(await keys(["j"]));
   state = await keys(["d", "d"], 3000);
-  const after_delete = messages_in_inbox(state);
-  state = await undo();
-  note(app, kind, ":undo after d d", `${victim} in Trash before :undo ${after_delete < 60}, back in the Inbox after :undo ${in_folder(state, victim, "/Inbox")}`);
+  const in_trash = in_folder(state, victim, "/Trash");
+  state = await keys(["u"], 4000);
+  check(app, kind, "u after d d moves the message back from Trash to the Inbox", in_trash && in_folder(state, victim, "/Inbox") && !in_folder(state, victim, "/Trash"), `${victim} in Trash after d d ${in_trash}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  await shot("undo_after_dd", "Inbox after d d then u");
+  await keys(["g", "e"]);
+  await keys(["g", "g"]);
+  victim = first_selected(await keys(["j"]));
+  state = await keys(["x"], 3000);
+  const archived = !in_folder(state, victim, "/Inbox");
+  state = await keys(["u"], 4000);
+  check(app, kind, "u after x moves the message back from Archives to the Inbox", archived && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after x ${archived}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  // A count reaches the rows below the current one. The fixture threads open collapsed, so z R opens them first: a count refuses to reach into a closed thread.
+  await keys(["z", "R"]);
+  await keys(["g", "g"]);
+  state = await keys(["j"]);
+  const counted = state.listed.slice(state.listed.indexOf(first_selected(state)), state.listed.indexOf(first_selected(state)) + 2);
+  state = await keys(["2", "x"], 3000);
+  const counted_archived = counted.filter((id) => !in_folder(state, id, "/Inbox"));
+  state = await keys(["u"], 4000);
+  check(app, kind, "2 x archives the current row and the one below, and one u brings both back", counted.length === 2 && counted_archived.length === 2 && counted.every((id) => in_folder(state, id, "/Inbox")), `rows ${counted.join(" ")}, archived ${counted_archived.join(" ")}, back ${counted.filter((id) => in_folder(state, id, "/Inbox")).join(" ")}`);
+  await keys(["g", "e"]);
+  await keys(["g", "g"]);
+  victim = first_selected(await keys(["j"]));
+  state = await keys(["d", "d"], 3000);
+  state = await undo_typed();
+  check(app, kind, ":undo after d d moves the message back too", in_folder(state, victim, "/Inbox"), `${victim} in the Inbox after :undo ${in_folder(state, victim, "/Inbox")}`);
+  const inbox_before = messages_in_inbox(state);
+  // One stack serves the whole run, so the next u steps back to an older entry: the archive that . made in visual mode.
+  state = await keys(["u"], 4000);
+  check(app, kind, "the next u undoes the older . archive, one message back in the Inbox", messages_in_inbox(state) === inbox_before + 1, `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
+  // Empty the stack: it holds at most 20 entries, and a step whose message is gone takes a second u to drop.
+  for (let press = 0; press < 42; press++) {
+    await instance.press(["u"]);
+    await sleep(800);
+  }
+  await sleep(3000);
   await keys(["g", "e"]);
   await keys(["g", "g"]);
   victim = first_selected(await keys(["j"]));
@@ -856,11 +889,9 @@ async function run_panes(instance, { app, kind, shot }) {
   await sleep(4000);
   state = await instance.ask("state");
   const deleted = !in_folder(state, victim, "/Inbox");
-  state = await undo();
-  check(app, kind, ":undo after a native Delete moves the message back to the Inbox", deleted && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox before :undo ${deleted}, in the Inbox after :undo ${in_folder(state, victim, "/Inbox")}`);
-  const inbox_before = messages_in_inbox(state);
-  state = await undo();
-  check(app, kind, "a second :undo with nothing left to undo changes no mail", messages_in_inbox(state) === inbox_before && in_folder(state, victim, "/Inbox"), `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
+  const inbox_after_delete = messages_in_inbox(state);
+  state = await keys(["u"], 4000);
+  check(app, kind, "with the stack empty, u leaves a native Delete to Thunderbird and changes no mail", deleted && !in_folder(state, victim, "/Inbox") && messages_in_inbox(state) === inbox_after_delete, `${victim} out of the Inbox after Delete ${deleted}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}, Inbox ${inbox_after_delete} then ${messages_in_inbox(state)}`);
 }
 
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.

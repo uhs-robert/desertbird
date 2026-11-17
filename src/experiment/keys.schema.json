@@ -206,7 +206,6 @@
               "name": {
                 "type": "string",
                 "enum": [
-                  "cmd_undo",
                   "cmd_openConversation"
                 ]
               }

@@ -23,7 +23,6 @@ export interface FolderTreeLike {
 }
 
 interface AppWindow extends MainWindow {
-    DefaultController: Controller;
     openAddonsMgr(view: string): void;
     openContentTab(url: string): void;
 }
@@ -41,7 +40,7 @@ interface AppPane extends ThreadVerbPane {
     browsingContext: { topChromeWindow: AppWindow };
 }
 
-const CONTROLLERS = { cmd_undo: (pane: AppPane) => pane.browsingContext.topChromeWindow.DefaultController, cmd_openConversation: (pane: AppPane) => pane.commandController as Controller };
+const CONTROLLERS = { cmd_openConversation: (pane: AppPane) => pane.commandController as Controller };
 
 const PAGES = {
     addons: (window: AppWindow) => window.openAddonsMgr("addons://list/extension"),

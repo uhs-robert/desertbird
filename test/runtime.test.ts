@@ -765,17 +765,32 @@ function default_tree(tag: boolean) {
     return { version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION, root };
 }
 
-test("the default tree carries repeatable false on the leaves that delete, archive, move or snooze", () => {
+test("the default tree carries repeatable false on the leaves that snooze or undo, and not on delete or archive", () => {
     const { root } = default_tree(true);
     const step_of = (...keys: string[]) => keys.reduce((node, key) => node.children[key], root).steps[0];
-    for (const keys of [["d", "d"], ["x"], ["m", "z", "t"]]) assert.equal(step_of(...keys).repeatable, false);
-    assert.equal(step_of("m", "r").repeatable, undefined);
+    for (const keys of [["m", "z", "t"], ["u"]]) assert.equal(step_of(...keys).repeatable, false);
+    for (const keys of [["d", "d"], ["x"], ["m", "r"]]) assert.equal(step_of(...keys).repeatable, undefined);
 });
 
-test("a dot after dd, x or m z t runs nothing, even after a repeatable command", () => {
+test("a dot after d d or x runs it again with its count, on the selection at the dot", () => {
     const { windows, emitted, runtime } = setup();
     runtime.install(default_tree(true));
-    for (const keys of [["d", "d"], ["x"], ["m", "z", "t"]]) {
+    const window = windows[0]!;
+    for (const [keys, command] of [[["3", "d", "d"], "msg.delete"], [["2", "x"], "msg.archive"]] as const) {
+        for (const key of keys) press(window, key);
+        window.selected += 1;
+        press(window, ".");
+        const [first, again] = emitted.splice(0);
+        assert.equal(first?.command, command);
+        assert.deepEqual([again?.command, again?.count], [command, first?.count], `a dot after ${keys.join(" ")}`);
+        assert.notDeepEqual(again?.messageIds, first?.messageIds, "the dot reads the selection again");
+    }
+});
+
+test("a dot after m z t or u runs nothing, even after a repeatable command", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(default_tree(true));
+    for (const keys of [["m", "z", "t"], ["u"]]) {
         for (const key of ["m", "r"]) press(windows[0]!, key);
         for (const key of keys) press(windows[0]!, key);
         const before = emitted.length;
