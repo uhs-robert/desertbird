@@ -579,14 +579,22 @@ async function run_steps(instance, { app, kind, shot }) {
     }
   }
   note(app, kind, "unread counts the step reads", JSON.stringify((await instance.ask("folder_unread")).counts));
-  // From the last unread row, ] U leaves the folder for one that has unread mail.
-  await instance.press(["G"]);
-  await key_and_state(instance, ["]"], 300);
+  // Earlier checks read every fixture message, so m u first makes one Inbox message unread. ] U from the end of Views must then land on it.
+  await instance.ask("show_folder", 20000, { path: "/Inbox" });
+  await sleep(2000);
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 1000);
+  await instance.press(["m"]);
+  const marked = (await key_and_state(instance, ["u"], 1500)).selected.map((message) => message.header_id);
+  await instance.ask("show_folder", 20000, { path: "/Views" });
+  await sleep(2000);
+  await key_and_state(instance, ["G"], 800);
+  await instance.press(["]"]);
   await instance.press(["U"]);
-  await sleep(2500);
+  await sleep(3000);
   const moved = await instance.ask("state");
   const landed = first_selected(moved);
-  check(app, kind, "] U with no later unread row opens another folder and selects a message in it", moved.mail_tab?.folder !== "/Views" && landed !== null && moved.folders[moved.mail_tab?.folder]?.includes(landed), `folder ${moved.mail_tab?.folder}, selected ${landed}`);
+  check(app, kind, "] U with no later unread row opens the folder that has unread mail and selects it", moved.mail_tab?.folder === "/Inbox" && marked.includes(landed), `folder ${moved.mail_tab?.folder}, selected ${landed}, marked unread ${marked.join(" ")}`);
   await shot("step_unread_all_folders", "the folder ] U opened, with an unread message selected");
 }
 
