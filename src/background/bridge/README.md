@@ -99,7 +99,8 @@ A `draft` frame needs `bridge` and `bridge_allow_drafts`, both off by default an
 - Any other field is refused, Bcc and attachments among them.
 - Every check runs before the first compose call. Each refusal is a fixed text and never echoes the request.
 - The reply is `ok` or a refusal. It never carries the draft, its id or any mail data.
-- The add-on never sends. It holds no `compose.send` permission, so Thunderbird refuses a send from it, and `test/bridge_drafts.test.ts` checks the manifest for that.
+- The add-on never sends. It has no send call and holds no `compose.send` permission. `test/bridge_drafts.test.ts` checks both.
 - Saving needs the `compose.save` permission. Thunderbird has no other way to save a draft that it builds itself (threading, identity, Drafts folder). An add-on with an Experiment cannot ask for it as optional, so it is always granted.
 - Thunderbird saves only from a compose window. The add-on opens one, saves it with `compose.saveMessage` in `draft` mode, and closes that window, matched by the id the compose call returned, on every path, a failed save included. The window shows for that moment and takes the focus. Then the add-on gives the focus back to the Thunderbird window that had it. When another program had the focus, it raises no Thunderbird window.
 - Drafts run one at a time, so a second compose window never opens while the first is still up.
+- A draft that is not saved within 30 s answers `timed out` and frees the next draft. Its window stays open, because a save can wait on a Thunderbird prompt (a failed copy to an IMAP Drafts folder, a passphrase), and closing it could drop the draft. Check Drafts before you retry.

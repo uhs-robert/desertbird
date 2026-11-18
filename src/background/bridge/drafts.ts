@@ -1,5 +1,7 @@
 // The `draft` frame of the bridge: a program outside Thunderbird asks for a plain-text draft, and the add-on saves it to the Drafts folder of the chosen identity. It never sends. Every field is checked before the first compose call, and every refusal is a fixed text that never echoes the request.
 
+import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
+import type { Timers } from "../hud/toasts.ts";
 import { resolve_identity } from "../handlers/identity.ts";
 import type { Identity, IdentityApi, IdentityContext } from "../handlers/identity.ts";
 import { MAX_BODY_BYTES, clean_body, cut_to_bytes, is_message_id } from "./reads.ts";
@@ -42,6 +44,7 @@ export interface DraftsApi extends IdentityApi {
 export interface BridgeDraftsDeps {
     api: DraftsApi;
     read_settings(): Promise<DraftSettings>;
+    timers: Timers;
 }
 
 type Reply = { ok: true } | { ok: false; message: string };
@@ -56,14 +59,18 @@ export const DRAFT_REFUSALS = {
     body_too_long: refuse("the body is over 64 KiB"),
     no_such_identity: refuse("no such identity"),
     no_identity: refuse("no account has an identity"),
+    identities_unread: refuse("the identities could not be read"),
     no_such_message: refuse("no such message"),
     not_saved: refuse("the draft could not be saved"),
+    timed_out: refuse("timed out"),
 } as const;
 
 export const MAX_RECIPIENTS = 10;
 // RFC 5322 caps a header line at 998 characters.
 export const MAX_SUBJECT_CHARS = 998;
 const MAX_ADDRESS_CHARS = 254;
+// A save to an IMAP Drafts folder can wait on Thunderbird's own retry prompt, or on a passphrase for an encrypted draft, for as long as nobody answers.
+export const SAVE_TIMEOUT_MS = 30_000;
 
 // Bcc and attachments are left out on purpose, so a field the frame does not name is refused rather than ignored.
 const DRAFT_FIELDS = new Set(["verb", "request_id", "to", "cc", "subject", "body", "from", "reply_to_id"]);
@@ -104,18 +111,27 @@ const is_refusal = (checked: CheckedDraft | Reply): checked is Reply => "ok" in 
 
 export function create_bridge_drafts(deps: BridgeDraftsDeps) {
     const { api } = deps;
-    // One draft at a time, so a second compose window never opens while the first is still up, and the focus each one gives back is the one it found.
+    // One draft at a time, so a second compose window never opens while the first is still up, and the focus each one gives back is the one it found. `SAVE_TIMEOUT_MS` frees the queue from a save that never ends.
     let queue: Promise<unknown> = Promise.resolve();
 
     // `from` names an identity by its exact address. Without it, a reply takes the identity the original was addressed to and a new draft the default one, as the keys do.
     async function identity_for(draft: CheckedDraft, original: IdentityContext | undefined): Promise<Identity | Reply> {
-        const identities = await api.identities.list();
-        if (draft.from !== undefined) return identities.find((identity) => identity.email === draft.from) ?? DRAFT_REFUSALS.no_such_identity;
-        if (identities.length === 0) return DRAFT_REFUSALS.no_identity;
-        return resolve_identity(api, original ?? {});
+        try {
+            if (draft.from !== undefined) return (await api.identities.list()).find((identity) => identity.email === draft.from) ?? DRAFT_REFUSALS.no_such_identity;
+            return await resolve_identity(api, original ?? {});
+        } catch (error) {
+            return error instanceof RuntimeRefusal ? DRAFT_REFUSALS.no_identity : DRAFT_REFUSALS.identities_unread;
+        }
     }
 
-    /** Opens the compose window, saves it to Drafts and closes that window on every path. Gives the focus back to the window that had it, when Thunderbird had it. */
+    /** The outcome of `work`, or `undefined` when it takes longer than `ms`. */
+    function within<T>(ms: number, work: Promise<T>): Promise<T | undefined> {
+        let timer: unknown;
+        const expired = new Promise<undefined>((resolve) => (timer = deps.timers.set(() => resolve(undefined), ms)));
+        return Promise.race([work, expired]).finally(() => deps.timers.clear(timer));
+    }
+
+    /** Opens the compose window, saves it to Drafts and closes that window. Gives the focus back to the window that had it, when Thunderbird had it. */
     async function save_to_drafts(draft: CheckedDraft, identity_id: string): Promise<Reply> {
         const details: DraftDetails = { subject: draft.subject, plainTextBody: draft.body, isPlainText: true, identityId: identity_id };
         // An empty `to` or `cc` on a reply keeps the recipients Thunderbird picks for it.
@@ -123,18 +139,20 @@ export function create_bridge_drafts(deps: BridgeDraftsDeps) {
         if (draft.cc.length > 0) details.cc = draft.cc;
         const had_focus = await api.windows.getLastFocused().catch(() => undefined);
         let tab: ComposeTab | undefined;
-        try {
+        // A rejected `beginNew` returns no tab, so a window it opened before failing stays open. Closing a new compose window found by comparing `windows.getAll` could close one the user opened at that moment.
+        const compose_and_save = async (): Promise<Reply> => {
             tab = draft.reply_to_id === undefined ? await api.compose.beginNew(undefined, details) : await api.compose.beginReply(draft.reply_to_id, "replyToSender", details);
             if (tab.id === undefined) return DRAFT_REFUSALS.not_saved;
             await api.compose.saveMessage(tab.id, { mode: "draft" });
             return { ok: true };
-        } catch {
-            return DRAFT_REFUSALS.not_saved;
-        } finally {
-            if (tab?.windowId !== undefined) await api.windows.remove(tab.windowId).catch(() => {});
-            // Only a Thunderbird window that had the focus gets it back. Raising one when another program had the focus would steal it a second time.
-            if (had_focus?.focused === true && had_focus.id !== undefined) await api.windows.update(had_focus.id, { focused: true }).catch(() => {});
-        }
+        };
+        const outcome = await within(SAVE_TIMEOUT_MS, compose_and_save().catch(() => DRAFT_REFUSALS.not_saved));
+        // The window stays open after a timeout: closing it under a pending save could drop the draft, and the user can still see and save it.
+        if (outcome === undefined) return DRAFT_REFUSALS.timed_out;
+        if (tab?.windowId !== undefined) await api.windows.remove(tab.windowId).catch(() => {});
+        // Only a Thunderbird window that had the focus gets it back. Raising one when another program had the focus would steal it a second time.
+        if (had_focus?.focused === true && had_focus.id !== undefined) await api.windows.update(had_focus.id, { focused: true }).catch(() => {});
+        return outcome;
     }
 
     async function create(request: Record<string, unknown>): Promise<Reply> {
@@ -147,7 +165,7 @@ export function create_bridge_drafts(deps: BridgeDraftsDeps) {
             original = (await api.messages.get(draft.reply_to_id).catch(() => null)) ?? undefined;
             if (!original) return DRAFT_REFUSALS.no_such_message;
         }
-        const identity = await identity_for(draft, original).catch(() => DRAFT_REFUSALS.no_identity);
+        const identity = await identity_for(draft, original);
         if ("ok" in identity) return identity;
         return save_to_drafts(draft, identity.id);
     }

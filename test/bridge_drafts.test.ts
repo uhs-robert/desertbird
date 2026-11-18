@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { DRAFT_REFUSALS, create_bridge_drafts } from "../src/background/bridge/drafts.ts";
+import { DRAFT_REFUSALS, SAVE_TIMEOUT_MS, create_bridge_drafts } from "../src/background/bridge/drafts.ts";
 import type { DraftSettings, DraftsApi } from "../src/background/bridge/drafts.ts";
 import { SETTING_DEFAULTS } from "../src/background/config/settings.ts";
+import { fake_timers } from "./hud_fakes.ts";
 
 const WORK = { id: "id1", email: "me@work.example" };
 const HOME = { id: "id2", email: "me@home.example" };
@@ -11,19 +12,29 @@ const ORIGINAL = { id: 42, recipients: ["me@home.example"], folder: { accountId:
 
 type Call = [string, ...unknown[]];
 
-function drafts_under_test(options: { settings?: Partial<DraftSettings>; save_fails?: boolean; focused?: { id?: number; focused?: boolean } } = {}) {
+function drafts_under_test(options: { settings?: Partial<DraftSettings>; save_fails?: boolean; begin_fails?: boolean; tab?: { id?: number; windowId?: number }; remove_fails?: boolean; identities_fail?: boolean; hung_saves?: number; focused?: { id?: number; focused?: boolean } } = {}) {
     const calls: Call[] = [];
+    const timers = fake_timers();
+    let hung_saves = options.hung_saves ?? 0;
     const settings: DraftSettings = { bridge: true, bridge_allow_drafts: true, ...options.settings };
     const api = {
         accounts: { getDefault: async () => (calls.push(["accounts.getDefault"]), { id: "a1" }) },
-        identities: { list: async (account_id?: string) => (calls.push(["identities.list", account_id]), account_id === "a1" ? [WORK] : account_id === "a2" ? [HOME] : [WORK, HOME]) },
+        identities: { list: async (account_id?: string) => (calls.push(["identities.list", account_id]), options.identities_fail ? Promise.reject(new Error("me@work.example")) : account_id === "a1" ? [WORK] : account_id === "a2" ? [HOME] : [WORK, HOME]) },
         messages: { get: async (id: number) => (calls.push(["messages.get", id]), id === ORIGINAL.id ? ORIGINAL : null) },
         compose: {
-            beginNew: async (...args: unknown[]) => (calls.push(["compose.beginNew", ...args]), { id: 70, windowId: 9 }),
+            beginNew: async (...args: unknown[]) => {
+                calls.push(["compose.beginNew", ...args]);
+                if (options.begin_fails) throw new Error("beginNew failed: me@work.example");
+                return options.tab ?? { id: 70, windowId: 9 };
+            },
             beginReply: async (...args: unknown[]) => (calls.push(["compose.beginReply", ...args]), { id: 71, windowId: 10 }),
             saveMessage: async (...args: unknown[]) => {
                 calls.push(["compose.saveMessage", ...args]);
                 if (options.save_fails) throw new Error("compose.saveMessage failed: me@work.example");
+                if (hung_saves > 0) {
+                    hung_saves--;
+                    return new Promise(() => {});
+                }
                 return { mode: "draft", messages: [{ id: 99, subject: "secret" }] };
             },
             // Present on the stub so a call to it would be seen. The drafts must never reach it.
@@ -31,13 +42,16 @@ function drafts_under_test(options: { settings?: Partial<DraftSettings>; save_fa
         },
         windows: {
             getLastFocused: async () => (calls.push(["windows.getLastFocused"]), options.focused ?? { id: 1, focused: true }),
-            remove: async (window_id: number) => void calls.push(["windows.remove", window_id]),
+            remove: async (window_id: number) => {
+                calls.push(["windows.remove", window_id]);
+                if (options.remove_fails) throw new Error("Invalid window ID: 9");
+            },
             update: async (window_id: number, properties: object) => void calls.push(["windows.update", window_id, properties]),
         },
     };
-    const drafts = create_bridge_drafts({ api: api as unknown as DraftsApi, read_settings: async () => settings });
+    const drafts = create_bridge_drafts({ api: api as unknown as DraftsApi, read_settings: async () => settings, timers });
     const compose_calls = () => calls.filter(([name]) => name.startsWith("compose."));
-    return { draft: (request: Record<string, unknown>) => drafts.draft({ verb: "draft", request_id: 1, ...request }), calls, compose_calls, settings };
+    return { draft: (request: Record<string, unknown>) => drafts.draft({ verb: "draft", request_id: 1, ...request }), calls, compose_calls, settings, timers };
 }
 
 const GOOD = { to: ["ann@example.org"], subject: "Bug report", body: "Steps\n1. open" };
@@ -178,4 +192,55 @@ test("two drafts at once run one after the other, so each closes its own window 
     await Promise.all([draft(GOOD), draft(GOOD)]);
     const order = calls.filter(([name]) => name === "compose.beginNew" || name === "windows.remove").map(([name]) => name);
     assert.deepEqual(order, ["compose.beginNew", "windows.remove", "compose.beginNew", "windows.remove"]);
+});
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("a save that never ends answers timed out after 30 s, leaves its window open and frees the next draft", async () => {
+    const { draft, calls, timers } = drafts_under_test({ hung_saves: 1 });
+    const first = draft(GOOD);
+    const second = draft(GOOD);
+    await settle();
+    timers.advance(SAVE_TIMEOUT_MS - 1);
+    await settle();
+    assert.equal(calls.filter(([name]) => name === "compose.beginNew").length, 1, "the second waits for the first");
+    timers.advance(1);
+    assert.deepEqual(await first, { ok: false, message: "timed out" });
+    assert.deepEqual(await second, { ok: true });
+    assert.deepEqual(
+        calls.filter(([name]) => name === "windows.remove"),
+        [["windows.remove", 9]],
+        "only the second draft's window closes",
+    );
+    assert.equal(calls.filter(([name]) => name === "windows.update").length, 1);
+    assert.equal(timers.pending(), 0);
+});
+
+test("a beginNew that throws answers fixed text, closes nothing and frees the next draft", async () => {
+    const { draft, calls } = drafts_under_test({ begin_fails: true });
+    assert.deepEqual(await draft(GOOD), DRAFT_REFUSALS.not_saved);
+    assert.ok(!calls.some(([name]) => name === "windows.remove" || name === "compose.saveMessage"));
+    assert.deepEqual(await draft(GOOD), DRAFT_REFUSALS.not_saved, "the queue still runs the next draft");
+    assert.equal(calls.filter(([name]) => name === "compose.beginNew").length, 2);
+});
+
+test("a window the user closed first still answers ok and gives the focus back", async () => {
+    const { draft, calls } = drafts_under_test({ remove_fails: true });
+    assert.deepEqual(await draft(GOOD), { ok: true });
+    assert.ok(calls.some(([name]) => name === "windows.update"));
+});
+
+test("a compose tab with no id is not saved, and its window still closes", async () => {
+    const { draft, calls } = drafts_under_test({ tab: { windowId: 12 } });
+    assert.deepEqual(await draft(GOOD), DRAFT_REFUSALS.not_saved);
+    assert.ok(!calls.some(([name]) => name === "compose.saveMessage"));
+    assert.ok(calls.some(([name, id]) => name === "windows.remove" && id === 12));
+});
+
+test("an identity lookup that fails answers fixed text, not a missing identity", async () => {
+    for (const from of [undefined, "me@work.example"]) {
+        const { draft, compose_calls } = drafts_under_test({ identities_fail: true });
+        assert.deepEqual(await draft({ ...GOOD, ...(from && { from }) }), { ok: false, message: "the identities could not be read" });
+        assert.deepEqual(compose_calls(), []);
+    }
 });
