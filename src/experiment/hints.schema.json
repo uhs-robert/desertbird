@@ -35,6 +35,12 @@
                 "type": "integer",
                 "minimum": 0
               },
+              "action": {
+                "type": "string",
+                "enum": ["focus", "activate", "yank", "choose"],
+                "optional": true,
+                "description": "What a typed label does: focus the target, click it, or copy its address or text. choose waits for the key f, c or y first. The text to copy is read from the page by the parent, never passed in."
+              },
               "colors": {
                 "type": "object",
                 "description": "The label box and letter colors as #rrggbb for each color scheme. The parent uses the scheme Thunderbird itself shows.",

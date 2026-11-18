@@ -8,6 +8,9 @@ export interface HintElement {
     /** A script click. Only a page of the add-on uses it, where `open` is the one to decide. */
     click(): void;
     matches(selector: string): boolean;
+    /** Set on a link: the absolute address. */
+    href?: string;
+    textContent?: string | null;
 }
 
 export interface HintLabelNode {

@@ -14,7 +14,14 @@ export const reading: CommandGroup = {
         "message.bottom": { runs_in: "message", bridge: true, label: "Go to bottom", intent: "Scroll to the bottom of the message." },
         "message.find_next": { runs_in: "message", bridge: true, label: "Next match", intent: "Go to the next match of the last find, wrapping.", count: "ignore" },
         "message.find_prev": { runs_in: "message", bridge: true, label: "Previous match", intent: "Go to the previous match of the last find, wrapping.", count: "ignore" },
-        "hint.pick": { runs_in: "message", bridge: true, label: "Pick a link", intent: "Label the links on screen, then open the typed one.", count: "ignore" },
+        "hint.pick": {
+            runs_in: "message",
+            bridge: true,
+            label: "Pick a link",
+            intent: "Label the links on screen, then open, focus or copy one.",
+            count: "ignore",
+            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank", "choose"], default: "activate", description: { focus: "Focus the link.", yank: "Copy the address of the link, else its text.", choose: "Ask for the action first: f focuses, c activates, y yanks." } }],
+        },
         "search.message": {
             bridge: true,
             runs_in: "background",
@@ -37,5 +44,6 @@ export const reading: CommandGroup = {
         n: { id: "message.find_next" },
         N: { id: "message.find_prev" },
         f: { id: "hint.pick" },
+        ";": { id: "hint.pick", args: { action: "choose" } },
     },
 };

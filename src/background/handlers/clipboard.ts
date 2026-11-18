@@ -27,7 +27,7 @@ export type ClipboardScope = HandlerScope<ClipboardApi>;
 
 type WriteText = (text: string) => Promise<void>;
 
-const write_to_clipboard: WriteText = (text) => navigator.clipboard.writeText(text);
+export const write_to_clipboard: WriteText = (text) => navigator.clipboard.writeText(text);
 
 // The walk stops at a named part (an attachment, even a text one) and at an attached message, whose own body is not this message's body.
 // The root part of `getFull` is itself `message/rfc822`, so the message rule applies to the parts below it.

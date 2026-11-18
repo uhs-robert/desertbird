@@ -11,6 +11,10 @@ interface TargetElement extends HintElement {
     index?: number;
     /** Set on a tab: the `tabs` element holds the selection. */
     selectedItem?: unknown;
+    /** Set on a link: the absolute address. */
+    href?: string;
+    textContent: string | null;
+    querySelector(selector: string): TargetElement | null;
 }
 
 type TargetWindow = HintWindow;
@@ -34,11 +38,19 @@ const pick_control = (element: TargetElement): void => {
     else element.click();
 };
 
-function on_screen(window: TargetWindow, selector: string, keep: (element: TargetElement) => boolean, act: (element: TargetElement) => void): PickTarget[] {
-    return [...(window.document.querySelectorAll(selector) as Iterable<TargetElement>)].filter((element) => keep(element) && is_on_screen(window, element)).map((element) => ({ window, element, act: () => act(element) }));
+// The name and the subject sit in their own elements of a row, so a yank copies those and not the unread count or the date.
+const FOLDER_NAME = ".name";
+const THREAD_SUBJECT = ".subject-line";
+
+/** A yank copies the address of a link, else the text. */
+const yank_text = (element: TargetElement | null): string => (element?.href ?? element?.textContent ?? "").trim();
+
+// A row has no focus of its own to take, so the focus action on a row is its pick: the row is selected and the list keeps the focus.
+function on_screen(window: TargetWindow, selector: string, keep: (element: TargetElement) => boolean, act: (element: TargetElement) => void, text_of: (element: TargetElement) => string, focus: (element: TargetElement) => void = act): PickTarget[] {
+    return [...(window.document.querySelectorAll(selector) as Iterable<TargetElement>)].filter((element) => keep(element) && is_on_screen(window, element)).map((element) => ({ window, element, act: () => act(element), focus: () => focus(element), text: text_of(element) }));
 }
 
-const controls_outside_rows = (window: TargetWindow): PickTarget[] => on_screen(window, CONTROLS, (element) => element.closest(INSIDE_A_ROW) === null, pick_control);
+const controls_outside_rows = (window: TargetWindow): PickTarget[] => on_screen(window, CONTROLS, (element) => element.closest(INSIDE_A_ROW) === null, pick_control, yank_text, (element) => element.focus());
 
 /** The targets in the order they sit on screen from the top: the window's own toolbars and tabs, the folder rows, the thread rows and the header buttons, then the message header. A pick selects a row and leaves the focus in its list, so the motion keys go on from there. */
 export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTarget[] {
@@ -50,11 +62,11 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
             // The index setter selects the row and opens the folder. Setting the row alone selects it and shows no folder.
             for (let index = 0; index < tree.rowCount; index++) if (tree.getRowAtIndex(index) === element.parentElement) tree.selectedIndex = index;
             tree.focus();
-        }),
+        }, (element) => yank_text(element.querySelector(FOLDER_NAME) ?? element)),
         ...on_screen(pane, THREAD_ROWS, () => true, (element) => {
             pane.threadTree.selectedIndex = element.index!;
             pane.threadTree.table?.body?.focus?.();
-        }),
+        }, (element) => yank_text(element.querySelector(THREAD_SUBJECT))),
         ...controls_outside_rows(pane),
         ...(message ? controls_outside_rows(message) : []),
     ];

@@ -26,15 +26,16 @@ test("the themed hints fill in the colors of the setting at each pick, and pass 
     name = "oasis_moonlight";
     await hints!.pick({ windowId: 4 });
     await hints!.sendEnter({ windowId: 4 });
-    assert.deepEqual(calls, [["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_sol")) }], ["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_moonlight")) }], ["enter", { windowId: 4 }]]);
+    await hints!.pick({ windowId: 4, action: "yank" });
+    assert.deepEqual(calls, [["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_sol")) }], ["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_moonlight")) }], ["enter", { windowId: 4 }], ["pick", { windowId: 4, action: "yank", colors: hint_label_colors(resolve_theme("oasis_moonlight")) }]]);
     assert.equal(themed_hints(undefined, async () => name), undefined, "no Experiment, no hints");
 });
 
 test("the hint command refuses when nothing is labelled, and says nothing when something is", async () => {
     const api = (count: number): HintWindowApi => ({ hints: { sendEnter: async () => {}, pick: async () => count } });
     const scope = (count: number) => ({ api: api(count), window_id: 2 }) as never;
-    await pick_in_window(scope(5));
-    await assert.rejects(pick_in_window(scope(0)), /Nothing on screen/);
+    await pick_in_window(scope(5), { action: "activate" });
+    await assert.rejects(pick_in_window(scope(0), { action: "activate" }), /Nothing on screen/);
 });
 
 test("the message label style is literal colors for both schemes, with no custom property", () => {
