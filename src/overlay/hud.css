@@ -16,7 +16,8 @@ html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-s
 #which_key { position: absolute; right: 16px; bottom: 44px; z-index: 2; max-width: calc(100vw - 32px); max-height: calc(100vh - 98px); overflow: auto; padding: 6px 10px 8px; }
 #which_key .title { color: var(--muted); border-bottom: 1px solid var(--edge); padding-bottom: 3px; margin-bottom: 4px; font-size: 12px; }
 #which_key .rows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(8, auto); column-gap: 24px; }
-#which_key.root .rows { grid-template-rows: repeat(12, auto); }
+/* hud.ts sets --root_rows above 12 when the columns do not fit the width. */
+#which_key.root .rows { grid-template-rows: repeat(var(--root_rows, 12), auto); }
 #which_key .row { white-space: nowrap; }
 #which_key .key { display: inline-block; min-width: 3.5em; font: 700 14px monospace; color: var(--accent); }
 #which_key .group { color: var(--muted); }

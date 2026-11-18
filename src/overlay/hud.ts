@@ -26,7 +26,20 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, class_name: string,
     return node;
 }
 
+const ROOT_ROWS = 12;
+
+// The root list has to show every column with whole labels, so a narrow window gets taller columns instead of a horizontal scrollbar, which a keyboard cannot reach. Rows grow until the panel stops overflowing sideways, or until one column is left.
+function fit_root_rows(rows: HTMLElement, row_count: number): void {
+    for (let count = ROOT_ROWS; count <= row_count; count++) {
+        rows.style.setProperty("--root_rows", String(count));
+        if (which_key_element.scrollWidth <= which_key_element.clientWidth) return;
+    }
+}
+
+let drawn_panel: HudState["which_key"] = null;
+
 function draw_which_key(panel: HudState["which_key"]): void {
+    drawn_panel = panel;
     which_key_element.hidden = panel === null;
     if (panel === null) return;
     const is_root = panel.title === "";
@@ -40,7 +53,10 @@ function draw_which_key(panel: HudState["which_key"]): void {
     }
     const hidden_count = panel.rows.length - shown_rows.length;
     which_key_element.replaceChildren(make("div", "title", is_root ? "keys" : `after ${panel.title}`), rows, ...(hidden_count > 0 ? [make("div", "row group", `... ${hidden_count} more`)] : []));
+    if (is_root) fit_root_rows(rows, shown_rows.length);
 }
+
+window.addEventListener("resize", () => draw_which_key(drawn_panel));
 
 function draw(state: HudState): void {
     draw_which_key(state.which_key);
