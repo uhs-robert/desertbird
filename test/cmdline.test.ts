@@ -69,11 +69,13 @@ test("the usage line comes from the params", () => {
     assert.match(usage_line(registry.get("sort.set")!), /--date/);
 });
 
-const sources = { folders: async () => ["/Archive", "/Archive/2026", "/Inbox"], tags: async () => ["Important", "Work stuff"] };
+const choice = (path: string, account_name = "Work", account_id = "a1") => ({ path, account_name, account_id });
+const sources = { folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"] };
+const no_selection = { window_id: 3, message_ids: [] };
 const complete = create_completer(registry, sources);
 
 test("completion lists background commands by name and leaves out hidden and chrome commands", async () => {
-    const { rows } = await complete("", 0);
+    const { rows } = await complete("", 0, no_selection);
     const names = rows.map((row) => row.name);
     assert.ok(names.includes("tag") && names.includes("move") && names.includes("msg.archive") && names.includes("tab.next"));
     assert.ok(!names.includes("cmdline.open"));
@@ -81,29 +83,29 @@ test("completion lists background commands by name and leaves out hidden and chr
 });
 
 test("completion ranks a typed word and marks the matched letters", async () => {
-    const answer = await complete("mo", 2);
+    const answer = await complete("mo", 2, no_selection);
     assert.equal(answer.rows[0]?.name, "move");
     assert.deepEqual(answer.rows[0]?.positions, [0, 1]);
     assert.deepEqual([answer.start, answer.end], [0, 2]);
 });
 
 test("completion offers the folders for move and the tags for tag, and quotes a name with a space", async () => {
-    const folders = await complete("move ", 5);
+    const folders = await complete("move ", 5, no_selection);
     assert.deepEqual(folders.rows.map((row) => row.name), ["/Archive", "/Archive/2026", "/Inbox"]);
-    assert.equal(folders.usage, "move folder");
-    const tags = await complete("tag ", 4);
+    assert.equal(folders.usage, "move [--account=<account>] folder");
+    const tags = await complete("tag ", 4, no_selection);
     assert.deepEqual(tags.rows.map((row) => row.insert), ["Important ", '"Work stuff" ']);
-    const narrowed = await complete("move arch", 9);
+    const narrowed = await complete("move arch", 9, no_selection);
     assert.deepEqual(narrowed.rows.map((row) => row.name), ["/Archive", "/Archive/2026"]);
 });
 
 test("a typed folder or tag word highlights the first row, except a whole value, an empty word or a command word", async () => {
-    assert.equal((await complete("move arch", 9)).highlight_first, true);
-    assert.equal((await complete("open arch", 9)).highlight_first, true);
-    assert.equal((await complete("tag imp", 7)).highlight_first, true);
-    assert.equal((await complete("move /Archive", 13)).highlight_first, undefined);
-    assert.equal((await complete("move ", 5)).highlight_first, undefined);
-    assert.equal((await complete("mo", 2)).highlight_first, undefined);
+    assert.equal((await complete("move arch", 9, no_selection)).highlight_first, true);
+    assert.equal((await complete("open arch", 9, no_selection)).highlight_first, true);
+    assert.equal((await complete("tag imp", 7, no_selection)).highlight_first, true);
+    assert.equal((await complete("move /Archive", 13, no_selection)).highlight_first, undefined);
+    assert.equal((await complete("move ", 5, no_selection)).highlight_first, undefined);
+    assert.equal((await complete("mo", 2, no_selection)).highlight_first, undefined);
 });
 
 test("open takes a fuzzy word and move takes any word, and the validator passes both", () => {
@@ -115,19 +117,19 @@ test("open takes a fuzzy word and move takes any word, and the validator passes 
 });
 
 test("completion offers the flags of a command and the value of an enum flag", async () => {
-    const flags = await complete("sort --", 7);
+    const flags = await complete("sort --", 7, no_selection);
     assert.ok(flags.rows.some((row) => row.name.startsWith("--date")));
     assert.ok(flags.rows.some((row) => row.name.startsWith("--descending")));
 });
 
 test("completion gives nothing inside a quote or for an unknown command", async () => {
-    assert.deepEqual((await complete('tag "Wo', 7)).rows, []);
-    assert.deepEqual((await complete("bogus x", 7)).rows, []);
+    assert.deepEqual((await complete('tag "Wo', 7, no_selection)).rows, []);
+    assert.deepEqual((await complete("bogus x", 7, no_selection)).rows, []);
 });
 
 test("a long folder list ranks in full and keeps the best rows only", async () => {
-    const many = Array.from({ length: 5000 }, (_, index) => `/Folder${index}`);
-    const answer = await create_completer(registry, { ...sources, folders: async () => many })("move ", 5);
+    const many = Array.from({ length: 5000 }, (_, index) => choice(`/Folder${index}`));
+    const answer = await create_completer(registry, { ...sources, folders: async () => many })("move ", 5, no_selection);
     assert.equal(answer.rows.length, 50);
 });
 
@@ -280,7 +282,7 @@ test("the default keys: : opens an empty line and the typed-value keys open it w
         return binding.args?.["text"];
     };
     assert.equal(text_of(":"), undefined);
-    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["o", "open "], ["go", "open "]] as const) {
+    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["mc", "copy "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["o", "open "], ["go", "open "]] as const) {
         assert.equal(text_of(keys), text);
         // The text each key types must name a command and parse as far as the word before the value.
         const first_word = text.split(" ")[0]!;
@@ -322,4 +324,57 @@ test("a failing history write still runs the command", async () => {
         console.error = errors;
     }
     assert.equal(ran.length, 1);
+});
+
+// --- account-aware folder rows
+
+test("a path two accounts hold gets a row per account that names the account, and is never a whole value", async () => {
+    const shared = create_completer(registry, { ...sources, folders: async () => [choice("/Inbox", "Work", "a1"), choice("/Inbox", "Home", "a2"), choice("/Plans", "Work", "a1")] });
+    const rows = (await shared("open ", 5, no_selection)).rows;
+    assert.deepEqual(rows.map((row) => [row.name, row.description, row.insert]), [["/Inbox", "Work", "--account=Work /Inbox "], ["/Inbox", "Home", "--account=Home /Inbox "], ["/Plans", "Work", "/Plans "]]);
+    assert.equal((await shared("open /Inbox", 11, no_selection)).highlight_first, true);
+    assert.equal((await shared("open /Plans", 11, no_selection)).highlight_first, undefined);
+    // The account name narrows the rows, as a keyword.
+    assert.deepEqual((await shared("open home", 9, no_selection)).rows.map((row) => row.description), ["Home"]);
+    // An account typed already narrows the list and adds no second flag.
+    const narrowed = (await shared("open --account=Home ", 20, no_selection)).rows;
+    assert.deepEqual(narrowed.map((row) => row.insert), ["/Inbox "]);
+});
+
+test("open asks for every account, move and copy for the selection's", async () => {
+    const asked: unknown[] = [];
+    const spy = create_completer(registry, { ...sources, folders: async (query) => (asked.push(query), []) });
+    for (const text of ["open ", "move ", "copy "]) await spy(text, text.length, { window_id: 3, message_ids: [7] });
+    assert.deepEqual(asked, [{ window_id: 3, message_ids: [7], all_accounts: true }, { window_id: 3, message_ids: [7], all_accounts: false }, { window_id: 3, message_ids: [7], all_accounts: false }]);
+});
+
+test("the folder source lists recent folders first, newest first, then the rest by path, and keeps one account for a selection", async () => {
+    const { create_folder_source } = await import("../src/background/cmdline/folder_rows.ts");
+    const { FOLDER_STATE_KEY, FOLDER_STATE_VERSION } = await import("../src/background/handlers/folder_state.ts");
+    const folders = [{ id: "1", accountId: "a1", path: "/B" }, { id: "2", accountId: "a1", path: "/A" }, { id: "3", accountId: "a2", path: "/A" }, { id: "4", accountId: "a1", path: "/C" }];
+    const entries = [{ account_id: "a1", path: "/B" }, { account_id: "a2", path: "/A" }, { account_id: "a1", path: "/Gone" }, { account_id: "a1", path: "/C" }, { account_id: "a2", path: "/A" }];
+    const stored = { [FOLDER_STATE_KEY]: { record_version: FOLDER_STATE_VERSION, marks: {}, history: { entries, cursor: 4 } } };
+    const api = {
+        folders: { query: async () => folders },
+        accounts: { list: async () => [{ id: "a1", name: "Work" }, { id: "a2", name: "Home" }] },
+        mailTabs: { query: async () => [{ displayedFolder: shown }] },
+        messages: { get: async () => ({ folder: { accountId: "a1" } }) },
+        storage: { local: { get: async () => stored, set: async () => {} } },
+    };
+    let shown: { accountId: string } | null = null;
+    const source = create_folder_source(api);
+    const label = (list: { path: string; account_name: string }[]) => list.map((entry) => `${entry.account_name}${entry.path}`);
+    assert.deepEqual(label(await source({ window_id: 3, message_ids: [], all_accounts: true })), ["Home/A", "Work/C", "Work/B", "Work/A"]);
+    assert.deepEqual(label(await source({ window_id: 3, message_ids: [1], all_accounts: false })), ["Work/C", "Work/B", "Work/A"]);
+    // The shown account's folder leads the other accounts' folder of the same path, though the other is more recent.
+    shown = { accountId: "a1" };
+    assert.deepEqual(label(await source({ window_id: 3, message_ids: [], all_accounts: true })), ["Work/A", "Home/A", "Work/C", "Work/B"]);
+});
+
+test("accounts that share a name insert the id and show it, and a typed --account adds no second flag", async () => {
+    const twins = create_completer(registry, { ...sources, folders: async () => [choice("/Inbox", "Mail", "a1"), choice("/Inbox", "Mail", "a2")] });
+    const rows = (await twins("open ", 5, no_selection)).rows;
+    assert.deepEqual(rows.map((row) => [row.description, row.insert]), [["Mail (a1)", "--account=a1 /Inbox "], ["Mail (a2)", "--account=a2 /Inbox "]]);
+    const typed = (await twins("open --account=Mail ", 20, no_selection)).rows;
+    assert.deepEqual(typed.map((row) => row.insert), ["/Inbox ", "/Inbox "]);
 });

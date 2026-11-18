@@ -7,7 +7,7 @@ import { DEFAULT_KEYMAP, GROUPS, MESSAGE_KEYMAP, registry } from "../src/backgro
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[]; background_ids?: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle"] },
-    messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move"] },
+    messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move", "msg.copy"] },
     compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },

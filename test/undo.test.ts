@@ -101,6 +101,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
                 return folders.filter((entry) => (query.accountId === undefined || entry.accountId === query.accountId) && (query.path === undefined || entry.path === query.path) && (query.specialUse === undefined || query.specialUse.some((use) => entry.specialUse?.includes(use))));
             },
         },
+        accounts: { list: async () => [{ id: "a1", name: "Work" }, { id: "a2", name: "Home" }] },
         notifications: { create: async (_id: string | undefined, notification: { message: string }) => (notices.push(notification.message), "n1") },
         keys: { viewRows: async ({ first, last }: { first: number; last: number }) => ({ current: options.current ?? -1, rows: (options.rows ?? []).filter((row) => row.index >= first && row.index <= last) }) },
         undo: { log, retry_delays_ms: options.retry_delays_ms ?? [1, 1] },
@@ -155,6 +156,14 @@ test("a move then u moves the message back", async () => {
     const mail = mail_store([inbox("a@x", 1)]);
     await mail.run("msg.move", [1], { folder: "/Work" });
     assert.deepEqual(mail.places(), ["a@x@work"]);
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@inbox"]);
+});
+
+test("a move to another account with --account then u moves the message back", async () => {
+    const mail = mail_store([inbox("a@x", 1)]);
+    await mail.run("msg.move", [1], { folder: "/INBOX", account: "Home" });
+    assert.deepEqual(mail.places(), ["a@x@imap-inbox"]);
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@inbox"]);
 });

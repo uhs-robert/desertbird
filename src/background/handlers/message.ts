@@ -1,6 +1,7 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { KeysApi } from "../../shared/protocol.ts";
 import { require_messages } from "./each_message.ts";
+import type { AccountsApi } from "./account_choice.ts";
 import type { IdentityApi } from "./identity.ts";
 import type { SpecialFolderApi } from "./special_folder.ts";
 import { record_moved } from "./undo.ts";
@@ -38,12 +39,14 @@ export interface MessageUpdate {
 export type ReplyType = "replyToSender" | "replyToAll" | "replyToList";
 
 export interface MessageApi extends IdentityApi, SpecialFolderApi {
+    accounts: IdentityApi["accounts"] & AccountsApi["accounts"];
     messages: {
         archive(ids: number[]): Promise<void>;
         delete(ids: number[]): Promise<void>;
         get(id: number): Promise<MessageHeader>;
         update(id: number, properties: MessageUpdate): Promise<void>;
         move(ids: number[], folder_id: string): Promise<void>;
+        copy(ids: number[], folder_id: string): Promise<void>;
         tags: { list(): Promise<MailTag[]> };
     };
     compose: {

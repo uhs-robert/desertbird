@@ -1,0 +1,2 @@
+// The flag that names the account of a folder path. The validator turns an omitted or blank optional value into the empty text before the pattern is read, so handlers read the empty text as absent. A path alone names two folders when two accounts hold it, and the folder rows insert this flag for exactly those paths. The name is checked at run time, since only the running add-on knows its accounts.
+export const ACCOUNT_PARAM = { name: "account", type: "string", optional: true, pattern: "^\\S.*", description: "Look the folder up in the account with this name." } as const;

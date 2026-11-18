@@ -9,6 +9,7 @@ import { first_sentence } from "../../../vendor/desertfox/registry/summary.ts";
 import { flag_alternatives, usage_line } from "../../../vendor/desertfox/registry/usage.ts";
 import { rank } from "../../../vendor/desertfox/score.ts";
 import type { Candidate } from "../../../vendor/desertfox/score.ts";
+import type { FolderChoice, FolderQuery } from "./folder_rows.ts";
 
 /** One line of the list. `insert` replaces the word under the caret. `positions` are the letters of `name` the query matched. */
 export interface CompletionRow {
@@ -31,9 +32,9 @@ export interface Completion {
     highlight_first?: true;
 }
 
-/** The value lists behind `values: { from }`. A list the command line has no source for stays empty. */
+/** The value lists behind `values: { from }`. A list the command line has no source for stays empty. The folders come in the order the rows show them when no word is typed. */
 export interface ValueSources {
-    folders(): Promise<string[]>;
+    folders(query: FolderQuery): Promise<FolderChoice[]>;
     tags(): Promise<string[]>;
 }
 
@@ -77,8 +78,23 @@ function flag_rows(command: Command, typed: Record<string, unknown>): Row[] {
     });
 }
 
-function value_rows(param: ParamDef, folders: string[], tags: string[]): Row[] {
-    const values = is_dynamic_values(param.values) ? (param.values.from === "folders" ? folders : param.values.from === "tags" ? tags : []) : (static_values(param) ?? []);
+// The account name is a keyword, so a word of it narrows the rows. A path two accounts hold carries the flag that names the account, so the picked row means one folder. The flag goes before the path, as the command line takes flags first.
+// Two accounts can share a name, so the flag then carries the id and the description shows it. No flag goes in when the line has one already.
+function folder_rows(choices: FolderChoice[], has_flag: boolean): Row[] {
+    const holders = new Map<string, number>();
+    for (const { path } of choices) holders.set(path, (holders.get(path) ?? 0) + 1);
+    const name_holders = new Map<string, number>();
+    for (const { account_id, account_name } of new Map(choices.map((choice) => [choice.account_id, choice])).values()) name_holders.set(account_name.toLowerCase(), (name_holders.get(account_name.toLowerCase()) ?? 0) + 1);
+    return choices.map(({ path, account_id, account_name }) => {
+        const is_shared = !has_flag && (holders.get(path) ?? 0) > 1;
+        const clashes = (name_holders.get(account_name.toLowerCase()) ?? 0) > 1;
+        return row_of(path, `${is_shared ? `--account=${quote_word(clashes ? account_id : account_name)} ` : ""}${quote_word(path)} `, clashes ? `${account_name} (${account_id})` : account_name, { keywords: [account_name] });
+    });
+}
+
+function value_rows(param: ParamDef, folders: FolderChoice[], tags: string[], has_flag: boolean): Row[] {
+    if (is_dynamic_values(param.values) && param.values.from === "folders") return folder_rows(folders, has_flag);
+    const values = is_dynamic_values(param.values) ? (param.values.from === "tags" ? tags : []) : (static_values(param) ?? []);
     const described = (value: string) => (typeof param.description === "object" ? (param.description[value] ?? "") : "");
     return values.map((value) => row_of(value, `${quote_word(value)} `, described(value)));
 }
@@ -94,7 +110,7 @@ function args_of(command: Command): string {
     return [...flag_params(command).flatMap((param) => flag_alternatives(param).filter((form) => form.startsWith("--")).map((form) => form.split("=")[0])), ...positional_params(command).map((param) => `<${param.name}>`), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
 }
 
-export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number) => Promise<Completion> {
+export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number, session: { window_id: number; message_ids: number[] }) => Promise<Completion> {
     // Only commands that run in the background can run from the line, and a hidden command stays typeable but unlisted.
     const listed = () =>
         registry
@@ -109,8 +125,8 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
     function finish(context: Exclude<CursorContext, { kind: "none" }>, rows: Row[], command?: Command, picks_value = false): Completion {
         const ranked = rank(context.word, rows).slice(0, MAX_ROWS);
         const usage = command && usage_line(command);
-        // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match.
-        const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && !rows.some((row) => row.name === context.word);
+        // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match. A path two accounts hold is no whole value, since typed alone it names two folders.
+        const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && rows.filter((row) => row.name === context.word).length !== 1;
         return {
             rows: ranked.map(({ name, insert, description, args, positions }) => ({ name, insert, description, args, positions })),
             start: context.start,
@@ -120,14 +136,18 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         };
     }
 
-    return async (text, caret) => {
+    return async (text, caret, session) => {
         const context = cursor_context(text, caret, (word) => registry.find(word));
         if (context.kind === "none") return NOTHING;
         if (context.kind === "command") return finish(context, listed());
         if (context.kind === "flag") return finish(context, flag_rows(context.command, context.typed), context.command);
         const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command) : undefined;
         const lists_values = param !== undefined && (is_dynamic_values(param.values) || static_values(param) !== undefined);
-        const [folders, tags] = lists_values ? await Promise.all([sources.folders(), sources.tags()]) : [[], []];
-        return finish(context, param ? value_rows(param, folders, tags) : [], context.command, is_dynamic_values(param?.values));
+        // `open` offers every account. Move and copy offer the selection's account, the only one they can reach without `--account`.
+        const folder_query = { window_id: session.window_id, message_ids: session.message_ids, all_accounts: context.kind === "subject" && context.command.id === "folder.open" };
+        const [folders, tags] = lists_values ? await Promise.all([sources.folders(folder_query), sources.tags()]) : [[], []];
+        const named = context.kind === "subject" && typeof context.typed["account"] === "string" ? context.typed["account"] : undefined;
+        const offered = named === undefined ? folders : folders.filter((choice) => choice.account_name.toLowerCase() === named.toLowerCase() || choice.account_id === named);
+        return finish(context, param ? value_rows(param, offered, tags, named !== undefined) : [], context.command, is_dynamic_values(param?.values));
     };
 }
