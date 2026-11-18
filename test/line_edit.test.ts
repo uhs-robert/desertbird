@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accepts_single_row, apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "../src/overlay/line_edit.ts";
+import { accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, read_history, rows_fit_after_wait, settle_latest, shown_highlight } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -99,4 +99,26 @@ test("a single row is accepted only while no row is selected", () => {
     assert.equal(accepts_single_row(1, 0), false);
     assert.equal(accepts_single_row(2, -1), false);
     assert.equal(accepts_single_row(0, -1), false);
+});
+
+test("queued keys run in the order they arrive, and done waits for all of them", async () => {
+    const order: string[] = [];
+    const queue = create_key_queue();
+    const slow = queue.add(() => new Promise((resolve) => setTimeout(() => { order.push("tab"); resolve(); }, 5)));
+    const failing = queue.add(async () => { order.push("failing tab"); throw new Error("failed"); });
+    void queue.add(async () => { order.push("down"); });
+    await queue.done();
+    order.push("enter");
+    await slow;
+    await assert.rejects(failing);
+    assert.deepEqual(order, ["tab", "failing tab", "down", "enter"]);
+});
+
+test("a row key is dropped when the rows still do not fit the line after the wait", async () => {
+    let fits = false;
+    let waited = 0;
+    assert.equal(await rows_fit_after_wait(() => fits, async () => { waited++; }), false);
+    assert.equal(await rows_fit_after_wait(() => fits, async () => { waited++; fits = true; }), true);
+    assert.equal(await rows_fit_after_wait(() => fits, async () => { waited++; }), true);
+    assert.equal(waited, 2);
 });

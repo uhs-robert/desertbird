@@ -5,7 +5,7 @@ import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts"
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
-import { accepts_single_row, apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "./line_edit.ts";
+import { accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, read_history, rows_fit_after_wait, settle_latest, shown_highlight } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
@@ -131,14 +131,15 @@ function preview_at(index: number): void {
 }
 
 // The rows of an older text hold a span that no longer fits the line, so a row key waits for the answer to the text in the line, as DesertFox holds its row keys while the list loads. A previewed line keeps its saved rows.
-async function rows_for_line(): Promise<void> {
-    if (preview_base === null && completion_for.text !== input.value) await settle_latest(() => latest_refresh);
-}
+const rows_fit_line = (): boolean => preview_base !== null || completion_for.text === input.value;
+const rows_for_line = (): Promise<boolean> => rows_fit_after_wait(rows_fit_line, () => settle_latest(() => latest_refresh));
+// Row keys run one at a time in the order they came, and Enter waits for the ones before it.
+const row_keys = create_key_queue();
 
 // Tab, C-n and A-Down step next, S-Tab, C-p and A-Up step back, and both wrap. A single match goes into the line at once and the rows are ranked for the new text.
 async function cycle_rows(step: 1 | -1): Promise<void> {
     walking_history = false;
-    await rows_for_line();
+    if (!(await rows_for_line())) return;
     const row_count = completion.rows.length;
     if (closing || row_count === 0) return;
     const accepts = accepts_single_row(row_count, highlighted);
@@ -151,8 +152,7 @@ async function cycle_rows(step: 1 | -1): Promise<void> {
 
 // Up and Down stop at the ends, as in DesertFox, and put the row in the line like the cycle keys.
 async function step_rows(step: 1 | -1): Promise<void> {
-    await rows_for_line();
-    if (closing) return;
+    if (!(await rows_for_line()) || closing) return;
     const target = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
     if (target >= 0) preview_at(target);
 }
@@ -167,6 +167,7 @@ async function run_line(): Promise<void> {
     running = true;
     try {
         if (!search_direction) {
+            await row_keys.done();
             await settle_latest(() => latest_refresh);
             if (closing) return;
         }
@@ -201,14 +202,14 @@ window.addEventListener(
         } else if (!search_direction && (event.key === "Tab" || (event.ctrlKey && (event.key === "n" || event.key === "p")) || (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")))) {
             event.preventDefault();
             const forward = event.key === "Tab" ? !event.shiftKey : event.key === "n" || event.key === "ArrowDown";
-            cycle_rows(forward ? 1 : -1).catch(report_failure);
+            row_keys.add(() => cycle_rows(forward ? 1 : -1)).catch(report_failure);
         } else if (event.key === "Tab") {
             event.preventDefault();
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             const step = event.key === "ArrowDown" ? 1 : -1;
             if (search_direction || arrow_target(walking_history, completion.rows.length) === "history") step_history(step);
-            else step_rows(step).catch(report_failure);
+            else row_keys.add(() => step_rows(step)).catch(report_failure);
         } else if (search_direction && event.ctrlKey && (event.key === "n" || event.key === "p")) {
             event.preventDefault();
             step_history(event.key === "n" ? 1 : -1);
