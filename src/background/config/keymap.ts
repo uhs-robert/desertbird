@@ -4,7 +4,7 @@ import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { Settings } from "./settings.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
-import { DEFAULT_KEYMAP, UNREPEATABLE_IDS, resolve_command } from "../commands/index.ts";
+import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, resolve_command } from "../commands/index.ts";
 
 /** What the user stores: normal-mode bindings only. A `null` binding removes a default key. */
 export type UserKeymap = Pick<KeymapConfig, "normal">;
@@ -26,10 +26,11 @@ export function sanitize_user_keymap(raw: unknown): UserKeymap {
     return { normal: Object.fromEntries(kept) };
 }
 
-/** Tags each step of a command with `repeatable: false` in the compiled tree, so the chrome runtime never replays it. The compiler has no field for it, and the runtime knows no command ids beyond its motions. */
+/** Tags each step of a command with `repeatable: false` (so the chrome runtime never replays it) or `keeps_selection: true` (so visual mode stays on after it) in the compiled tree. The compiler has no field for either, and the runtime knows no command ids beyond its motions. */
 export function mark_unrepeatable(node: object): void {
     const { steps, otherwise, children } = node as { steps?: Array<{ invocation: { id: string } }>; otherwise?: object; children?: Record<string, object> };
     for (const step of steps ?? []) if (UNREPEATABLE_IDS.has(step.invocation.id)) Object.assign(step, { repeatable: false });
+    for (const step of steps ?? []) if (KEEPS_SELECTION_IDS.has(step.invocation.id)) Object.assign(step, { keeps_selection: true });
     if (otherwise) mark_unrepeatable(otherwise);
     for (const child of Object.values(children ?? {})) mark_unrepeatable(child);
 }

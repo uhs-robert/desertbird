@@ -14,6 +14,7 @@ export const messages: CommandGroup = {
         "msg.delete": { bridge: false, runs_in: "background", label: "Delete", intent: "Move the selected messages to Trash. A count deletes that many rows from the current one.", count: "repeat", run: scoped<TrashApi>(delete_messages) },
         "msg.read": {
             bridge: false,
+            keeps_selection: true,
             runs_in: "background",
             label: "Read state",
             intent: "Mark the selected messages read or unread. With no flag, the first message decides. A count marks that many rows from the current one.",
@@ -28,10 +29,11 @@ export const messages: CommandGroup = {
             intent: "Mark every message in the shown folder read.",
             run: scoped(read_all),
         },
-        "msg.flag": { bridge: false, runs_in: "background", label: "Flag", intent: "Star the selected messages, or clear the star. The first message decides which.", run: scoped(toggle_flag) },
-        "msg.junk": { bridge: false, runs_in: "background", label: "Junk", intent: "Mark the selected messages as junk without moving them. The first message decides between junk and not junk.", run: scoped(toggle_junk) },
+        "msg.flag": { bridge: false, keeps_selection: true, runs_in: "background", label: "Flag", intent: "Star the selected messages, or clear the star. The first message decides which.", run: scoped(toggle_flag) },
+        "msg.junk": { bridge: false, keeps_selection: true, runs_in: "background", label: "Junk", intent: "Mark the selected messages as junk without moving them. The first message decides between junk and not junk.", run: scoped(toggle_junk) },
         "msg.tag": {
             bridge: false,
+            keeps_selection: true,
             runs_in: "background",
             name: "tag",
             label: "Toggle tag",

@@ -5,7 +5,8 @@ import type { HandlerScope, MessageApi } from "../handlers/message.ts";
 
 // Every command states `bridge` on purpose, because the bridge runs nothing by default and a forgotten field should not pass silently.
 // `repeatable: false` keeps `.` from replaying the command. A command that moves mail where `u` cannot follow (`msg.move`, which takes a typed folder, and `msg.snooze`) sets it, so a stray `.` never repeats it on the next selection. `u` undoes `msg.delete` and `msg.archive`, so `.` repeats them.
-export type CommandDefinition = CommandInput & { bridge: boolean; repeatable?: false };
+// `keeps_selection: true` marks a command that leaves its rows in the list (read state, star, junk, tag). Visual mode then stays on after it, so the range can take a second command. Commands that remove or move rows end the mode, because their rows are gone.
+export type CommandDefinition = CommandInput & { bridge: boolean; repeatable?: false; keeps_selection?: true };
 
 /** One group file: its commands by id, and the default normal-mode keys that run them. `message_keys` bind in the message document and not in the mail tab. */
 export interface CommandGroup {
