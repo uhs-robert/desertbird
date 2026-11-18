@@ -211,12 +211,9 @@ const hud = create_hud_service({
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });
 
-// The command line and the commands that open it mount through this, so a toast sits above the command line box while it is open.
-const command_line_mount = messenger.overlay && lifting_toasts(messenger.overlay, hud);
-
-// The y or n prompt of a bridge write. It borrows the command line surface, so every other command line mount goes through `yielding_overlay`, which ends a prompt in that window as a no first. Its one pending request lives in memory only.
+// The y or n prompt of a bridge write. It borrows the command line surface, so every other command line mount goes through `yielding_overlay`, which ends a prompt in that window as a no first. Its mounts lift the toasts above the tall prompt. The command line mounts through the same wrapper without the lift. Its one pending request lives in memory only.
 const confirm = create_confirm_service({
-    overlay: command_line_mount,
+    overlay: messenger.overlay && lifting_toasts(messenger.overlay, hud, true),
     target_window: () => last_focused_main_window(),
     end_command_line: (window_id) => cmdline.end(window_id),
     page_url: () => messenger.runtime.getURL("overlay/cmdline.html"),
@@ -224,7 +221,7 @@ const confirm = create_confirm_service({
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
     now_ms: () => Date.now(),
 });
-const command_line_overlay = command_line_mount && confirm.yielding_overlay(command_line_mount);
+const command_line_overlay = messenger.overlay && confirm.yielding_overlay(lifting_toasts(messenger.overlay, hud, false));
 
 // Session storage survives a restart of this page and not of the application, like the window state it copies. It is absent on a build without it, and the memory copy works alone then.
 keep_filters(messenger.storage.session);
@@ -246,6 +243,7 @@ const cmdline = create_cmdline_service({
         tabs: (window_id) => tab_choices(messenger, window_id),
     },
     overlay: command_line_overlay,
+    read_prompt: async () => (await config_store.read()).settings.cmdline_prompt,
     history: create_cmdline_history(messenger.storage.local),
     search_history: create_cmdline_history(messenger.storage.local, SEARCH_HISTORY_STORAGE_KEY),
     search,

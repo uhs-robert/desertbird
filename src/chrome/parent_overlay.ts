@@ -5,7 +5,7 @@ import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROW
 import { capture_focus, in_text_field } from "./focus.ts";
 import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
-import { create_overlay_host } from "./overlay.ts";
+import { create_overlay_host, on_escape_key } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
@@ -34,10 +34,10 @@ interface SurfaceSpec {
 const PINNED = "position: fixed; left: 0; right: 0; bottom: 0;";
 
 // The fixed table from a surface name to its page in the extension. A caller never supplies a path.
-// The command line draws the completion list above its input line inside its box. The hud sits one z-index step below it, transparent and deaf to the mouse, so a click on the list under it still lands.
+// The command line draws the completion list above its input line inside its box. The hud sits one z-index step above it, transparent and deaf to the mouse, so a toast draws over the panel and a click on the list under it still lands.
 const SURFACES: Record<OverlaySurface, SurfaceSpec> = {
     cmdline: { page: "overlay/cmdline.html", box_id: OVERLAY_BOX_ID, browser_id: OVERLAY_BROWSER_ID, box_style: `${PINNED} height: 280px; z-index: 100000;`, max_width: 0, max_height: 0, takes_keyboard: true },
-    hud: { page: "overlay/hud.html", box_id: HUD_BOX_ID, browser_id: HUD_BROWSER_ID, box_style: `${PINNED} height: 520px; z-index: 99999; pointer-events: none;`, max_width: 0, max_height: 0, takes_keyboard: false },
+    hud: { page: "overlay/hud.html", box_id: HUD_BOX_ID, browser_id: HUD_BROWSER_ID, box_style: `${PINNED} height: 520px; z-index: 100001; pointer-events: none;`, max_width: 0, max_height: 0, takes_keyboard: false },
 };
 
 const closed_listeners = new Set<(closed: OverlayClosed) => void>();
@@ -186,7 +186,9 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
         },
         on_escape(window, listener) {
             const handler = (event: KeydownEvent) => {
-                if (event.key === "Escape") listener();
+                if (event.key !== "Escape") return;
+                const browser = (window.document as unknown as { getElementById(id: string): { contentTitle?: string } | null }).getElementById(OVERLAY_BROWSER_ID);
+                on_escape_key(() => browser?.contentTitle ?? "", (run, ms) => void (window as unknown as { setTimeout(run: () => void, ms: number): number }).setTimeout(run, ms), listener);
             };
             window.addEventListener("keydown", handler, true);
             return () => window.removeEventListener("keydown", handler, true);

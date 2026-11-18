@@ -28,6 +28,8 @@ export interface CmdlineSessions {
 export interface CmdlineDeps {
     registry: Registry;
     sources: ValueSources;
+    /** The `cmdline_prompt` setting, read each time a line opens. */
+    read_prompt(): Promise<string>;
     /** Absent when the Experiment failed to load. */
     overlay: OverlayApi | undefined;
     /** Keeps the lines that were run. A failed write is logged and never stops the command. */
@@ -151,7 +153,7 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
             const session = sessions.get(request.windowId);
             switch (request.type) {
                 case "cmdline.hello":
-                    return Promise.resolve(session ? { open: true, text: session.text, ...(session.search && { search: session.search }) } : { open: false });
+                    return session ? deps.read_prompt().then((prompt) => ({ open: true as const, text: session.text, prompt, ...(session.search && { search: session.search }) })) : Promise.resolve({ open: false as const });
                 case "cmdline.close":
                     return close(request.windowId).then(() => ({}));
                 case "cmdline.complete":

@@ -16,7 +16,7 @@ export interface OverlayDeps<Window> {
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window closes. Returns the way to stop listening. */
     on_window_unload(window: Window, listener: () => void): () => void;
-    /** Calls `listener` on each Escape key of the window. Returns the way to stop listening. */
+    /** Calls `listener` when an Escape key needs the host to close the overlay: the page has no title, or did not answer in time (see `on_escape_key`). Returns the way to stop listening. */
     on_escape(window: Window, listener: () => void): () => void;
     emit_closed(window_id: number, surface: OverlaySurface): void;
 }
@@ -89,7 +89,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             const stops = [deps.on_window_unload(window, () => close_by_itself(window, entry, "window_closed"))];
             if (takes_keyboard(surface)) {
                 stops.push(deps.on_tab_select(window, () => close_by_itself(window, entry, "tab_changed")));
-                // The page closes itself on Escape. This is the way out when the page never loaded and nothing answers the key.
+                // A loaded page decides its own Escape. This is the way out when the page never loaded, hangs or has no background to answer it.
                 stops.push(deps.on_escape(window, () => close_by_itself(window, entry, "escape")));
             }
             entry.stop_listening = () => stops.forEach((stop) => stop());
@@ -110,4 +110,16 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             for (const [window, of_window] of [...mounted]) for (const entry of [...of_window.values()]) take_down(window, entry);
         },
     };
+}
+
+/** How long a loaded page has to answer an Escape before the host closes the overlay itself. */
+export const ESCAPE_ANSWER_MS = 300;
+
+/**
+ * What the host does on an Escape keydown. A page that has loaded decides the key: it answers by changing its title, as the command line does when the first Escape only closes its list. When the title is empty (the page never loaded) the host closes at once, and when it does not change in time (the page hangs) the host closes after the wait.
+ */
+export function on_escape_key(read_title: () => string, wait: (run: () => void, ms: number) => void, close: () => void): void {
+    const before = read_title();
+    if (before === "") close();
+    else wait(() => (read_title() === before ? close() : undefined), ESCAPE_ANSWER_MS);
 }
