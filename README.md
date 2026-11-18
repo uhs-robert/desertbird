@@ -19,6 +19,21 @@ Pre-alpha. The design is in progress and there is no code yet. Read [`docs/desig
 
 Off by default. Thunderbird shows its own new-mail alert, so this one is opt-in. Turn it on with the `notify_new_mail` setting on the options page, or run `:notify.toggle`. While it is on, each new unread, non-junk Inbox message shows a desktop notification with the sender and the subject. More than three at once give one notification with a count. Clicking a notification opens the message in a tab. Notifications have no action buttons, because Thunderbird 153 does not support them. The subject and sender show on the lock screen and in the desktop's notification history. The add-on needs no new permission.
 
+## Bridge
+
+Off by default. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. Thunderbird shows it on install as "Exchange messages with programs other than Thunderbird". An add-on with an Experiment cannot ask for an optional permission, so the permission is always granted. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. Commands that send, delete or move mail, and commands that open a link, never run through the bridge.
+
+Four more settings, each off by default and each inert while `bridge` is off, let a script read mail:
+
+| Setting | What leaves Thunderbird |
+| --- | --- |
+| `bridge_share_folders` | Folder names, paths, account names and unread and total counts |
+| `bridge_share_headers` | Sender, subject, date and read and flagged state of the messages in one folder, at most 200 at a time. Needs `bridge_share_folders` on too |
+| `bridge_share_bodies` | The text of one message, with `bridge_share_headers` on too. HTML turns into plain text, the text is cut at 64 KiB, and an encrypted message is never sent |
+| `bridge_share_attachments` | Attachment names, sizes and types. Never the files |
+
+With all four off, the bridge sends no mail, no folder names and no tags. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
+
 ## License
 
 MPL-2.0. See [`LICENSE`](LICENSE).

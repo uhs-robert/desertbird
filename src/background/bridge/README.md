@@ -1,0 +1,76 @@
+# Bridge, add-on side
+
+The add-on's end of the native bridge host. A program outside Thunderbird, such as a desktop bar or a CLI, talks to the host over its socket. The host talks to the add-on over one `connectNative` port named `desertbird_bridge`. The add-on is the trust boundary: it holds the setting, the never-list and the validator. The host only forwards.
+
+| File | Role |
+| --- | --- |
+| `run.ts` | The one path a `run` takes: the first word against the bridge rules, then the parse, the rules again, `check_args`, and `router.route` in the last focused main window. Also `list_bridge_commands`, the commands `run` accepts |
+| `reads.ts` | The four read frames, each behind its own share setting: `folders`, `messages`, `message` and `attachments`. It cleans every string a sender controls and refuses an encrypted body |
+| `port.ts` | The port: connect while `bridge` is on, the `ready` handshake, the backoff, the answers to `list`, `run` and `state`, and the `mode` frames |
+
+## Setup
+
+The bridge needs the DesertFox host and its `desertbird_bridge.json` manifest. A new host install writes it. An existing DesertFox user gets it only by running `host/install.sh` again or by running `:native.update` in Firefox. The automatic host update does not add it. Then turn `bridge` on in the options page. The `desertfox` CLI talks to Thunderbird only with `--app thunderbird`, for example `desertfox --app thunderbird run step.unread`.
+
+## Rules
+
+- `bridge` (default `false`) gates everything. While it is off, `connectNative` is never called. Turning it off closes the port and stops the retry timer. A `run` reads the stored setting again before it runs, so a frame that lands between the write and `storage.onChanged` is refused.
+- A command runs only when its `bridge` field is `true`, it is not on the never-list, and it runs in the background. Chrome and message commands (`motion.down`, `message.scroll_down`) run on a key in the window. The background has no verb to start them, so the bridge refuses them.
+- The never-list wins over the `bridge` field. Groups `config`, `settings`, `native`, `permissions`, `clipboard` and `hint` (as an id prefix or a group file). `repeat.last` is on it because it replays any command a key ran. So are `mark.set`, `msg.undo`, every command that sends, deletes or moves mail, and every command that opens an address (`hint.pick`, `msg.open`, `msg.unsubscribe`, `app.open_page`, `help.open`).
+- A refused command is refused on its first word, before its args are parsed. The parse and the validator read no dynamic value list. `list` gives a folder, tag or tab param only its `{ from }` source, so no folder name or tag leaves.
+- A handler failure answers `<id> failed` and nothing more: its text can name a folder or a subject.
+- The ok or failed answer itself tells whether a typed text matched mail, alone or through a step that reads the filtered list. So no caller text reaches a match against mail: `search.message` and `search.threads` are on the never-list, `filter.set` takes no tag, `tab.switch` takes only a tab number, and `folder.open` takes only a special folder with no account.
+- `test/registry.test.ts` holds the audited `bridge: true` set. A command newly marked `true` fails it until it is reviewed.
+
+## Backoff
+
+A failed connect or a dropped port retries after 1 s. Each further failure doubles the wait, up to 60 s. A port that stayed up 10 s after `ready` starts the backoff over. At most one retry timer exists. A drop of a port that is no longer the current one does nothing. Each port's two listeners are removed when it closes, so a reconnect leaks none.
+
+## Frames
+
+Each frame is one JSON object. The host frames it with a 4-byte length on its stdin and stdout.
+
+Host to add-on:
+
+```json
+{ "ready": true, "host_version": 1, "release_version": "..." }
+{ "verb": "list", "request_id": 1 }
+{ "verb": "run", "request_id": 2, "command": "pane.toggle folder" }
+{ "verb": "state", "request_id": 3 }
+```
+
+The add-on ignores every frame before `ready`, every frame without an integer `request_id`, and every other verb. `command` is a command line of at most 4096 characters.
+
+Add-on to host:
+
+```json
+{ "verb": "reply", "request_id": 1, "ok": true, "commands": [{ "id": "pane.toggle", "label": "Toggle a pane", "intent": "...", "params": [...] }] }
+{ "verb": "reply", "request_id": 2, "ok": true }
+{ "verb": "reply", "request_id": 2, "ok": false, "message": "msg.delete never runs through the bridge" }
+{ "verb": "reply", "request_id": 3, "ok": true, "mode": { "id": "normal", "label": "NORMAL", "private": false, "tab_id": 7, "window_id": 3 } }
+{ "verb": "reply", "request_id": 3, "ok": false, "message": "no mail window is open" }
+{ "verb": "mode", "id": "visual", "label": "VISUAL", "private": false, "tab_id": 7, "window_id": 3 }
+```
+
+A `commands` row has `id` and `label`, and `name`, `aliases`, `intent`, `params` and `count` when the command has them. `mode` goes out after `ready`, on each mode change the key runtime reports, and when a main window takes the focus. It names the last focused main window and its active tab. Thunderbird has no private windows, so `private` is always `false`.
+
+## Reads
+
+Each read needs `bridge` and its own share setting, all off by default. The add-on reads the settings from storage at each request, never the host.
+
+| Frame | Request fields | Setting | Reply |
+| --- | --- | --- | --- |
+| `folders` | none | `bridge_share_folders` | `folders: [{ id, name, path, account, unread, total }]`, `truncated` |
+| `messages` | `folder` (an id from `folders`, at most 1024 characters), `limit` (1 to 200, default 50), `unread_only` | `bridge_share_headers` and `bridge_share_folders` | `messages: [{ id, from, subject, date, folder, read, flagged }]` newest first, `truncated`. `folder` is the opaque id, never the name |
+| `message` | `id` (a positive integer) | `bridge_share_headers` and `bridge_share_bodies` | `message: { id, from, to, subject, date, content_type, body, untrusted: true, html_stripped, truncated }` |
+| `attachments` | `id` | `bridge_share_attachments` | `attachments: [{ part, name, size, content_type }]`, `truncated`. Names and sizes only, never the bytes |
+
+- Bad fields, an unknown folder and an unknown message get fixed refusal texts that never echo the request.
+- Every string a sender controls (from, to, subject, folder and account names, attachment names) loses its control and format characters, zero-width and bidirectional marks among them, and is cut to 512 characters. Attachment names go through `safe_filename`.
+- `messages` needs folder sharing too: a folder id is the folder's path, so its answer to a guessed id would confirm a folder name.
+- `attachments` checks for encryption first, because `listAttachments` decrypts an encrypted message.
+- A body is the plain text part, else the HTML part turned into text by Thunderbird's own converter, which loads and resolves nothing. It keeps line breaks and tabs, loses other controls and format characters, and is cut at 64 KiB of UTF-8 at a code point.
+- `getFull` runs with `decrypt: false`. A message with any part of type `multipart/encrypted`, `application/pkcs7-mime` or `application/pgp-encrypted`, a decryption status, or an inline `-----BEGIN PGP MESSAGE-----` is refused. Its body never leaves.
+- A list reply over 900 KiB drops rows from its end and says `truncated`, so it stays under the host's 1 MiB cap. `messages` reads every page of the folder and keeps only the newest `limit` rows so far, so it finds the newest mail of any folder with memory for one page plus `limit` rows.
+- The CLI wraps a body in delimiters with a nonce it makes itself. The add-on makes no nonce.
+- `list` never carries folder names or tags, whatever `bridge_share_folders` says: a dynamic param gives only its `{ from }` source.

@@ -59,6 +59,8 @@ export function create_router(registry: Registry, api: RouterApi) {
     }
 
     return {
+        /** Runs the invocation and throws on a refusal or a failure, with no notification. The bridge answers its caller instead. */
+        route,
         async run(invocation: KeysInvocation): Promise<void> {
             try {
                 await route(invocation);

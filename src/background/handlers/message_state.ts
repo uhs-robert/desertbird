@@ -2,11 +2,11 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { displayed_folder } from "./displayed_folder.ts";
 import type { DisplayedFolderApi } from "./displayed_folder.ts";
-import { for_each_message, require_messages } from "./each_message.ts";
+import { require_messages } from "./each_message.ts";
 import type { HandlerScope, MessageApi, MessageHeader } from "./message.ts";
 import { account_id_named } from "./account_choice.ts";
 import type { MailFolder } from "./displayed_folder.ts";
-import { record_moved, record_state } from "./undo.ts";
+import { record_moved, record_state, record_tag } from "./undo.ts";
 import type { UndoApi } from "./undo.ts";
 import type { StateField } from "../undo_log.ts";
 
@@ -39,16 +39,15 @@ export async function read_all(scope: HandlerScope<ReadAllApi>): Promise<void> {
 }
 
 // The typed text is a tag key (`$label1`) or a tag name, in any letter case. `messages.update` replaces the whole tag list of a message, so each message keeps its own tags and gains or loses this one. As with the star, the first message decides: it has the tag, so the tag comes off every message, else it goes on every message.
-export async function toggle_tag(scope: HandlerScope, args: CheckedArgs): Promise<void> {
-    const wanted = String(args["tag"]);
-    const known = await scope.api.messages.tags.list();
-    const match = known.find((entry) => entry.key === wanted) ?? known.find((entry) => entry.tag.toLowerCase() === wanted.toLowerCase());
-    if (match === undefined) throw new RuntimeRefusal(`There is no tag named ${wanted}.`);
-    const [first] = require_messages(scope.message_ids);
-    const removes = ((await scope.api.messages.get(first!)).tags ?? []).includes(match.key);
-    await for_each_message(scope.message_ids, async (id) => {
-        const { tags = [] } = await scope.api.messages.get(id);
-        if (tags.includes(match.key) === removes) await scope.api.messages.update(id, { tags: removes ? tags.filter((key) => key !== match.key) : [...tags, match.key] });
+export function toggle_tag(scope: HandlerScope<MessageApi & UndoApi>, args: CheckedArgs): Promise<void> {
+    return record_tag(scope, async () => {
+        const wanted = String(args["tag"]);
+        const known = await scope.api.messages.tags.list();
+        const match = known.find((entry) => entry.key === wanted) ?? known.find((entry) => entry.tag.toLowerCase() === wanted.toLowerCase());
+        if (match === undefined) throw new RuntimeRefusal(`There is no tag named ${wanted}.`);
+        const [first] = require_messages(scope.message_ids);
+        const removes = ((await scope.api.messages.get(first!)).tags ?? []).includes(match.key);
+        return { ids: scope.message_ids, tag_key: match.key, removes };
     });
 }
 

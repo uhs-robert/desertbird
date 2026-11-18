@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { DEFAULT_KEYMAP, MESSAGE_KEYMAP, UNREPEATABLE_IDS } from "../src/background/commands/index.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
+import { fake_native_messaging } from "./chrome_stubs.ts";
 
 interface StorageChange {
     newValue?: unknown;
@@ -13,16 +14,17 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const change_listeners: ((changes: Record<string, StorageChange>, area: string) => void)[] = [];
     const installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
+    const native = fake_native_messaging();
     let report_read: () => void = () => {};
     const first_read = new Promise<void>((resolve) => (report_read = resolve));
     const messenger = {
         storage: {
             local: {
-                get: async (key: string) => {
-                    const value = stored[key];
+                get: async (key: string | string[]) => {
+                    const values = Object.fromEntries((Array.isArray(key) ? key : [key]).filter((name) => stored[name] !== undefined).map((name) => [name, stored[name]]));
                     report_read();
                     await new Promise((resolve) => setTimeout(resolve, read_delays_ms.shift() ?? 0));
-                    return value === undefined ? {} : { [key]: value };
+                    return values;
                 },
                 set: async (items: Record<string, unknown>) => {
                     Object.assign(stored, items);
@@ -33,7 +35,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             onChanged: { addListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void change_listeners.push(listener) },
         },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
-        runtime: { onMessage: { addListener: () => {} } },
+        runtime: { onMessage: { addListener: () => {} }, connectNative: (application: string) => native.connectNative(application) },
         notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) }, onClosed: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         messages: { onNewMailReceived: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         tabs: { onActivated: { addListener: () => {} } },
@@ -47,7 +49,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, external_write, first_read, new_mail_listeners, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, external_write, first_read, new_mail_listeners, native, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -114,4 +116,17 @@ test("the new-mail listeners register once at start", async () => {
     // onNewMailReceived, onClicked and onClosed once each, and a second onClicked for the follow-up notices. The storage.onChanged of the setting is one of several storage listeners, so only its presence is counted.
     assert.equal(new_mail_listeners.length, 4);
     assert.ok(storage_listener_count() - storage_before >= 3);
+});
+
+test("the bridge never connects while its setting is at the default, and connects once the setting turns on", async () => {
+    const { native, external_write } = stub_messenger();
+    await start_background();
+    await settle();
+    assert.deepEqual(native.names, []);
+    external_write({ desertbird_settings: { bridge: true } });
+    await settle();
+    assert.deepEqual(native.names, ["desertbird_bridge"]);
+    external_write({ desertbird_settings: { bridge: false } });
+    await settle();
+    assert.equal(native.ports[0]!.disconnected, true);
 });
