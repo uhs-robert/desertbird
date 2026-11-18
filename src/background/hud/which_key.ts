@@ -23,7 +23,10 @@ function group_label(branch: TreeBranch): string {
 export function which_key_panel(root: TreeBranch, keys: readonly string[], settings: Pick<Settings, "which_key_border">): WhichKeyPanel | null {
     const branch = branch_at(root, keys);
     if (branch === null) return null;
-    const rows = Object.entries(branch.children).map(([token, child]) =>
+    // The root list puts the prefix groups first, so the user sees what a prefix opens before the single keys.
+    const entries = Object.entries(branch.children);
+    if (keys.length === 0) entries.sort(([, a], [, b]) => Number(is_branch(b)) - Number(is_branch(a)));
+    const rows = entries.map(([token, child]) =>
         is_branch(child) ? { key: token_label(token), label: group_label(child), is_group: true } : { key: token_label(token), label: child.label ?? child.steps[0]?.invocation.id ?? "", is_group: false },
     );
     if (rows.length === 0) return null;

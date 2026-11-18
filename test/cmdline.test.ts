@@ -77,7 +77,8 @@ const complete = create_completer(registry, sources);
 test("completion lists background commands by name and leaves out hidden and chrome commands", async () => {
     const { rows } = await complete("", 0, no_selection);
     const names = rows.map((row) => row.name);
-    assert.ok(names.includes("tag") && names.includes("move") && names.includes("msg.archive") && names.includes("tab.next"));
+    assert.ok(names.includes("tag") && names.includes("move") && names.includes("msg.archive"));
+    assert.ok((await complete("tab", 3, no_selection)).rows.some((row) => row.name === "tab.next"));
     assert.ok(!names.includes("cmdline.open"));
     assert.ok(!names.includes("motion.down"));
 });

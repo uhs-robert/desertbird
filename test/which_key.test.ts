@@ -49,3 +49,12 @@ test("a sequence in the skip list opens no panel by itself, but a panel already 
 test("a skip entry covers only its exact sequence", () => {
     assert.equal(may_open_by_itself(settings_with({ which_key_skip: ["g"] }), ["g", "u"], false), true);
 });
+
+test("the root list puts the groups first and lists every key, however many", () => {
+    const children = Object.fromEntries(Array.from({ length: 40 }, (_, at) => [`k${at}`, { kind: "leaf" as const, label: `Key ${at}`, steps: [] }]));
+    const root = { kind: "branch" as const, children: { ...children, ...sample_root().children } };
+    const panel = which_key_panel(root, [], settings_with({}));
+    assert.equal(panel?.rows.length, 43);
+    assert.deepEqual(panel?.rows.slice(0, 2).map((row) => row.is_group), [true, true]);
+    assert.equal(panel?.rows.slice(2).some((row) => row.is_group), false);
+});
