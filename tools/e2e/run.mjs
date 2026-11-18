@@ -1306,7 +1306,7 @@ async function run_window_hints(instance, { app, kind, shot }) {
   await instance.press([";"]);
   await sleep(1200);
   await shot("window_hints_cmdline", "after ; ;: the command line is open with hint typed in");
-  await instance.press(["--focus"]);
+  await instance.press(["--", "--focus"]);
   await instance.press(["-k", "Return"]);
   await sleep(1200);
   await shot("window_hints_cmdline_labels", "after hint --focus on the line: the labels show");

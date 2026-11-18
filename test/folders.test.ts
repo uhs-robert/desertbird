@@ -49,6 +49,16 @@ test("a saved binding of one slot runs, and the default capture row still takes 
     assert.deepEqual(invocation_of(["'", "b"]), { id: "mark.jump", args: { slot: "b" } });
 });
 
+test("a stored null for an old slot key (Ma, 'a) leaves M and ' taking any key", () => {
+    const { compiled } = compile_bindings({ ...DEFAULT_KEYMAP, normal: { ...DEFAULT_KEYMAP.normal, Ma: null, "'a": null } }, {}, DEFAULT_KEYMAP);
+    for (const [prefix, id] of [["M", "mark.set"], ["'", "mark.jump"]] as const) {
+        const matcher = create_matcher(compiled);
+        assert.equal(matcher.feed("normal", prefix).kind_, "pending", prefix);
+        const result = matcher.feed("normal", "q");
+        assert.deepEqual((result as { leaf: { steps: { invocation: unknown }[] } }).leaf.steps[0]?.invocation, { id, args: { slot: "q" } }, prefix);
+    }
+});
+
 test("a user key that unbinds or replaces M leaves no capture row behind", () => {
     for (const binding of [null, { id: "msg.archive" }]) {
         const { compiled } = compile_bindings({ ...DEFAULT_KEYMAP, normal: { ...DEFAULT_KEYMAP.normal, M: binding } }, {}, DEFAULT_KEYMAP);
