@@ -90,3 +90,23 @@ export async function settle_latest(latest: () => Promise<unknown>): Promise<voi
         await waited.catch(() => undefined);
     } while (waited !== latest());
 }
+
+/** Runs each key after the keys queued before it, so held keys keep their order as in DesertFox. A failed key does not stop the keys after it. */
+export function create_key_queue(): { add(run: () => Promise<void>): Promise<void>; done(): Promise<void> } {
+    let tail: Promise<void> = Promise.resolve();
+    return {
+        add(run) {
+            const ran = tail.then(run);
+            tail = ran.catch(() => undefined);
+            return ran;
+        },
+        done: () => tail,
+    };
+}
+
+/** Whether the rows fit the line, waiting once for the newest answer when they do not. It checks only once more, because a failed request never brings rows for the line. */
+export async function rows_fit_after_wait(fits: () => boolean, wait: () => Promise<void>): Promise<boolean> {
+    if (fits()) return true;
+    await wait();
+    return fits();
+}
