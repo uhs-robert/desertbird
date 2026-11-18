@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
-import { compile_message_keymap } from "../src/background/commands/index.ts";
+import { compile_message_keymap, message_background_commands } from "../src/background/commands/index.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
 
 const VIEWPORT = 600;
@@ -536,4 +536,49 @@ test("the scroll step setting rejects 0 and anything below 1, and the body scrip
     change({ message_scroll_step_px: 0.5 }, "local", SETTINGS_STORAGE_KEY);
     window.press("j");
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`, `by ${MESSAGE_SCROLL_STEP_PX}`]);
+});
+
+const message_tree_json = (user: Parameters<typeof compile_message_keymap>[0]) => JSON.stringify(compile_message_keymap(user).compiled.modes.normal);
+
+test("a user key for a message command works in a message, and a user key for any other command stays out", () => {
+    const tree = message_tree_json({ X: { id: "msg.archive" }, Y: { id: "motion.down" }, Z: { id: "repeat.last" } });
+    assert.match(tree, /"X"/);
+    assert.doesNotMatch(tree, /"Y"|"Z"/);
+});
+
+test("a user key never carries tab.close_mail in a message", () => {
+    assert.doesNotMatch(message_tree_json({ X: { id: "tab.close_mail" } }), /tab\.close_mail|"X"/);
+});
+
+test("a user key on a message default key takes its place", () => {
+    const tree = message_tree_json({ j: { id: "msg.archive" } });
+    assert.doesNotMatch(tree, /message\.scroll_down/);
+    assert.match(tree, /message\.scroll_up/);
+});
+
+test("a user key that extends a message key compiles, and only drops that key", () => {
+    const result = compile_message_keymap({ gfz: { id: "msg.archive" } });
+    assert.deepEqual(result.warnings, ['normal: dropped default keys that your keys extend: "gf" by gfz']);
+    assert.match(JSON.stringify(result.compiled.modes.normal), /"z"/);
+});
+
+test("a null user binding removes a message key whatever its spelling, and one for a key the message lacks changes nothing", () => {
+    const without_j = message_tree_json({ j: null });
+    assert.doesNotMatch(without_j, /message\.scroll_down/);
+    assert.match(without_j, /message\.scroll_up/);
+    assert.doesNotMatch(message_tree_json({ "<C-J>": null }), /tab\.next/);
+    assert.equal(message_tree_json({ Q: null }), message_tree_json({}));
+});
+
+test("a user key with the command and args of a list-only default stays out of a message, whatever the args order", () => {
+    const tree = message_tree_json({ X: { id: "cmdline.open", args: { text: "sort " } }, Y: { id: "cmdline.open", args: { text: "find " } } });
+    assert.doesNotMatch(tree, /"X"/);
+    assert.match(tree, /"Y"/);
+    assert.doesNotMatch(message_tree_json({ X: { args: { text: "sort " }, id: "cmdline.open" } }), /"X"/);
+});
+
+test("the background accepts a body request for message commands and never for the list or the close chord", () => {
+    const allowed = message_background_commands();
+    for (const id of ["msg.move", "msg.archive", "tab.switch"]) assert.ok(allowed.has(id), id);
+    for (const id of ["tab.close_mail", "folder.read_all", "repeat.last", "motion.down"]) assert.ok(!allowed.has(id), id);
 });
