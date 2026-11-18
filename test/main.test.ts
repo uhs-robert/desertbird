@@ -10,7 +10,9 @@ interface StorageChange {
 }
 
 /** A stand-in for the `messenger` global the background entry reads: storage that fires `onChanged` on each write, and a recording `keys.install`. */
-function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = []) {
+function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}) {
+    const native_messages: { application: string; message: object }[] = [];
+    const compose_scripts: unknown[] = [];
     const change_listeners: ((changes: Record<string, StorageChange>, area: string) => void)[] = [];
     const installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
@@ -32,13 +34,24 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
                     setTimeout(() => change_listeners.forEach((listener) => listener(changes, "local")), 0);
                 },
             },
+            session: {
+                get: async (key: string) => (key in session ? { [key]: session[key] } : {}),
+                set: async (items: Record<string, unknown>) => void Object.assign(session, items),
+            },
             onChanged: { addListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void change_listeners.push(listener) },
         },
+        composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
+        compose: { onAfterSend: { addListener: () => {} } },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
-        runtime: { onMessage: { addListener: () => {} }, connectNative: (application: string) => native.connectNative(application) },
+        runtime: {
+            onMessage: { addListener: () => {} },
+            connectNative: (application: string) => native.connectNative(application),
+            // A collect that never answers, as a host that waits on an open editor. A resolved pending answer would loop for the rest of the run.
+            sendNativeMessage: (application: string, message: object) => (native_messages.push({ application, message }), new Promise(() => {})),
+        },
         notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) }, onClosed: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         messages: { onNewMailReceived: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
-        tabs: { onActivated: { addListener: () => {} } },
+        tabs: { get: async () => ({}), onActivated: { addListener: () => {} }, onRemoved: { addListener: () => {} } },
         windows: { getAll: async () => [], onCreated: { addListener: () => {} }, onRemoved: { addListener: () => {} }, onFocusChanged: { addListener: () => {} } },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
         mailTabs: { query: async () => [], onDisplayedFolderChanged: { addListener: () => {} } },
@@ -49,7 +62,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, external_write, first_read, new_mail_listeners, native, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -129,4 +142,22 @@ test("the bridge never connects while its setting is at the default, and connect
     external_write({ desertbird_settings: { bridge: false } });
     await settle();
     assert.equal(native.ports[0]!.disconnected, true);
+});
+
+test("the start registers the compose script, and with external_editor at its default a stored editor job is dropped and never reaches the host", async () => {
+    const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
+    const { native_messages, compose_scripts, session } = stub_messenger({}, [], { desertbird_editor_jobs: { 70: job } });
+    await start_background();
+    await settle();
+    assert.deepEqual(compose_scripts, [{ js: [{ file: "content/compose_keys.js" }] }]);
+    assert.deepEqual(session["desertbird_editor_jobs"], {});
+    assert.deepEqual(native_messages, []);
+});
+
+test("with external_editor on, a stored job of a live tab collects again from desertbird_host", async () => {
+    const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
+    const { native_messages } = stub_messenger({ desertbird_settings: { external_editor: true } }, [], { desertbird_editor_jobs: { 70: job } });
+    await start_background();
+    await settle();
+    assert.deepEqual(native_messages[0], { application: "desertbird_host", message: { cmd: "editor_collect", job: "j1" } });
 });

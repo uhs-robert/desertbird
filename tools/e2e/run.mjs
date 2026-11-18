@@ -1848,6 +1848,47 @@ function seed_storage(xpi, work_dir, records, extra_script = "") {
   return seeded;
 }
 
+// The external editor kind: the native host from a DesertFox install, reached through a desertbird_host manifest in the session's own HOME, runs a fake editor that rewrites the scratch file. Nothing is written outside the work directory.
+const EDITED_TEXT = "Edited by the e2e editor.";
+const DESERTFOX_HOST = process.env.E2E_DESERTFOX_HOST ?? join(process.env.HOME ?? "", ".local/share/desertfox/desertfox-host");
+
+function install_editor_host(work_dir) {
+  const home = join(work_dir, "home");
+  const manifests = join(home, ".mozilla", "native-messaging-hosts");
+  mkdirSync(manifests, { recursive: true });
+  writeFileSync(join(manifests, "desertbird_host.json"), JSON.stringify({ name: "desertbird_host", description: "DesertBird e2e editor host", path: DESERTFOX_HOST, type: "stdio", allowed_extensions: ["desertbird@uhs-robert"] }));
+  const config = join(home, ".config", "desertfox");
+  mkdirSync(config, { recursive: true });
+  // The scratch path holds no space, so `$1` goes unquoted and the TOML string needs no escape.
+  writeFileSync(join(config, "editor.toml"), `argv = ["sh", "-c", "echo ${EDITED_TEXT} > $1", "sh", "{file}"]\n`);
+}
+
+async function run_compose_editor(instance) {
+  const app = instance.app;
+  const kind = instance.kind;
+  const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+  if (!existsSync(DESERTFOX_HOST)) {
+    note(app, kind, "external editor not run", `no DesertFox host at ${DESERTFOX_HOST}; set E2E_DESERTFOX_HOST`);
+    return;
+  }
+  await sleep(2000);
+  await instance.press(["-k", "F6"]);
+  await instance.ask("select:inbox-s2@fixture.invalid", 30000);
+  await sleep(1000);
+  // A reply puts the focus in the body, where the compose script listens.
+  let state = await key_and_state(instance, ["r"], 4000);
+  const before = compose_tab(state)?.body ?? "";
+  check(app, kind, "r opens a plain-text reply for the editor", compose_tab(state)?.is_plain === true && !before.includes(EDITED_TEXT), `isPlainText ${compose_tab(state)?.is_plain}, body ${JSON.stringify(before)}`);
+  state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], 6000);
+  const after = compose_tab(state)?.body ?? "";
+  check(app, kind, "Ctrl+E runs the editor through desertbird_host and writes its text into the body", after.trim() === EDITED_TEXT, `body ${JSON.stringify(after)}`);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_after_ctrl_e`), name: "after_ctrl_e", line: "compose window with the text of the fake editor" });
+  await instance.ask("close_compose");
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "the app survived the external editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
+}
+
 async function run_quick_replies(instance) {
   const app = instance.app;
   const kind = instance.kind;
@@ -2181,6 +2222,7 @@ async function run_assertions(instance) {
   else if (instance.kind === "mail_account") await run_mail_account(instance);
   else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
   else if (instance.kind === "own_pages") await run_own_pages(instance);
+  else if (instance.kind === "compose_editor") await run_compose_editor(instance);
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
   else await run_no_identity(instance);
 }
@@ -2188,10 +2230,11 @@ async function run_assertions(instance) {
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,compose_editor").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
-    const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : MODE_LABEL_KINDS[kind];
+    const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind === "compose_editor" ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];
+    if (kind === "compose_editor") install_editor_host(work_dir);
     const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path && kind === "own_pages" ? seed_storage(xpi_path, work_dir, {}, OPEN_OWN_PAGES_SCRIPT) : xpi_path;
     const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
     try {

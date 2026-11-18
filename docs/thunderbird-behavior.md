@@ -123,6 +123,7 @@ This contradicts the design's statement that the message body "runs in a content
 ### Keys in compose
 
 - `composeScripts.register` ran in the compose editor. A real `q` press with no cancel reached the content script and added one character to the body (`getComposeDetails`). With the top window cancel on `z`, the content script got nothing and the body did not change. A chrome cancel stops text entry in compose.
+- Ctrl+E in the body of a plain-text reply reached the `composeScripts` script on Thunderbird 153 and on Betterbird (e2e kind `compose_editor`). With the script's cancel, the body afterwards held only the editor's text, so no Thunderbird action on the chord showed. The `desertbird_host` manifest in `~/.mozilla/native-messaging-hosts/` was found by `sendNativeMessage`, and `setComposeDetails({plainTextBody})` replaced the whole body, quote and signature included.
 - The compose window must be the active window before a key press counts. The probe waits for that and runs the settle step.
 - `tabs.create` called while the compose window was focused opened the tab in the main window (`windowId` of the `normal` window), not in the compose window. The compose window kept the focus.
 - `tabs.create` with an extension page opened a content tab, but the focus stayed in the chrome document. A real key did not reach the page.
