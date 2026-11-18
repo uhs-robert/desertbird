@@ -3,7 +3,7 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
-import { UNREPEATABLE_IDS, compile_message_keymap, message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -14,6 +14,7 @@ import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
 import { publish_theme } from "./theme/publish.ts";
+import { themed_hints } from "./theme/themed_hints.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -96,8 +97,8 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
 
 declare const messenger: Messenger;
 
-// The commands that open the overlay. The registry says so through `needs`, so the key runtime learns "these take the keyboard" and no command name.
-const HOLD_COMMANDS = registry.list().filter((command) => command.needs?.includes("overlay.mount")).map((command) => command.id);
+// The commands after which the key runtime holds plain keys. The registry says so through `needs`, so the runtime learns "these take the keyboard" and no command name.
+const HOLD_COMMANDS = hold_command_ids();
 
 async function hash_of(value: unknown): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
@@ -219,7 +220,7 @@ const cmdline = create_cmdline_service({
     search,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
+const router = create_router(registry, { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
 // The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.
 const last_focused_main_window = async (): Promise<number | undefined> => {

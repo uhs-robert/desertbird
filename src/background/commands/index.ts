@@ -13,6 +13,7 @@ import { compose } from "./compose.ts";
 import { folders } from "./folders.ts";
 import { followup } from "./followup.ts";
 import { help } from "./help.ts";
+import { hints } from "./hints.ts";
 import { messages } from "./messages.ts";
 import { new_mail } from "./new_mail.ts";
 import { motion } from "./motion.ts";
@@ -28,9 +29,12 @@ import { unsubscribe } from "./unsubscribe.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints };
 
 export const registry = create_registry();
+
+/** The commands after which the key runtime drops plain keys for a moment: the ones that open the overlay, and the hint pick. A burst such as `f d d` would otherwise reach the runtime before the labels take the keys, and the `d` would delete. */
+export const hold_command_ids = (): string[] => registry.list().filter((command) => command.needs?.includes("overlay.mount") || command.needs?.includes("hints.pick")).map((command) => command.id);
 
 const define = (id: string, input: CommandDefinition) => registry.define(id, input);
 

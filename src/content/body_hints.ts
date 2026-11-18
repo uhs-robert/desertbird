@@ -1,39 +1,10 @@
 // Hint labels in the message: `f` labels the links and buttons on screen, the typed label focuses one, and Enter opens a link. The labels come from `../shared/hint_labels.ts`.
 
 import { hint_labels, labels_matching } from "../shared/hint_labels.ts";
+import { is_on_screen } from "../shared/hint_view.ts";
+import type { HintElement, HintLabelNode, HintWindow } from "../shared/hint_view.ts";
 
-export interface HintElement {
-    getBoundingClientRect(): { top: number; left: number; width: number; height: number };
-    contains(other: unknown): boolean;
-    /** Moves the keyboard focus to the element. A link then takes a real Enter, which Thunderbird handles as a click on it. */
-    focus(): void;
-    /** A script click. Only a page of the add-on uses it, where `open` is the one to decide. */
-    click(): void;
-    matches(selector: string): boolean;
-}
-
-export interface HintLabelNode {
-    textContent: string | null;
-    style: { cssText: string };
-    remove(): void;
-    append(...children: HintLabelNode[]): void;
-    /** The labels live in a closed shadow root, so no rule of the mail's style sheet reaches them. */
-    attachShadow(init: { mode: "closed" }): { append(...children: HintLabelNode[]): void };
-}
-
-export interface HintDocument {
-    querySelectorAll(selector: string): Iterable<HintElement>;
-    elementFromPoint(x: number, y: number): unknown;
-    createElement(name: string): HintLabelNode;
-    documentElement: { append(child: HintLabelNode): void };
-}
-
-export interface HintWindow {
-    innerHeight: number;
-    innerWidth: number;
-    document: HintDocument;
-    getComputedStyle(element: HintElement): { display: string; visibility: string; opacity: string };
-}
+export type { HintDocument, HintElement, HintLabelNode, HintWindow } from "../shared/hint_view.ts";
 
 /** What a click can act on in a mail. Scripts never run in a mail, so there are no handlers to find. */
 const CLICKABLE = "a[href], button:not(:disabled), input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [role=button]";
@@ -44,9 +15,9 @@ const OPENABLE = "a[href], button";
 // The host of the labels. Its own rules are inline and `!important`, so a style sheet of the mail cannot hide, move or fade it.
 const CONTAINER_STYLE = "all: initial !important; position: fixed !important; inset: 0 !important; pointer-events: none !important; z-index: 2147483647 !important; display: block !important; opacity: 1 !important; transform: none !important;";
 
-// `!important` on each property, because the mail's own style sheet shares the document.
-const LABEL_STYLE = (top: number, left: number): string =>
-    `all: initial !important; position: fixed !important; top: ${top}px !important; left: ${left}px !important; z-index: 2147483647 !important; background: #ffd33d !important; color: #000 !important; font: bold 12px monospace !important; padding: 1px 3px !important; border: 1px solid #000 !important;`;
+// `!important` on each property, because the mail's own style sheet shares the document. `colors` are literal declarations from the background: a custom property would pass through `all: initial` and a mail could recolor or hide the label.
+const LABEL_STYLE = (top: number, left: number, colors: string): string =>
+    `all: initial !important; position: fixed !important; top: ${top}px !important; left: ${left}px !important; z-index: 2147483647 !important; ${colors} font: bold 12px monospace !important; padding: 1px 3px !important; border: 1px solid !important;`;
 
 export type HintKey = { kind: "typed"; letter: string } | { kind: "cancel" };
 
@@ -62,7 +33,7 @@ export interface HintSession {
 }
 
 /** `open` runs on a picked link or button, after it has the focus. In a mail it asks for a trusted Enter, since a script click would skip Thunderbird's check for a link that lies about its address. */
-export function create_hint_session(window: HintWindow, open: (element: HintElement) => void): HintSession {
+export function create_hint_session(window: HintWindow, open: (element: HintElement) => void, colors: () => string): HintSession {
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";
@@ -74,20 +45,10 @@ export function create_hint_session(window: HintWindow, open: (element: HintElem
         typed = "";
     }
 
-    // What a mouse would hit: the element is drawn, and it is the one on top at its own centre. A mail can hide a link or stack it under another, and such a link must get no label.
-    function is_on_screen(element: HintElement): boolean {
-        const box = element.getBoundingClientRect();
-        if (!(box.width > 0 && box.height > 0 && box.top < window.innerHeight && box.top + box.height > 0 && box.left < window.innerWidth && box.left + box.width > 0)) return false;
-        const style = window.getComputedStyle(element);
-        if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0) return false;
-        const hit = window.document.elementFromPoint(box.left + box.width / 2, (Math.max(box.top, 0) + Math.min(box.top + box.height, window.innerHeight)) / 2);
-        return hit === element || element.contains(hit);
-    }
-
     return {
         active: () => container !== null,
         begin() {
-            const elements = [...window.document.querySelectorAll(CLICKABLE)].filter(is_on_screen);
+            const elements = [...window.document.querySelectorAll(CLICKABLE)].filter((element) => is_on_screen(window, element));
             if (elements.length === 0) return 0;
             const labels = hint_labels(elements.length);
             container = window.document.createElement("div");
@@ -97,7 +58,7 @@ export function create_hint_session(window: HintWindow, open: (element: HintElem
                 const node = window.document.createElement("span");
                 const box = element.getBoundingClientRect();
                 node.textContent = labels[index]!.toUpperCase();
-                node.style.cssText = LABEL_STYLE(Math.max(box.top, 0), Math.max(box.left, 0));
+                node.style.cssText = LABEL_STYLE(Math.max(box.top, 0), Math.max(box.left, 0), colors());
                 shadow.append(node);
                 return { label: labels[index]!, element, node };
             });

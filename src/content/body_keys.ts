@@ -6,7 +6,7 @@ import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
 import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
-import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
+import { BODY_SCRIPT_LIVE_ATTRIBUTE, HINT_STYLE_STORAGE_KEY, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
 import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkRequest, JsonValue } from "../shared/protocol.ts";
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
@@ -79,7 +79,9 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
 export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error))): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
-    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, open_pick) };
+    // Read once per document: each message loads the script anew, so a theme change shows on the next message.
+    let hint_colors = "background: #ffd33d !important;";
+    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, open_pick, () => hint_colors) };
 
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {
@@ -144,7 +146,8 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         if (changes[SETTINGS_STORAGE_KEY]) context.step_px = scroll_step_of(changes[SETTINGS_STORAGE_KEY].newValue);
         if (changes[KEYMAP_STORAGE_KEY]) install(changes[KEYMAP_STORAGE_KEY].newValue);
     });
-    const stored = await storage.get([KEYMAP_STORAGE_KEY, SETTINGS_STORAGE_KEY]);
+    const stored = await storage.get([KEYMAP_STORAGE_KEY, SETTINGS_STORAGE_KEY, HINT_STYLE_STORAGE_KEY]);
+    hint_colors = (stored[HINT_STYLE_STORAGE_KEY] as string | undefined) ?? hint_colors;
     context.step_px = scroll_step_of(stored[SETTINGS_STORAGE_KEY]);
     install(stored[KEYMAP_STORAGE_KEY]);
 }

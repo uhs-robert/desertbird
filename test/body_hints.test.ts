@@ -76,14 +76,14 @@ test("begin labels only the elements a mouse would hit", () => {
     const below = fake_element("below", { box: { top: 700, left: 10, width: 50, height: 20 } });
     const covered = fake_element("covered", { covered: true });
     const { window } = fake_window([shown, hidden, faded, none, flat, below, covered]);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     assert.equal(session.begin(), 1);
     assert.equal(session.active(), true);
 });
 
 test("begin stays inactive and adds nothing when no element qualifies", () => {
     const { window, appended } = fake_window([fake_element("hidden", { style: { display: "none", visibility: "visible", opacity: "1" } })]);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     assert.equal(session.begin(), 0);
     assert.equal(session.active(), false);
     assert.equal(appended.length, 0);
@@ -93,7 +93,7 @@ test("a picked button gets the focus and the Enter", () => {
     opened.length = 0;
     const button = fake_element("button", { tag: "button" });
     const { window } = fake_window([button]);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     session.begin();
     session.feed(typed("a"));
     assert.deepEqual(button.acted, ["focus"]);
@@ -104,7 +104,7 @@ test("a picked form control gets the focus and no Enter", () => {
     opened.length = 0;
     const field = fake_element("field", { tag: "input" });
     const { window } = fake_window([field]);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     session.begin();
     session.feed(typed("a"));
     assert.deepEqual(field.acted, ["focus"]);
@@ -116,7 +116,7 @@ test("a typed label acts on its element once and ends the session", () => {
     const first = fake_element("first");
     const second = fake_element("second", { box: { top: 50, left: 10, width: 50, height: 20 } });
     const { window, appended } = fake_window([first, second]);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     session.begin();
     session.feed(typed("s"));
     assert.deepEqual(first.acted, []);
@@ -130,7 +130,7 @@ test("a letter that no label starts, and cancel, end the session with no pick", 
     for (const key of [typed("z"), { kind: "cancel" } as const]) {
         const only = fake_element("only");
         const { window, appended } = fake_window([only]);
-        const session = create_hint_session(window, () => opened.push(1));
+        const session = create_hint_session(window, () => opened.push(1), () => "");
         session.begin();
         session.feed(key);
         assert.equal(session.active(), false);
@@ -142,7 +142,7 @@ test("a letter that no label starts, and cancel, end the session with no pick", 
 test("with many targets a label takes several letters and a partial label keeps the session open", () => {
     const elements = Array.from({ length: 12 }, (_, index) => fake_element(`link${index}`, { box: { top: 5 + index * 25, left: 10, width: 50, height: 20 } }));
     const { window } = fake_window(elements);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     assert.equal(session.begin(), 12);
     session.feed(typed("a"));
     assert.equal(session.active(), true);
@@ -155,7 +155,7 @@ test("with many targets a label takes several letters and a partial label keeps 
 test("cancel removes the labels and a second begin starts fresh", () => {
     const only = fake_element("only");
     const { window, appended } = fake_window([only]);
-    const session = create_hint_session(window, () => opened.push(1));
+    const session = create_hint_session(window, () => opened.push(1), () => "");
     session.begin();
     session.cancel();
     assert.equal(session.active(), false);
@@ -163,4 +163,19 @@ test("cancel removes the labels and a second begin starts fresh", () => {
     session.begin();
     session.feed(typed("a"));
     assert.deepEqual(only.acted, ["focus"]);
+});
+
+test("the label carries the colors the background published as literal declarations, so no mail custom property reaches it", () => {
+    const styles: string[] = [];
+    const { window } = fake_window([fake_element("link")]);
+    const create = window.document.createElement;
+    window.document.createElement = (name) => {
+        const node = create(name);
+        node.attachShadow = () => ({ append: (...children) => void children.forEach((child) => styles.push(child.style.cssText)) });
+        return node;
+    };
+    create_hint_session(window, () => {}, () => "background: #123456 !important;").begin();
+    assert.equal(styles.length, 1);
+    assert.match(styles[0]!, /background: #123456 !important;/);
+    assert.doesNotMatch(styles[0]!, /var\(/);
 });

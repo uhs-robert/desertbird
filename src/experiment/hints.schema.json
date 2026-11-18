@@ -1,7 +1,7 @@
 [
   {
     "namespace": "hints",
-    "description": "Hints in a window of the application. One verb for now: the Enter that opens the link a hint pick has focused.",
+    "description": "Hints in a window of the application: the Enter that opens the link a hint pick has focused, and the labels over the targets of a mail tab.",
     "functions": [
       {
         "name": "sendEnter",
@@ -16,6 +16,56 @@
               "windowId": {
                 "type": "integer",
                 "minimum": 0
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "pick",
+        "type": "function",
+        "async": true,
+        "description": "Labels the buttons, tabs, folder rows and message rows on screen in the front mail tab of the window, each in its own document, and takes the keys until a label is typed in full or the labels end. A pick selects a row or clicks a button, and the call itself returns at once with how many labels it drew. With none it starts nothing. The call takes colors and no text to run.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "colors": {
+                "type": "object",
+                "description": "The label box and letter colors as #rrggbb for each color scheme. The parent uses the scheme Thunderbird itself shows.",
+                "properties": {
+                  "dark": {
+                    "type": "object",
+                    "properties": {
+                      "fill": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "text": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      }
+                    }
+                  },
+                  "light": {
+                    "type": "object",
+                    "properties": {
+                      "fill": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      },
+                      "text": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-f]{6}$"
+                      }
+                    }
+                  }
+                }
               }
             }
           }
