@@ -35,6 +35,9 @@ import { create_followup_store } from "./followup_store.ts";
 import { create_snooze_store } from "./snooze_store.ts";
 import { create_undo_log } from "./undo_log.ts";
 import type { RouterApi } from "./router.ts";
+import { create_bridge_run, list_bridge_commands } from "./bridge/run.ts";
+import { BRIDGE_HOST_NAME, create_bridge_port } from "./bridge/port.ts";
+import type { NativePort } from "./bridge/port.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
@@ -64,6 +67,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
             getAll(query: { windowTypes: string[] }): Promise<{ id?: number }[]>;
             onCreated: { addListener(listener: (window: { id?: number; type?: string }) => void): void };
             onRemoved: { addListener(listener: (window_id: number) => void): void };
+            getLastFocused(query: { windowTypes: string[] }): Promise<{ id?: number; type?: string }>;
             /** Fires with -1 when no window of the application has the focus. */
             onFocusChanged: { addListener(listener: (window_id: number) => void): void };
         };
@@ -75,6 +79,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     runtime: {
         onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void };
         sendMessage(message: HudChanged): Promise<unknown>;
+        connectNative(application: string): NativePort;
     };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
@@ -214,6 +219,27 @@ const cmdline = create_cmdline_service({
 });
 const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
+// The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.
+const last_focused_main_window = async (): Promise<number | undefined> => {
+    const window = await messenger.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => undefined);
+    return window?.id !== undefined && window.type === "normal" ? window.id : undefined;
+};
+const bridge_run = create_bridge_run({ target_window: last_focused_main_window, route: (invocation) => router.route(invocation) });
+const bridge = create_bridge_port({
+    connect: () => messenger.runtime.connectNative(BRIDGE_HOST_NAME),
+    read_bridge_setting: async () => (await config_store.read()).settings.bridge,
+    timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
+    now_ms: () => Date.now(),
+    run_command: (command_text) => bridge_run.run(command_text),
+    list_commands: list_bridge_commands,
+    async current_mode() {
+        const window_id = await last_focused_main_window();
+        if (window_id === undefined) return undefined;
+        const tab_id = (await messenger.tabs.query({ windowId: window_id })).find((tab) => tab.active)?.id;
+        return tab_id === undefined ? undefined : { mode: hud.mode_of(window_id), window_id, tab_id };
+    },
+});
+
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation), hints: messenger.hints });
 
 messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
@@ -226,13 +252,17 @@ start_jump_history(messenger);
 create_new_mail_notifier(messenger, async () => (await config_store.read()).settings.notify_new_mail).register();
 
 messenger.keys?.onInvocation.addListener((event) => {
-    if ("keys" in event || "mode" in event) hud.on_keys_event(event).catch(console.error);
+    if ("mode" in event) hud.on_keys_event(event).then(() => bridge.mode_changed(), console.error);
+    else if ("keys" in event) hud.on_keys_event(event).catch(console.error);
     else router.run(event).catch(console.error);
 });
 
 // A half-typed sequence the key runtime cannot see end: a tab change, or the window losing the focus.
 messenger.tabs.onActivated.addListener(() => hud.close_which_key());
-messenger.windows.onFocusChanged.addListener((window_id) => hud.close_which_key(window_id === NO_WINDOW ? undefined : window_id));
+messenger.windows.onFocusChanged.addListener((window_id) => {
+    hud.close_which_key(window_id === NO_WINDOW ? undefined : window_id);
+    if (window_id !== NO_WINDOW) void bridge.mode_changed();
+});
 
 const track_window = (window: { id?: number; type?: string }) => {
     if (window.id !== undefined && (window.type === undefined || window.type === "normal")) hud.track(window.id).catch(console.error);
@@ -252,6 +282,7 @@ messenger.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !(SETTINGS_KEY in changes)) return;
     hud.settings_changed().catch(console.error);
     publish_current_theme();
+    void bridge.settings_changed();
 });
 
 // The pages read the theme from storage, so it is published at every start and again when the setting changes.
@@ -263,3 +294,5 @@ publish_current_theme();
 queue_install(false);
 
 scheduler.start().catch(console.error);
+
+void bridge.start();

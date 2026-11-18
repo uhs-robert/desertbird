@@ -38,6 +38,8 @@ export interface HudService {
     forget(window_id: number): void;
     /** The settings changed: the mode settings may add, remove or restyle the label, and the border may change. */
     settings_changed(): Promise<void>;
+    /** The mode the key runtime last reported for the window, `normal` before any report. */
+    mode_of(window_id: number): KeysMode["mode"];
 }
 
 interface WindowHud {
@@ -216,6 +218,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         async settings_changed() {
             await Promise.all([...windows.keys()].flatMap((window_id) => [changed(window_id), sync_label(window_id)]));
         },
+        mode_of: (window_id) => windows.get(window_id)?.mode ?? "normal",
     };
 }
 
