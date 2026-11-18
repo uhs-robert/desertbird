@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_hud_service, lifting_toasts } from "../src/background/hud/service.ts";
 import { mode_label_colors, resolve_theme } from "../src/background/theme/palette.ts";
+import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
 import type { Settings } from "../src/background/config/settings.ts";
 import type { HudState, KeysEvent, KeysMode } from "../src/shared/protocol.ts";
 import { fake_timers, sample_root, settings_with, settle } from "./hud_fakes.ts";
+
+const message_root = (): TreeBranch => ({ kind: "branch", children: { g: { kind: "branch", children: { x: { kind: "leaf", label: "Only in a message", steps: [{ invocation: { id: "message.top" }, runs_in: "message", count_rule: "repeat" }] } } } } });
 
 function setup(overrides: Partial<Settings> = {}) {
     const log: string[] = [];
@@ -20,14 +23,15 @@ function setup(overrides: Partial<Settings> = {}) {
             onClosed: { addListener: () => {}, removeListener: () => {} },
         },
         read_settings: async () => settings,
-        read_root: async () => sample_root(),
+        read_root: async (source) => (source === "main" ? sample_root() : message_root()),
         send_changed: (window_id) => void log.push(`changed ${window_id}`),
         timers,
     });
     const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id });
+    const body_pending = (keys: string[], window_id = 1): Promise<void> => hud.on_body_pending(window_id, keys);
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
     const set_mode = (mode: KeysMode["mode"], window_id = 1): Promise<void> => hud.on_keys_event({ command: "mode", mode, windowId: window_id });
-    return { hud, log, labels, label_colors, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
+    return { hud, body_pending, log, labels, label_colors, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
 }
 
 test("the panel waits for the delay: nothing mounts before it and the panel shows after it", async () => {
@@ -391,6 +395,31 @@ test("show_root shows the root panel at once, and the next reported end removes 
     assert.deepEqual(log, ["mount hud@1"]);
     assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["j", "d", "g"]);
     await pending([]);
+    await settle();
+    assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);
+});
+
+test("a prefix typed in a message document lists the message keys, and the redraw reads the same tree", async () => {
+    const { timers, body_pending, pending, state } = setup();
+    await body_pending(["g"]);
+    timers.advance(300);
+    await settle();
+    assert.deepEqual((await state()).which_key?.rows.map((row) => row.label), ["Only in a message"]);
+    await body_pending(["g", "x"]);
+    await settle();
+    assert.equal((await state()).which_key, null, "a prefix with no continuations ends the panel");
+    await pending(["g"]);
+    timers.advance(300);
+    await settle();
+    assert.notDeepEqual((await state()).which_key?.rows.map((row) => row.label), ["Only in a message"], "the newest report, from the main tree, wins");
+});
+
+test("an empty prefix from a message document removes its panel", async () => {
+    const { log, timers, body_pending } = setup();
+    await body_pending(["g"]);
+    timers.advance(300);
+    await settle();
+    await body_pending([]);
     await settle();
     assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);
 });

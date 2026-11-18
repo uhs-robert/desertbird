@@ -187,7 +187,7 @@ const NO_WINDOW = -1;
 const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
-    read_root: async () => (await load_record()).tree.root as TreeBranch,
+    read_root: async (source) => (await load_record())[source === "main" ? "tree" : "message_tree"].root as TreeBranch,
     send_changed: (windowId) => void messenger.runtime.sendMessage({ type: "hud.changed", windowId }).catch(() => {}),
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });
@@ -245,7 +245,7 @@ const bridge = create_bridge_port({
     },
 });
 
-const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation), hints: messenger.hints });
+const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: messenger.hints });
 
 messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.

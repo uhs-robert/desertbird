@@ -151,12 +151,13 @@ class StubWindow implements BodyWindow {
 /** The runtime of the stub: it records what the script sends and keeps the listener the script adds. */
 function stub_runtime() {
     const sent: unknown[] = [];
+    const reports: string[][] = [];
     let listener: ((message: unknown) => Promise<{ found: boolean }> | undefined) | undefined;
     const runtime: BodyRuntime = {
-        sendMessage: async (message) => void sent.push(message),
+        sendMessage: async (message) => void (message.type === "body.pending" ? reports.push(message.keys) : sent.push(message)),
         onMessage: { addListener: (added) => void (listener = added) },
     };
-    return { runtime, sent, receive: (message: unknown) => listener?.(message) };
+    return { runtime, sent, reports, receive: (message: unknown) => listener?.(message) };
 }
 
 function stub_storage(stored: Record<string, unknown>) {
@@ -177,9 +178,9 @@ function record() {
 async function started(stored: Record<string, unknown> = { [KEYMAP_STORAGE_KEY]: record() }, own_page = false) {
     const window = new StubWindow();
     const { storage, change } = stub_storage(stored);
-    const { runtime, sent, receive } = stub_runtime();
+    const { runtime, sent, reports, receive } = stub_runtime();
     await (own_page ? start_body_script(window, storage, runtime, (element) => element.click()) : start_body_script(window, storage, runtime));
-    return { window, change, sent, receive };
+    return { window, change, sent, reports, receive };
 }
 
 test("j and k scroll by a fixed line step and are cancelled", async () => {
@@ -581,4 +582,30 @@ test("the background accepts a body request for message commands and never for t
     const allowed = message_background_commands();
     for (const id of ["msg.move", "msg.archive", "tab.switch"]) assert.ok(allowed.has(id), id);
     for (const id of ["tab.close_mail", "folder.read_all", "repeat.last", "motion.down"]) assert.ok(!allowed.has(id), id);
+});
+
+test("a half-typed sequence reports its prefix, and each way it ends reports an empty prefix", async () => {
+    const { window, reports } = await started();
+    window.press("j");
+    assert.deepEqual(reports, [], "a plain key with no sequence sends nothing");
+    window.press("g");
+    assert.deepEqual(reports, [["g"]]);
+    window.press("g");
+    assert.deepEqual(reports, [["g"], []], "a match ends it");
+    window.press("g");
+    window.press("Escape");
+    window.press("g");
+    window.fire("blur");
+    window.press("g");
+    window.press("j", { target: { localName: "input" } });
+    window.press("g");
+    window.press("z");
+    assert.deepEqual(reports, [["g"], [], ["g"], [], ["g"], [], ["g"], [], ["g"], []]);
+});
+
+test("a new tree ends the reported sequence", async () => {
+    const { window, reports, change } = await started();
+    window.press("g");
+    change(record());
+    assert.deepEqual(reports, [["g"], []]);
 });

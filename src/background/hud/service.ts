@@ -8,12 +8,15 @@ import { create_toasts } from "./toasts.ts";
 import type { Timers, Toasts } from "./toasts.ts";
 import { may_open_by_itself, which_key_panel } from "./which_key.ts";
 
+export type WhichKeySource = "main" | "message";
+
 export interface HudDeps {
     /** Absent when the Experiment failed to load. Nothing shows then, and `toast` reports that it showed nothing. */
     overlay: OverlayApi | undefined;
     /** The live settings. The config store refills on a storage change, so each call sees the current values. */
     read_settings(): Promise<Settings>;
-    read_root(): Promise<TreeBranch>;
+    /** The root of the keys a panel lists: the mail window keys, or the keys of a message document. */
+    read_root(source: WhichKeySource): Promise<TreeBranch>;
     /** Tells the hud page of the window to ask for its state again. */
     send_changed(window_id: number): void;
     timers: Timers;
@@ -24,6 +27,8 @@ export interface HudService {
     handle(message: unknown): Promise<HudState> | undefined;
     /** Feeds the `pending` and `mode` events of the key runtime. Other events are ignored. */
     on_keys_event(event: KeysEvent): Promise<void>;
+    /** Feeds the typed prefix of a message document in the window. The panel lists the message keys. The newest report of either source wins. */
+    on_body_pending(window_id: number, keys: string[]): Promise<void>;
     /** Shows a toast in the window. Resolves to false when no toast can show (no window id, no Experiment, a zero time, or the page could not mount), so the caller falls back to a system notification. */
     toast(window_id: number, text: string, is_error: boolean): Promise<boolean>;
     /** The command line opened or closed in the window. Its box covers the bottom of the window, so the toasts move above it. */
@@ -46,6 +51,8 @@ interface WindowHud {
     toasts: Toasts;
     /** The typed keys the panel lists the continuations of, or null when no panel shows. */
     which_key_keys: string[] | null;
+    /** Whose keys the panel lists. The redraw reads the same tree the panel opened from. */
+    which_key_source: WhichKeySource;
     /** Counts each key event. A slower answer from an earlier event finds a newer number and stops. */
     sequence: number;
     lifted: boolean;
@@ -64,7 +71,7 @@ export function create_hud_service(deps: HudDeps): HudService {
     function hud_of(window_id: number): WindowHud {
         let hud = windows.get(window_id);
         if (hud === undefined) {
-            hud = { toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
+            hud = { toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
             windows.set(window_id, hud);
         }
         return hud;
@@ -116,7 +123,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         return changed(window_id);
     }
 
-    async function on_pending(window_id: number, keys: string[]): Promise<void> {
+    async function on_pending(window_id: number, keys: string[], source: WhichKeySource): Promise<void> {
         // A window with no id has no hud to mount.
         if (window_id < 0) return;
         // The sequence moved to this window, so another window's panel is stale.
@@ -130,12 +137,13 @@ export function create_hud_service(deps: HudDeps): HudService {
         if (sequence !== hud.sequence) return;
         const panel_is_up = hud.which_key_keys !== null;
         if (!may_open_by_itself(settings, keys, panel_is_up)) return panel_is_up ? end_which_key(window_id, hud) : undefined;
-        const root = await deps.read_root();
+        const root = await deps.read_root(source);
         if (sequence !== hud.sequence) return;
         if (which_key_panel(root, keys, settings) === null) return end_which_key(window_id, hud);
         const show = () => {
             hud.delay_timer = undefined;
             hud.which_key_keys = keys;
+            hud.which_key_source = source;
             void changed(window_id);
         };
         if (panel_is_up) show();
@@ -146,7 +154,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         const hud = hud_of(window_id);
         const settings = await deps.read_settings();
         const keys = hud.which_key_keys;
-        const which_key = keys === null ? null : which_key_panel(await deps.read_root(), keys, settings);
+        const which_key = keys === null ? null : which_key_panel(await deps.read_root(hud.which_key_source), keys, settings);
         return { which_key, toasts: hud.toasts.list(), lifted: hud.lifted };
     }
 
@@ -169,8 +177,9 @@ export function create_hud_service(deps: HudDeps): HudService {
                 return sync_label(event.windowId);
             }
             if (event.command !== "pending" || !("keys" in event)) return;
-            await on_pending(event.windowId, event.keys);
+            await on_pending(event.windowId, event.keys, "main");
         },
+        on_body_pending: (window_id, keys) => on_pending(window_id, keys, "message"),
         async toast(window_id, text, is_error) {
             if (deps.overlay === undefined || window_id < 0) return false;
             const settings = await deps.read_settings();
@@ -198,6 +207,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             deps.timers.clear(hud.delay_timer);
             hud.delay_timer = undefined;
             hud.which_key_keys = [];
+            hud.which_key_source = "main";
             await changed(window_id);
         },
         close_which_key(except_window_id) {
