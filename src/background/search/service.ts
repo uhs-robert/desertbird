@@ -9,6 +9,8 @@ import type { ThreadViewApi } from "../handlers/thread_view.ts";
 import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
 import type { QuickFilter } from "../handlers/view.ts";
 import type { Timers } from "../hud/toasts.ts";
+import { create_folder_search } from "./folder_search.ts";
+import type { FolderSearchApi } from "./folder_search.ts";
 import type { SearchRegisterStore } from "./register.ts";
 
 /** How long the filter waits after a keystroke. A burst of typing filters once, and a slow folder is not asked for each letter. */
@@ -17,7 +19,7 @@ export const SEARCH_DEBOUNCE_MS = 150;
 // The most rows one `keys.viewRows` call returns.
 const BLOCK = 500;
 
-export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { keys?: Pick<KeysApi, "viewRows">; folderpane?: ThreadViewApi["folderpane"] };
+export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { keys?: Pick<KeysApi, "viewRows">; folderpane?: ThreadViewApi["folderpane"] } & Partial<Pick<FolderSearchApi, "folders">>;
 
 export interface SearchDeps {
     api: SearchApi;
@@ -29,7 +31,7 @@ export interface SearchDeps {
 
 /** The part of the service the commands use. */
 export interface SearchSessions {
-    /** Opens a live search in the window. Refuses when no message list is shown. */
+    /** Opens a live search in the window. A forward search opened with the folder pane focused searches folder names. Otherwise it refuses when no message list is shown. */
     start(window_id: number, direction: SearchDirection): Promise<void>;
     /** `n` (the same way as the register) and `N` (the other way). */
     step(window_id: number, relation: "same" | "opposite"): Promise<void>;
@@ -71,6 +73,7 @@ function in_order<T>(search: LiveSearch, change: () => Promise<T>): Promise<T> {
 
 export function create_search_service(deps: SearchDeps): SearchService {
     const live = new Map<number, LiveSearch>();
+    const folder_search = create_folder_search(deps as unknown as Parameters<typeof create_folder_search>[0]);
 
     const scope_of = (window_id: number) => ({ api: deps.api as unknown as ThreadViewApi, window_id, message_ids: [], count: 1 });
 
@@ -119,6 +122,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     return {
         async start(window_id, direction) {
+            if (direction === "forward" && (await folder_search.start(window_id))) return;
             const tab = await list_mail_tab(scope_of(window_id));
             viewer();
             await filters_ready();
@@ -126,6 +130,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
         },
 
         async type(window_id, text) {
+            if (folder_search.is_open(window_id)) return folder_search.type(window_id, text);
             const search = live.get(window_id);
             if (search === undefined) throw new RuntimeRefusal("The search is not open.");
             const mine = ++search.sequence;
@@ -147,6 +152,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
         },
 
         async commit(window_id, text) {
+            if (folder_search.is_open(window_id)) return folder_search.commit(window_id, text);
             const search = live.get(window_id);
             if (search === undefined) throw new RuntimeRefusal("The search ended before it could finish.");
             // A newer keystroke or the end of the search stops any filter still in flight.
@@ -167,7 +173,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
                 // No match keeps the search open, so the user can edit the text. Escape still restores the earlier filter.
                 if (count === 0) throw new RuntimeRefusal(describe_match(query, 0, 0, undefined));
-                await deps.register.write({ text: query, direction: search.direction });
+                await deps.register.write({ text: query, direction: search.direction, kind: "threads" });
                 await show_match(window_id, query, search.direction === "forward" ? 0 : count - 1, count, false);
                 // The search ends only now, so a failed write or selection leaves it open for another Enter.
                 leave_search(window_id, search);
@@ -175,6 +181,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
         },
 
         async cancel(window_id) {
+            if (folder_search.is_open(window_id)) return folder_search.cancel(window_id);
             const search = live.get(window_id);
             if (search === undefined) return;
             leave_search(window_id, search);
@@ -187,6 +194,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
         async step(window_id, relation) {
             const register = await deps.register.read();
             if (register === undefined) throw new RuntimeRefusal("No search to repeat. Press / first.");
+            if (register.kind === "folders") return folder_search.step(window_id, register, relation);
             const tab = await list_mail_tab(scope_of(window_id));
             // After Escape the list is no longer narrowed to the search, so `n` narrows it again.
             if (remembered_filter(tab.id).text?.text !== register.text) await apply_filter(deps.api.mailTabs, tab.id, with_text(remembered_filter(tab.id), register.text));

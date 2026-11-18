@@ -24,6 +24,8 @@ export interface MainWindow extends KeyTarget {
 export interface ExtensionContext {
     extension: {
         windowManager: { getWrapper(window: MainWindow): { id: number } | null };
+        /** Used by the folder pane verbs only. `get` is the folder of an account and path, as the `folders` API names them. */
+        folderManager?: { get(account_id: string, path: string): { URI: string } | null };
         /** Present with the `messagesRead` permission. `convert` builds the whole MailExtension header of a message, `skipFolder` drops its folder part. */
         messageManager: { convert(header: unknown, options: { skipFolder: true }): { id: number } | null };
     };

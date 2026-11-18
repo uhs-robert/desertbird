@@ -167,7 +167,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                       appCommand: async () => true,
                       appOpenPage: async () => {},
                   },
-        folderpane: options.experiment === false ? undefined : { fold: async () => false },
+        folderpane: options.experiment === false ? undefined : { fold: async () => false, focused: async () => false, select: async () => false },
         overlay:
             options.experiment === false
                 ? undefined

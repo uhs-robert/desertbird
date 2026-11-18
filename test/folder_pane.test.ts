@@ -9,6 +9,7 @@ interface FakeRow {
     collapsed: boolean;
     unselectable: boolean;
     parent: FakeRow | null;
+    getAttribute(name: string): string | null;
     classList: { contains(name: string): boolean };
     parentNode: { closest(selector: string): FakeRow | null };
 }
@@ -24,6 +25,7 @@ function folder_tree(shape: [string, unknown[]][]) {
                 collapsed: false,
                 unselectable,
                 parent,
+                getAttribute: (attribute) => (attribute === "data-uri" ? `uri:${name}` : null),
                 classList: { contains: (cls) => (cls === "children" ? row.children.length > 0 : cls === "collapsed" ? row.collapsed : cls === "unselectable" && row.unselectable) },
                 // `closest` here honors the two selectors the code uses: the nearest ancestor that is not the wrapper, and the nearest closed ancestor.
                 parentNode: {
@@ -47,7 +49,9 @@ function folder_tree(shape: [string, unknown[]][]) {
         set selectedIndex(index: number) { selected = visible()[index]!; },
         get selectedRow() { return selected; },
         getRowAtIndex: (index: number) => visible()[index],
-        querySelectorAll: (selector: string) => all.filter((row) => row.children.length > 0 && !(selector.includes(":not(.unselectable)") && row.unselectable) && (selector.includes(":not(.collapsed)") ? !row.collapsed : row.collapsed)),
+        focused: false,
+        focus() { tree.focused = true; },
+        querySelectorAll: (selector: string) => selector === "li" ? real() : all.filter((row) => row.children.length > 0 && !(selector.includes(":not(.unselectable)") && row.unselectable) && (selector.includes(":not(.collapsed)") ? !row.collapsed : row.collapsed)),
         expandRow(row: FakeRow) { row.collapsed = false; },
         collapseRow(row: FakeRow) {
             row.collapsed = true;
@@ -71,8 +75,8 @@ function window_with(tree: unknown, folder_focused: boolean) {
 function api_for(windows: Map<number, unknown>) {
     const platform = stub_platform([...windows.values()]);
     const ids = new Map([...windows].map(([id, window]) => [window, id]));
-    const api = get_folderpane_api({ extension: { windowManager: { getWrapper: (window: unknown) => ({ id: ids.get(window)! }) }, messageManager: { convert: () => null } } } as never);
-    return { fold: api.folderpane.fold, restore: platform.restore };
+    const api = get_folderpane_api({ extension: { windowManager: { getWrapper: (window: unknown) => ({ id: ids.get(window)! }) }, messageManager: { convert: () => null }, folderManager: { get: (_account: string, path: string) => (path === "/gone" ? null : { URI: `uri:${path.slice(1)}` }) } } } as never);
+    return { fold: api.folderpane.fold, focused: api.folderpane.focused, select: api.folderpane.select, restore: platform.restore };
 }
 
 const SHAPE: [string, unknown[]][] = [["Account", [["Inbox", [["Work", []], ["Home", []]]], ["Sent", []]]], ["Local", [["Trash", []]]]];
@@ -164,4 +168,34 @@ test("z M leaves an open subfolder inside a closed parent alone", async () => {
     await fold({ windowId: 1, open: false, extent: "all" });
     assert.deepEqual(closed.sort(), ["Account", "Local"]);
     restore();
+});
+
+test("select opens every closed parent, selects the row and focuses the tree", async () => {
+    const fake = folder_tree(SHAPE);
+    fake.row("Account").collapsed = true;
+    fake.row("Inbox").collapsed = true;
+    const { select, restore } = api_for(new Map([[1, window_with(fake.tree, false)]]));
+    assert.equal(await select({ windowId: 1, accountId: "a", path: "/Home" }), true);
+    assert.equal(fake.open_state(), "Account Inbox Work Home Sent Local Trash");
+    assert.equal(fake.selected(), "Home");
+    assert.equal(fake.tree.focused, true);
+    restore();
+});
+
+test("select answers false and changes nothing for a folder with no row", async () => {
+    const fake = folder_tree(SHAPE);
+    const { select, restore } = api_for(new Map([[1, window_with(fake.tree, false)]]));
+    assert.equal(await select({ windowId: 1, accountId: "a", path: "/gone" }), false);
+    assert.equal(await select({ windowId: 1, accountId: "a", path: "/Nowhere" }), false);
+    assert.equal(fake.tree.focused, false);
+    restore();
+});
+
+test("focused tells the folder pane from the other panes", async () => {
+    const fake = folder_tree(SHAPE);
+    for (const folder_focused of [true, false]) {
+        const { focused, restore } = api_for(new Map([[1, window_with(fake.tree, folder_focused)]]));
+        assert.equal(await focused({ windowId: 1 }), folder_focused);
+        restore();
+    }
 });

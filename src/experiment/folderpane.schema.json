@@ -19,6 +19,38 @@
             }
           }
         ]
+      },
+      {
+        "name": "focused",
+        "type": "function",
+        "async": true,
+        "description": "Answers whether the folder pane has the focus.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" }
+            }
+          }
+        ]
+      },
+      {
+        "name": "select",
+        "type": "function",
+        "async": true,
+        "description": "Selects the folder with this account and path in the folder tree, opens the closed folders above it and focuses the tree. Answers false when the tree has no row for it. It does not open the folder in the thread list.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" },
+              "accountId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+              "path": { "type": "string", "pattern": "^/" }
+            }
+          }
+        ]
       }
     ]
   }
