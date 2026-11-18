@@ -132,7 +132,7 @@ test("mark_unrepeatable tags the steps of move and snooze, and not delete or arc
 test("mark_unrepeatable tags the steps of the commands that keep the selection, and not delete or archive", async () => {
     const { mark_unrepeatable } = await import("../src/background/config/keymap.ts");
     const { KEEPS_SELECTION_IDS } = await import("../src/background/commands/index.ts");
-    assert.deepEqual([...KEEPS_SELECTION_IDS].sort(), ["msg.flag", "msg.junk", "msg.read", "msg.tag"]);
+    assert.deepEqual([...KEEPS_SELECTION_IDS].sort(), ["msg.copy", "msg.flag", "msg.junk", "msg.read", "msg.tag"]);
     const step = (id: string) => ({ invocation: { id } });
     const root = { kind: "branch", children: { s: { kind: "leaf", steps: [step("msg.flag")] }, x: { kind: "leaf", steps: [step("msg.archive")] } } };
     mark_unrepeatable(root);

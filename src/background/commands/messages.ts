@@ -53,6 +53,7 @@ export const messages: CommandGroup = {
         },
         "msg.copy": {
             bridge: false,
+            keeps_selection: true,
             repeatable: false,
             runs_in: "background",
             name: "copy",
