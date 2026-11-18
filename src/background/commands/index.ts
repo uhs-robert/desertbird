@@ -64,35 +64,34 @@ export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, mail_key
 // Closes the tab on chords that must copy and cut in a message body, so no user key may carry it there.
 const NEVER_REBOUND_IN_MESSAGE: ReadonlySet<string> = new Set(["tab.close_mail"]);
 
+const invocations_of = (bindings: NonNullable<KeymapConfig["normal"]>) => Object.values(bindings).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []));
+
 // The commands a user key may run in a message: those of the message groups and the reading keys. A binding of any other command (a list motion, `repeat.last`) stays in the mail tab.
 const REBINDABLE_IN_MESSAGE: ReadonlySet<string> = new Set([
     ...MESSAGE_MAIL_GROUPS.flatMap((group) => Object.keys(group.commands)),
-    ...Object.values(MESSAGE_KEYMAP.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : [])).map((invocation) => invocation.id),
+    ...invocations_of(MESSAGE_KEYMAP.normal ?? {}).map((invocation) => invocation.id),
 ].filter((id) => !NEVER_REBOUND_IN_MESSAGE.has(id)));
 
-// A user key with the same command and args as a list-only default (`,,` is `cmdline.open` with `sort `) needs the list as well.
-const LIST_ONLY_BINDINGS: ReadonlySet<string> = new Set(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => LIST_ONLY_KEYS.has(keys)).map(([, binding]) => JSON.stringify(binding)));
+const LIST_ONLY_DEFAULTS = invocations_of(Object.fromEntries(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => LIST_ONLY_KEYS.has(keys))));
 
-/** The message keys with the user's bindings of message commands on top. A `null` removes the key only where the message keys have it. */
+// A user key with the same command and args as a list-only default (`,,` is `cmdline.open` with `sort `) needs the list as well. Args compare with sorted keys, so the order in a stored binding does not matter.
+const same_binding_key = (invocation: { id: string; args?: object }) => JSON.stringify([invocation.id, Object.entries(invocation.args ?? {}).sort(([left], [right]) => (left < right ? -1 : 1))]);
+const LIST_ONLY_BINDINGS: ReadonlySet<string> = new Set(LIST_ONLY_DEFAULTS.map(same_binding_key));
+
+/** The message keys with the user's bindings of message commands on top. A `null` goes through, and the compiler removes the key it names, however spelled. */
 export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig {
-    const normal = { ...MESSAGE_KEYMAP.normal };
-    for (const [keys, binding] of Object.entries(user ?? {})) {
-        if (binding === null) delete normal[keys];
-        else if (!Array.isArray(binding) && REBINDABLE_IN_MESSAGE.has(binding.id) && !LIST_ONLY_BINDINGS.has(JSON.stringify(binding))) normal[keys] = binding;
-    }
-    return { normal };
+    const kept = Object.entries(user ?? {}).filter(([, binding]) => binding === null || (!Array.isArray(binding) && REBINDABLE_IN_MESSAGE.has(binding.id) && !LIST_ONLY_BINDINGS.has(same_binding_key(binding))));
+    return { normal: { ...MESSAGE_KEYMAP.normal, ...Object.fromEntries(kept) } };
 }
 
+// The message keys are the default layer, so a user key that extends a message key (`gfz` over `gf`) drops that key as it does in the mail tab.
 export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
-    return compile_keymap(message_keymap(user), {}, resolve_command);
+    return compile_keymap(message_keymap(user), {}, resolve_command, undefined, MESSAGE_KEYMAP);
 }
-
-const invocations_of = (keymap: KeymapConfig) => Object.values(keymap.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []));
 
 /** The ids of the background commands a message key may run, by default or by a user key. The background runs a request of the body script only for these. A command bound only to a list key (`mR`) stays out, since it needs the list. */
 export function message_background_commands(): Set<string> {
-    const in_message = new Set(invocations_of(MESSAGE_KEYMAP).map((invocation) => invocation.id));
-    const list_only = invocations_of({ normal: Object.fromEntries(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => LIST_ONLY_KEYS.has(keys))) }).map((invocation) => invocation.id);
-    const needs_list = new Set(list_only.filter((id) => !in_message.has(id)));
+    const in_message = new Set(invocations_of(MESSAGE_KEYMAP.normal ?? {}).map((invocation) => invocation.id));
+    const needs_list = new Set(LIST_ONLY_DEFAULTS.map((invocation) => invocation.id).filter((id) => !in_message.has(id)));
     return new Set([...REBINDABLE_IN_MESSAGE].filter((id) => !needs_list.has(id) && registry.get(id)?.runs_in === "background"));
 }
