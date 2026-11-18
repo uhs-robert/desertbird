@@ -1,7 +1,7 @@
 /* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. The fallbacks hold until the background has published one. Muted text mixes the text color into the surface, so it stays readable on every theme. */
 :root {
     color-scheme: light dark;
-    --surface: var(--desertfox-bg-mantle, Canvas);
+    --surface: var(--desertfox-bg-core, Canvas);
     --selected: var(--desertfox-selection, color-mix(in srgb, CanvasText 15%, Canvas));
     --text: var(--desertfox-fg-core, CanvasText);
     --muted: color-mix(in srgb, var(--text) 72%, var(--surface));
