@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "../src/overlay/line_edit.ts";
+import { accepts_single_row, apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -92,4 +92,11 @@ test("settle_latest waits for a refresh started while it waited", async () => {
     assert.deepEqual(order, ["first", "second"]);
     const failed = Promise.reject(new Error("failed"));
     await settle_latest(() => failed);
+});
+
+test("a single row is accepted only while no row is selected", () => {
+    assert.equal(accepts_single_row(1, -1), true);
+    assert.equal(accepts_single_row(1, 0), false);
+    assert.equal(accepts_single_row(2, -1), false);
+    assert.equal(accepts_single_row(0, -1), false);
 });

@@ -19,11 +19,16 @@ export function move_highlight(current: number, step: 1 | -1, row_count: number)
     return Math.min(row_count - 1, Math.max(0, current + step));
 }
 
-/** The row C-n (step 1) or C-p (step -1) previews next. The saved list wraps, and from no row C-n starts at the first and C-p at the last. */
+/** The row a cycle key (Tab, C-n, A-Down for step 1, S-Tab, C-p, A-Up for step -1) previews next. The saved list wraps, and from no row C-n starts at the first and C-p at the last. */
 export function cycle_index(current: number, step: 1 | -1, row_count: number): number {
     if (row_count === 0) return -1;
     if (current < 0) return step === 1 ? 0 : row_count - 1;
     return (current + step + row_count) % row_count;
+}
+
+/** True when a cycle key puts the only row in the line for good: one row and none selected yet. With the row already selected, the key only previews it again. */
+export function accepts_single_row(row_count: number, highlighted: number): boolean {
+    return row_count === 1 && highlighted < 0;
 }
 
 /** The stored history as a list of lines. A failed read or data of another shape gives an empty list, so a broken store never stops the line. */
@@ -70,7 +75,7 @@ export interface Answered {
     highlight_first?: boolean | undefined;
 }
 
-/** The text Enter runs. Enter takes the row the user moved to, else the first row when the completion asks for that, in place of the typed word. An answer for older text or another caret is ignored, because its span no longer fits the line. A row C-n or C-p already put in the line is in the text. */
+/** The text Enter runs. Enter takes the row the user moved to, else the first row when the completion asks for that, in place of the typed word. An answer for older text or another caret is ignored, because its span no longer fits the line. A row a row key already put in the line is in the text. */
 export function enter_text(text: string, caret: number, answer: Answered, highlighted: number, previewed: boolean): string {
     if (previewed || answer.for_text !== text || answer.for_caret !== caret) return text;
     const row = answer.rows[shown_highlight(highlighted, answer.rows.length, answer.highlight_first)];

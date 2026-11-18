@@ -5,7 +5,7 @@ import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts"
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
-import { apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "./line_edit.ts";
+import { accepts_single_row, apply_pick, arrow_target, cycle_index, enter_text, move_highlight, name_parts, read_history, settle_latest, shown_highlight } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
@@ -41,7 +41,7 @@ let running = false;
 // A copy of the stored history, oldest first. The background writes the list when a line runs, and the copy refills on `storage.onChanged`.
 let history: string[] = [];
 let history_cursor: HistoryCursor = create_history_cursor(history);
-// Up and Down walk the history until the user types or uses a completion key. After that they move the highlight, as in DesertFox.
+// Up and Down walk the history until the user types or uses a completion key. After that they put the next or previous row in the text, as in DesertFox.
 let walking_history = true;
 
 const send = <Answer>(message: CmdlineRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
@@ -130,20 +130,29 @@ function preview_at(index: number): void {
     draw_rows();
 }
 
+// The rows of an older text hold a span that no longer fits the line, so a row key waits for the answer to the text in the line, as DesertFox holds its row keys while the list loads. A previewed line keeps its saved rows.
+async function rows_for_line(): Promise<void> {
+    if (preview_base === null && completion_for.text !== input.value) await settle_latest(() => latest_refresh);
+}
+
 // Tab, C-n and A-Down step next, S-Tab, C-p and A-Up step back, and both wrap. A single match goes into the line at once and the rows are ranked for the new text.
-function cycle_rows(step: 1 | -1): void {
+async function cycle_rows(step: 1 | -1): Promise<void> {
     walking_history = false;
+    await rows_for_line();
     const row_count = completion.rows.length;
-    if (row_count === 0) return;
+    if (closing || row_count === 0) return;
+    const accepts = accepts_single_row(row_count, highlighted);
     preview_at(cycle_index(highlighted, step, row_count));
-    if (row_count === 1) {
+    if (accepts) {
         preview_base = null;
         refresh_completion().catch(report_failure);
     }
 }
 
 // Up and Down stop at the ends, as in DesertFox, and put the row in the line like the cycle keys.
-function step_rows(step: 1 | -1): void {
+async function step_rows(step: 1 | -1): Promise<void> {
+    await rows_for_line();
+    if (closing) return;
     const target = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
     if (target >= 0) preview_at(target);
 }
@@ -192,14 +201,14 @@ window.addEventListener(
         } else if (!search_direction && (event.key === "Tab" || (event.ctrlKey && (event.key === "n" || event.key === "p")) || (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")))) {
             event.preventDefault();
             const forward = event.key === "Tab" ? !event.shiftKey : event.key === "n" || event.key === "ArrowDown";
-            cycle_rows(forward ? 1 : -1);
+            cycle_rows(forward ? 1 : -1).catch(report_failure);
         } else if (event.key === "Tab") {
             event.preventDefault();
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             const step = event.key === "ArrowDown" ? 1 : -1;
             if (search_direction || arrow_target(walking_history, completion.rows.length) === "history") step_history(step);
-            else step_rows(step);
+            else step_rows(step).catch(report_failure);
         } else if (search_direction && event.ctrlKey && (event.key === "n" || event.key === "p")) {
             event.preventDefault();
             step_history(event.key === "n" ? 1 : -1);
