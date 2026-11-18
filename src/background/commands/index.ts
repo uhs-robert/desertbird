@@ -81,13 +81,13 @@ export const resolve_command: ResolveCommand = (command_id) => {
 
 const key_tokens = (sequence: string): string[] => parse_sequence(sequence).tokens ?? [];
 
-/** The default bindings that wait for a key press (`M`, `'`) and that a user key extends (`Ma`). The compiler would drop such a default key and its capture row with it. */
+/** The default bindings that wait for a key press (`M`, `'`) and that a user key extends (`Ma`). A stored `null` unbinds and extends nothing. The compiler would drop such a default key and its capture row with it. */
 function extended_capture_defaults(keymap: KeymapConfig, default_layer: KeymapConfig | undefined): [sequence: string, binding: KeyBinding][] {
     const bindings = Object.entries(keymap.normal ?? {});
     return Object.entries(default_layer?.normal ?? {}).flatMap(([sequence, binding]) => {
         const waits = binding !== null && !Array.isArray(binding) && keymap.normal?.[sequence] === binding && captured_key_param({ params: registry.get(binding.id)?.params ?? [] }, binding.args) !== undefined;
         const tokens = key_tokens(sequence);
-        const extended = bindings.some(([other]) => key_tokens(other).length > tokens.length && tokens.every((token, index) => key_tokens(other)[index] === token));
+        const extended = bindings.some(([other, written]) => written !== null && key_tokens(other).length > tokens.length && tokens.every((token, index) => key_tokens(other)[index] === token));
         return waits && extended ? [[sequence, binding]] : [];
     });
 }
