@@ -521,7 +521,7 @@ test("a tag undo keeps a tag added by hand since", async () => {
     assert.deepEqual(mail.message("a@x")!.tags, ["home"]);
 });
 
-test("a tag undo of a message with no Message-ID warns and records nothing for it", async () => {
+test("m t on a message with no Message-ID warns and records nothing for it", async () => {
     const mail = mail_store([{ id: 1, folder: "inbox" }, inbox("b@x", 2)]);
     await mail.run("msg.tag", [1, 2], { tag: "work" });
     assert.match(mail.notices.at(-1) ?? "", /^u cannot undo this for 1 of 2 messages/);
@@ -572,4 +572,19 @@ test("a version 1 record keeps its entries and is re-stamped, a version 2 record
     assert.deepEqual(old?.entries.map((entry) => entry.id), ["m", "s"]);
     assert.deepEqual(migrate_undo_record({ record_version: 2, entries: [moved, state, tag, { id: "bad", kind: "tag", items: [{ header_message_id: "a" }] }] })?.entries.map((entry) => entry.id), ["m", "s", "t"]);
     assert.equal(migrate_undo_record({ record_version: 3, entries: [tag] }), undefined);
+});
+
+test("m t and u at once: u waits for the tag entry, so it undoes the tag and not the older delete", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)]);
+    await mail.run("msg.delete", [1]);
+    await Promise.all([mail.run("msg.tag", [2], { tag: "work" }), mail.run("msg.undo")]);
+    assert.deepEqual(mail.places(), ["a@x@trash", "b@x@inbox"]);
+    assert.deepEqual(mail.message("b@x")!.tags, []);
+});
+
+test("a tag undo picks the copy that still carries the change among two copies of one Message-ID", async () => {
+    const mail = mail_store([inbox("a@x", 1, { tags: ["home"] }), inbox("a@x", 2)]);
+    await mail.run("msg.tag", [2], { tag: "work" });
+    await mail.run("msg.undo");
+    assert.deepEqual([mail.message_by_id(1)!.tags, mail.message_by_id(2)!.tags], [["home"], []]);
 });
