@@ -20,4 +20,5 @@ The which-key panel and the toasts of each main window, and the mode label of it
 - Toasts show above the command line box while it is open: the command line is mounted through `lifting_toasts`, which tells the service, and the page moves its toasts up (`lifted` in the state). A toast counts as shown only when the page mounted. Otherwise `toast` answers false and `notify.ts` sends a system notification.
 - A keymap reinstall closes the panel, because a new matcher forgets the sequence without a report.
 - State is in memory only (an exception recorded in `AGENTS.md`): a few seconds of interface state per window, like the command line session. The page keeps none, and the background restart drops all of it.
+- A bridge confirm prompt (`../bridge/confirm.ts`) borrows the command line surface and mounts it through `lifting_toasts`, so toasts move above it as above the command line.
 - The hud page and the command line page are separate surfaces, so a toast or the panel never replaces the command line. The command line box sits above the hud, and a key that opens the command line ends the pending sequence first, which removes the panel.

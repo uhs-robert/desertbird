@@ -40,6 +40,7 @@ import { create_bridge_run, list_bridge_commands } from "./bridge/run.ts";
 import { BRIDGE_HOST_NAME, create_bridge_port } from "./bridge/port.ts";
 import type { NativePort } from "./bridge/port.ts";
 import { create_bridge_reads } from "./bridge/reads.ts";
+import { create_confirm_service } from "./bridge/confirm.ts";
 import type { ReadsApi } from "./bridge/reads.ts";
 import { create_bridge_drafts } from "./bridge/drafts.ts";
 import type { DraftsApi } from "./bridge/drafts.ts";
@@ -82,7 +83,8 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
     messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"] & FollowupOpenApi["messageDisplay"];
     runtime: {
-        onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number } }) => Promise<unknown> | undefined): void };
+        onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number }; url?: string }) => Promise<unknown> | undefined): void };
+        getURL(path: string): string;
         sendMessage(message: HudChanged): Promise<unknown>;
         connectNative(application: string): NativePort;
     };
@@ -195,7 +197,19 @@ const hud = create_hud_service({
 });
 
 // The command line and the commands that open it mount through this, so a toast sits above the command line box while it is open.
-const command_line_overlay = messenger.overlay && lifting_toasts(messenger.overlay, hud);
+const command_line_mount = messenger.overlay && lifting_toasts(messenger.overlay, hud);
+
+// The y or n prompt of a bridge write. It borrows the command line surface, so every other command line mount goes through `yielding_overlay`, which ends a prompt in that window as a no first. Its one pending request lives in memory only.
+const confirm = create_confirm_service({
+    overlay: command_line_mount,
+    target_window: () => last_focused_main_window(),
+    end_command_line: (window_id) => cmdline.end(window_id),
+    page_url: () => messenger.runtime.getURL("overlay/cmdline.html"),
+    make_token: () => crypto.randomUUID(),
+    timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
+    now_ms: () => Date.now(),
+});
+const command_line_overlay = command_line_mount && confirm.yielding_overlay(command_line_mount);
 
 // Session storage survives a restart of this page and not of the application, like the window state it copies. It is absent on a build without it, and the memory copy works alone then.
 keep_filters(messenger.storage.session);
@@ -251,9 +265,10 @@ const bridge = create_bridge_port({
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: messenger.hints });
 
-messenger.runtime.onMessage.addListener((message, sender) => cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
+// The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
+messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
-messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? (cmdline.end(windowId), hud.set_lifted(windowId, false)) : hud.forget(windowId)));
+messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? (confirm.surface_gone(windowId), cmdline.end(windowId), hud.set_lifted(windowId, false)) : hud.forget(windowId)));
 
 start_jump_history(messenger);
 
@@ -277,7 +292,10 @@ const track_window = (window: { id?: number; type?: string }) => {
     if (window.id !== undefined && (window.type === undefined || window.type === "normal")) hud.track(window.id).catch(console.error);
 };
 messenger.windows.onCreated.addListener(track_window);
-messenger.windows.onRemoved.addListener((window_id) => hud.forget(window_id));
+messenger.windows.onRemoved.addListener((window_id) => {
+    confirm.surface_gone(window_id);
+    hud.forget(window_id);
+});
 messenger.windows.getAll({ windowTypes: ["normal"] }).then((open) => open.forEach(track_window), console.error);
 
 messenger.storage.onChanged.addListener((changes, area) => {
