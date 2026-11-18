@@ -24,6 +24,7 @@ function bridge_under_test(options: { setting?: boolean; run?: (text: string) =>
         },
         list_commands: () => [{ id: "motion.left", label: "Close thread or go to its root" }],
         current_mode: async () => state.mode,
+        read: async (verb, request) => ({ ok: true, verb_read: verb, id: request["id"] }),
     });
     const advance = (ms: number) => {
         clock_ms += ms;
@@ -242,4 +243,14 @@ test("turning the setting on again connects at once", async () => {
     await bridge.settings_changed();
     assert.equal(native.ports.length, 2);
     assert.equal(native.ports[0]!.disconnected, true);
+});
+
+test("a read frame goes to the reads with its fields and comes back in the reply envelope", async () => {
+    const { bridge, last, ready } = bridge_under_test();
+    await bridge.start();
+    await ready();
+    last().posted.length = 0;
+    last().host_says({ verb: "message", request_id: 4, id: 12 });
+    await settle();
+    assert.deepEqual(last().posted, [{ ok: true, verb_read: "message", id: 12, verb: "reply", request_id: 4 }]);
 });

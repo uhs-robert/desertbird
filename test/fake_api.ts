@@ -233,3 +233,74 @@ export function fake_storage(data: Record<string, unknown> = {}, write_delay_ms 
         },
     };
 }
+
+/** A fake of the API the bridge reads use. `calls` holds one line per call. Folder ids not in `folders` and message ids not in `headers` throw, as Thunderbird does. */
+export function fake_reads_api(options: {
+    folders?: { id: string; name?: string; path: string; accountId: string; isRoot?: boolean; unread?: number; total?: number }[];
+    accounts?: { id: string; name?: string }[];
+    headers?: { id: number; folder: string; author?: string; subject?: string; date?: Date; recipients?: string[]; read?: boolean; flagged?: boolean }[];
+    full?: Record<number, object>;
+    attachments?: Record<number, { name?: string; partName: string; size?: number; contentType?: string }[]>;
+    page_size?: number;
+} = {}) {
+    const calls: string[] = [];
+    const folders = options.folders ?? [];
+    const headers = options.headers ?? [];
+    const pages = new Map<string, (typeof headers)[]>();
+    let next_list = 1;
+    const page_of = (rows: typeof headers) => {
+        const size = options.page_size ?? 100;
+        const chunks = Array.from({ length: Math.ceil(rows.length / size) }, (_, index) => rows.slice(index * size, (index + 1) * size));
+        const first = chunks.shift() ?? [];
+        if (chunks.length === 0) return { id: null, messages: first };
+        const id = `list-${next_list++}`;
+        pages.set(id, chunks);
+        return { id, messages: first };
+    };
+    const header_of = (id: number) => {
+        const header = headers.find((row) => row.id === id);
+        if (header === undefined) throw new Error(`Message not found: ${id}.`);
+        return header;
+    };
+    const api = {
+        accounts: { list: async () => (calls.push("accounts.list"), options.accounts ?? [{ id: "a1", name: "Work" }]) },
+        folders: {
+            query: async (query: object) => (calls.push(`folders.query ${JSON.stringify(query)}`), folders),
+            get: async (folder_id: string) => {
+                calls.push(`folders.get ${folder_id}`);
+                const folder = folders.find((row) => row.id === folder_id);
+                if (folder === undefined) throw new Error(`Folder not found: ${folder_id}`);
+                return folder;
+            },
+            getFolderInfo: async (folder_id: string) => {
+                const folder = folders.find((row) => row.id === folder_id);
+                return { unreadMessageCount: folder?.unread ?? 0, totalMessageCount: folder?.total ?? 0 };
+            },
+        },
+        messages: {
+            get: async (id: number) => (calls.push(`messages.get ${id}`), header_of(id)),
+            getFull: async (id: number, opts: object) => {
+                calls.push(`messages.getFull ${id} ${JSON.stringify(opts)}`);
+                header_of(id);
+                return options.full?.[id] ?? { contentType: "message/rfc822", parts: [] };
+            },
+            query: async (query: { folderId: string; unread?: true }) => {
+                calls.push(`messages.query ${JSON.stringify(query)}`);
+                return page_of(headers.filter((row) => row.folder === query.folderId && (query.unread !== true || row.read !== true)));
+            },
+            continueList: async (list_id: string) => {
+                calls.push(`messages.continueList ${list_id}`);
+                const rest = pages.get(list_id) ?? [];
+                const next = rest.shift() ?? [];
+                if (rest.length === 0) {
+                    pages.delete(list_id);
+                    return { id: null, messages: next };
+                }
+                return { id: list_id, messages: next };
+            },
+            listAttachments: async (id: number) => (calls.push(`messages.listAttachments ${id}`), header_of(id), options.attachments?.[id] ?? []),
+        },
+        messengerUtilities: { convertToPlainText: async (html: string) => (calls.push("convertToPlainText"), html.replace(/<[^>]*>/g, "")) },
+    };
+    return { api, calls };
+}
