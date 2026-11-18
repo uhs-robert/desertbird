@@ -1,5 +1,6 @@
 // The hud page: the which-key panel and the toasts. It keeps no state. Each time the background says the hud of this window changed, it asks for the state and draws it.
 
+import { WHICH_KEY_ROOT_TITLE, WHICH_KEY_TITLE_SEPARATOR } from "../shared/protocol.ts";
 import type { HudChanged, HudRequest, HudState } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
 
@@ -42,7 +43,7 @@ function draw_which_key(panel: HudState["which_key"]): void {
     drawn_panel = panel;
     which_key_element.hidden = panel === null;
     if (panel === null) return;
-    const is_root = panel.title === "";
+    const is_root = panel.title.length === 1 && panel.title[0] === WHICH_KEY_ROOT_TITLE;
     which_key_element.className = is_root ? `${panel.border} root` : panel.border;
     const shown_rows = is_root ? panel.rows : panel.rows.slice(0, MAX_ROWS);
     const rows = make("div", "rows");
@@ -52,7 +53,7 @@ function draw_which_key(panel: HudState["which_key"]): void {
         rows.append(line);
     }
     const hidden_count = panel.rows.length - shown_rows.length;
-    which_key_element.replaceChildren(make("div", "title", is_root ? "keys" : `after ${panel.title}`), rows, ...(hidden_count > 0 ? [make("div", "row group", `... ${hidden_count} more`)] : []));
+    which_key_element.replaceChildren(make("div", "title", panel.title.join(WHICH_KEY_TITLE_SEPARATOR)), rows, ...(hidden_count > 0 ? [make("div", "row group", `... ${hidden_count} more`)] : []));
     if (is_root) fit_root_rows(rows, shown_rows.length);
 }
 

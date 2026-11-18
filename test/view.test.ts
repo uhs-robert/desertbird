@@ -107,13 +107,16 @@ test("toggle_starred sets the starred filter and clears it when it already shows
     assert.deepEqual(calls.filter((call) => call.startsWith("mailTabs.setQuickFilter")), ['mailTabs.setQuickFilter 77 {"flagged":true}', "mailTabs.setQuickFilter 77 {}"]);
 });
 
-test("F f and , , open the filter and sort pickers, F s toggles starred, F A is the attachment filter, and C-x C-c C-h close the tab", () => {
+test("F f and , , open the filter and sort pickers, F s toggles starred, F a is the attachment filter, F r resets it, and C-x C-c close the tab", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(normal["Ff"], { id: "cmdline.open", args: { text: "filter " } });
-    assert.deepEqual(normal[",,"], { id: "cmdline.open", args: { text: "sort " } });
-    assert.deepEqual(normal["Fs"], { id: "filter.set", args: { state: "toggle_starred" } });
-    assert.deepEqual(normal["FA"], { id: "filter.set", args: { state: "attachment" } });
-    for (const key of ["<C-x>", "<C-c>", "<C-h>"]) assert.deepEqual(normal[key], { id: "tab.close_mail" }, key);
+    assert.deepEqual(normal["Ff"], { id: "cmdline.open", args: { text: "filter " }, label: "By text" });
+    assert.deepEqual(normal[",,"], { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" });
+    assert.deepEqual(normal["Fs"], { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" });
+    assert.deepEqual(normal["Fa"], { id: "filter.set", args: { state: "attachment" }, label: "Attachments" });
+    assert.deepEqual(normal["Fr"], { id: "filter.set", args: { state: "all" }, label: "Reset" });
+    assert.equal(normal["FA"], undefined);
+    for (const key of ["<C-x>", "<C-c>"]) assert.deepEqual(normal[key], { id: "tab.close_mail", label: "Close tab" }, key);
+    assert.equal(normal["<C-h>"], undefined);
 });
 
 test("the view commands are bridge safe and only the fixed states, panes and sorts have keys", () => {
@@ -138,7 +141,7 @@ test("the sort keys name a column and the default order of that column", () => {
         ",r": ["received", "descending"],
         ",p": ["priority", "ascending"],
     };
-    for (const [keys, [by, order]] of Object.entries(planned)) assert.deepEqual(normal[keys], { id: "sort.set", args: { by, order } }, keys);
+    for (const [keys, [by, order]] of Object.entries(planned)) assert.deepEqual({ ...(normal[keys] as object), label: undefined }, { id: "sort.set", args: { by, order }, label: undefined }, keys);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
 
@@ -275,7 +278,7 @@ test("tab_kind: the mail tab is 0, the tabs with a readable document 1, every ot
 
 test("the close chords of the mail tab are in the mail keymap and not in the message keymap", async () => {
     const { MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
-    for (const key of ["<C-x>", "<C-c>", "<C-h>", "Ff", ",,"]) {
+    for (const key of ["<C-x>", "<C-c>", "Ff", ",,", ";;"]) {
         assert.ok(DEFAULT_KEYMAP.normal?.[key], key);
         assert.equal(MESSAGE_KEYMAP.normal?.[key], undefined, key);
     }

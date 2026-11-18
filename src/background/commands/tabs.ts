@@ -22,12 +22,11 @@ export const tabs: CommandGroup = {
         "tab.close_mail": { bridge: false, runs_in: "background", label: "Close tab (mail tab keys)", intent: "Close the current tab or message window. Its default keys are chords that run in the mail tab only, so copy and cut still work in message and web page tabs.", needs: ["keys.paneFocus"], run: scoped<TabsApi>(close_tab) },
     },
     normal_keys: {
-        "<C-j>": { id: "tab.next" },
-        "<C-k>": { id: "tab.prev" },
-        q: { id: "tab.close" },
-        "<C-x>": { id: "tab.close_mail" },
-        "<C-c>": { id: "tab.close_mail" },
-        "<C-h>": { id: "tab.close_mail" },
-        "<A-q>": { id: "tab.close" },
+        "<C-j>": { id: "tab.next", label: "Next tab" },
+        "<C-k>": { id: "tab.prev", label: "Previous tab" },
+        q: { id: "tab.close", label: "Close tab" },
+        "<C-x>": { id: "tab.close_mail", label: "Close tab" },
+        "<C-c>": { id: "tab.close_mail", label: "Close tab" },
+        "<A-q>": { id: "tab.close", label: "Close tab" },
     },
 };

@@ -15,5 +15,5 @@ export const unsubscribe: CommandGroup = {
             run: scoped<UnsubscribeApi>((scope, args) => unsubscribe_handler(scope, args)),
         },
     },
-    normal_keys: { gu: { id: "msg.unsubscribe" } },
+    normal_keys: { gu: { id: "msg.unsubscribe", label: "Unsubscribe" } },
 };

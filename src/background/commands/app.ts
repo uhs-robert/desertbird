@@ -8,9 +8,15 @@ import type { CommandGroup } from "./define.ts";
 // `msg.undo` reverses DesertBird's own changes from its undo log, never Thunderbird's: Thunderbird records no step for an API change, and mixing the two stacks would undo in the wrong order. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
 // Each names a pane, not a direction: `<A-h>` and `L` both reach the thread list from any pane. `pane.left` and `pane.right` are the relative pair, unbound by default.
 const PANE_CHORDS = {
-    "<A-h>": { id: "pane.focus", args: { pane: "threads" } },
-    L: { id: "pane.focus", args: { pane: "threads" } },
-    "<A-l>": { id: "pane.focus", args: { pane: "message" } },
+    "<A-h>": { id: "pane.focus", args: { pane: "threads" }, label: "Focus thread list" },
+    L: { id: "pane.focus", args: { pane: "threads" }, label: "Focus thread list" },
+    "<A-l>": { id: "pane.focus", args: { pane: "message" }, label: "Focus message pane" },
+};
+
+// Undo and the conversation view act on the displayed message as well as on the list, so the message tree binds them too.
+const MESSAGE_ACTIONS = {
+    u: { id: "msg.undo" },
+    gC: { id: "thread.open_conversation", label: "Open conversation" },
 };
 
 export const app: CommandGroup = {
@@ -68,21 +74,21 @@ export const app: CommandGroup = {
         },
     },
     normal_keys: {
-        u: { id: "msg.undo" },
-        gC: { id: "thread.open_conversation" },
-        gx: { id: "app.open_page", args: { page: "addons" } },
-        gT: { id: "app.open_page", args: { page: "themes" } },
-        gc: { id: "app.open_page", args: { page: "config" } },
-        gf: { id: "pane.focus", args: { pane: "folders" } },
-        ge: { id: "pane.focus", args: { pane: "threads" } },
-        gm: { id: "pane.focus", args: { pane: "message" } },
+        ...MESSAGE_ACTIONS,
+        gpa: { id: "app.open_page", args: { page: "addons" }, label: "Add-ons" },
+        gpt: { id: "app.open_page", args: { page: "themes" }, label: "Themes" },
+        gpc: { id: "app.open_page", args: { page: "config" }, label: "Config" },
+        gf: { id: "pane.focus", args: { pane: "folders" }, label: "Folder pane" },
+        ge: { id: "pane.focus", args: { pane: "threads" }, label: "Thread list" },
+        gm: { id: "pane.focus", args: { pane: "message" }, label: "Message pane" },
         ...PANE_CHORDS,
     },
     // The body script takes every key while the message pane has the focus, so the way out of it is bound there too.
     message_keys: {
-        H: { id: "pane.focus", args: { pane: "folders" } },
-        gf: { id: "pane.focus", args: { pane: "folders" } },
-        ge: { id: "pane.focus", args: { pane: "threads" } },
+        ...MESSAGE_ACTIONS,
+        H: { id: "pane.focus", args: { pane: "folders" }, label: "Focus folder pane" },
+        gf: { id: "pane.focus", args: { pane: "folders" }, label: "Folder pane" },
+        ge: { id: "pane.focus", args: { pane: "threads" }, label: "Thread list" },
         ...PANE_CHORDS,
     },
 };

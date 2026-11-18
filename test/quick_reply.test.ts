@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
-import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
+import { create_body_requests } from "../src/background/body_requests.ts";
+import type { BodyRequestApi } from "../src/background/body_requests.ts";
+import { DEFAULT_KEYMAP, message_background_commands, registry } from "../src/background/commands/index.ts";
 import { insert_into_plain } from "../src/background/handlers/quick_reply.ts";
 import { create_quick_reply_store, migrate_quick_reply_record, QUICK_REPLY_STORAGE_KEY } from "../src/background/quick_reply_store.ts";
 import { create_router } from "../src/background/router.ts";
@@ -12,7 +14,7 @@ const MESSAGES = [{ id: 5, headerMessageId: "m5", folder: { accountId: "a1" } }]
 
 test("g r 1 to g r 9 bind msg.reply_with with the slot", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    for (let slot = 1; slot <= 9; slot++) assert.deepEqual(normal[`gr${slot}`], { id: "msg.reply_with", args: { slot } });
+    for (let slot = 1; slot <= 9; slot++) assert.deepEqual(normal[`gr${slot}`], { id: "msg.reply_with", args: { slot }, label: `Slot ${slot}` });
 });
 
 test("the slot is checked by the param schema", () => {
@@ -57,4 +59,18 @@ test("the store keeps nine slots, pads short lists and drops bad entries", async
     assert.deepEqual(migrate_quick_reply_record({ record_version: 1, slots: ["a", 3] })?.slots.slice(0, 3), ["a", "", ""]);
     assert.equal(migrate_quick_reply_record({ record_version: 2, slots: [] }), undefined);
     assert.equal(migrate_quick_reply_record(undefined), undefined);
+});
+
+test("g r 1 pressed in a message tab replies to the displayed message and not to the mail tab selection", async () => {
+    const { api, calls } = fake_api({ messages: [...MESSAGES, { id: 9, headerMessageId: "m9", folder: { accountId: "a1" } }], quick_replies: ["Thanks."] });
+    const router = create_router(registry, api);
+    // The mail tab selects message 5. The message tab shows message 9, and the body request reads its own tab.
+    const handle = create_body_requests({
+        registry,
+        api: { messageDisplay: { getDisplayedMessages: async (tab_id: number) => (tab_id === 40 ? [{ id: 9 }] : [{ id: 5 }]) }, windows: { get: async () => ({ type: "normal" }) }, notifications: api.notifications } as unknown as BodyRequestApi,
+        allowed: message_background_commands(),
+        run: (request) => router.run(request),
+    });
+    await handle({ type: "body.invoke", command: "msg.reply_with", args: { slot: 1 }, count: 1 }, { tab: { id: 40, windowId: 1 } });
+    assert.deepEqual(calls.filter((call) => call.startsWith("compose.beginReply")), ["compose.beginReply 9 replyToSender i1"]);
 });

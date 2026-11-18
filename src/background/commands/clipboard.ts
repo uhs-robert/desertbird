@@ -3,7 +3,7 @@ import type { ClipboardApi } from "../handlers/clipboard.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-const yank_key = (field: string) => ({ id: "msg.yank", args: { field } });
+const yank_key = (field: string, label: string) => ({ id: "msg.yank", args: { field }, label });
 
 export const clipboard: CommandGroup = {
     commands: {
@@ -26,11 +26,11 @@ export const clipboard: CommandGroup = {
         "msg.open": { bridge: false, runs_in: "background", label: "Open", intent: "Open the selected message in a tab.", run: scoped<ClipboardApi>(open_message) },
     },
     normal_keys: {
-        yy: yank_key("content"),
-        ys: yank_key("subject"),
-        yf: yank_key("sender"),
-        ya: yank_key("address"),
-        yi: yank_key("message_id"),
-        "<C-l>": { id: "msg.open" },
+        yy: yank_key("content", "Message"),
+        ys: yank_key("subject", "Subject"),
+        yf: yank_key("sender", "Sender"),
+        ya: yank_key("address", "Address"),
+        yi: yank_key("message_id", "Message ID"),
+        "<C-l>": { id: "msg.open", label: "Open message" },
     },
 };

@@ -13,9 +13,9 @@ export const motion: CommandGroup = {
     normal_keys: {
         j: { id: "motion.down" },
         k: { id: "motion.up" },
-        gg: { id: "motion.top" },
+        gg: { id: "motion.top", label: "First row" },
         G: { id: "motion.bottom" },
         ".": { id: "repeat.last" },
-        v: { id: "visual.toggle" },
+        v: { id: "visual.toggle", label: "Select range" },
     },
 };

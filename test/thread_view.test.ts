@@ -49,13 +49,13 @@ test("the thread commands check their typed args", () => {
 
 test("the keys h l z z z t z b z M z R and the thread root steps bind their commands", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(normal["h"], { id: "motion.left" });
-    assert.deepEqual(normal["l"], { id: "motion.right" });
-    assert.deepEqual(normal["]t"], { id: "step.thread_root", args: { direction: "next" } });
-    assert.deepEqual(normal["[t"], { id: "step.thread_root", args: { direction: "previous" } });
-    for (const [keys, position] of [["zz", "center"], ["zt", "top"], ["zb", "bottom"]] as const) assert.deepEqual(normal[keys], { id: "view.reposition", args: { position } }, keys);
-    assert.deepEqual(normal["zM"], { id: "thread.fold_all", args: { open: false } });
-    assert.deepEqual(normal["zR"], { id: "thread.fold_all", args: { open: true } });
+    assert.deepEqual(normal["h"], { id: "motion.left", label: "Collapse thread or go to root" });
+    assert.deepEqual(normal["l"], { id: "motion.right", label: "Expand thread or go to reply" });
+    assert.deepEqual(normal["]t"], { id: "step.thread_root", args: { direction: "next" }, label: "Thread root" });
+    assert.deepEqual(normal["[t"], { id: "step.thread_root", args: { direction: "previous" }, label: "Thread root" });
+    for (const [keys, position, label] of [["zz", "center", "Center row"], ["zt", "top", "Row to top"], ["zb", "bottom", "Row to bottom"]] as const) assert.deepEqual(normal[keys], { id: "view.reposition", args: { position }, label }, keys);
+    assert.deepEqual(normal["zM"], { id: "thread.fold_all", args: { open: false }, label: "Close all threads" });
+    assert.deepEqual(normal["zR"], { id: "thread.fold_all", args: { open: true }, label: "Open all threads" });
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
 

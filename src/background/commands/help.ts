@@ -9,7 +9,7 @@ export const help: CommandGroup = {
         // Hidden from completion: typed on the line it leaves a panel that no key ends, since only the key press arms the report.
         "help.whichkey": { bridge: false, runs_in: "background", completion: "hidden", label: "Key list", intent: "Show the top-level keys in a panel in the window.", run: scoped<WhichKeyApi>(show_root_keys) },
     },
-    normal_keys: { "g?": { id: "help.whichkey" } },
+    normal_keys: { "g?": { id: "help.whichkey", label: "Show keys" } },
     // A message document does not report typed keys, so nothing there could close the panel. The key opens the help page instead.
-    message_keys: { "g?": { id: "help.open" } },
+    message_keys: { "g?": { id: "help.open", label: "Open help" } },
 };

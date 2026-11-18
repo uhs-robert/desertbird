@@ -86,7 +86,7 @@ test("a longer prefix with the panel up redraws at once and the page asks again"
     await pending(["g", "u"]);
     await settle();
     assert.deepEqual(log, ["mount hud@1", "changed 1"]);
-    assert.equal((await state()).which_key?.title, "g u");
+    assert.deepEqual((await state()).which_key?.title, ["+Go", "+u"]);
     assert.equal(timers.pending(), 0);
 });
 
@@ -301,7 +301,7 @@ test("the which-key panel, a toast and the command line page can show together: 
     await hud.toast(1, "failed", true);
     await settle();
     const shown = await state();
-    assert.equal(shown.which_key?.title, "g");
+    assert.deepEqual(shown.which_key?.title, ["+Go"]);
     assert.equal(shown.toasts.length, 1);
     assert.equal(log.filter((line) => line.startsWith("mount")).length, 1);
 });

@@ -864,10 +864,10 @@ async function run_panes(instance, { app, kind, shot }) {
   await keys(["g", "e"]);
 
   // Each page opens in a tab of the window. The reset closes it so the next key runs in the mail tab.
-  for (const [key, page, address] of [["x", "addons", "about:addons"], ["T", "themes", "about:addons"], ["c", "config", "about:config"]]) {
-    state = await keys(["g", key], 3000);
-    check(app, kind, `g ${key} opens the ${page} page in a tab`, tabs_of(state).includes(address), `tabs ${tabs_of(state).join(" ")}`);
-    await shot(`panes_g${key}`, `the page g ${key} opened`);
+  for (const [key, page, address] of [["a", "addons", "about:addons"], ["t", "themes", "about:addons"], ["c", "config", "about:config"]]) {
+    state = await keys(["g", "p", key], 3000);
+    check(app, kind, `g p ${key} opens the ${page} page in a tab`, tabs_of(state).includes(address), `tabs ${tabs_of(state).join(" ")}`);
+    await shot(`panes_gp${key}`, `the page g p ${key} opened`);
     await instance.ask("reset_tabs");
     await sleep(1500);
     await keys(["g", "e"]);
@@ -904,6 +904,13 @@ async function run_panes(instance, { app, kind, shot }) {
   const archived = !in_folder(state, victim, "/Inbox");
   state = await keys(["u"], 4000);
   check(app, kind, "u after x moves the message back from Archives to the Inbox", archived && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after x ${archived}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  await keys(["g", "e"]);
+  await keys(["g", "g"]);
+  victim = first_selected(await keys(["j"]));
+  state = await keys(["a"], 3000);
+  const archived_by_a = !in_folder(state, victim, "/Inbox");
+  state = await keys(["u"], 4000);
+  check(app, kind, "a archives like x, and u brings the message back", archived_by_a && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after a ${archived_by_a}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
   // A count reaches the rows below the current one. The fixture threads open collapsed, so z R opens them first: a count refuses to reach into a closed thread.
   await keys(["z", "R"]);
   await keys(["g", "g"]);
@@ -1185,7 +1192,7 @@ async function run_search(instance, { app, kind, shot }) {
   state = await instance.ask("state");
   check(app, kind, "Escape after F u restores the unread list", state.listed.length === unread, `listed ${state.listed.length}, expected ${unread}`);
   await instance.press(["F"]);
-  await key_and_state(instance, ["a"], 1200);
+  await key_and_state(instance, ["r"], 1200);
 
   await open_search("/", "Single 1");
   const narrowed = (await instance.ask("state")).listed;
@@ -1204,12 +1211,12 @@ async function run_search(instance, { app, kind, shot }) {
 
   // Escape ended nothing here: the filter stays, so clear it, then n narrows it again from the register.
   await instance.press(["F"]);
-  await key_and_state(instance, ["a"], 1200);
+  await key_and_state(instance, ["r"], 1200);
   state = await key_and_state(instance, ["n"], 1500);
   check(app, kind, "n after the filter was cleared narrows the list to the register again", state.listed.length === narrowed.length, `listed ${state.listed.length}, expected ${narrowed.length}`);
 
   await instance.press(["F"]);
-  await key_and_state(instance, ["a"], 1200);
+  await key_and_state(instance, ["r"], 1200);
   await instance.press(["?"]);
   await sleep(1200);
   await instance.press(["Single 1"]);
@@ -1220,7 +1227,7 @@ async function run_search(instance, { app, kind, shot }) {
   state = await instance.ask("state");
   check(app, kind, "? then Enter selects the last matching row", selection_of(state) === narrowed.at(-1), `selected ${selection_of(state)}, expected ${narrowed.at(-1)}`);
   await instance.press(["F"]);
-  await key_and_state(instance, ["a"], 1200);
+  await key_and_state(instance, ["r"], 1200);
 }
 
 // The labels sit in the order the targets sit on screen (window toolbars, folder rows, message rows, then buttons), so a fixed window shows the same labels each run. The ones below were read from the shots of each app.
@@ -1285,6 +1292,20 @@ async function run_window_hints(instance, { app, kind, shot }) {
   await sleep(1800);
   state = await instance.ask("state");
   check(app, kind, "window hints: the label of the Inbox row returns to the Inbox", state.mail_tab?.folder === "/Inbox", `displayed folder ${state.mail_tab?.folder}`);
+  // `; ;` opens the command line with `hint ` typed. A flag and Enter run the window hint command, which labels the window.
+  await sleep(1800);
+  await instance.press([";"]);
+  await instance.press([";"]);
+  await sleep(1200);
+  await shot("window_hints_cmdline", "after ; ;: the command line is open with hint typed in");
+  await instance.press(["--focus"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(1200);
+  await shot("window_hints_cmdline_labels", "after hint --focus on the line: the labels show");
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
+  state = await instance.ask("state");
+  check(app, kind, "window hints: ; ; then hint --focus then Escape leaves the list as it was", state.listed.length === rows_before, `listed ${state.listed.length} of ${rows_before}`);
   check(app, kind, "the app survived the window hint checks", instance.exited() === null);
 }
 
@@ -1431,7 +1452,7 @@ async function run_view_settings(instance, check_in) {
   let state = await instance.ask("state");
   check(app, kind, "the Views folder is displayed with 6 messages", state.mail_tab?.folder === "/Views" && state.listed.length === 6, `folder ${state.mail_tab?.folder}, listed ${state.listed.length}`);
   const listed_after = async (args, wait_ms = 1500) => (await key_and_state(instance, args, wait_ms)).listed.length;
-  for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "A"], 1], ["all", ["F", "a"], 6]]) {
+  for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "a"], 1], ["reset", ["F", "r"], 6]]) {
     await instance.press([keys[0]]);
     const count = await listed_after([keys[1]]);
     check(app, kind, `F ${keys[1]} (${name}) shows ${expected} rows`, count === expected, `listed ${count}`);
@@ -2259,7 +2280,23 @@ async function run_message_scripts(instance) {
   await sleep(1500);
   state = await flag_keys();
   check(app, kind, "message tab: m s flags the message of the tab, not the list selection", flagged_ids(state).includes(plain_id) && !flagged_ids(state).includes("reading-html@fixture.invalid"), `flagged ${JSON.stringify(flagged_ids(state))}`);
-  await flag_keys();
+  // u in the tab undoes the star it just set. g C opens the conversation of the displayed message: it needs the message in Thunderbird's search index, so the result is a note.
+  state = await key_and_state(instance, ["u"], 3000);
+  check(app, kind, "message tab: u undoes the star", !flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
+  const tabs_before_conversation = main_window_tabs(state).length;
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["C"], 2500);
+  note(app, kind, "message tab: g C", `tabs ${tabs_before_conversation} then ${main_window_tabs(state).length}; a new tab means the conversation opened, none means Thunderbird has the command disabled for this message`);
+  await shot("message_tab_gC", "message tab after g C: no error notification about a missing mail tab");
+  if (main_window_tabs(state).length > tabs_before_conversation) {
+    // The conversation tab opened after the message tab. Close it so the tab count below stays one.
+    await instance.ask("select_tab", 20000, { index: tabs_before_conversation });
+    await sleep(1000);
+    await instance.press(["q"]);
+    await sleep(1500);
+  }
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(1000);
   state = await key_and_state(instance, CTRL("k"), 1500);
   check(app, kind, "message tab: C-k switches to the mail tab", active_index(state) === 0, `active ${active_index(state)}`);
   await instance.ask("select_tab", 20000, { index: 1 });

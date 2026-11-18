@@ -17,7 +17,7 @@ const SLOT_PARAM = { name: "slot", type: "string", main: true, pattern: `^[${SLO
 
 const slot_keys = (prefix: string, id: string) => Object.fromEntries(SLOTS.map((slot) => [`${prefix}${slot}`, { id, args: { slot } }]));
 
-// `o` and `g o` open the command line on `open `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
+// `o` opens the command line on `open `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
 export const folders: CommandGroup = {
     commands: {
         "folder.open": {
@@ -62,11 +62,11 @@ export const folders: CommandGroup = {
         "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back.", count: "repeat", run: scoped<FolderApi>(jump_forward) },
     } satisfies Record<string, CommandDefinition>,
     normal_keys: {
-        H: { id: "folder.collapse" },
-        gi: { id: "folder.open", args: { special: "inbox" } },
-        gt: { id: "folder.open", args: { special: "trash" } },
-        gd: { id: "folder.open", args: { special: "drafts" } },
-        gs: { id: "folder.open", args: { special: "sent" } },
+        H: { id: "folder.collapse", label: "Collapse folder or go to folders" },
+        gi: { id: "folder.open", args: { special: "inbox" }, label: "Inbox" },
+        gt: { id: "folder.open", args: { special: "trash" }, label: "Trash" },
+        gd: { id: "folder.open", args: { special: "drafts" }, label: "Drafts" },
+        gs: { id: "folder.open", args: { special: "sent" }, label: "Sent" },
         "<C-o>": { id: "jump.back" },
         "<C-i>": { id: "jump.forward" },
         ...slot_keys("M", "mark.set"),

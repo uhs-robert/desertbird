@@ -69,10 +69,10 @@ test("the step commands check their typed args", () => {
 
 test("] and [ bind the step keys and the keymap still compiles", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(normal["]u"], { id: "step.unread", args: { direction: "next", scope: "folder" } });
-    assert.deepEqual(normal["[U"], { id: "step.unread", args: { direction: "previous", scope: "all_folders" } });
-    assert.deepEqual(normal["]s"], { id: "step.starred", args: { direction: "next" } });
-    assert.deepEqual(normal["[a"], { id: "step.attachment", args: { direction: "previous" } });
+    assert.deepEqual(normal["]u"], { id: "step.unread", args: { direction: "next", scope: "folder" }, label: "Unread" });
+    assert.deepEqual(normal["[U"], { id: "step.unread", args: { direction: "previous", scope: "all_folders" }, label: "Unread in all folders" });
+    assert.deepEqual(normal["]s"], { id: "step.starred", args: { direction: "next" }, label: "Starred" });
+    assert.deepEqual(normal["[a"], { id: "step.attachment", args: { direction: "previous" }, label: "Attachment" });
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
 

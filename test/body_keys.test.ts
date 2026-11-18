@@ -4,6 +4,7 @@ import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
 import { compile_message_keymap, message_background_commands } from "../src/background/commands/index.ts";
+import { compile_effective_keymap } from "../src/background/config/keymap.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
 
 const VIEWPORT = 600;
@@ -392,6 +393,43 @@ test("keys that need the thread list send nothing from a message", async () => {
     assert.deepEqual(sent, []);
 });
 
+// The message tree lacks these prefixes, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
+test("a list prefix swallows its next key in a message, so u and a after it run nothing", async () => {
+    const { window, sent } = await started();
+    for (const prefix of ["]", "[", "F", ",", "z", "t", "M", "'"]) for (const key of ["u", "a"]) {
+        const before = sent.length;
+        window.press(prefix);
+        window.press(key);
+        assert.equal(sent.length, before, `${prefix} ${key}`);
+    }
+    assert.deepEqual(sent, []);
+    window.press("u");
+    assert.deepEqual(sent, [invoked("msg.undo")]);
+});
+
+// A mail sequence that the message tree lacks must complete and run nothing. Broken partway, the matcher retries the rest from the root, where `a` archives and `; y` copies a link.
+test("a mail sequence typed in a message runs nothing, also under a prefix the message tree has", async () => {
+    const { window, sent } = await started();
+    window.elements = [Object.assign(new StubElement(), { href: "https://example.org/x" })];
+    // `y ] a`: a stray `y` must not stop `] a` from being a list sequence.
+    for (const keys of [["g", "p", "a"], [";", ";", "y"], ["]", "a"], ["F", "a"], [",", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
+        for (const key of keys) window.press(key);
+        assert.deepEqual(sent.splice(0), [], keys.join(" "));
+        assert.deepEqual(window.appended, [], `${keys.join(" ")} shows no labels`);
+    }
+    for (const key of ["g", "t", "u"]) window.press(key);
+    assert.deepEqual(sent, [invoked("msg.undo")], "g t completes, so u stays free");
+});
+
+// The background passes the mail tree with the user's keys, so a user's list sequence ends in a message too.
+test("a user's mail sequence typed in a message runs nothing", async () => {
+    const user = { wu: { id: "filter.set", args: { state: "unread" } } };
+    const root = JSON.parse(JSON.stringify(compile_message_keymap(user, compile_effective_keymap({ normal: user }).compiled.modes.normal).compiled.modes.normal)) as unknown;
+    const { window, sent } = await started({ [KEYMAP_STORAGE_KEY]: { message_tree: { version: COMPILED_KEYMAP_VERSION, root } } });
+    for (const key of ["w", "u"]) window.press(key);
+    assert.deepEqual(sent, []);
+});
+
 test("a half-typed d does not survive the window losing the focus", async () => {
     const { window, sent } = await started();
     window.press("d");
@@ -599,7 +637,7 @@ test("a half-typed sequence reports its prefix, and each way it ends reports an 
     window.press("g");
     window.press("j", { target: { localName: "input" } });
     window.press("g");
-    window.press("z");
+    window.press("w");
     assert.deepEqual(reports, [["g"], [], ["g"], [], ["g"], [], ["g"], [], ["g"], []]);
 });
 

@@ -11,7 +11,7 @@ test("the panel lists the keys that follow the typed keys, leaves by label and g
         { key: "g", label: "First row", is_group: false },
         { key: "u", label: "2 keys", is_group: true },
     ]);
-    assert.equal(panel?.title, "g");
+    assert.deepEqual(panel?.title, ["+Go"]);
 });
 
 test("a group with a name shows the name", () => {
@@ -22,7 +22,7 @@ test("a group with a name shows the name", () => {
 test("the panel follows a longer sequence down the tree", () => {
     const panel = which_key_panel(sample_root(), ["g", "u"], settings_with({}));
     assert.deepEqual(panel?.rows.map((row) => row.key), ["a", "b"]);
-    assert.equal(panel?.title, "g u");
+    assert.deepEqual(panel?.title, ["+Go", "+u"]);
 });
 
 test("typed keys that lead to a leaf or nowhere have no panel", () => {
@@ -52,8 +52,11 @@ test("a skip entry covers only its exact sequence", () => {
     assert.equal(may_open_by_itself(settings_with({ which_key_skip: ["g"] }), ["g", "u"], false), true);
 });
 
+// A leaf without steps runs nothing, and the panel hides it.
+const step = { invocation: { id: "x" }, runs_in: "background" as const, count_rule: "repeat" as const };
+
 test("the root list orders letters, other keys, chords, then groups, and lists every key", () => {
-    const children = Object.fromEntries(Array.from({ length: 40 }, (_, at) => [`k${at}`, { kind: "leaf" as const, label: `Key ${at}`, steps: [] }]));
+    const children = Object.fromEntries(Array.from({ length: 40 }, (_, at) => [`k${at}`, { kind: "leaf" as const, label: `Key ${at}`, steps: [step] }]));
     const root = { kind: "branch" as const, children: { ...children, ...sample_root().children } };
     const panel = which_key_panel(root, [], settings_with({}));
     assert.equal(panel?.rows.length, 43);
@@ -62,12 +65,13 @@ test("the root list orders letters, other keys, chords, then groups, and lists e
     const mixed = { kind: "branch" as const, children: { "<C-x>": leaf_of("a"), "1": leaf_of("b"), T: leaf_of("c"), t: leaf_of("d"), ...sample_root().children } };
     assert.deepEqual(which_key_panel(mixed, [], settings_with({}))?.rows.map((row) => row.key), ["j", "t", "T", "1", "<C-x>", "d", "g"]);
 });
-const leaf_of = (label: string) => ({ kind: "leaf" as const, label, steps: [] });
+const leaf_of = (label: string) => ({ kind: "leaf" as const, label, steps: [step] });
 
 test("`;` is a prefix whose panel lists f, c and y, and each resolves to a pick with its action", () => {
     for (const [compiled, id] of [[compile_default_keymap().compiled.modes.normal, "hint.window"], [compile_message_keymap().compiled.modes.normal, "hint.pick"]] as const) {
         const root = compiled as TreeBranch;
-        assert.deepEqual(which_key_panel(root, [";"], settings_with({}))?.rows.map((row) => row.key), ["f", "c", "y"]);
+        const keys = which_key_panel(root, [";"], settings_with({}))?.rows.map((row) => row.key).sort();
+        assert.deepEqual(keys, id === "hint.window" ? [";", "c", "f", "y"] : ["c", "f", "y"]);
         const actions = ["f", "c", "y"].map((key) => {
             const node = branch_at(root, [";"])?.children[key];
             const step = node?.kind === "leaf" ? node.steps[0] : undefined;

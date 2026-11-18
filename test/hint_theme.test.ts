@@ -46,10 +46,10 @@ test("the message label style is literal colors for both schemes, with no custom
     assert.ok(style.includes("color-scheme: light dark !important") && !style.includes("var("));
 });
 
-test("the hint command holds plain keys after it, is not replayed by `.`, and has no command line use", async () => {
+test("the hint command holds plain keys after it, is not replayed by `.`, and is typed as `hint`", async () => {
     const { hold_command_ids, registry, UNREPEATABLE_IDS } = await import("../src/background/commands/index.ts");
     assert.ok(hold_command_ids().includes("hint.window"), "f d d in one burst must not reach the key runtime before the labels take the keys");
     assert.ok(hold_command_ids().includes("cmdline.open"));
     assert.ok(UNREPEATABLE_IDS.has("hint.window"));
-    assert.equal(registry.get("hint.window")?.completion, "hidden");
+    assert.equal(registry.get("hint.window")?.name, "hint");
 });

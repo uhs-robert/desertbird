@@ -27,10 +27,10 @@ test("the keymap binds 21 mark leaves and 21 jump leaves with a fixed slot, and 
     assert.equal((normal.match(/"mark\.jump"/g) ?? []).length, 21);
 });
 
-test("g p and m p stay unbound in the default keymap", () => {
+test("m p stays unbound in the default keymap and g p holds the Thunderbird pages", () => {
     const { compiled } = compile_default_keymap();
     const normal = compiled.modes.normal as { children: Record<string, { children?: Record<string, unknown> }> };
-    assert.equal(normal.children["g"]?.children?.["p"], undefined);
+    assert.deepEqual(Object.keys((normal.children["g"]?.children?.["p"] as { children: object }).children).sort(), ["a", "c", "t"]);
     assert.equal(normal.children["m"]?.children?.["p"], undefined);
 });
 

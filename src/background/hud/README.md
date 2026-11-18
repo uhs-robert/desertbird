@@ -5,7 +5,7 @@ The which-key panel and the toasts of each main window, and the mode label of it
 | File | Role |
 | --- | --- |
 | `service.ts` | One state per window: the typed keys the panel lists, the toasts, the visual mode flag and a mount flag. Reads `pending` and `mode` events, answers the page's `hud.state` message and tells a mounted page to ask again (`hud.changed`). Mounts the `hud` surface while something shows and unmounts it when nothing does. `mode_of` gives the bridge the mode of a window |
-| `which_key.ts` | Pure: the continuations of a typed prefix from the compiled tree, and whether the panel may open on its own (`which_key_delay_ms`, `which_key_skip`) |
+| `which_key.ts` | Pure: the continuations of a typed prefix from the compiled tree, with the chain of group names as the title, and whether the panel may open on its own (`which_key_delay_ms`, `which_key_skip`) |
 | `toasts.ts` | Pure: the stack of toasts of one window, each with its own timer. Timers come in as a parameter, so tests move the clock |
 
 ## Rules

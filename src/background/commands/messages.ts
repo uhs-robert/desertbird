@@ -65,11 +65,12 @@ export const messages: CommandGroup = {
     },
     normal_keys: {
         x: { id: "msg.archive" },
-        dd: { id: "msg.delete" },
-        mr: { id: "msg.read", args: { state: "read" } },
-        mu: { id: "msg.read", args: { state: "unread" } },
-        mR: { id: "folder.read_all" },
-        ms: { id: "msg.flag" },
-        mj: { id: "msg.junk" },
+        a: { id: "msg.archive" },
+        dd: { id: "msg.delete", label: "Delete" },
+        mr: { id: "msg.read", args: { state: "read" }, label: "Mark read" },
+        mu: { id: "msg.read", args: { state: "unread" }, label: "Mark unread" },
+        mR: { id: "folder.read_all", label: "Mark folder read" },
+        ms: { id: "msg.flag", label: "Toggle star" },
+        mj: { id: "msg.junk", label: "Mark junk" },
     },
 };

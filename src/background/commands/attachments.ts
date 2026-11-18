@@ -22,5 +22,5 @@ export const attachments: CommandGroup = {
             run: scoped<AttachmentsApi>((scope, args) => save_attachments(scope, args)),
         },
     },
-    normal_keys: { ga: { id: "msg.save_attachments" } },
+    normal_keys: { ga: { id: "msg.save_attachments", label: "Save attachments" } },
 };
