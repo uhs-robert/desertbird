@@ -137,7 +137,7 @@ export function is_encrypted(part: FullPart): boolean {
     return (part.parts ?? []).some(is_encrypted);
 }
 
-const is_message_id = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
+export const is_message_id = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 const is_folder_id = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= MAX_FOLDER_ID_CHARS;
 
 const iso_date = (date: Date | string | undefined): string => {

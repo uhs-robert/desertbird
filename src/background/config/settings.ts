@@ -7,13 +7,16 @@ import type { ModeLabelStyle } from "../../shared/protocol.ts";
 import { DEFAULT_THEME, OASIS_THEME_NAMES } from "../../shared/theme_choice.ts";
 
 /** The vendored table plus the settings only DesertBird has. The vendored table is a pinned copy and stays as it is. */
-export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean; notice_show_subject: boolean; mode_indicator_style: ModeLabelStyle; theme: string } & BridgeShareSettings;
+export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean; notice_show_subject: boolean; mode_indicator_style: ModeLabelStyle; theme: string } & BridgeShareSettings & BridgeAllowSettings;
 
 /** What the bridge may read. Each is inert while `bridge` is off. */
 export type BridgeShareSettings = { bridge_share_headers: boolean; bridge_share_bodies: boolean; bridge_share_attachments: boolean; bridge_share_folders: boolean };
 
+/** What the bridge may write. Each is inert while `bridge` is off. */
+export type BridgeAllowSettings = { bridge_allow_drafts: boolean };
 
-export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "mode_indicator_style" | "notify_new_mail" | "notice_show_subject" | "theme" | "bridge" | keyof BridgeShareSettings;
+
+export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "mode_indicator_style" | "notify_new_mail" | "notice_show_subject" | "theme" | "bridge" | keyof BridgeShareSettings | keyof BridgeAllowSettings;
 
 export type SettingKind = { kind: "number"; min?: number } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
 
@@ -35,6 +38,7 @@ export const SETTING_KINDS: Record<SettingName, SettingKind> = {
     bridge_share_bodies: { kind: "boolean" },
     bridge_share_attachments: { kind: "boolean" },
     bridge_share_folders: { kind: "boolean" },
+    bridge_allow_drafts: { kind: "boolean" },
 };
 
 export const SETTING_NAMES = Object.keys(SETTING_KINDS) as SettingName[];
@@ -73,6 +77,6 @@ export function sanitize_settings(raw: unknown, on_problem: (message: string) =>
 }
 
 /** Every setting at its default: the vendored defaults plus DesertBird's own. */
-export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false, notice_show_subject: true, mode_indicator: "always", mode_indicator_style: "classic", theme: DEFAULT_THEME, bridge_share_headers: false, bridge_share_bodies: false, bridge_share_attachments: false, bridge_share_folders: false };
+export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false, notice_show_subject: true, mode_indicator: "always", mode_indicator_style: "classic", theme: DEFAULT_THEME, bridge_share_headers: false, bridge_share_bodies: false, bridge_share_attachments: false, bridge_share_folders: false, bridge_allow_drafts: false };
 
 export const settings_with_defaults = (overrides: Partial<Settings>): Settings => ({ ...SETTING_DEFAULTS, ...overrides });

@@ -25,6 +25,10 @@ function bridge_under_test(options: { setting?: boolean; run?: (text: string) =>
         list_commands: () => [{ id: "motion.left", label: "Close thread or go to its root" }],
         current_mode: async () => state.mode,
         read: async (verb, request) => ({ ok: true, verb_read: verb, id: request["id"] }),
+        draft: async (request) => {
+            if (request["subject"] === "throws") throw new Error("Re: secret subject");
+            return { ok: true, drafted: request["subject"] };
+        },
     });
     const advance = (ms: number) => {
         clock_ms += ms;
@@ -253,4 +257,19 @@ test("a read frame goes to the reads with its fields and comes back in the reply
     last().host_says({ verb: "message", request_id: 4, id: 12 });
     await settle();
     assert.deepEqual(last().posted, [{ ok: true, verb_read: "message", id: 12, verb: "reply", request_id: 4 }]);
+});
+
+test("a draft frame goes to the drafts with its fields, and a throw answers fixed text", async () => {
+    const { bridge, last, ready } = bridge_under_test();
+    await bridge.start();
+    await ready();
+    last().posted.length = 0;
+    last().host_says({ verb: "draft", request_id: 5, subject: "Hello" });
+    last().host_says({ verb: "draft", request_id: 6, subject: "throws" });
+    await settle();
+    const by_id = [...last().posted].sort((left, right) => (left as { request_id: number }).request_id - (right as { request_id: number }).request_id);
+    assert.deepEqual(by_id, [
+        { ok: true, drafted: "Hello", verb: "reply", request_id: 5 },
+        { ok: false, message: "the command failed", verb: "reply", request_id: 6 },
+    ]);
 });
