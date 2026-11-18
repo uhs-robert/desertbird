@@ -135,7 +135,9 @@ function tree_of(result: CompileResult): KeymapTree {
 }
 
 function compile_record(source_hash: string, config: Config): KeymapRecord {
-    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(compile_effective_keymap(config.user_keymap, config.setting_overrides)), message_tree: tree_of(compile_message_keymap(config.user_keymap.normal)) };
+    const mail = compile_effective_keymap(config.user_keymap, config.setting_overrides);
+    // The message tree ends every mail sequence, the user's included, so it reads this mail tree. The source hash already covers the user's mail keys.
+    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_message_keymap(config.user_keymap.normal, mail.compiled.modes.normal)) };
 }
 
 // Registered before the listener below, so the store has dropped its copy by the time an install reads it.

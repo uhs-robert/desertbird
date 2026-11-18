@@ -53,7 +53,7 @@ export const folders: CommandGroup = {
             needs: ["keys.paneFocus"],
             run: scoped<CollapseApi>(collapse_folder),
         },
-        "mark.set": { bridge: false, runs_in: "background", label: "Set a mark", intent: "Remember the shown folder under a one-letter slot.", params: [SLOT_PARAM], run: scoped<FolderApi>(set_mark) },
+        "mark.set": { bridge: false, runs_in: "background", label: "Set a mark", intent: "Remember the shown folder under a one-key slot.", params: [SLOT_PARAM], run: scoped<FolderApi>(set_mark) },
         "mark.jump": { bridge: true, runs_in: "background", label: "Jump to a mark", intent: "Show the folder a slot remembers.", params: [SLOT_PARAM], run: scoped<FolderApi>(jump_to_mark) },
         "jump.back": { bridge: true, runs_in: "background", label: "Back in folder history", intent: "Show the folder shown before this one. A count goes that many folders back.", count: "repeat", run: scoped<FolderApi>(jump_back) },
         "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back.", count: "repeat", run: scoped<FolderApi>(jump_forward) },

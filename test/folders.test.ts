@@ -35,13 +35,26 @@ test("M and ' bind one capture row each, and the key press fills the slot", () =
     assert.equal(create_matcher(compiled).feed("normal", "M").kind_, "pending");
 });
 
-test("a saved binding of one slot keeps working, and the default capture row yields to it with a warning", () => {
-    const { compiled, warnings } = compile_bindings({ ...DEFAULT_KEYMAP, normal: { ...DEFAULT_KEYMAP.normal, Ma: { id: "mark.set", args: { slot: "a" } } } }, {}, DEFAULT_KEYMAP);
-    assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: "M" by Ma']);
-    const matcher = create_matcher(compiled);
-    matcher.feed("normal", "M");
-    const result = matcher.feed("normal", "a");
-    assert.deepEqual((result as { leaf: { steps: { invocation: unknown }[] } }).leaf.steps[0]?.invocation, { id: "mark.set", args: { slot: "a" } });
+test("a saved binding of one slot runs, and the default capture row still takes every other key", () => {
+    const { compiled, warnings } = compile_bindings({ ...DEFAULT_KEYMAP, normal: { ...DEFAULT_KEYMAP.normal, Ma: { id: "mark.set", args: { slot: "a" } }, "'z": { id: "mark.jump", args: { slot: "q" } } } }, {}, DEFAULT_KEYMAP);
+    assert.deepEqual(warnings, []);
+    const invocation_of = (keys: string[]) => {
+        const matcher = create_matcher(compiled);
+        const results = keys.map((key) => matcher.feed("normal", key));
+        return (results[results.length - 1] as { leaf: { steps: { invocation: unknown }[] } }).leaf.steps[0]?.invocation;
+    };
+    assert.deepEqual(invocation_of(["M", "a"]), { id: "mark.set", args: { slot: "a" } });
+    assert.deepEqual(invocation_of(["M", "b"]), { id: "mark.set", args: { slot: "b" } });
+    assert.deepEqual(invocation_of(["'", "z"]), { id: "mark.jump", args: { slot: "q" } });
+    assert.deepEqual(invocation_of(["'", "b"]), { id: "mark.jump", args: { slot: "b" } });
+});
+
+test("a user key that unbinds or replaces M leaves no capture row behind", () => {
+    for (const binding of [null, { id: "msg.archive" }]) {
+        const { compiled } = compile_bindings({ ...DEFAULT_KEYMAP, normal: { ...DEFAULT_KEYMAP.normal, M: binding } }, {}, DEFAULT_KEYMAP);
+        const node = (compiled.modes.normal as { children: Record<string, { kind: string } | undefined> }).children["M"];
+        assert.ok(node === undefined || node.kind === "leaf", JSON.stringify(binding));
+    }
 });
 
 test("m p stays unbound in the default keymap and g p holds the Thunderbird pages", () => {
