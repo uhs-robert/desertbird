@@ -69,7 +69,10 @@ function prompt_of(token: string, request: ConfirmRequest): ConfirmPrompt {
     return { token, action: request.action, count: request.count, items, more: Math.max(0, request.count - items.length), ...folder };
 }
 
-const is_valid_request = (request: ConfirmRequest): boolean => ACTIONS.includes(request.action) && Number.isInteger(request.count) && request.count > 0 && Array.isArray(request.items);
+const is_item = (item: unknown): boolean => typeof item === "object" && item !== null && typeof (item as { subject?: unknown }).subject === "string" && typeof (item as { from?: unknown }).from === "string";
+
+// The headline count and the list must agree, so a list longer than the count is refused too.
+const is_valid_request = (request: ConfirmRequest): boolean => typeof request === "object" && request !== null && ACTIONS.includes(request.action) && Number.isInteger(request.count) && request.count > 0 && Array.isArray(request.items) && request.items.length <= request.count && request.items.every(is_item);
 
 function read_answer(message: Partial<Record<string, unknown>>): ConfirmAnswerRequest | undefined {
     const { windowId: window_id, token, answer } = message;
@@ -111,8 +114,9 @@ export function create_confirm_service(deps: ConfirmDeps): ConfirmService {
 
     return {
         async request_confirm(request) {
+            if (!is_valid_request(request)) return "no";
             if (pending !== undefined) return "busy";
-            if (deps.overlay === undefined || !is_valid_request(request)) return "no";
+            if (deps.overlay === undefined) return "no";
             const overlay = deps.overlay;
             // The slot is taken before the first await, so a second request in the meantime is busy.
             let resolve: (result: ConfirmResult) => void = () => {};

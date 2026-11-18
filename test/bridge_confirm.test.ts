@@ -229,9 +229,50 @@ test("no main window, no Experiment, a failed mount or a bad request is no at on
         assert.equal(setup.timers.pending(), 0);
         assert.ok(!setup.calls.includes(`unmount ${WINDOW} cmdline`));
     }
+});
+
+test("a malformed request resolves no without a mount and never rejects", async () => {
     const setup = confirm_under_test();
-    for (const bad of [{ ...request, action: "delete" }, { ...request, count: 0 }, { ...request, count: 1.5 }]) assert.equal(await setup.service.request_confirm(bad as ConfirmRequest), "no");
+    const bad_requests: unknown[] = [
+        null,
+        { ...request, action: "delete" },
+        { ...request, count: 0 },
+        { ...request, count: 1.5 },
+        { ...request, count: "2" },
+        { ...request, items: "x" },
+        { ...request, items: [null] },
+        { ...request, items: [{ subject: "s" }] },
+        { ...request, items: [{ subject: 1, from: "f" }] },
+        { ...request, count: 1 },
+    ];
+    for (const bad of bad_requests) assert.equal(await setup.service.request_confirm(bad as ConfirmRequest), "no", JSON.stringify(bad));
     assert.deepEqual(setup.calls, []);
+    assert.equal(setup.timers.pending(), 0);
+    assert.ok((await start(setup)).prompt, "the slot stays free");
+});
+
+test("a window that closes while the mount is pending ends the prompt as no, and the late mount result changes nothing", async () => {
+    for (const outcome of ["resolve", "reject"] as const) {
+        const setup = confirm_under_test();
+        let finish_mount: () => void = () => {};
+        const calls: string[] = [];
+        setup.overlay.mount = (args) => {
+            calls.push(`mount ${args.windowId}`);
+            return new Promise<void>((resolve, reject) => (finish_mount = outcome === "resolve" ? resolve : () => reject(new Error("window gone"))));
+        };
+        setup.overlay.unmount = async (args) => void calls.push(`unmount ${args.windowId}`);
+        const results: ConfirmResult[] = [];
+        const done = setup.service.request_confirm(request).then((result) => void results.push(result));
+        await settle();
+        assert.deepEqual(calls, [`mount ${WINDOW}`]);
+        setup.service.surface_gone(WINDOW);
+        finish_mount();
+        await done;
+        await settle();
+        assert.deepEqual(results, ["no"], outcome);
+        assert.deepEqual(calls, [`mount ${WINDOW}`], `${outcome}: no unmount`);
+        assert.equal(setup.timers.pending(), 0);
+    }
 });
 
 test("the prompt holds the cleaned subjects and senders cut to 80 characters, at most 10, and never a body", async () => {
@@ -320,7 +361,8 @@ function fake_page(outcomes: ConfirmAnswerResult["outcome"][]) {
 
 test("the page draws text only and sends one answer per prompt", async () => {
     const page = fake_page([]);
-    assert.equal(page.shown().children[2]!.textContent, "a: <img src=x onerror=alert(1)>");
+    assert.deepEqual(page.shown().children.map((node) => node.className), ["source", "headline", "keys", "item"], "the keys line sits above the list");
+    assert.equal(page.shown().children[3]!.textContent, "a: <img src=x onerror=alert(1)>");
     await page.press("y");
     assert.deepEqual(page.sent, [], "the grace holds back the first key");
     page.move(CONFIRM_KEY_GRACE_MS);

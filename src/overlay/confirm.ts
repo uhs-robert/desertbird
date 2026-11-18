@@ -68,7 +68,8 @@ export function show_confirm<Node extends PromptNode<Node>>(prompt: ConfirmPromp
     };
     const box = page.create("div");
     box.className = "confirm";
-    box.append(line("source", lines.source), line("headline", lines.headline), ...lines.items.map((text) => line("item", text)), ...(lines.more === undefined ? [] : [line("more", lines.more)]), line("keys", lines.keys));
+    // The keys line goes above the list, so a large font clips the end of the list and never the keys.
+    box.append(line("source", lines.source), line("headline", lines.headline), line("keys", lines.keys), ...lines.items.map((text) => line("item", text)), ...(lines.more === undefined ? [] : [line("more", lines.more)]));
     page.show(box);
     const shown_at_ms = page.now_ms();
     let sent = false;

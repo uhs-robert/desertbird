@@ -40,4 +40,4 @@ body.confirming #rows, body.confirming #status, body.confirming #line { display:
 .confirm .source { color: var(--error_text); font-weight: 700; }
 .confirm .headline { font-weight: 700; margin: 4px 0; }
 .confirm .more { color: var(--muted); }
-.confirm .keys { margin-top: 6px; font-family: monospace; color: var(--accent); }
+.confirm .keys { margin-bottom: 6px; font-family: monospace; color: var(--accent); }
