@@ -134,9 +134,10 @@ test("mark_steps tags the steps of the commands that keep the selection, and not
     const { KEEPS_SELECTION_IDS } = await import("../src/background/commands/index.ts");
     assert.deepEqual([...KEEPS_SELECTION_IDS].sort(), ["msg.copy", "msg.flag", "msg.junk", "msg.read", "msg.tag"]);
     const step = (id: string) => ({ invocation: { id } });
-    const root = { kind: "branch", children: { s: { kind: "leaf", steps: [step("msg.flag")] }, x: { kind: "leaf", steps: [step("msg.archive")] } } };
+    const root = { kind: "branch", children: { s: { kind: "leaf", steps: [step("msg.flag")] }, x: { kind: "leaf", steps: [step("msg.archive")] }, d: { kind: "leaf", steps: [step("msg.delete")] } } };
     mark_steps(root);
     const flags = (node: { steps: object[] }) => node.steps.map((entry) => (entry as { keeps_selection?: boolean }).keeps_selection);
     assert.deepEqual(flags(root.children.s), [true]);
     assert.deepEqual(flags(root.children.x), [undefined]);
+    assert.deepEqual(flags(root.children.d), [undefined]);
 });
