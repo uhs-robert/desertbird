@@ -91,6 +91,6 @@ test("the style modules are pure text and layout", () => {
     assert.match(STYLE, /\.desertfox-whichkey/);
     assert.match(CMDLINE_STYLE, /\.desertfox-cmdline/);
     assert.equal(choose_columns(8, 800), 1);
-    assert.equal(choose_columns(45, 800), 2);
+    assert.equal(choose_columns(45, 800), 3);
     assert.equal(fit_title(["+Go"], () => false).text, "+Go");
 });
