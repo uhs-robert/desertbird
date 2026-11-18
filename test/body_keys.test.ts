@@ -388,7 +388,7 @@ test("the mail keys send their command to the background, are cancelled and scro
 
 test("keys that need the thread list send nothing from a message", async () => {
     const { window, sent } = await started();
-    for (const keys of [["z", "z"], ["]", "u"], ["F", "t"], ["t", "m"]]) for (const key of keys) window.press(key);
+    for (const keys of [["z", "z"], ["]", "s"], ["F", "t"], ["t", "m"]]) for (const key of keys) window.press(key);
     assert.deepEqual(sent, []);
 });
 

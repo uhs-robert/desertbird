@@ -39,8 +39,8 @@ export const search: CommandGroup = {
         },
     },
     normal_keys: {
-        "/": { id: "search.open", args: { direction: "forward" } },
-        "?": { id: "search.open", args: { direction: "backward" } },
+        "/": { id: "search.open", args: { direction: "forward" }, label: "Search list" },
+        "?": { id: "search.open", args: { direction: "backward" }, label: "Search list backward" },
         n: { id: "search.next" },
         N: { id: "search.prev" },
     },

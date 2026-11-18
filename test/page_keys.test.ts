@@ -53,5 +53,5 @@ test("both own pages load the page key script before their own script", () => {
 });
 
 test("the message keys bind g? to the help page", () => {
-    assert.deepEqual(MESSAGE_KEYMAP.normal?.["g?"], { id: "help.open" });
+    assert.deepEqual(MESSAGE_KEYMAP.normal?.["g?"], { id: "help.open", label: "Open help" });
 });

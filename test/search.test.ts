@@ -410,8 +410,8 @@ test("the search keys open the line as a search line and a failed mount drops th
 test("? is backward search and g? is the key list, / and n and N are bound in the mail tab and ? is free in no other place", async () => {
     const { DEFAULT_KEYMAP, MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
     const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: Record<string, unknown> }>;
-    assert.deepEqual(normal["?"], { id: "search.open", args: { direction: "backward" } });
-    assert.deepEqual(normal["/"], { id: "search.open", args: { direction: "forward" } });
+    assert.deepEqual(normal["?"], { id: "search.open", args: { direction: "backward" }, label: "Search list backward" });
+    assert.deepEqual(normal["/"], { id: "search.open", args: { direction: "forward" }, label: "Search list" });
     assert.equal(normal["g?"]?.id, "help.whichkey");
     assert.deepEqual([normal["n"]?.id, normal["N"]?.id], ["search.next", "search.prev"]);
     // The message pane keeps its own find on / n N.

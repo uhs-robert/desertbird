@@ -6,7 +6,7 @@ import type { CommandGroup } from "./define.ts";
 const UNTAGGED_STATES = ["unread", "all", "starred", "toggle_starred", "attachment"];
 
 // A sort key names its order because the column alone leaves it open: dates read newest first and every other column reads smallest first.
-const sort_key = (by: string, order: string) => ({ id: "sort.set", args: { by, order } });
+const sort_key = (by: string, order: string, label: string) => ({ id: "sort.set", args: { by, order }, label });
 
 // All four change only what the list shows, never mail, so `bridge` is true.
 export const view: CommandGroup = {
@@ -93,21 +93,21 @@ export const view: CommandGroup = {
         },
     },
     normal_keys: {
-        Fu: { id: "filter.set", args: { state: "unread" } },
-        Fa: { id: "filter.set", args: { state: "all" } },
-        Fs: { id: "filter.set", args: { state: "toggle_starred" } },
-        FA: { id: "filter.set", args: { state: "attachment" } },
-        ",d": sort_key("date", "descending"),
-        ",s": sort_key("subject", "ascending"),
-        ",f": sort_key("author", "ascending"),
-        ",z": sort_key("size", "ascending"),
-        ",t": sort_key("tags", "ascending"),
-        ",a": sort_key("attachments", "ascending"),
-        ",u": sort_key("unread", "ascending"),
-        ",r": sort_key("received", "descending"),
-        ",p": sort_key("priority", "ascending"),
-        ",o": sort_key("current", "toggle"),
-        tm: { id: "pane.toggle", args: { pane: "message" } },
-        tf: { id: "pane.toggle", args: { pane: "folder" } },
+        Fu: { id: "filter.set", args: { state: "unread" }, label: "Unread" },
+        Fr: { id: "filter.set", args: { state: "all" }, label: "Reset" },
+        Fs: { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" },
+        Fa: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
+        ",d": sort_key("date", "descending", "Date"),
+        ",s": sort_key("subject", "ascending", "Subject"),
+        ",f": sort_key("author", "ascending", "Author"),
+        ",z": sort_key("size", "ascending", "Size"),
+        ",t": sort_key("tags", "ascending", "Tags"),
+        ",a": sort_key("attachments", "ascending", "Attachments"),
+        ",u": sort_key("unread", "ascending", "Unread"),
+        ",r": sort_key("received", "descending", "Received"),
+        ",p": sort_key("priority", "ascending", "Priority"),
+        ",o": sort_key("current", "toggle", "Toggle direction"),
+        tm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
+        tf: { id: "pane.toggle", args: { pane: "folder" }, label: "Folder pane" },
     },
 };

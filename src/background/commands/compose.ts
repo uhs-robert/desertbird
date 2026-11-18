@@ -28,7 +28,7 @@ export const compose: CommandGroup = {
     normal_keys: {
         r: { id: "msg.reply", args: { to: "sender" } },
         R: { id: "msg.reply", args: { to: "all" } },
-        gF: { id: "msg.forward" },
+        gF: { id: "msg.forward", label: "Forward" },
         c: { id: "msg.new" },
     },
 };

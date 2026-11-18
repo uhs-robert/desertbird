@@ -33,9 +33,9 @@ export const followup: CommandGroup = {
         },
     },
     normal_keys: {
-        mfd: { id: "msg.remind", args: { after: "one_day" } },
-        mft: { id: "msg.remind", args: { after: "three_days" } },
-        mfw: { id: "msg.remind", args: { after: "one_week" } },
-        mfc: { id: "msg.remind_cancel" },
+        mfd: { id: "msg.remind", args: { after: "one_day" }, label: "In 1 day" },
+        mft: { id: "msg.remind", args: { after: "three_days" }, label: "In 3 days" },
+        mfw: { id: "msg.remind", args: { after: "one_week" }, label: "In 1 week" },
+        mfc: { id: "msg.remind_cancel", label: "Cancel" },
     },
 };

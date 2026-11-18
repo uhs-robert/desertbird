@@ -3,6 +3,7 @@
 import { token_label } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { TreeBranch, TreeNode } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { Settings } from "../../../vendor/desertfox/config.ts";
+import { WHICH_KEY_ROOT_TITLE } from "../../shared/protocol.ts";
 import type { WhichKeyPanel } from "../../shared/protocol.ts";
 
 const is_branch = (node: TreeNode | undefined): node is TreeBranch => node?.kind === "branch";
@@ -12,6 +13,12 @@ export function branch_at(root: TreeBranch, keys: readonly string[]): TreeBranch
     let node: TreeNode | undefined = root;
     for (const key of keys) node = is_branch(node) ? node.children[key] : undefined;
     return is_branch(node) ? node : null;
+}
+
+/** The chain of groups the typed keys went through, each as `+Name` or, for a group without a name, `+` and its key. */
+function title_chain(root: TreeBranch, keys: readonly string[]): string[] {
+    if (keys.length === 0) return [WHICH_KEY_ROOT_TITLE];
+    return keys.map((key, index) => `+${branch_at(root, keys.slice(0, index + 1))?.label ?? token_label(key)}`);
 }
 
 function group_label(branch: TreeBranch): string {
@@ -29,7 +36,7 @@ function compare_root_rows(left: { key: string; is_group: boolean }, right: { ke
     return by_code_point(left.key.toLowerCase(), right.key.toLowerCase()) || by_code_point(right.key, left.key);
 }
 
-/** The panel for a half-typed sequence, or null when no key can follow it. The title is the chain of group names, else the typed keys. */
+/** The panel for a half-typed sequence, or null when no key can follow it. The title is the chain of group names. */
 export function which_key_panel(root: TreeBranch, keys: readonly string[], settings: Pick<Settings, "which_key_border">): WhichKeyPanel | null {
     const branch = branch_at(root, keys);
     if (branch === null) return null;
@@ -38,7 +45,7 @@ export function which_key_panel(root: TreeBranch, keys: readonly string[], setti
     );
     if (rows.length === 0) return null;
     if (keys.length === 0) rows.sort(compare_root_rows);
-    return { title: keys.join(" "), rows, border: settings.which_key_border };
+    return { title: title_chain(root, keys), rows, border: settings.which_key_border };
 }
 
 /** Whether the panel may open on its own after the delay. A sequence in `which_key_skip` waits for a key that leads on, and a panel already up redraws at once. */

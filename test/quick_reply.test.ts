@@ -12,7 +12,7 @@ const MESSAGES = [{ id: 5, headerMessageId: "m5", folder: { accountId: "a1" } }]
 
 test("g r 1 to g r 9 bind msg.reply_with with the slot", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    for (let slot = 1; slot <= 9; slot++) assert.deepEqual(normal[`gr${slot}`], { id: "msg.reply_with", args: { slot } });
+    for (let slot = 1; slot <= 9; slot++) assert.deepEqual(normal[`gr${slot}`], { id: "msg.reply_with", args: { slot }, label: `Slot ${slot}` });
 });
 
 test("the slot is checked by the param schema", () => {

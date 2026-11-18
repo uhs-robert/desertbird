@@ -31,10 +31,11 @@ test("app.open_page and pane.focus take only the names the table lists", () => {
 test("the app keys bind their commands and add no warning, and u undoes", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
     assert.deepEqual(normal["u"], { id: "msg.undo" });
-    assert.deepEqual(normal["gC"], { id: "thread.open_conversation" });
-    for (const [keys, page] of [["gx", "addons"], ["gT", "themes"], ["gc", "config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page } }, keys);
-    for (const [keys, pane] of [["gf", "folders"], ["ge", "threads"], ["gm", "message"], ["<A-h>", "threads"], ["L", "threads"], ["<A-l>", "message"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane } }, keys);
-    assert.deepEqual(normal["H"], { id: "folder.collapse" });
+    assert.deepEqual(normal["gC"], { id: "thread.open_conversation", label: "Open conversation" });
+    for (const [keys, page, label] of [["gpa", "addons", "Add-ons"], ["gpt", "themes", "Themes"], ["gpc", "config", "Config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page }, label }, keys);
+    for (const keys of ["gx", "gT", "gc"]) assert.equal(normal[keys], undefined, keys);
+    for (const [keys, pane, label] of [["gf", "folders", "Folder pane"], ["ge", "threads", "Thread list"], ["gm", "message", "Message pane"], ["<A-h>", "threads", "Focus thread list"], ["L", "threads", "Focus thread list"], ["<A-l>", "message", "Focus message pane"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane }, label }, keys);
+    assert.deepEqual(normal["H"], { id: "folder.collapse", label: "Collapse folder or go to folders" });
     for (const id of ["pane.left", "pane.right"]) assert.ok(!Object.values(normal).some((binding) => binding !== null && typeof binding === "object" && "id" in binding && binding.id === id), id);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
@@ -65,7 +66,7 @@ test("a command Thunderbird has disabled is refused with a message", async () =>
 
 test("the pane chords bind in the message document too, so focus can leave the message by them", () => {
     const message = MESSAGE_KEYMAP.normal ?? {};
-    for (const [keys, pane] of [["H", "folders"], ["<A-h>", "threads"], ["L", "threads"], ["<A-l>", "message"]] as const) assert.deepEqual(message[keys], { id: "pane.focus", args: { pane } }, keys);
+    for (const [keys, pane, label] of [["H", "folders", "Focus folder pane"], ["<A-h>", "threads", "Focus thread list"], ["L", "threads", "Focus thread list"], ["<A-l>", "message", "Focus message pane"]] as const) assert.deepEqual(message[keys], { id: "pane.focus", args: { pane }, label }, keys);
 });
 
 test("the pane commands only move the focus, so the bridge may run them", () => {

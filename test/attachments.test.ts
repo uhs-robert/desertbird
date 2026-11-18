@@ -19,7 +19,7 @@ const downloads = (calls: string[]) => calls.filter((call) => call.startsWith("d
 const notices = (calls: string[]) => calls.filter((call) => call.startsWith("notify "));
 
 test("the key is bound and the where argument is a fixed enum", () => {
-    assert.deepEqual(DEFAULT_KEYMAP.normal?.["ga"], { id: "msg.save_attachments" });
+    assert.deepEqual(DEFAULT_KEYMAP.normal?.["ga"], { id: "msg.save_attachments", label: "Save attachments" });
     const command = registry.get("msg.save_attachments")!;
     assert.equal(check_args(command, { where: "ask" }).ok, true);
     assert.equal(check_args(command, { where: "/tmp" }).ok, false);

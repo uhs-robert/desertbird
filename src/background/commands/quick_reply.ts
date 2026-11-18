@@ -18,5 +18,5 @@ export const quick_reply: CommandGroup = {
             run: scoped<QuickReplyApi>(reply_with),
         },
     },
-    normal_keys: Object.fromEntries(slots.map((slot) => [`gr${slot}`, { id: "msg.reply_with", args: { slot } }])),
+    normal_keys: Object.fromEntries(slots.map((slot) => [`gr${slot}`, { id: "msg.reply_with", args: { slot }, label: `Slot ${slot}` }])),
 };

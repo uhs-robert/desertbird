@@ -11,7 +11,7 @@ test("the panel lists the keys that follow the typed keys, leaves by label and g
         { key: "g", label: "First row", is_group: false },
         { key: "u", label: "2 keys", is_group: true },
     ]);
-    assert.equal(panel?.title, "g");
+    assert.deepEqual(panel?.title, ["+Go"]);
 });
 
 test("a group with a name shows the name", () => {
@@ -22,7 +22,7 @@ test("a group with a name shows the name", () => {
 test("the panel follows a longer sequence down the tree", () => {
     const panel = which_key_panel(sample_root(), ["g", "u"], settings_with({}));
     assert.deepEqual(panel?.rows.map((row) => row.key), ["a", "b"]);
-    assert.equal(panel?.title, "g u");
+    assert.deepEqual(panel?.title, ["+Go", "+u"]);
 });
 
 test("typed keys that lead to a leaf or nowhere have no panel", () => {
@@ -67,7 +67,8 @@ const leaf_of = (label: string) => ({ kind: "leaf" as const, label, steps: [] })
 test("`;` is a prefix whose panel lists f, c and y, and each resolves to a pick with its action", () => {
     for (const [compiled, id] of [[compile_default_keymap().compiled.modes.normal, "hint.window"], [compile_message_keymap().compiled.modes.normal, "hint.pick"]] as const) {
         const root = compiled as TreeBranch;
-        assert.deepEqual(which_key_panel(root, [";"], settings_with({}))?.rows.map((row) => row.key), ["f", "c", "y"]);
+        const keys = which_key_panel(root, [";"], settings_with({}))?.rows.map((row) => row.key).sort();
+        assert.deepEqual(keys, id === "hint.window" ? [";", "c", "f", "y"] : ["c", "f", "y"]);
         const actions = ["f", "c", "y"].map((key) => {
             const node = branch_at(root, [";"])?.children[key];
             const step = node?.kind === "leaf" ? node.steps[0] : undefined;

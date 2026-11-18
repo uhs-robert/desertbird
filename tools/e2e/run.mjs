@@ -864,10 +864,10 @@ async function run_panes(instance, { app, kind, shot }) {
   await keys(["g", "e"]);
 
   // Each page opens in a tab of the window. The reset closes it so the next key runs in the mail tab.
-  for (const [key, page, address] of [["x", "addons", "about:addons"], ["T", "themes", "about:addons"], ["c", "config", "about:config"]]) {
-    state = await keys(["g", key], 3000);
-    check(app, kind, `g ${key} opens the ${page} page in a tab`, tabs_of(state).includes(address), `tabs ${tabs_of(state).join(" ")}`);
-    await shot(`panes_g${key}`, `the page g ${key} opened`);
+  for (const [key, page, address] of [["a", "addons", "about:addons"], ["t", "themes", "about:addons"], ["c", "config", "about:config"]]) {
+    state = await keys(["g", "p", key], 3000);
+    check(app, kind, `g p ${key} opens the ${page} page in a tab`, tabs_of(state).includes(address), `tabs ${tabs_of(state).join(" ")}`);
+    await shot(`panes_gp${key}`, `the page g p ${key} opened`);
     await instance.ask("reset_tabs");
     await sleep(1500);
     await keys(["g", "e"]);

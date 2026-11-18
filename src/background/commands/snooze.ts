@@ -25,9 +25,9 @@ export const snooze: CommandGroup = {
         },
     },
     normal_keys: {
-        mzl: { id: "msg.snooze", args: { until: "later_today" } },
-        mzt: { id: "msg.snooze", args: { until: "tomorrow" } },
-        mzw: { id: "msg.snooze", args: { until: "weekend" } },
-        mzm: { id: "msg.snooze", args: { until: "monday" } },
+        mzl: { id: "msg.snooze", args: { until: "later_today" }, label: "Later today" },
+        mzt: { id: "msg.snooze", args: { until: "tomorrow" }, label: "Tomorrow" },
+        mzw: { id: "msg.snooze", args: { until: "weekend" }, label: "Weekend" },
+        mzm: { id: "msg.snooze", args: { until: "monday" }, label: "Monday" },
     },
 };
