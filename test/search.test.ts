@@ -315,7 +315,7 @@ function line_setup(options: { commit_error?: string; commit_gate?: Promise<void
     const histories: string[] = [];
     const service = create_cmdline_service({
         registry,
-        sources: { folders: async () => [], tags: async () => [] },
+        sources: { folders: async () => [], tags: async () => [], tabs: async () => [] },
         overlay: { mount: async () => {}, unmount: async (args) => void log.push(`unmount ${args.windowId}`), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         history: { record: async () => {} },
         search_history: { record: async (line) => void histories.push(line) },

@@ -74,6 +74,12 @@ test("tab.switch picks by number counted from 1 and by part of a title", async (
     assert.deepEqual(writes(by_title.calls), ['tabs.update 11 {"active":true}']);
 });
 
+test("tab.switch prefers a whole title over a title that contains it", async () => {
+    const box = with_tabs(bar(0, ["Mail", "Re: Budget", "Budget"]));
+    await run(box.api, "tab.switch", { tab: "budget" });
+    assert.deepEqual(writes(box.calls), ['tabs.update 12 {"active":true}']);
+});
+
 test("tab.switch refuses a number past the last tab and a title nothing matches", async () => {
     for (const tab of ["4", "0", "nothing"]) {
         const { api, calls } = with_tabs(bar(0, ["Mail", "Docs", "Message"]));

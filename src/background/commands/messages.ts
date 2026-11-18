@@ -1,6 +1,6 @@
 import { archive, delete_messages } from "../handlers/message.ts";
 import type { TrashApi } from "../handlers/message.ts";
-import { add_tag, copy_messages, move_messages, read_all, set_read, toggle_flag, toggle_junk } from "../handlers/message_state.ts";
+import { copy_messages, move_messages, read_all, set_read, toggle_flag, toggle_junk, toggle_tag } from "../handlers/message_state.ts";
 import { ACCOUNT_PARAM } from "./account_param.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
@@ -33,10 +33,10 @@ export const messages: CommandGroup = {
             bridge: false,
             runs_in: "background",
             name: "tag",
-            label: "Tag",
-            intent: "Add a tag to the selected messages.",
+            label: "Toggle tag",
+            intent: "Toggle a tag on the selection. The first message decides: if it has the tag, the tag comes off every message, else it goes on every message.",
             params: [{ name: "tag", type: "string", main: true, values: { from: "tags" }, pattern: "^\\S(.*\\S)?$" }],
-            run: scoped(add_tag),
+            run: scoped(toggle_tag),
         },
         "msg.move": {
             bridge: false,

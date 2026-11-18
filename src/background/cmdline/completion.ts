@@ -9,6 +9,7 @@ import { first_sentence } from "../../../vendor/desertfox/registry/summary.ts";
 import { flag_alternatives, usage_line } from "../../../vendor/desertfox/registry/usage.ts";
 import { rank } from "../../../vendor/desertfox/score.ts";
 import type { Candidate } from "../../../vendor/desertfox/score.ts";
+import type { TabChoice } from "../handlers/tabs.ts";
 import type { FolderChoice, FolderQuery } from "./folder_rows.ts";
 
 /** One line of the list. `insert` replaces the word under the caret. `positions` are the letters of `name` the query matched. */
@@ -36,6 +37,8 @@ export interface Completion {
 export interface ValueSources {
     folders(query: FolderQuery): Promise<FolderChoice[]>;
     tags(): Promise<string[]>;
+    /** The tabs of one window, in tab-bar order. */
+    tabs(window_id: number): Promise<TabChoice[]>;
 }
 
 /** The most rows the page draws. A long folder list ranks in full and then keeps the best. */
@@ -92,7 +95,13 @@ function folder_rows(choices: FolderChoice[], has_flag: boolean): Row[] {
     });
 }
 
-function value_rows(param: ParamDef, folders: FolderChoice[], tags: string[], has_flag: boolean): Row[] {
+// A tab row is named by its title. It inserts the number, so two tabs with one title stay apart, and the number is a keyword, so typing it finds the tab.
+function tab_rows(tabs: TabChoice[]): Row[] {
+    return tabs.map(({ number, title, is_active }) => row_of(title === "" ? String(number) : title, `${number} `, `Tab ${number}${is_active ? ", this tab" : ""}`, { keywords: [String(number)] }));
+}
+
+function value_rows(param: ParamDef, folders: FolderChoice[], tags: string[], tabs: TabChoice[], has_flag: boolean): Row[] {
+    if (is_dynamic_values(param.values) && param.values.from === "tabs") return tab_rows(tabs);
     if (is_dynamic_values(param.values) && param.values.from === "folders") return folder_rows(folders, has_flag);
     const values = is_dynamic_values(param.values) ? (param.values.from === "tags" ? tags : []) : (static_values(param) ?? []);
     const described = (value: string) => (typeof param.description === "object" ? (param.description[value] ?? "") : "");
@@ -122,11 +131,14 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
             })
             .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 
-    function finish(context: Exclude<CursorContext, { kind: "none" }>, rows: Row[], command?: Command, picks_value = false): Completion {
+    // Folders and tags: the word names exactly one row. Tabs: the word is a number.
+    const is_whole = (word: string, rows: Row[], tab_numbers: boolean) => (tab_numbers ? /^\d+$/.test(word) : rows.filter((row) => row.name === word).length === 1);
+
+    function finish(context: Exclude<CursorContext, { kind: "none" }>, rows: Row[], command?: Command, picks_value = false, tab_numbers = false): Completion {
         const ranked = rank(context.word, rows).slice(0, MAX_ROWS);
         const usage = command && usage_line(command);
-        // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match. A path two accounts hold is no whole value, since typed alone it names two folders.
-        const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && rows.filter((row) => row.name === context.word).length !== 1;
+        // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match. For tabs only a number is whole: a title word always highlights, since the handler matches a title as a part and could pick another tab. A path two accounts hold is no whole value, since typed alone it names two folders.
+        const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && !is_whole(context.word, rows, tab_numbers);
         return {
             rows: ranked.map(({ name, insert, description, args, positions }) => ({ name, insert, description, args, positions })),
             start: context.start,
@@ -145,9 +157,10 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         const lists_values = param !== undefined && (is_dynamic_values(param.values) || static_values(param) !== undefined);
         // `open` offers every account. Move and copy offer the selection's account, the only one they can reach without `--account`.
         const folder_query = { window_id: session.window_id, message_ids: session.message_ids, all_accounts: context.kind === "subject" && context.command.id === "folder.open" };
-        const [folders, tags] = lists_values ? await Promise.all([sources.folders(folder_query), sources.tags()]) : [[], []];
+        const from = is_dynamic_values(param?.values) ? param.values.from : undefined;
+        const [folders, tags, tabs] = lists_values ? await Promise.all([from === "tabs" ? [] : sources.folders(folder_query), sources.tags(), from === "tabs" ? sources.tabs(session.window_id) : []]) : [[], [], []];
         const named = context.kind === "subject" && typeof context.typed["account"] === "string" ? context.typed["account"] : undefined;
         const offered = named === undefined ? folders : folders.filter((choice) => choice.account_name.toLowerCase() === named.toLowerCase() || choice.account_id === named);
-        return finish(context, param ? value_rows(param, offered, tags, named !== undefined) : [], context.command, is_dynamic_values(param?.values));
+        return finish(context, param ? value_rows(param, offered, tags, tabs, named !== undefined) : [], context.command, is_dynamic_values(param?.values), from === "tabs");
     };
 }

@@ -27,10 +27,12 @@ export interface TabsApi {
 }
 
 // The tab list comes back in tab-bar order. The sort keeps the wrap-around right if an implementation ever returns another order.
-async function tabs_of_window(scope: TabsScope): Promise<TabInfo[]> {
-    const tabs = await scope.api.tabs.query(scope.window_id >= 0 ? { windowId: scope.window_id } : { currentWindow: true });
+async function sorted_tabs(api: { tabs: Pick<TabsApi["tabs"], "query"> }, window_id: number): Promise<TabInfo[]> {
+    const tabs = await api.tabs.query(window_id >= 0 ? { windowId: window_id } : { currentWindow: true });
     return [...tabs].sort((left, right) => left.index - right.index);
 }
+
+const tabs_of_window = (scope: TabsScope): Promise<TabInfo[]> => sorted_tabs(scope.api, scope.window_id);
 
 async function activate(scope: TabsScope, tab: TabInfo): Promise<void> {
     if (tab.id === undefined) throw new RuntimeRefusal("That tab cannot be selected.");
@@ -52,13 +54,27 @@ export const next_tab = (scope: TabsScope): Promise<void> => step_active(scope, 
 /** Wraps from the first tab to the last. */
 export const previous_tab = (scope: TabsScope): Promise<void> => step_active(scope, -1);
 
+/** One row of the tab list: the place in the tab bar counted from 1, the title and whether the tab is the front one. */
+export interface TabChoice {
+    number: number;
+    title: string;
+    is_active: boolean;
+}
+
+export async function tab_choices(api: { tabs: Pick<TabsApi["tabs"], "query"> }, window_id: number): Promise<TabChoice[]> {
+    return (await sorted_tabs(api, window_id)).map((tab, at) => ({ number: at + 1, title: tab.title ?? "", is_active: tab.active }));
+}
+
 const TAB_NUMBER = /^\d+$/;
 
-/** `tab` is a place in the tab bar counted from 1, or part of a tab title. */
+/** `tab` is a place in the tab bar counted from 1, or a tab title: a whole title first, else part of one. */
 export async function switch_tab(scope: TabsScope, args: CheckedArgs): Promise<void> {
     const wanted = String(args["tab"]).trim();
     const tabs = await tabs_of_window(scope);
-    const picked = TAB_NUMBER.test(wanted) ? tabs[Number(wanted) - 1] : tabs.find((tab) => (tab.title ?? "").toLowerCase().includes(wanted.toLowerCase()));
+    const lowered = wanted.toLowerCase();
+    const titled = (tab: TabInfo) => (tab.title ?? "").toLowerCase();
+    // A whole title wins over a title that merely contains it ("Budget" before "Re: Budget").
+    const picked = TAB_NUMBER.test(wanted) ? tabs[Number(wanted) - 1] : (tabs.find((tab) => titled(tab) === lowered) ?? tabs.find((tab) => titled(tab).includes(lowered)));
     if (picked === undefined) throw new RuntimeRefusal(`No tab matches "${wanted}".`);
     await activate(scope, picked);
 }
