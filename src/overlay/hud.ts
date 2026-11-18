@@ -1,8 +1,9 @@
 // The hud page: the which-key panel and the toasts. It keeps no state. Each time the background says the hud of this window changed, it asks for the state and draws it.
 
-import { WHICH_KEY_ROOT_TITLE, WHICH_KEY_TITLE_SEPARATOR } from "../shared/protocol.ts";
 import type { HudChanged, HudRequest, HudState } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
+import { choose_columns, fit_title } from "../../vendor/desertfox/whichkey_layout.ts";
+import { STYLE } from "../../vendor/desertfox/whichkey_style.ts";
 
 declare const messenger: {
     runtime: {
@@ -12,12 +13,11 @@ declare const messenger: {
 };
 
 follow_theme();
-
-// A panel after a typed prefix with more keys than this is cut, so it never grows past the box it sits in. The root list is the key list itself and shows every key, in more columns.
-const MAX_ROWS = 24;
+document.head.append(Object.assign(document.createElement("style"), { textContent: STYLE }));
 
 const window_id = Number(new URLSearchParams(location.search).get("window"));
 const which_key_element = document.getElementById("which_key") as HTMLDivElement;
+which_key_element.className = "desertfox-whichkey";
 const toasts_element = document.getElementById("toasts") as HTMLDivElement;
 
 function make<K extends keyof HTMLElementTagNameMap>(tag: K, class_name: string, text?: string): HTMLElementTagNameMap[K] {
@@ -27,15 +27,8 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, class_name: string,
     return node;
 }
 
-const ROOT_ROWS = 12;
-
-// The root list has to show every column with whole labels, so a narrow window gets taller columns instead of a horizontal scrollbar, which a keyboard cannot reach. Rows grow until the panel stops overflowing sideways, or until one column is left.
-function fit_root_rows(rows: HTMLElement, row_count: number): void {
-    for (let count = ROOT_ROWS; count <= row_count; count++) {
-        rows.style.setProperty("--root_rows", String(count));
-        if (which_key_element.scrollWidth <= which_key_element.clientWidth) return;
-    }
-}
+// DesertFox's panel look: its sheet and its column chooser are vendored, and the sheet reads the `--desertfox-*` tokens that `follow_theme` publishes on the page root.
+const FOOTER: readonly [key: string, word: string][] = [["ESC", "close"]];
 
 let drawn_panel: HudState["which_key"] = null;
 
@@ -43,18 +36,26 @@ function draw_which_key(panel: HudState["which_key"]): void {
     drawn_panel = panel;
     which_key_element.hidden = panel === null;
     if (panel === null) return;
-    const is_root = panel.title.length === 1 && panel.title[0] === WHICH_KEY_ROOT_TITLE;
-    which_key_element.className = is_root ? `${panel.border} root` : panel.border;
-    const shown_rows = is_root ? panel.rows : panel.rows.slice(0, MAX_ROWS);
-    const rows = make("div", "rows");
-    for (const row of shown_rows) {
-        const line = make("div", "row");
-        line.append(make("span", "key", row.key), make("span", row.is_group ? "group" : "command", row.is_group ? `+${row.label}` : row.label));
-        rows.append(line);
+    const columns = choose_columns(panel.rows.length, window.innerHeight);
+    const list = make("div", "rows");
+    list.style.gridTemplateColumns = `repeat(${columns}, auto)`;
+    for (const row of panel.rows) {
+        const line = make("div", row.is_group ? "row group" : "row");
+        line.append(make("span", "key", row.key), make("span", "arrow", "\u279c"), make("span", "label", row.is_group ? `+${row.label}` : row.label));
+        list.append(line);
     }
-    const hidden_count = panel.rows.length - shown_rows.length;
-    which_key_element.replaceChildren(make("div", "title", panel.title.join(WHICH_KEY_TITLE_SEPARATOR)), rows, ...(hidden_count > 0 ? [make("div", "row group", `... ${hidden_count} more`)] : []));
-    if (is_root) fit_root_rows(rows, shown_rows.length);
+    const footer = make("div", "footer");
+    for (const [key, word] of FOOTER) footer.append(make("span", "", key), word);
+    const body = make("div", "body");
+    body.append(list, footer);
+    const frame = make("div", `frame ${panel.border}`);
+    frame.append(body);
+    const chip = make("div", "chip");
+    const title_bar = make("div", "title");
+    title_bar.append(chip);
+    which_key_element.replaceChildren(title_bar, frame);
+    // Only a rendered chip can say whether it overflows.
+    chip.textContent = fit_title(panel.title, (candidate) => ((chip.textContent = candidate), chip.scrollWidth > chip.clientWidth)).text;
 }
 
 window.addEventListener("resize", () => draw_which_key(drawn_panel));

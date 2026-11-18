@@ -131,6 +131,14 @@ async function hud_pixels(instance, name, region = "0,640 1260x80") {
   return createHash("sha256").update(readFileSync(await instance.shot_region(name, region))).digest("hex");
 }
 
+// Escape three times leave no command line open, whatever the list held: the first hides the list, the second closes the line, the third goes to the mail list, where it does nothing.
+async function close_command_line(instance) {
+  for (let count = 0; count < 3; count++) {
+    await instance.press(["-k", "Escape"]);
+    await sleep(700);
+  }
+}
+
 // The region the root key list fills: it is about twelve rows tall above the status bar, taller than the strip of a toast.
 const KEY_LIST_REGION = "0,300 1260x420";
 
@@ -1327,8 +1335,7 @@ async function run_cmdline(instance, { app, kind, shot }) {
   state = await instance.ask("state");
   check(app, kind, "j and x typed into the open command line run nothing", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}`);
   await shot("cmdline_typed", "the line after j and x were typed into it");
-  await instance.press(["-k", "Escape"]);
-  await sleep(1000);
+  await close_command_line(instance);
   await shot("cmdline_closed", "the window after Escape, with no command line");
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "after Escape a bound key runs again", selection_of(state) !== selected_before, `selected ${selected_before} then ${selection_of(state)}`);
@@ -1373,8 +1380,7 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await instance.press(["-k", "Tab"]);
   await sleep(600);
   await shot("cmdline_after_tab", "the line after Tab: the box keeps its size and position");
-  await instance.press(["-k", "Escape"]);
-  await sleep(800);
+  await close_command_line(instance);
 
   // C-n and C-p belong to the line. Thunderbird binds them to a new message and to print, so a leak shows as a new window.
   const windows_before_ctrl = (await instance.ask("state")).windows;
@@ -1382,15 +1388,19 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await sleep(1200);
   await instance.press(["f"]);
   await sleep(500);
+  const input_row = "0,692 640x28";
+  const input_typed = await hud_pixels(instance, `${app}_ctrl_input_typed`, input_row);
   await instance.press(["-M", "ctrl", "-k", "n", "-m", "ctrl"]);
   await sleep(600);
+  const input_after_n = await hud_pixels(instance, `${app}_ctrl_input_after_n`, input_row);
+  check(app, kind, "C-n puts a row in the input line", input_after_n !== input_typed);
   await instance.press(["-M", "ctrl", "-k", "p", "-m", "ctrl"]);
   await sleep(1000);
+  check(app, kind, "C-p then puts another row in", (await hud_pixels(instance, `${app}_ctrl_input_after_p`, input_row)) !== input_after_n);
   await shot("cmdline_ctrl_n_p", "the line after C-n and C-p: a row went into the line and no other window opened");
   const windows_after_ctrl = (await instance.ask("state")).windows;
   check(app, kind, "C-n and C-p in the open line open no window", same(windows_before_ctrl, windows_after_ctrl) && instance.exited() === null, `windows before ${windows_before_ctrl.length}, after ${windows_after_ctrl.length}`);
-  await instance.press(["-k", "Escape"]);
-  await sleep(800);
+  await close_command_line(instance);
 
   // History: two sorts run, then a fresh line recalls them newest first, so Up twice is the older sort.
   for (const order of ["descending", "ascending"]) {
@@ -1417,9 +1427,48 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await instance.press(["-k", "Return"]);
   await sleep(800);
   await shot("cmdline_error", "the line stays open and names the unknown command");
-  await instance.press(["-k", "Escape"]);
-  await sleep(800);
+  await close_command_line(instance);
   check(app, kind, "the app survived the command line", instance.exited() === null);
+
+  // The first Escape closes the list and keeps the line, the second closes the line. Keys m s toggle the star of the selected message when the list has them, and are typed into the line when it is open.
+  const keys_reach_list = async () => {
+    const id = (await instance.ask("state")).selected[0]?.header_id;
+    const flagged = async () => (await instance.ask("state")).flags[id]?.flagged;
+    const before = await flagged();
+    await instance.press(["m"]);
+    await instance.press(["s"]);
+    await sleep(900);
+    if ((await flagged()) === before) return false;
+    await instance.press(["m"]);
+    await instance.press(["s"]);
+    await sleep(900);
+    return true;
+  };
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["-k", "Escape"]);
+  await sleep(900);
+  await shot("cmdline_list_closed", "after the first Escape: the list is gone and the input line stays");
+  check(app, kind, "the first Escape keeps the line open: m s is typed into it", !(await keys_reach_list()));
+  await close_command_line(instance);
+  check(app, kind, "after Escape three times the line is closed and keys reach the list", await keys_reach_list());
+  await shot("cmdline_list_closed_twice", "after the Escapes: no command line");
+  // A selected row puts its usage in the note row, and a missing value shows in the note in the error color.
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["-k", "Tab"]);
+  await instance.press(["-k", "Tab"]);
+  await sleep(700);
+  await shot("cmdline_selected_note", "the line after two Tabs: the second row is in the line and the note row above the input shows its usage");
+  await close_command_line(instance);
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["step.unread"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(800);
+  await shot("cmdline_typed_error", "step.unread typed and run: the note row shows the error in the error color");
+  await close_command_line(instance);
+  check(app, kind, "the line is closed before the next scenario", await keys_reach_list());
 
   // Enter takes the highlighted row: a fuzzy word picks a folder without Tab.
   await instance.ask("show_folder", 20000, { path: "/Views" });
@@ -1472,8 +1521,7 @@ async function run_view_settings(instance, check_in) {
   await sleep(1200);
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "F f opens the command line, so j typed into it moves no selection", state.selected.map((message) => message.header_id).join(",") === selected_before_f, `selected ${selected_before_f} then ${state.selected.map((message) => message.header_id).join(",")}`);
-  await instance.press(["-k", "Escape"]);
-  await sleep(1000);
+  await close_command_line(instance);
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "Escape closes the command line, so j moves the selection again", state.selected.map((message) => message.header_id).join(",") !== selected_before_f, `selected ${selected_before_f} then ${state.selected.map((message) => message.header_id).join(",")}`);
   await instance.ask("api_view", 20000, { filter: { tags: { mode: "any", tags: { $label1: true } } } });
@@ -1605,8 +1653,7 @@ async function run_own_pages(instance) {
     await instance.press([":"]);
     await sleep(1500);
     await shot(`${name.replace(" ", "_")}_cmdline`, `${name} tab after the colon key: the command line shows`);
-    await instance.press(["-k", "Escape"]);
-    await sleep(500);
+    await close_command_line(instance);
     const closed_here = await key_and_state(instance, ["q"], 2000);
     check(app, kind, `q closes the ${name} tab`, main_window_tabs(closed_here).length === before, `tabs ${main_window_tabs(closed_here).length}, expected ${before}`);
   }

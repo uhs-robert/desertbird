@@ -61,3 +61,9 @@ test("a user key that makes a default key skip does not block the save, and the 
         assert.ok(built.messages.some((message) => message.includes("skipped")));
     }
 });
+
+test("a custom prompt keeps its leading and trailing spaces, and a list setting is still trimmed", () => {
+    assert.deepEqual(parse_setting_text("cmdline_prompt", " $ "), { value: " $ " });
+    assert.deepEqual(parse_setting_text("cmdline_prompt", ""), { error: "expected 1 to 8 characters" });
+    assert.deepEqual(parse_setting_text("which_key_skip", " gu , x "), { value: ["gu", "x"] });
+});

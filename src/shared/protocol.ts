@@ -329,9 +329,19 @@ export type CmdlineRequest =
     | { type: "cmdline.search_type"; windowId: number; text: string }
     | { type: "cmdline.search_commit"; windowId: number; text: string };
 
-/** The rows are plain data. `positions` are the letters of `name` the query matched. */
+/** One row of the list, as plain data. `positions` are the letters of `name` the query matched. `usage` is what the note shows while the row is selected, and `keys` fills the last column. Both are absent when the row has nothing to say. */
+export interface CmdlineRow {
+    name: string;
+    insert: string;
+    description: string;
+    args: string;
+    positions: number[];
+    usage?: string;
+    keys?: string;
+}
+
 export interface CmdlineCompletion {
-    rows: { name: string; insert: string; description: string; args: string; positions: number[] }[];
+    rows: CmdlineRow[];
     start: number;
     end: number;
     usage?: string;
@@ -340,8 +350,8 @@ export interface CmdlineCompletion {
 
 export type SearchDirection = "forward" | "backward";
 
-/** `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. `confirm` is set when the background mounted the page for a confirm prompt and not for a command line. */
-export type CmdlineHello = { open: true; text: string; search?: SearchDirection } | { open: false; confirm?: ConfirmPrompt };
+/** `prompt` is the `cmdline_prompt` setting. `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. `confirm` is set when the background mounted the page for a confirm prompt and not for a command line. */
+export type CmdlineHello = { open: true; text: string; prompt: string; search?: SearchDirection } | { open: false; confirm?: ConfirmPrompt };
 
 export type ConfirmAction = "archive" | "trash" | "move";
 
@@ -376,7 +386,6 @@ export type HudRequest = { type: "hud.state"; windowId: number };
 
 /** The title of the panel at the root. A group in a chain starts with `+`, so no chain equals it. */
 export const WHICH_KEY_ROOT_TITLE = "keys";
-export const WHICH_KEY_TITLE_SEPARATOR = " \u00bb ";
 
 /** The which-key panel as the page draws it: the chain of group names as a title (`["+Go", "+Pages"]`, or `["keys"]` at the root) and one row per key that can follow. */
 export interface WhichKeyPanel {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { create_overlay_host } from "../src/chrome/overlay.ts";
+import { ESCAPE_ANSWER_MS, create_overlay_host, on_escape_key } from "../src/chrome/overlay.ts";
 
 class FakeWindow {
     tab_listeners = new Set<() => void>();
@@ -202,4 +202,26 @@ test("Escape from outside the page restores the same element, and a gone element
     host.mount({ windowId: 2, surface: "cmdline" });
     host.unmount({ windowId: 2, surface: "cmdline" });
     assert.equal(log.at(-1), "focus list of 2");
+});
+
+test("Escape closes at once when the page never loaded, and after the wait when a loaded page does not answer", () => {
+    const waits: { run: () => void; ms: number }[] = [];
+    const wait = (run: () => void, ms: number) => void waits.push({ run, ms });
+    const closed: string[] = [];
+    on_escape_key(() => "", wait, () => closed.push("never loaded"));
+    assert.deepEqual([closed, waits.length], [["never loaded"], 0]);
+    on_escape_key(() => "DesertBird command line", wait, () => closed.push("hung"));
+    assert.deepEqual([closed.length, waits[0]!.ms], [1, ESCAPE_ANSWER_MS]);
+    waits[0]!.run();
+    assert.deepEqual(closed, ["never loaded", "hung"]);
+});
+
+test("a page that answers Escape by changing its title keeps the overlay open", () => {
+    let title = "DesertBird command line";
+    const waits: (() => void)[] = [];
+    const closed: string[] = [];
+    on_escape_key(() => title, (run) => void waits.push(run), () => closed.push("closed"));
+    title = "DesertBird command line 1";
+    waits[0]!();
+    assert.deepEqual(closed, []);
 });

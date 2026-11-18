@@ -315,6 +315,7 @@ function line_setup(options: { commit_error?: string; commit_gate?: Promise<void
     const histories: string[] = [];
     const service = create_cmdline_service({
         registry,
+        read_prompt: async () => "caret",
         sources: { folders: async () => [], tags: async () => [], tabs: async () => [] },
         overlay: { mount: async () => {}, unmount: async (args) => void log.push(`unmount ${args.windowId}`), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         history: { record: async () => {} },
@@ -339,9 +340,9 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 test("hello of a search line carries the direction, and a command line has none", async () => {
     const { service } = line_setup();
     service.begin(3, { message_ids: [], text: "", search: "backward" });
-    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "", search: "backward" });
+    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "", prompt: "caret", search: "backward" });
     service.begin(4, { message_ids: [], text: "tag " });
-    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 4 }), { open: true, text: "tag " });
+    assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 4 }), { open: true, text: "tag ", prompt: "caret" });
 });
 
 test("search keystrokes reach the search service, and only for a search line", async () => {

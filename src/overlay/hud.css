@@ -1,9 +1,8 @@
-/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. The fallbacks hold until the background has published one. Muted text mixes the text color into the surface, so it stays readable on every theme. */
+/* The theme tokens (--desertfox-*) come from the stored theme through follow_theme. The fallbacks hold until the background has published one. */
 :root {
     color-scheme: light dark;
     --surface: var(--desertfox-bg-core, Canvas);
     --text: var(--desertfox-fg-core, CanvasText);
-    --muted: color-mix(in srgb, var(--text) 72%, var(--surface));
     --accent: color-mix(in srgb, var(--desertfox-primary, CanvasText) 85%, var(--text));
     --edge: var(--desertfox-border, GrayText);
     --error_surface: color-mix(in srgb, var(--error_edge) 22%, var(--surface));
@@ -11,21 +10,12 @@
     --error_edge: var(--desertfox-error, #b3261e);
 }
 html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-serif; color: var(--text); overflow: hidden; }
-#which_key, #toasts > div { background: var(--surface); color: var(--text); border: 1px solid var(--edge); box-sizing: border-box; }
-/* Positions and sizes follow DesertFox: both sit at the bottom right and the panel draws over a toast. */
-#which_key { position: absolute; right: 16px; bottom: 44px; z-index: 2; max-width: calc(100vw - 32px); max-height: calc(100vh - 98px); overflow: auto; padding: 6px 10px 8px; }
-#which_key .title { color: var(--muted); border-bottom: 1px solid var(--edge); padding-bottom: 3px; margin-bottom: 4px; font-size: 12px; }
-#which_key .rows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(8, auto); column-gap: 24px; }
-/* hud.ts sets --root_rows above 12 when the columns do not fit the width. */
-#which_key.root .rows { grid-template-rows: repeat(var(--root_rows, 12), auto); }
-#which_key .row { white-space: nowrap; }
-#which_key .key { display: inline-block; min-width: 3.5em; font: 700 14px monospace; color: var(--accent); }
-#which_key .group { color: var(--muted); }
-#which_key.round { border-radius: 8px; }
-#which_key.chamfer { clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+#toasts > div { background: var(--surface); color: var(--text); border: 1px solid var(--edge); box-sizing: border-box; }
+/* The panel's own rules are DesertFox's sheet, which hud.ts adds. It sits at the bottom right like the toasts, and draws over a toast. */
+#which_key { z-index: 2; }
 #toasts { position: absolute; right: 16px; bottom: 48px; z-index: 1; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; max-width: 40ch; }
 #toasts > div { padding: 6px 10px; border-left: 4px solid var(--accent); overflow-wrap: anywhere; }
 #toasts > div.error { background: var(--error_surface); color: var(--error_text); border-color: var(--error_edge); border-left-color: var(--error_edge); }
-/* The command line box is 280 px high and sits over the bottom of the window, so toasts go above it. */
+/* A confirm prompt fills the 280 px box over the bottom of the window, so toasts go above it. The command line lifts nothing. */
 body.lifted #toasts { bottom: 292px; }
 [hidden] { display: none !important; }

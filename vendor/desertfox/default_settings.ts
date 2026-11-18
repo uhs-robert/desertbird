@@ -29,4 +29,5 @@ export const DEFAULT_SETTINGS: Settings = {
   site_rules: [],
   bridge: false,
   bridge_share_tabs: false,
+  item_navigator: false,
 };

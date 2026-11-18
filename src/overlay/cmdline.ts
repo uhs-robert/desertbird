@@ -5,20 +5,23 @@ import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts"
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
+import { CMDLINE_STYLE } from "../../vendor/desertfox/cmdline_style.ts";
 import { show_confirm } from "./confirm.ts";
-import { accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, read_history, rows_fit_after_wait, settle_latest, shown_highlight } from "./line_edit.ts";
+import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, list_shown_after_answer, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, row_for_click, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest | ConfirmAnswerRequest): Promise<unknown> };
     storage: { local: { get(key: string): Promise<Record<string, unknown>> }; onChanged: { addListener(listener: (changes: Record<string, unknown>, area: string) => void): void } };
 };
 
-follow_theme();
+// The sheet goes in after cmdline.css, and the theme after the sheet, so the theme beats the sheet's hex fallbacks.
+document.head.append(Object.assign(document.createElement("style"), { textContent: CMDLINE_STYLE }));
+follow_theme(".desertfox-cmdline");
 
 const window_id = Number(new URLSearchParams(location.search).get("window"));
 const input = document.getElementById("input") as HTMLInputElement;
-const rows_element = document.getElementById("rows") as HTMLOListElement;
-const status_element = document.getElementById("status") as HTMLDivElement;
+const list_element = document.getElementById("list") as HTMLDivElement;
+const note_element = document.getElementById("note") as HTMLDivElement;
 const prompt_element = document.getElementById("prompt") as HTMLSpanElement;
 
 // Set when the line opened as a search line (`/` forward, `?` backward). It has no completion rows, and the background filters the list as the text changes.
@@ -31,6 +34,17 @@ let latest_search = 0;
 let confirming = false;
 
 let completion: CmdlineCompletion = { rows: [], start: 0, end: 0 };
+// Escape closes the list and keeps the line. Typing, or a row key, shows it again.
+let list_shown = true;
+// How many Escapes hid the list. A completion request that started before one must not show the list again.
+let list_hides = 0;
+// What the note says in place of the usage: a parse error, a failed run or the count of a search. An edit of a command line clears it.
+let message: { text: string; is_error: boolean } | undefined;
+// The first ranked row the list draws, and what it drew last. The window follows the highlight only when the highlight moved or the ranking changed, so a wheel scroll is not undone by the next draw.
+let list_top = 0;
+let drawn_completion: CmdlineCompletion | undefined;
+let drawn_shown = -1;
+const wheel_state = { remainder_px: 0 };
 // The text and caret the current completion was computed for. Enter uses a row only while the line still matches them.
 let completion_for = { text: "", caret: 0 };
 // The newest completion request, so Enter can wait for the answer to the text it runs.
@@ -47,37 +61,71 @@ let history_cursor: HistoryCursor = create_history_cursor(history);
 // Up and Down walk the history until the user types or uses a completion key. After that they put the next or previous row in the text, as in DesertFox.
 let walking_history = true;
 
+const FALLBACK_ROW_HEIGHT_PX = 20;
+const PAGE_TITLE = document.title;
+let escapes_answered = 0;
+
 const send = <Answer>(message: CmdlineRequest | ConfirmAnswerRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
 
 function show_status(text: string, is_error: boolean): void {
-    status_element.textContent = text;
-    status_element.classList.toggle("error", is_error);
+    message = text === "" ? undefined : { text, is_error };
+    draw_note();
 }
 
-function draw_rows(): void {
-    const shown = shown_highlight(highlighted, completion.rows.length, completion.highlight_first);
-    rows_element.replaceChildren(
-        ...completion.rows.map((row, index) => {
-            const item = document.createElement("li");
-            item.classList.toggle("selected", index === shown);
-            const name = document.createElement("span");
-            name.className = "name";
+function visible_rows(): CmdlineCompletion["rows"] {
+    return list_shown ? completion.rows : [];
+}
+
+function selected_index(): number {
+    return list_shown ? shown_highlight(highlighted, completion.rows.length, completion.highlight_first) : -1;
+}
+
+// The note is hidden when it has nothing to say, so it takes no height.
+function draw_note(): void {
+    const text = note_text(message?.text, completion.rows[selected_index()]?.usage, completion.usage, completion.rows.length, input.value);
+    note_element.textContent = text;
+    note_element.hidden = text === "";
+    document.body.classList.toggle("desertfox-cmdline-error", message?.is_error === true);
+}
+
+function draw_rows(scroll_rows = 0): void {
+    const rows = visible_rows();
+    const shown = selected_index();
+    const same_ranking = completion === drawn_completion;
+    list_top = window_top(same_ranking ? list_top + scroll_rows : 0, !same_ranking || shown !== drawn_shown ? shown : -1, rows.length);
+    drawn_completion = completion;
+    drawn_shown = shown;
+    const window = rows.slice(list_top, list_top + LIST_ROWS);
+    list_element.hidden = window.length === 0;
+    list_element.style.setProperty("--desertfox-name-width", `${name_width(window.map((row) => row.name))}ch`);
+    // The keys column is filled by the background. It has no width while no row carries keys.
+    list_element.style.setProperty("--desertfox-keys-width", `${Math.max(0, ...window.map((row) => row.keys?.length ?? 0))}ch`);
+    list_element.replaceChildren(
+        ...window.map((row, offset) => {
+            const item = cell("item", "");
+            if (list_top + offset === shown) item.className += " desertfox-cmdline-selected";
+            // The index in the ranked rows, because a click picks by it and the window may be scrolled.
+            item.dataset["index"] = String(list_top + offset);
+            const name = cell("name", "");
             for (const part of name_parts(row.name, row.positions)) {
                 const piece = part.matched ? document.createElement("b") : document.createElement("span");
                 piece.textContent = part.text;
                 name.append(piece);
             }
-            const args = document.createElement("span");
-            args.className = "args";
-            args.textContent = row.args;
-            const description = document.createElement("span");
-            description.className = "description";
-            description.textContent = row.description;
-            item.append(name, args, description);
+            const args = cell("args", "");
+            args.append(cell("args-full", row.args), cell("args-short", row.args === "" ? "" : "\u2026"));
+            item.append(name, cell("description", row.description), args, cell("keys", row.keys ?? ""));
             return item;
         }),
     );
-    rows_element.children[shown]?.scrollIntoView({ block: "nearest" });
+    draw_note();
+}
+
+function cell(class_name: string, text: string): HTMLSpanElement {
+    const element = document.createElement("span");
+    element.className = `desertfox-cmdline-${class_name}`;
+    element.textContent = text;
+    return element;
 }
 
 function refresh_completion(): Promise<void> {
@@ -89,13 +137,14 @@ async function request_completion(): Promise<void> {
     const request = ++latest_request;
     const text = input.value;
     const caret = input.selectionStart ?? text.length;
+    const hides_at_request = list_hides;
     const answer = await send<CmdlineCompletion>({ type: "cmdline.complete", windowId: window_id, text, caret });
     if (request !== latest_request || closing) return;
     completion = answer;
     completion_for = { text, caret };
     highlighted = -1;
+    list_shown = list_shown_after_answer(hides_at_request, list_hides, list_shown);
     draw_rows();
-    show_status(completion.usage ?? "", false);
 }
 
 // The background waits out a burst of typing, filters the list and answers with a count, or with `stale` when a newer keystroke took over.
@@ -118,6 +167,7 @@ function step_history(direction: 1 | -1): void {
     if (entry === undefined) return;
     input.value = entry;
     input.setSelectionRange(entry.length, entry.length);
+    clear_message();
     refresh_line().catch(report_failure);
 }
 
@@ -142,6 +192,7 @@ const row_keys = create_key_queue();
 // Tab, C-n and A-Down step next, S-Tab, C-p and A-Up step back, and both wrap. A single match goes into the line at once and the rows are ranked for the new text.
 async function cycle_rows(step: 1 | -1): Promise<void> {
     walking_history = false;
+    list_shown = true;
     if (!(await rows_for_line())) return;
     const row_count = completion.rows.length;
     if (closing || row_count === 0) return;
@@ -156,13 +207,14 @@ async function cycle_rows(step: 1 | -1): Promise<void> {
 // Up and Down stop at the ends, as in DesertFox, and put the row in the line like the cycle keys.
 async function step_rows(step: 1 | -1): Promise<void> {
     if (!(await rows_for_line()) || closing) return;
+    list_shown = true;
     const target = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
     if (target >= 0) preview_at(target);
 }
 
 function line_to_run(): string {
     const answer = { for_text: completion_for.text, for_caret: completion_for.caret, ...completion };
-    return enter_text(input.value, input.selectionStart ?? input.value.length, answer, highlighted, preview_base !== null);
+    return enter_text(input.value, input.selectionStart ?? input.value.length, answer, highlighted, preview_base !== null, list_shown);
 }
 
 async function run_line(): Promise<void> {
@@ -198,7 +250,14 @@ window.addEventListener(
         if (closing || confirming) return;
         if (event.key === "Escape") {
             event.preventDefault();
-            close_line();
+            // The first Escape closes the list and keeps the line, as in DesertFox.
+            if (list_shown && completion.rows.length > 0) {
+                list_shown = false;
+                list_hides++;
+                draw_rows();
+                // The host closes the overlay on an Escape the page does not answer. A new title is the answer.
+                document.title = `${PAGE_TITLE} ${++escapes_answered}`;
+            } else close_line();
         } else if (event.key === "Enter") {
             event.preventDefault();
             run_line().catch(report_failure);
@@ -225,8 +284,45 @@ messenger.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && !confirming && history_key() in changes) load_history().catch(report_failure);
 });
 
+// An edit of a command line drops its message. A search line keeps its count until the next answer.
+function clear_message(): void {
+    if (search_direction || message === undefined) return;
+    message = undefined;
+    draw_note();
+}
+
+// A press on a row must not take the focus from the input, which would lose the caret.
+list_element.addEventListener("mousedown", (event) => event.preventDefault());
+// A click on a row is the same as moving to it with Tab: the line takes the row and the list ranks the new text.
+list_element.addEventListener("click", (event) => {
+    const index = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-index]")?.dataset["index"];
+    if (index === undefined || confirming) return;
+    const drawn = completion;
+    row_keys.add(() => pick_row(drawn, Number(index))).catch(report_failure);
+});
+// Not passive, so the mail window behind the list never scrolls while the pointer is over it.
+list_element.addEventListener(
+    "wheel",
+    (event) => {
+        event.preventDefault();
+        const row_height_px = (list_element.firstElementChild as HTMLElement | null)?.offsetHeight || FALLBACK_ROW_HEIGHT_PX;
+        const rows = wheel_rows(wheel_state, event.deltaY, event.deltaMode, row_height_px);
+        if (rows !== 0) draw_rows(rows);
+    },
+    { passive: false },
+);
+
+async function pick_row(drawn: CmdlineCompletion, index: number): Promise<void> {
+    if (!(await rows_for_line()) || closing || !list_shown || row_for_click(drawn, completion, index, completion.rows.length) < 0) return;
+    walking_history = false;
+    preview_at(index);
+    preview_base = null;
+    refresh_completion().catch(report_failure);
+}
+
 input.addEventListener("input", () => {
     if (confirming) return;
+    clear_message();
     walking_history = false;
     preview_base = null;
     history_cursor = create_history_cursor(history);
@@ -240,12 +336,22 @@ function start_confirm(prompt: ConfirmPrompt): void {
     window.focus();
     show_confirm(prompt, {
         create: (tag) => document.createElement(tag),
-        show: (prompt_element) => document.body.append(prompt_element),
+        // The prompt wears the panel's class, so it takes the panel's colors and the theme reaches it.
+        show: (box) => {
+            box.classList.add("desertfox-cmdline");
+            document.body.append(box);
+        },
         on_key: (listener) => window.addEventListener("keydown", listener, true),
         now_ms: () => performance.now(),
         send_answer: (answer) => send<ConfirmAnswerResult>({ type: "confirm.answer", windowId: window_id, token: prompt.token, answer }),
         close: close_line,
     });
+}
+
+function show_prompt(setting: string): void {
+    const look = prompt_look(setting);
+    prompt_element.textContent = look.text;
+    prompt_element.classList.toggle("desertfox-cmdline-prompt-colon", look.colon);
 }
 
 async function start(): Promise<void> {
@@ -258,10 +364,8 @@ async function start(): Promise<void> {
     }
     input.value = hello.text;
     search_direction = hello.search;
-    if (search_direction) {
-        prompt_element.textContent = search_direction === "forward" ? "/" : "?";
-        document.body.classList.add("search");
-    }
+    show_prompt(search_direction ? (search_direction === "forward" ? "/ " : "? ") : hello.prompt);
+    if (search_direction) document.body.classList.add("search");
     window.focus();
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
