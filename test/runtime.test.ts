@@ -245,8 +245,21 @@ const page_tree = () => ({
             j: leaf("motion.down", "chrome"),
             g: { kind: "branch", children: { "?": leaf("help.open", "background"), g: leaf("motion.top", "chrome") } },
             "<A-q>": leaf("tab.close", "background"),
+            "<C-c>": leaf("tab.close_mail", "background"),
         },
     },
+});
+
+test("a close chord of the mail tab passes in a page tab, so Ctrl+C still copies there", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(page_tree());
+    const window = windows[0]!;
+    for (const tab_kind of [1, 2] as const) {
+        window.in_mail_tab = false;
+        window.tab_kind = tab_kind;
+        assert.equal(press(window, "c", { ctrlKey: true }).cancelled, false, `kind ${tab_kind}`);
+    }
+    assert.deepEqual(emitted, []);
 });
 
 test("a readable tab runs q, : and g? and passes every other key", () => {

@@ -99,6 +99,23 @@ test("a window with no mail tab refuses and changes nothing", async () => {
     assert.equal(calls.filter((call) => call.startsWith("notify")).length, 1);
 });
 
+test("toggle_starred sets the starred filter and clears it when it already shows", async () => {
+    // A tab id of its own, because the handler remembers the filter by tab id across tests.
+    const { run, calls } = view_fake({ id: 77, messagePaneVisible: true, folderPaneVisible: false, displayedFolder: INBOX });
+    await run("filter.set", { state: "toggle_starred" });
+    await run("filter.set", { state: "toggle_starred" });
+    assert.deepEqual(calls.filter((call) => call.startsWith("mailTabs.setQuickFilter")), ['mailTabs.setQuickFilter 77 {"flagged":true}', "mailTabs.setQuickFilter 77 {}"]);
+});
+
+test("F f and , , open the filter and sort pickers, F s toggles starred, F A is the attachment filter, and C-x C-c C-h close the tab", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    assert.deepEqual(normal["Ff"], { id: "cmdline.open", args: { text: "filter " } });
+    assert.deepEqual(normal[",,"], { id: "cmdline.open", args: { text: "sort " } });
+    assert.deepEqual(normal["Fs"], { id: "filter.set", args: { state: "toggle_starred" } });
+    assert.deepEqual(normal["FA"], { id: "filter.set", args: { state: "attachment" } });
+    for (const key of ["<C-x>", "<C-c>", "<C-h>"]) assert.deepEqual(normal[key], { id: "tab.close_mail" }, key);
+});
+
 test("the view commands are bridge safe and only the fixed states, panes and sorts have keys", () => {
     for (const id of ["filter.set", "search.threads", "sort.set", "pane.toggle"]) assert.equal(registry.get(id)?.bridge, true, id);
     const bound = Object.values(DEFAULT_KEYMAP.normal ?? {}).flatMap((binding) => (binding && !Array.isArray(binding) ? [binding] : []));
@@ -118,6 +135,8 @@ test("the sort keys name a column and the default order of that column", () => {
         ",a": ["attachments", "ascending"],
         ",u": ["unread", "ascending"],
         ",o": ["current", "toggle"],
+        ",r": ["received", "descending"],
+        ",p": ["priority", "ascending"],
     };
     for (const [keys, [by, order]] of Object.entries(planned)) assert.deepEqual(normal[keys], { id: "sort.set", args: { by, order } }, keys);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
@@ -252,4 +271,20 @@ test("tab_kind: the mail tab is 0, the tabs with a readable document 1, every ot
     assert.equal(kind_of("mail3PaneTab"), 0);
     for (const name of ["calendar", "addressBookTab", "preferencesTab"]) assert.equal(kind_of(name), 1, name);
     for (const name of ["contentTab", "mailMessageTab", "tasks", "chat", "calendarEvent"]) assert.equal(kind_of(name), 2, name);
+});
+
+test("the close chords of the mail tab are in the mail keymap and not in the message keymap", async () => {
+    const { MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
+    for (const key of ["<C-x>", "<C-c>", "<C-h>", "Ff", ",,"]) {
+        assert.ok(DEFAULT_KEYMAP.normal?.[key], key);
+        assert.equal(MESSAGE_KEYMAP.normal?.[key], undefined, key);
+    }
+});
+
+test("F s flips only the star and keeps the other filters", async () => {
+    const { run, calls } = view_fake({ id: 78, messagePaneVisible: true, folderPaneVisible: false, displayedFolder: INBOX });
+    await run("filter.set", { state: "unread" });
+    await run("filter.set", { state: "toggle_starred" });
+    await run("filter.set", { state: "toggle_starred" });
+    assert.deepEqual(calls.filter((call) => call.startsWith("mailTabs.setQuickFilter")), ['mailTabs.setQuickFilter 78 {"unread":true}', 'mailTabs.setQuickFilter 78 {"unread":true,"flagged":true}', 'mailTabs.setQuickFilter 78 {"unread":true}']);
 });

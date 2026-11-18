@@ -5,7 +5,7 @@ import { ACCOUNT_PARAM } from "./account_param.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.tag`, `msg.move` and `msg.copy` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
+// `msg.tag`, `msg.move` and `msg.copy` take a typed value, so they open on the command line (`mt`, `mm`, `mc`). Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
 const FOLDER_PARAM = { name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^\\S.*" } as const;
 
 export const messages: CommandGroup = {
