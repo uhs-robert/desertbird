@@ -27,6 +27,8 @@ export interface Completion {
     end: number;
     /** Shown while no row is selected: the usage of the typed command. */
     usage?: string;
+    /** Set for a typed word of a folder or tag value: the page highlights the first row and Enter takes it. */
+    highlight_first?: true;
 }
 
 /** The value lists behind `values: { from }`. A list the command line has no source for stays empty. */
@@ -104,14 +106,17 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
             })
             .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 
-    function finish(context: Exclude<CursorContext, { kind: "none" }>, rows: Row[], command?: Command): Completion {
+    function finish(context: Exclude<CursorContext, { kind: "none" }>, rows: Row[], command?: Command, picks_value = false): Completion {
         const ranked = rank(context.word, rows).slice(0, MAX_ROWS);
         const usage = command && usage_line(command);
+        // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match.
+        const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && !rows.some((row) => row.name === context.word);
         return {
             rows: ranked.map(({ name, insert, description, args, positions }) => ({ name, insert, description, args, positions })),
             start: context.start,
             end: context.end,
             ...(usage !== undefined && { usage }),
+            ...(highlight_first && { highlight_first: true as const }),
         };
     }
 
@@ -123,6 +128,6 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command) : undefined;
         const lists_values = param !== undefined && (is_dynamic_values(param.values) || static_values(param) !== undefined);
         const [folders, tags] = lists_values ? await Promise.all([sources.folders(), sources.tags()]) : [[], []];
-        return finish(context, param ? value_rows(param, folders, tags) : [], context.command);
+        return finish(context, param ? value_rows(param, folders, tags) : [], context.command, is_dynamic_values(param?.values));
     };
 }

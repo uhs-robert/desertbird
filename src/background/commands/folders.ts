@@ -16,10 +16,11 @@ const SLOT_PARAM = { name: "slot", type: "string", main: true, pattern: `^[${SLO
 
 const slot_keys = (prefix: string, id: string) => Object.fromEntries(SLOTS.map((slot) => [`${prefix}${slot}`, { id, args: { slot } }]));
 
-// `folder.open` with a folder path has no default key until the command line exists. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
+// `o` and `g o` open the command line on `open `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
 export const folders: CommandGroup = {
     commands: {
         "folder.open": {
+            name: "open",
             bridge: true,
             runs_in: "background",
             label: "Open a folder",
@@ -39,7 +40,7 @@ export const folders: CommandGroup = {
                     main: true,
                     values: { from: "folders" },
                     default: [{ value: "", when: { special: SPECIAL } }],
-                    pattern: "^(/.+)?$",
+                    pattern: "^(\\S.*)?$",
                     pattern_arms: [{ pattern: "^$", when: { special: SPECIAL } }],
                 },
             ],

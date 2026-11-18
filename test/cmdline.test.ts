@@ -45,7 +45,7 @@ test("the validator still rejects what the parser lets through", () => {
     assert.equal(parsed.kind, "invocation");
     assert.deepEqual(check_args(tag, parsed.kind === "invocation" ? parsed.invocation.args : undefined), { ok: false, error: "missing <tag>", missing_param: "tag" });
     const move = registry.get("msg.move")!;
-    assert.equal(check_args(move, { folder: "Archive" }).ok, false);
+    assert.equal(check_args(move, { folder: " Archive" }).ok, false);
 });
 
 test("the printer writes text that parses back to the same args", () => {
@@ -95,6 +95,23 @@ test("completion offers the folders for move and the tags for tag, and quotes a 
     assert.deepEqual(tags.rows.map((row) => row.insert), ["Important ", '"Work stuff" ']);
     const narrowed = await complete("move arch", 9);
     assert.deepEqual(narrowed.rows.map((row) => row.name), ["/Archive", "/Archive/2026"]);
+});
+
+test("a typed folder or tag word highlights the first row, except a whole value, an empty word or a command word", async () => {
+    assert.equal((await complete("move arch", 9)).highlight_first, true);
+    assert.equal((await complete("open arch", 9)).highlight_first, true);
+    assert.equal((await complete("tag imp", 7)).highlight_first, true);
+    assert.equal((await complete("move /Archive", 13)).highlight_first, undefined);
+    assert.equal((await complete("move ", 5)).highlight_first, undefined);
+    assert.equal((await complete("mo", 2)).highlight_first, undefined);
+});
+
+test("open takes a fuzzy word and move takes any word, and the validator passes both", () => {
+    for (const [text, id] of [["open proj", "folder.open"], ["move proj", "msg.move"]] as const) {
+        const parsed = parse_command_line(registry, text);
+        assert.equal(parsed.kind, "invocation", text);
+        if (parsed.kind === "invocation") assert.deepEqual(parsed.invocation, { id, args: { folder: "proj" } }, text);
+    }
 });
 
 test("completion offers the flags of a command and the value of an enum flag", async () => {
@@ -205,7 +222,7 @@ test("complete answers from the registry while a session exists and refuses with
 test("run keeps the line open and returns the reason for text that is not a command", async () => {
     const { service, ran, calls } = service_setup();
     service.begin(3, { message_ids: [5], text: "" });
-    for (const [text, reason] of [["bogus", /unknown command/], ["tag", /missing <tag>/], ["move Archive", /folder/], ["tag -h", /^tag tag$/], ["tag @clipboard", /@sources/], ["motion.down", /runs on a key/]] as const) {
+    for (const [text, reason] of [["bogus", /unknown command/], ["tag", /missing <tag>/], ["tag -h", /^tag tag$/], ["tag @clipboard", /@sources/], ["motion.down", /runs on a key/]] as const) {
         const result = await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text });
         assert.equal(result.ok, false, text);
         assert.match((result as { message: string }).message, reason, text);
@@ -263,7 +280,7 @@ test("the default keys: : opens an empty line and the typed-value keys open it w
         return binding.args?.["text"];
     };
     assert.equal(text_of(":"), undefined);
-    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["Ft", "filter --tag --tag="], ["T", "tab "]] as const) {
+    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["o", "open "], ["go", "open "]] as const) {
         assert.equal(text_of(keys), text);
         // The text each key types must name a command and parse as far as the word before the value.
         const first_word = text.split(" ")[0]!;
