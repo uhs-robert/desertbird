@@ -147,8 +147,9 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             // A remote page hides its text fields, so only a chord is safe there.
             if (kind > 1 ? is_plain_printable(token) : deps.is_typing_target(window, event) || deps.menu_is_open(window)) return matcher.reset();
             const result = matcher.feed(NORMAL_MODE, token);
-            const id = result.kind_ === "match" && result.leaf.steps[0]!.invocation.id;
-            if (!id || !PAGE_COMMANDS.includes(id)) return;
+            const { id, args } = result.kind_ === "match" ? result.leaf.steps[0]!.invocation : { id: "", args: undefined };
+            if (!PAGE_COMMANDS.includes(id) || args) return;
+            if (hold_commands.has(id)) hold_until = deps.now() + HOLD_MS;
             event.preventDefault();
             event.stopPropagation();
             return deps.emit({ command: id, args: {}, count: 1, windowId: deps.window_id_of(window), messageIds: [] });

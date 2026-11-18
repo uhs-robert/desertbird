@@ -241,6 +241,7 @@ const page_tree = () => ({
             q: leaf("tab.close", "background"),
             ":": leaf("cmdline.open", "background"),
             x: leaf("msg.archive", "background"),
+            o: { kind: "leaf" as const, steps: [{ ...step("cmdline.open", "background"), invocation: { id: "cmdline.open", args: { text: "open " } } }] },
             j: leaf("motion.down", "chrome"),
             g: { kind: "branch", children: { "?": leaf("help.open", "background"), g: leaf("motion.top", "chrome") } },
             "<A-q>": leaf("tab.close", "background"),
@@ -262,11 +263,22 @@ test("a readable tab runs q, : and g? and passes every other key", () => {
         emitted.map((event) => [event.command, event.messageIds]),
         [["tab.close", []], ["cmdline.open", []], ["help.open", []]],
     );
-    for (const key of ["x", "j", "z"]) assert.equal(press(window, key).cancelled, false, key);
+    for (const key of ["x", "j", "z", "o"]) assert.equal(press(window, key).cancelled, false, key);
     press(window, "g");
     assert.equal(press(window, "g").cancelled, false);
     assert.equal(emitted.length, 3);
     assert.equal(window.selected, 0);
+});
+
+test("a readable tab holds plain keys after : so a fast :q does not close the tab", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(page_tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    window.in_mail_tab = false;
+    window.tab_kind = 1;
+    assert.equal(press(window, ":").cancelled, true);
+    assert.equal(press(window, "q").cancelled, true);
+    assert.deepEqual(emitted.map((event) => event.command), ["cmdline.open"]);
 });
 
 test("a readable tab leaves q to a text field or an open menu", () => {

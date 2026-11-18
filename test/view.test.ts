@@ -6,7 +6,7 @@ import { create_router } from "../src/background/router.ts";
 import { while_loading } from "../src/background/handlers/loading.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
 import type { RouterApi } from "../src/background/router.ts";
-import { read_rows, scroll_row } from "../src/chrome/view.ts";
+import { read_rows, scroll_row, tab_kind } from "../src/chrome/view.ts";
 
 const INBOX = { id: "f-inbox", accountId: "a1", path: "/Inbox" };
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
@@ -244,4 +244,12 @@ test("scroll_row brings the row into existence, aligns it to the chosen edge and
         scroll_row(tree as never, 40, position);
         assert.deepEqual(calls, ["scrollToIndex 40", `align ${block}`, `scrollBy ${shift}`], position);
     }
+});
+
+test("tab_kind: the mail tab is 0, the tabs with a readable document 1, every other tab 2", () => {
+    const kind_of = (name: string | null) => tab_kind({ currentTabInfo: name === null ? null : { mode: { name } } });
+    assert.equal(kind_of(null), 0);
+    assert.equal(kind_of("mail3PaneTab"), 0);
+    for (const name of ["calendar", "addressBookTab", "preferencesTab"]) assert.equal(kind_of(name), 1, name);
+    for (const name of ["contentTab", "mailMessageTab", "tasks", "chat", "calendarEvent"]) assert.equal(kind_of(name), 2, name);
 });
