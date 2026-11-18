@@ -44,7 +44,7 @@ interface Stored {
 const inbox = (header: string, id: number, more: Partial<Stored> = {}): Stored => ({ id, header, folder: "inbox", subject: `Subject ${header}`, author: `Sender <${header}>`, ...more });
 
 /** A mail store that behaves as the API does where the act depends on it: a move gives a message a new id, an archive files into a year folder, and `messages.delete` would delete a message in Trash for good. */
-function acts_under_test(stored: Stored[], options: { settings?: Partial<ActSettings>; answer?: ConfirmResult; fail_move_after?: number } = {}) {
+function acts_under_test(stored: Stored[], options: { settings?: Partial<ActSettings>; answer?: ConfirmResult; fail_move_after?: number; archive_skips?: string[] } = {}) {
     const folders = structuredClone(FOLDERS);
     const box = new Map(stored.map((message) => [message.id, { ...message }]));
     let next_id = 100;
@@ -76,7 +76,8 @@ function acts_under_test(stored: Stored[], options: { settings?: Partial<ActSett
             archive: async (ids: number[]) => {
                 calls.push(`archive ${ids.join(",")}`);
                 if (!folders.some((entry) => entry.id === "archives-2026")) folders.push({ id: "archives-2026", accountId: "a1", path: "/Archives/2026", name: "2026" });
-                relocate(ids, "archives-2026");
+                // The archiver skips a message whose identity has archiving off, and still resolves.
+                relocate(ids.filter((id) => !options.archive_skips?.includes(known(id).header)), "archives-2026");
             },
             move: async (ids: number[], folder_id: string) => {
                 calls.push(`move ${ids.join(",")} ${folder_id}`);
@@ -97,6 +98,7 @@ function acts_under_test(stored: Stored[], options: { settings?: Partial<ActSett
             },
             query: async (query: { accountId?: string; specialUse?: string[] }) => folders.filter((entry) => (query.accountId === undefined || entry.accountId === query.accountId) && (query.specialUse === undefined || query.specialUse.some((use) => entry.specialUse?.includes(use)))),
         },
+        accounts: { list: async () => [{ id: "a1", name: "Work" }, { id: "a2", name: "Home" }] },
         notifications: { create: async () => "n1" },
         keys: undefined,
         undo: { log, retry_delays_ms: [1, 1] },
@@ -209,7 +211,7 @@ test("the prompt lists every message, with an empty text for a missing subject o
                 { subject: "Subject a@x", from: "Sender <a@x>" },
                 { subject: "", from: "" },
             ],
-            target_folder_name: "Work",
+            target_folder_name: "Work (Work)",
         },
     ]);
 });
@@ -232,7 +234,7 @@ test("archive, trash and move on yes answer only a count, and u reverses each li
 
 test("trash moves to each account's Trash and never deletes, so a message already in Trash stays", async () => {
     const mail = acts_under_test([inbox("a@x", 1), inbox("t@x", 2, { folder: "trash" })]);
-    assert.deepEqual(await mail.act({ action: "trash", ids: [1, 2] }), { ok: true, count: 2 });
+    assert.deepEqual(await mail.act({ action: "trash", ids: [1, 2] }), { ok: false, message: "moved 1 of 2" }, "a message already in Trash did not move");
     assert.deepEqual(mail.moves(), ["move 1 trash"]);
     assert.deepEqual(mail.places(), ["a@x@trash", "t@x@trash"]);
 });
@@ -269,4 +271,10 @@ test("no registry command is added, and msg.delete and the rest of the never-lis
         registry.list().filter((command) => /act|confirm|trash/.test(command.id)),
         [],
     );
+});
+
+test("an archive that resolves but skips a message answers moved n of m", async () => {
+    const mail = acts_under_test([inbox("a@x", 1), inbox("b@x", 2)], { archive_skips: ["b@x"] });
+    assert.deepEqual(await mail.act({ action: "archive", ids: [1, 2] }), { ok: false, message: "moved 1 of 2" });
+    assert.deepEqual(mail.places(), ["a@x@archives-2026", "b@x@inbox"]);
 });

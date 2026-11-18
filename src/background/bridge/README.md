@@ -133,7 +133,9 @@ An `act` frame needs `bridge` and `bridge_allow_actions`, both off by default an
 
 - The fields are checked first, then the settings. Every id and the folder are found before the prompt. One missing id refuses the whole act with `no such message`, and nothing moves.
 - Nothing moves without a yes on the confirm prompt (see above). `n` or Escape answers `denied`, the 30 s limit `timed out`, and a prompt already showing `busy`.
-- After the yes, the settings are read and the messages found again. A setting turned off during the prompt answers `off` and moves nothing. A message moved by hand meanwhile is left out, and the reply is `moved <n> of <m>`. So is a move that fails part way.
+- After the yes, the settings are read and the messages found again. A setting turned off during the prompt answers `off` and moves nothing. A message moved by hand meanwhile is left out, and the reply is `moved <n> of <m>`.
+- A message counts as moved only when it left its folder. A move that fails part way, an archive that skips a message (its identity has archiving off) and a message already in Trash all answer `moved <n> of <m>`.
+- The prompt names the target folder with its account, as `Archive (Work)`.
 - `archive` runs the handler of the archive key. `move` runs the move handler of the move command. `trash` moves each message to the Trash of its own account and never calls `messages.delete`, which deletes a message already in Trash for good. A message already in Trash stays there.
 - Each act writes the same undo entry as the key, so `u` (`msg.undo`) moves the messages back. `msg.delete`, `msg.archive`, `msg.move` and `msg.undo` stay on the never-list: the frame does not run a registry command.
 - The reply is `ok` with the count, or a fixed refusal. It carries no subject, sender or folder name.
