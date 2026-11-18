@@ -18,23 +18,27 @@ const FOLDERS = [
 function setup(options: { focused?: boolean } = {}) {
     const calls: string[] = [];
     const said: string[] = [];
-    const state = { shown: "inbox", focused: options.focused ?? true, select_gate: undefined as Promise<void> | undefined };
+    const state = { shown: "inbox", focused: options.focused ?? true, select_gate: undefined as Promise<void> | undefined, query_gate: undefined as Promise<void> | undefined, focus_works: true };
     const api = {
         folders: { query: async () => FOLDERS },
         mailTabs: {
-            query: async () => [{ id: 1, displayedFolder: FOLDERS.find((folder) => folder.id === state.shown) }],
+            query: async () => {
+                await state.query_gate;
+                return [{ id: 1, displayedFolder: FOLDERS.find((folder) => folder.id === state.shown) }];
+            },
             get: async () => ({ displayedFolder: { id: state.shown } }),
             update: async (_id: number, update: { displayedFolder: { id: string } }) => void (calls.push(`open ${update.displayedFolder.id}`), (state.shown = update.displayedFolder.id)),
             setQuickFilter: async () => calls.push("filter"),
         },
-        keys: undefined,
+        keys: {
+            paneFocus: async ({ pane }: { pane: string }) => {
+                calls.push(`focus ${pane}`);
+                await state.select_gate;
+                return state.focus_works;
+            },
+        },
         folderpane: {
             focused: async () => state.focused,
-            select: async ({ path }: { path: string }) => {
-                calls.push(`select ${path}`);
-                await state.select_gate;
-                return true;
-            },
         },
     };
     const storage = fake_storage();
@@ -58,20 +62,20 @@ test("the name is the last path segment, so a parent's name does not match its c
     assert.match(said.at(-1)!, /1 of 1/);
 });
 
-test("Enter opens the first match in tree order, selects its row and stores a folder register", async () => {
+test("Enter opens the first match in tree order, focuses the folder pane and stores a folder register", async () => {
     const { service, calls, said, storage } = setup();
     await service.start(3, "forward");
     await service.commit(3, "work");
-    assert.deepEqual(calls, ["open work", "select /Inbox/Work"]);
+    assert.deepEqual(calls, ["open work", "focus folders"]);
     assert.equal(said.at(-1), "1 of 3");
     assert.deepEqual(storage.data[SEARCH_REGISTER_STORAGE_KEY], { text: "work", direction: "forward", kind: "folders" });
 });
 
-test("a match in a collapsed parent is selected through the same verb, which opens the parents", async () => {
+test("a match in a collapsed parent opens like any other, and the focus returns to the folder pane", async () => {
     const { service, calls } = setup();
     await service.start(3, "forward");
     await service.commit(3, "network");
-    assert.deepEqual(calls, ["open network", "select /Archive/Network"]);
+    assert.deepEqual(calls, ["open network", "focus folders"]);
 });
 
 test("no match keeps the line open and moves nothing", async () => {
@@ -80,7 +84,7 @@ test("no match keeps the line open and moves nothing", async () => {
     await assert.rejects(service.commit(3, "zzz"), /Not found: zzz/);
     assert.deepEqual(calls, []);
     await service.commit(3, "sent");
-    assert.deepEqual(calls, ["open sent", "select /Sent"]);
+    assert.deepEqual(calls, ["open sent", "focus folders"]);
 });
 
 test("n and N step the matches in tree order and wrap", async () => {
@@ -134,12 +138,38 @@ test("an empty line repeats a folder register and refuses after a thread search"
     assert.equal(state.shown, "sent");
 });
 
+// The thread search reads rows through `keys.viewRows`, which this fake lacks, so an Enter that reaches it fails and opens no folder.
 test("with the folder pane unfocused, a forward search is the thread search", async () => {
-    const { service } = setup({ focused: false });
-    await assert.rejects(service.start(3, "forward"), /Search needs|No message list|Experiment/);
+    const { service, calls } = setup({ focused: false });
+    await service.start(3, "forward");
+    await assert.rejects(service.commit(3, "sent"));
+    assert.deepEqual(calls.filter((call) => call.startsWith("open")), []);
 });
 
 test("a backward search is always a thread search, even in the folder pane", async () => {
-    const { service } = setup();
-    await assert.rejects(service.start(3, "backward"), /Search needs|No message list|Experiment/);
+    const { service, calls } = setup();
+    await service.start(3, "backward");
+    await assert.rejects(service.commit(3, "sent"));
+    assert.deepEqual(calls.filter((call) => call.startsWith("open")), []);
+});
+
+test("an Escape while the search opens ends it, so a later keystroke finds no folder search", async () => {
+    const { service, state } = setup();
+    let release = () => {};
+    state.query_gate = new Promise<void>((resolve) => (release = resolve));
+    const started = service.start(3, "forward");
+    await new Promise((resolve) => setImmediate(resolve));
+    await service.cancel(3);
+    state.query_gate = undefined;
+    release();
+    await started;
+    await assert.rejects(service.type(3, "x"), /not open/);
+});
+
+test("a folder pane that takes no focus is a refusal, not a match", async () => {
+    const { service, state, said } = setup();
+    await service.start(3, "forward");
+    state.focus_works = false;
+    await assert.rejects(service.commit(3, "sent"), /did not take the focus/);
+    assert.deepEqual(said, []);
 });

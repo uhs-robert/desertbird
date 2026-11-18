@@ -4,10 +4,9 @@ import { focused_pane } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
-import type { FolderpaneFoldArgs, FolderpaneFocusedArgs, FolderpaneSelectArgs } from "../shared/protocol.ts";
+import type { FolderpaneFoldArgs, FolderpaneFocusedArgs } from "../shared/protocol.ts";
 
 interface FolderRowLike {
-    getAttribute(name: string): string | null;
     classList: { contains(name: string): boolean };
     parentNode: { closest(selector: string): FolderRowLike | null } | null;
 }
@@ -20,7 +19,6 @@ interface FolderTreeLike {
     querySelectorAll(selector: string): ArrayLike<FolderRowLike>;
     expandRow(row: unknown): void;
     collapseRow(row: unknown): void;
-    focus(): void;
 }
 
 interface FolderPane {
@@ -51,19 +49,6 @@ function fold_folders(tree: FolderTreeLike, { open, extent }: Pick<FolderpaneFol
     }
 }
 
-// Opens every closed ancestor of the row, nearest first, then selects it and puts the focus on the tree. Rows are matched on the folder's URI, which the tree keeps in `data-uri`.
-function select_folder(tree: FolderTreeLike, uri: string): boolean {
-    const row = Array.from(tree.querySelectorAll("li")).find((each) => each.getAttribute("data-uri") === uri);
-    if (!row) return false;
-    for (let pass = 0; pass < MAX_FOLDER_DEPTH; pass++) {
-        const closed = row.parentNode?.closest("li.collapsed");
-        if (closed) tree.expandRow(closed);
-    }
-    for (let index = 0, rows = tree.rowCount; index < rows; index++) if (tree.getRowAtIndex(index) === row) tree.selectedIndex = index;
-    tree.focus();
-    return true;
-}
-
 export function get_folderpane_api(context: ExtensionContext) {
     const pane_of = (window_id: number) => mail_pane_of(context, window_id) as unknown as FolderPane;
     const has_focus = (pane: FolderPane) => focused_pane(pane.browsingContext.topChromeWindow.document) === 0;
@@ -76,10 +61,6 @@ export function get_folderpane_api(context: ExtensionContext) {
                 return in_folder_pane;
             }),
             focused: guard("folderpane.focused", ({ windowId }: FolderpaneFocusedArgs): boolean => has_focus(pane_of(windowId))),
-            select: guard("folderpane.select", ({ windowId, accountId, path }: FolderpaneSelectArgs): boolean => {
-                const uri = context.extension.folderManager?.get(accountId, path)?.URI;
-                return uri !== undefined && select_folder(pane_of(windowId).folderTree, uri);
-            }),
         },
     };
 }

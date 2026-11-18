@@ -1,9 +1,9 @@
 // The search of `/` when the folder pane has the focus. The text matches folder names, and nothing moves while the user types: Enter selects the first match and opens it, `n` and `N` step the matches, and Escape leaves the folder that was selected before the line opened.
-// The matches come from `folders.query` in its order, which is the order of the tree, and cover folders inside closed parents. The `folderpane.select` verb opens those parents.
+// The matches come from `folders.query` in its order, which is the order of the tree, and cover folders inside closed parents. Showing a folder with `mailTabs.update` opens its parents and selects its row, and `keys.paneFocus` then returns the focus to the folder pane.
 
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
-import type { CmdlineSearchNote, FolderpaneApi } from "../../shared/protocol.ts";
+import type { CmdlineSearchNote, FolderpaneApi, KeysApi } from "../../shared/protocol.ts";
 import type { MailFolder } from "../handlers/displayed_folder.ts";
 import { show_folder } from "../handlers/folder_open.ts";
 import type { FolderApi, FolderScope } from "../handlers/folder_open.ts";
@@ -11,7 +11,8 @@ import type { SearchRegister, SearchRegisterStore } from "./register.ts";
 
 export interface FolderSearchApi extends FolderApi {
     folders: FolderApi["folders"] & { query(query: Record<string, never>): Promise<MailFolder[]> };
-    folderpane: Pick<FolderpaneApi, "focused" | "select"> | undefined;
+    folderpane: Pick<FolderpaneApi, "focused"> | undefined;
+    keys?: Pick<KeysApi, "paneFocus">;
 }
 
 export interface FolderSearchDeps {
@@ -61,16 +62,26 @@ export function create_folder_search(deps: FolderSearchDeps): FolderSearch {
         return (await deps.api.mailTabs.query({ windowId: window_id, active: true }))[0]?.displayedFolder ?? undefined;
     }
 
-    // The thread list shows the folder first and then the tree row is selected, so the focus ends in the folder pane.
+    // Showing the folder selects its tree row. The focus then goes back to the folder pane, since opening a folder can leave it elsewhere.
     async function go_to(window_id: number, folder: MailFolder): Promise<void> {
         await show_folder(scope_of(window_id), folder);
-        await deps.api.folderpane?.select({ windowId: window_id, accountId: folder.accountId, path: folder.path });
+        if (!(await deps.api.keys?.paneFocus({ windowId: window_id, pane: "folders" }))) throw new RuntimeRefusal("The folder opened, but the folder pane did not take the focus.");
     }
 
     return {
         async start(window_id) {
+            // A line left over from an earlier start must not outlive a start that answers false.
+            open.delete(window_id);
             if (!(await pane_has_focus(window_id))) return false;
-            open.set(window_id, { origin: await displayed_folder(window_id), sequence: 0 });
+            // The entry exists before the next await, so an Escape during it finds the search and ends it.
+            const search: OpenFolderSearch = { origin: undefined, sequence: 0 };
+            open.set(window_id, search);
+            try {
+                search.origin = await displayed_folder(window_id);
+            } catch (error) {
+                if (open.get(window_id) === search) open.delete(window_id);
+                throw error;
+            }
             return true;
         },
 

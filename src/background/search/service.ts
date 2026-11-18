@@ -19,7 +19,7 @@ export const SEARCH_DEBOUNCE_MS = 150;
 // The most rows one `keys.viewRows` call returns.
 const BLOCK = 500;
 
-export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { keys?: Pick<KeysApi, "viewRows">; folderpane?: ThreadViewApi["folderpane"] } & Partial<Pick<FolderSearchApi, "folders">>;
+export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { keys?: Pick<KeysApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"] } & Partial<Pick<FolderSearchApi, "folders">>;
 
 export interface SearchDeps {
     api: SearchApi;
