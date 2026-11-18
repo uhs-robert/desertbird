@@ -173,3 +173,23 @@ test("folder.open --account opens the path in that account and refuses an unknow
     assert.equal(updates(calls).length, 1);
     assert.deepEqual(notifications(calls), ["There is no account named Nowhere.", "There is no folder /Work/Plans in account Home."]);
 });
+
+test("folder.open --inbox --account uses that account's inbox, and refuses an account without one", async () => {
+    const accounts = [{ id: "a1", type: "imap", name: "Work" }, { id: "a2", type: "imap", name: "Home" }, { id: "a3", type: "imap", name: "Empty" }];
+    const { api, calls } = fake_api({ folders: FOLDERS, accounts, displayed: FOLDERS[0] as MailFolder });
+    await run(api, "folder.open", { special: "inbox", account: "Home" });
+    assert.deepEqual(updates(calls), ["mailTabs.update 1 a2:/Inbox"]);
+    await run(api, "folder.open", { special: "inbox", account: "Empty" });
+    assert.equal(updates(calls).length, 1);
+    assert.deepEqual(notifications(calls), ["There is no inbox folder in this account."]);
+});
+
+test("--account refuses a name two accounts share and takes their id", async () => {
+    const accounts = [{ id: "a1", type: "imap", name: "Mail" }, { id: "a2", type: "imap", name: "mail" }];
+    const { api, calls } = fake_api({ folders: FOLDERS, accounts, displayed: FOLDERS[0] as MailFolder });
+    await run(api, "folder.open", { folder: "/Inbox", account: "Mail" });
+    assert.equal(updates(calls).length, 0);
+    assert.match(notifications(calls)[0] ?? "", /More than one account is named Mail\. Name the account by its id: a1, a2/);
+    await run(api, "folder.open", { folder: "/Inbox", account: "a2" });
+    assert.deepEqual(updates(calls), ["mailTabs.update 1 a2:/Inbox"]);
+});

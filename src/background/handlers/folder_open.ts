@@ -61,7 +61,9 @@ async function folder_by_path(scope: FolderScope, path: string, account_id: stri
     return here ?? (await folders.query({ path }))[0];
 }
 
-async function special_in_account_order(scope: FolderScope, special_use: SpecialUse, account_id: string | undefined): Promise<MailFolder> {
+async function special_in_account_order(scope: FolderScope, special_use: SpecialUse, account_id: string | undefined, only_account = false): Promise<MailFolder> {
+    // A named account is the only place to look, so its missing folder is a refusal, not another account's.
+    if (only_account) return special_folder(scope.api, special_use, account_id);
     if (account_id !== undefined) {
         const [here] = await scope.api.folders.query({ accountId: account_id, specialUse: [special_use] });
         if (here !== undefined) return here;
@@ -77,14 +79,14 @@ export async function find_folder(api: FolderApi, account_id: string, path: stri
 export async function open_folder(scope: FolderScope, args: CheckedArgs): Promise<void> {
     const tab = await active_mail_tab(scope);
     const account_id = tab.displayedFolder?.accountId;
-    const special = String(args.special ?? "");
-    if (special !== "") return show_folder(scope, await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, account_id), tab);
-    const path = String(args.folder);
-    if (path === "") throw new RuntimeRefusal("Name a folder.");
-    // A named account is the only place to look: the same path in another account is a different folder.
     // An omitted optional string reaches the handler as the empty text.
     const account_name = String(args.account ?? "");
     const named = account_name === "" ? undefined : await account_id_named(scope.api, account_name);
+    const special = String(args.special ?? "");
+    if (special !== "") return show_folder(scope, await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, named ?? account_id, named !== undefined), tab);
+    const path = String(args.folder);
+    if (path === "") throw new RuntimeRefusal("Name a folder.");
+    // A named account is the only place to look: the same path in another account is a different folder.
     const folder = named === undefined ? await folder_by_path(scope, path, account_id) : (await scope.api.folders.query({ accountId: named, path }))[0];
     if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path}${named === undefined ? "" : ` in account ${account_name}`}.`);
     return show_folder(scope, folder, tab);

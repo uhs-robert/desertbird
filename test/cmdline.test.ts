@@ -71,7 +71,7 @@ test("the usage line comes from the params", () => {
 
 const choice = (path: string, account_name = "Work", account_id = "a1") => ({ path, account_name, account_id });
 const sources = { folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"] };
-const no_selection = { message_ids: [] };
+const no_selection = { window_id: 3, message_ids: [] };
 const complete = create_completer(registry, sources);
 
 test("completion lists background commands by name and leaves out hidden and chrome commands", async () => {
@@ -344,8 +344,8 @@ test("a path two accounts hold gets a row per account that names the account, an
 test("open asks for every account, move and copy for the selection's", async () => {
     const asked: unknown[] = [];
     const spy = create_completer(registry, { ...sources, folders: async (query) => (asked.push(query), []) });
-    for (const text of ["open ", "move ", "copy "]) await spy(text, text.length, { message_ids: [7] });
-    assert.deepEqual(asked, [{ message_ids: [7], all_accounts: true }, { message_ids: [7], all_accounts: false }, { message_ids: [7], all_accounts: false }]);
+    for (const text of ["open ", "move ", "copy "]) await spy(text, text.length, { window_id: 3, message_ids: [7] });
+    assert.deepEqual(asked, [{ window_id: 3, message_ids: [7], all_accounts: true }, { window_id: 3, message_ids: [7], all_accounts: false }, { window_id: 3, message_ids: [7], all_accounts: false }]);
 });
 
 test("the folder source lists recent folders first, newest first, then the rest by path, and keeps one account for a selection", async () => {
@@ -357,11 +357,24 @@ test("the folder source lists recent folders first, newest first, then the rest 
     const api = {
         folders: { query: async () => folders },
         accounts: { list: async () => [{ id: "a1", name: "Work" }, { id: "a2", name: "Home" }] },
+        mailTabs: { query: async () => [{ displayedFolder: shown }] },
         messages: { get: async () => ({ folder: { accountId: "a1" } }) },
         storage: { local: { get: async () => stored, set: async () => {} } },
     };
+    let shown: { accountId: string } | null = null;
     const source = create_folder_source(api);
     const label = (list: { path: string; account_name: string }[]) => list.map((entry) => `${entry.account_name}${entry.path}`);
-    assert.deepEqual(label(await source({ message_ids: [], all_accounts: true })), ["Home/A", "Work/C", "Work/B", "Work/A"]);
-    assert.deepEqual(label(await source({ message_ids: [1], all_accounts: false })), ["Work/C", "Work/B", "Work/A"]);
+    assert.deepEqual(label(await source({ window_id: 3, message_ids: [], all_accounts: true })), ["Home/A", "Work/C", "Work/B", "Work/A"]);
+    assert.deepEqual(label(await source({ window_id: 3, message_ids: [1], all_accounts: false })), ["Work/C", "Work/B", "Work/A"]);
+    // The shown account's folder leads the other accounts' folder of the same path, though the other is more recent.
+    shown = { accountId: "a1" };
+    assert.deepEqual(label(await source({ window_id: 3, message_ids: [], all_accounts: true })), ["Work/A", "Home/A", "Work/C", "Work/B"]);
+});
+
+test("accounts that share a name insert the id and show it, and a typed --account adds no second flag", async () => {
+    const twins = create_completer(registry, { ...sources, folders: async () => [choice("/Inbox", "Mail", "a1"), choice("/Inbox", "Mail", "a2")] });
+    const rows = (await twins("open ", 5, no_selection)).rows;
+    assert.deepEqual(rows.map((row) => [row.description, row.insert]), [["Mail (a1)", "--account=a1 /Inbox "], ["Mail (a2)", "--account=a2 /Inbox "]]);
+    const typed = (await twins("open --account=Mail ", 20, no_selection)).rows;
+    assert.deepEqual(typed.map((row) => row.insert), ["/Inbox ", "/Inbox "]);
 });

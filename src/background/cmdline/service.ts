@@ -155,7 +155,7 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
                 case "cmdline.close":
                     return close(request.windowId).then(() => ({}));
                 case "cmdline.complete":
-                    return session ? complete(request.text, request.caret, session) : Promise.reject(new RuntimeRefusal("The command line is not open."));
+                    return session ? complete(request.text, request.caret, { window_id: request.windowId, message_ids: session.message_ids }) : Promise.reject(new RuntimeRefusal("The command line is not open."));
                 case "cmdline.search_type":
                     return session?.search ? deps.search.type(request.windowId, request.text) : Promise.reject(new RuntimeRefusal("The search line is not open."));
                 case "cmdline.search_commit":
