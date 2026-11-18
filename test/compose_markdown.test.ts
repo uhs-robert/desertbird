@@ -169,3 +169,18 @@ test("a link to an entity-encoded script URL comes out with no live href", () =>
     assert.match(part, /<a>a<\/a>/);
     assert.match(part, /<a href="https:\/\/example\.org\/">b<\/a>/);
 });
+
+test("an embedded image as Thunderbird gives it back from a draft survives an edit elsewhere", () => {
+    // Recorded by the e2e kind compose_editor_html: a saved draft opened again holds its image as a data URL with a file name.
+    const image = '<img src="data:image/png;filename=pixel.png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="pixel">';
+    const body = body_of(`<p>Image draft.</p><p>${image}</p>`);
+    const sent = markdown.markdown_of(body);
+    assert.equal(markdown.body_with(body, sent.replace("Image draft.", "Image kept.")), body_of("<p>Image kept.</p>\n", `<p>${image}</p>`));
+    assert.equal(markdown.dropped_images(sent), 0);
+});
+
+test("images with a file, cid or blob source are left out and counted", () => {
+    const edited = "![a](file:///home/u/a.png) ![b](cid:part1.abc) ![c](blob:x) ![d](https://example.org/d.png)\n";
+    assert.equal(markdown.dropped_images(edited), 3);
+    assert.doesNotMatch(user_html(markdown.body_with(body_of("<p>x</p>"), edited)), /file:|cid:|blob:/);
+});

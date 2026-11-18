@@ -141,6 +141,8 @@ export interface ComposeMarkdown {
     markdown_of(body_html: string): string;
     /** The body with the user's text replaced by the HTML of `markdown`. The stop nodes are left as they were. */
     body_with(body_html: string, markdown: string): string;
+    /** How many images of `markdown` `body_with` leaves out, because their source is not one it keeps (a file, a `cid:` part, a `blob:`). */
+    dropped_images(markdown: string): number;
 }
 
 export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdown {
@@ -185,6 +187,10 @@ export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdo
             else for (const node of nodes) document.body.insertBefore(node, part.insert_before);
             for (const node of part.nodes) node.remove();
             return serialize(document);
+        },
+        dropped_images(markdown) {
+            const { marked } = libraries();
+            return Array.from(parse(marked.parse(markdown)).querySelectorAll("img")).filter((image) => !safe_attribute("src", image.getAttribute("src") ?? "")).length;
         },
     };
 }

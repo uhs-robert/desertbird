@@ -65,6 +65,7 @@ function setup(options: { enabled?: boolean; body?: string; plain?: boolean; ses
                 return `md(${html})\n`;
             },
             body_with: (html, markdown) => `html(${html} + ${markdown.trimEnd()})`,
+            dropped_images: (markdown) => (markdown.match(/!\[file\]/g) ?? []).length,
         },
         compose_tab_in: async (window_id) => (window_id === COMPOSE_WINDOW && state.compose_open ? COMPOSE_TAB : undefined),
         tab_exists: async (tab_id) => live_tabs.has(tab_id),
@@ -251,6 +252,14 @@ test("changed Markdown is written back as HTML when the body is still the origin
     await settle();
     assert.deepEqual(harness.writes, ["html(<p>Hi</p> + Edited)"]);
     assert.deepEqual(harness.said, []);
+});
+
+test("an image the edit drops is named in a toast after the write", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited ![file](file:///a.png) ![file](cid:b)\n" });
+    await settle();
+    assert.equal(harness.writes.length, 1);
+    assert.match(harness.said[0]!.text, /^2 images of the edited text/);
 });
 
 test("Markdown that differs only in the closing newline writes nothing", async () => {

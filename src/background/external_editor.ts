@@ -110,6 +110,8 @@ const GONE_AT_END_TEXT = "The compose window was gone when the editor ended, so 
 const TURNED_HTML_TEXT = "The message turned to HTML while the editor was open, so the edited text was not written.";
 const TURNED_PLAIN_TEXT = "The message turned to plain text while the editor was open, so the edited text was not written.";
 const BODY_CHANGED_TEXT = "The message body changed in the compose window while the editor was open, so the edited text was not written.";
+const dropped_images_text = (count: number): string =>
+    `${count === 1 ? "One image" : `${count} images`} of the edited text had a source DesertBird does not write back (only web addresses and embedded PNG, JPEG, GIF or WebP data), so the message lost ${count === 1 ? "it" : "them"}. Insert ${count === 1 ? "it" : "them"} again in the compose window.`;
 const SCRATCH_FOLDER_HINT = " The edited text stays in the host's scratch folder (desertfox/editor under $XDG_RUNTIME_DIR, else under the cache folder) until a later editor start, a day or more on, sweeps it.";
 
 const failure_text = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -164,6 +166,8 @@ export function create_external_editor(deps: ExternalEditorDeps) {
         if (is_html && text.trimEnd() === held.markdown!.trimEnd()) return deps.say(held.window_id, UNCHANGED_TEXT, false);
         try {
             await deps.compose.setComposeDetails(held.tab_id, is_html ? { body: deps.markdown.body_with(held.original, text) } : { plainTextBody: text });
+            const dropped = is_html ? deps.markdown.dropped_images(text) : 0;
+            if (dropped > 0) await deps.say(held.window_id, dropped_images_text(dropped), true);
         } catch (error) {
             await deps.say(held.window_id, `The edited text could not be written: ${failure_text(error)}`, true);
         }

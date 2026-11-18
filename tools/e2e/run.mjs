@@ -1855,6 +1855,9 @@ const DESERTFOX_HOST = process.env.E2E_DESERTFOX_HOST ?? join(process.env.HOME ?
 // The HTML kinds: Markdown the user writes, with a bold word, markup that must not turn live and tag text that must stay text.
 const EDITED_MARKDOWN = "**Edited** by the e2e editor.\n\n<img src=\"x\" onerror=\"document.title='hit'\"> [a link](javascript:alert(1)) &lt;b&gt;kept as text&lt;/b&gt;\n";
 
+// A 1x1 PNG for the draft image measurement.
+const PIXEL_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 function install_editor_host(work_dir, kind) {
   const home = join(work_dir, "home");
   const manifests = join(home, ".mozilla", "native-messaging-hosts");
@@ -1875,6 +1878,15 @@ function install_editor_host(work_dir, kind) {
 
 // The HTML kinds and the layout each tests: a reply below the quote (Thunderbird's default), and a reply above the quote with the signature above it too.
 const COMPOSE_EDITOR_HTML_KINDS = { compose_editor_html: "below", compose_editor_html_top: "above" };
+
+// The image a stored draft gives back: a draft with a data image Thunderbird embeds is saved and opened again, and a NOTE records the `src` of each image. The external editor keeps only the image sources its allowlist names.
+async function note_draft_image(instance) {
+  const image = `<img src="data:image/png;filename=pixel.png;base64,${PIXEL_PNG_BASE64}" alt="pixel">`;
+  const reopened = await instance.ask("draft_round_trip", 30000, { body: `<html><body><p>Image draft.</p>${image}</body></html>` });
+  const image_tags = [...(reopened.body ?? "").matchAll(/<img[^>]*>/g)].map((match) => match[0].replace(/base64,[^"]{40,}/, "base64,..."));
+  note(instance.app, instance.kind, "src of an embedded image in a saved draft opened again", JSON.stringify(image_tags) + (reopened.body?.startsWith("error") ? ` ${reopened.body}` : ""));
+  await instance.ask("close_compose");
+}
 
 async function run_compose_editor_html(instance) {
   const app = instance.app;
@@ -1908,10 +1920,13 @@ async function run_compose_editor_html(instance) {
   const at_quote = reply_after.indexOf('<blockquote type="cite"');
   const at_signature = reply_after.indexOf("E2E signature line");
   check(app, kind, "reply: the quote and the signature survive", at_quote >= 0 && at_signature >= 0 && reply_after.includes("Body of inbox-s2."), `quote at ${at_quote}, signature at ${at_signature}`);
-  const placed = COMPOSE_EDITOR_HTML_KINDS[kind] === "below" ? at_text > at_quote && at_text < at_signature : at_text < at_quote && at_text < at_signature;
+  // Below means past the end of the quote, so text written inside the quote fails.
+  const at_quote_end = reply_after.indexOf("</blockquote>");
+  const placed = COMPOSE_EDITOR_HTML_KINDS[kind] === "below" ? at_text > at_quote_end && at_text < at_signature : at_text < at_quote && at_text < at_signature;
   check(app, kind, `reply: the text sits ${COMPOSE_EDITOR_HTML_KINDS[kind]} the quote where Thunderbird put the cursor`, at_text >= 0 && placed, `text at ${at_text}, quote at ${at_quote}, signature at ${at_signature}`);
   await instance.ask("close_compose");
   await sleep(1500);
+  if (COMPOSE_EDITOR_HTML_KINDS[kind] === "below") await note_draft_image(instance);
   state = await instance.ask("state");
   check(app, kind, "the app survived the HTML editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
 }

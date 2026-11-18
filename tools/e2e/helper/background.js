@@ -60,6 +60,19 @@ async function close_compose_windows() {
   for (const window of await browser.windows.getAll({ windowTypes: ["messageCompose"] })) await browser.windows.remove(window.id);
 }
 
+// Writes an HTML draft holding `body`, saves it, closes it and opens the saved message again with `compose.beginNew`. Returns the body as Thunderbird gives it back, which shows how an embedded image comes back from a stored message.
+async function draft_round_trip(body) {
+  // Each step names itself when it hangs, so the NOTE says where.
+  const step = (name, promise) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} did not return in 8 s`)), 8000))]);
+  const tab = await step("beginNew", browser.compose.beginNew(undefined, { isPlainText: false, body, subject: "Draft image" }));
+  const saved = await step("saveMessage", browser.compose.saveMessage(tab.id, { mode: "draft" }));
+  await close_compose_windows();
+  // Without an identity the call never returns when no account is the default, as with beginForward.
+  const identity = (await browser.accounts.list()).flatMap((account) => account.identities)[0];
+  const reopened = await step("beginNew of the draft", browser.compose.beginNew(saved.messages[0].id, { identityId: identity?.id }));
+  return (await step("getComposeDetails", browser.compose.getComposeDetails(reopened.id))).body ?? "";
+}
+
 // Archive or delete what the mail tab has selected, through the API. It measures what Thunderbird leaves selected afterwards, independent of the keys.
 async function act_on_selected(name) {
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
@@ -237,6 +250,8 @@ async function poll_forever() {
       } else if (command.name === "close_message_windows") {
         for (const window of await browser.windows.getAll({ windowTypes: ["messageDisplay"] })) await browser.windows.remove(window.id);
         await post({ seq: command.seq, closed: true });
+      } else if (command.name === "draft_round_trip") {
+        await post({ seq: command.seq, body: await draft_round_trip(command.args.body).catch((error) => `error: ${error.message}`) });
       } else if (command.name === "close_compose") {
         await close_compose_windows();
         await post({ seq: command.seq, closed: true });
