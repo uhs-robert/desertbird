@@ -93,11 +93,12 @@ export async function record_state(scope: UndoScope, field: StateField, prepare:
     await warn_untraced(scope, untraced, total);
 }
 
-/** Adds or removes `tag_key` on each message of `ids`, as `removes` says, and records the old membership of each message that changed. The other tags of a message stay as they are. The log is taken before the first await, as in `record_moved`, and a failure part way keeps the items of the messages already changed. */
-export async function record_tag(scope: UndoScope, tag_key: string, ids: number[], removes: boolean): Promise<void> {
+/** Adds or removes the tag `prepare` names on each message it lists, and records the old membership of each message that changed. The other tags of a message stay as they are. The log is taken before the first await, as in `record_state`, so `prepare` runs with it held. A failure part way keeps the items of the messages already changed. */
+export async function record_tag(scope: UndoScope, prepare: () => Promise<{ ids: number[]; tag_key: string; removes: boolean }>): Promise<void> {
     let untraced = 0;
     let total = 0;
     await scope.api.undo.log.record(async (keep) => {
+        const { ids, tag_key, removes } = await prepare();
         const items: TagItem[] = [];
         keep({ kind: "tag", items });
         await for_each_message(ids, async (id) => {
@@ -283,8 +284,7 @@ async function write_back_tags(api: UndoApi, present: { item: TagItem; copy: Mes
     return failed;
 }
 
-const UNDONE: Record<MoveAction | StateField | "tag", string> = {
-    tag: "tag change", delete: "delete", archive: "archive", move: "move", read: "read change", flagged: "star change", junk: "junk change" };
+const UNDONE: Record<MoveAction | StateField | "tag", string> = { delete: "delete", archive: "archive", move: "move", read: "read change", flagged: "star change", junk: "junk change", tag: "tag change" };
 
 export async function undo(scope: UndoScope): Promise<void> {
     const done = await scope.api.undo.log.undo_newest(
