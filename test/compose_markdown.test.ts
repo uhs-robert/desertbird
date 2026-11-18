@@ -146,3 +146,12 @@ test("a web address and a mail address with underscores come back intact after a
     const sent = markdown.markdown_of(body);
     assert.equal(markdown.body_with(body, sent.replace("today", "tomorrow")), body_of("<p>See https://example.org/a_b*c and foo_bar@example.org tomorrow.</p>"));
 });
+
+test("a table and underlined or struck text survive an edit elsewhere", () => {
+    const struck = "<p>Keep <u>this</u>, <s>that</s> and <del>those</del>.</p>";
+    const table = "<table><tbody><tr><td>a</td><td>b &lt;c&gt;</td></tr></tbody></table>";
+    const body = body_of("<p>Hello.</p>", struck, table);
+    const sent = markdown.markdown_of(body);
+    // The line breaks between the blocks come from `marked`, which writes the whole part anew.
+    assert.equal(markdown.body_with(body, sent.replace("Hello.", "Hi.")), body_of("<p>Hi.</p>\n", struck, "\n", table));
+});

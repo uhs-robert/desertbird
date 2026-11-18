@@ -6,6 +6,7 @@ import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 interface Turndown {
     turndown(root: Node): string;
     escape(text: string): string;
+    keep(filter: string[]): void;
 }
 type TurndownConstructor = new (options: Record<string, string>) => Turndown;
 interface MarkedInstance {
@@ -151,9 +152,11 @@ export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdo
             const escape_markdown = service.escape.bind(service);
             // Text that looks like a tag or an entity is written escaped, so `marked` gives it back as text and never as markup.
             service.escape = (text) => escape_markdown(text).replace(/</g, "\\<").replace(/&(?=#?\w+;)/g, "\\&");
+            // Markdown has no underline, and `turndown` without its GFM plugin writes no table or strike. These travel as HTML through the editor, and the allowlist rebuilds them on the way back.
+            service.keep(["table", "u", "s", "del"]);
             turndown = service;
         }
-        // GFM links a bare web or mail address. It would match the escaped text `turndown` wrote (`a\_b`) before the escape is undone, and break the address. With this tokenizer off, a bare address stays text, as it was in the draft. `undefined` and not `false`, since `false` falls back to the built-in tokenizer.
+        // GFM links a bare web or mail address. It matches the escaped text `turndown` wrote (`a\_b`) before the escape is undone, which breaks the address. With this tokenizer off, a bare address stays text, as it was in the draft. `undefined` and not `false`, since `false` falls back to the built-in tokenizer.
         marked ??= new globals.marked.Marked({ async: false, gfm: true }).use({ tokenizer: { url: () => undefined } });
         return { turndown, marked };
     };
