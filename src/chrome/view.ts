@@ -74,6 +74,12 @@ export type MessageIdOf = (header: unknown) => number | null;
 
 export const MAIL_TAB_MODE = "mail3PaneTab";
 
+/** Which tab is in front: 0 the mail tab, 1 a tab whose document the focus chain reads, 2 any other. */
+export function tab_kind(tabmail: TabmailLike | null): 0 | 1 | 2 {
+    const mode = tabmail?.currentTabInfo?.mode.name;
+    return mode && mode !== MAIL_TAB_MODE ? (/^(calendar|addressBookTab|preferencesTab)$/.test(mode) ? 1 : 2) : 0;
+}
+
 /** The `about:3pane` of the tab in front, or null when that tab is not a mail tab. */
 export function front_about_3pane<Pane extends About3PaneLike = About3PaneLike>(tabmail: TabmailLike | null): Pane | null {
     const tab = tabmail?.currentTabInfo;
