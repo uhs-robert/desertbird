@@ -60,6 +60,14 @@ async function close_compose_windows() {
   for (const window of await browser.windows.getAll({ windowTypes: ["messageCompose"] })) await browser.windows.remove(window.id);
 }
 
+// Saves the open compose window as a draft and returns the raw source of the saved message, to check what a draft holds.
+async function save_draft_raw() {
+  const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["messageCompose"] });
+  const saved = await browser.compose.saveMessage(window.tabs[0].id, { mode: "draft" });
+  const raw = await browser.messages.getRaw(saved.messages[0].id, { data_format: "File" });
+  return await raw.text();
+}
+
 // Writes an HTML draft holding `body`, saves it, closes it and opens the saved message again with `compose.beginNew`. Returns the body as Thunderbird gives it back, which shows how an embedded image comes back from a stored message.
 async function draft_round_trip(body) {
   // Each step names itself when it hangs, so the NOTE says where.
@@ -250,6 +258,8 @@ async function poll_forever() {
       } else if (command.name === "close_message_windows") {
         for (const window of await browser.windows.getAll({ windowTypes: ["messageDisplay"] })) await browser.windows.remove(window.id);
         await post({ seq: command.seq, closed: true });
+      } else if (command.name === "save_draft_raw") {
+        await post({ seq: command.seq, raw: await save_draft_raw() });
       } else if (command.name === "draft_round_trip") {
         await post({ seq: command.seq, body: await draft_round_trip(command.args.body).catch((error) => `error: ${error.message}`) });
       } else if (command.name === "close_compose") {

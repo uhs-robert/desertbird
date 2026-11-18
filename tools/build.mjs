@@ -34,8 +34,8 @@ const CONTENT_MAX_BYTES = 17650;
 // The `hints` API has a guard of its own, since it is a separate bundle and not chrome runtime code. Its first measured size was 3091 bytes, and the guard is that plus 20 percent (3709) rounded up to 3800. The check that the focus still sits on the picked link made it 3863, so the guard was 3800 plus 63 rounded up to 3900. The `pick` verb for the mail window (targets, labels per chrome document, typed label, act) made it 11670, so the guard was 11670 rounded up to 11700. The `;` action step (the action phase, a focus and a text per target, and the clipboard write in the parent) made it 12994 (1324 bytes over main), so the guard was that measured size rounded up to 13000. The card view subject lookup made it 13004 (4 bytes over that), so the guard is 13004 rounded up to 13050.
 const HINTS_MAX_BYTES = 13050;
 
-// The size guard of the compose script bundle (`content/compose_keys.js`), which runs in every compose body: its first measured size (717 bytes) plus 20 percent made 861, rounded up to 900. AGENTS.md records the same number.
-const COMPOSE_MAX_BYTES = 900;
+// The size guard of the compose script bundle (`content/compose_keys.js`), which runs in every compose body: its first measured size (717 bytes) plus 20 percent made 861, rounded up to 900. The modes (insert and normal, Ctrl+O, Escape and `e`) and the label drawn by the script made it 2516 (1799 bytes over main). Hiding the label while the body has no focus made it 2571, which is 1854 over main, so the guard was that measured size rounded up to 2600. Reading the `external_editor` setting from storage and following its changes, so the modes and the label stay off while it is off, made it 3492, which is 921 over that, and the guard is 3492 rounded up to 3500. AGENTS.md records the same number.
+const COMPOSE_MAX_BYTES = 3500;
 
 // The release files of `turndown` and `marked` and their licenses. Each folder's VENDOR.md holds the pin.
 const VENDORED_LIBRARY_FILES = ["vendor/turndown/turndown.js", "vendor/turndown/LICENSE", "vendor/marked/marked.umd.js", "vendor/marked/LICENSE"];

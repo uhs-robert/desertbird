@@ -1953,6 +1953,44 @@ async function run_compose_editor(instance) {
   report.shots.push({ app, kind, path: await instance.shot(`${app}_after_ctrl_e`), name: "after_ctrl_e", line: "compose window with the text of the fake editor" });
   await instance.ask("close_compose");
   await sleep(1500);
+
+  // Normal mode. Each entry into the body is a fresh reply, so the fake editor's text shows only when `e` ran it.
+  const reply_again = async () => {
+    await instance.ask("select:inbox-s2@fixture.invalid", 30000);
+    await sleep(1000);
+    return key_and_state(instance, ["r"], 4000);
+  };
+  const body_of = (state) => compose_tab(state)?.body ?? "";
+  state = await reply_again();
+  const plain_body = body_of(state);
+  state = await key_and_state(instance, ["e"], 1500);
+  check(app, kind, "e in insert mode types an e and runs no editor", body_of(state) === `e${plain_body}` || body_of(state).length === plain_body.length + 1, `body ${JSON.stringify(body_of(state))}`);
+  await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_normal_label`), name: "normal_label", line: "compose window after Ctrl+O, label reads NORMAL" });
+  state = await key_and_state(instance, ["x"], 1500);
+  check(app, kind, "Ctrl+O then a key other than e passes that key to the body", body_of(state).includes("x") && !body_of(state).includes(EDITED_TEXT), `body ${JSON.stringify(body_of(state))}`);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_insert_label`), name: "insert_label", line: "compose window back in insert mode, label reads INSERT" });
+  await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
+  state = await key_and_state(instance, ["e"], 6000);
+  check(app, kind, "Ctrl+O then e runs the editor and writes its text into the body", body_of(state).trim() === EDITED_TEXT, `body ${JSON.stringify(body_of(state))}`);
+  await instance.ask("close_compose");
+  await sleep(1500);
+  state = await reply_again();
+  await instance.press(["-k", "Escape"]);
+  state = await key_and_state(instance, ["e"], 6000);
+  check(app, kind, "Escape then e runs the editor and keeps the compose window open", body_of(state).trim() === EDITED_TEXT, `body ${JSON.stringify(body_of(state))}`);
+
+  // The label must not reach the body or a saved draft.
+  await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
+  const draft = await instance.ask("save_draft_raw", 30000);
+  state = await instance.ask("state");
+  const label_pattern = /-- (INSERT|NORMAL) --/;
+  await instance.press(["-M", "shift", "-k", "Tab", "-m", "shift"]);
+  await sleep(500);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_unfocused_label`), name: "unfocused_label", line: "compose window with focus out of the body, no label" });
+  check(app, kind, "the mode label is in neither the body nor the saved draft", !label_pattern.test(compose_tab(state)?.html ?? "") && !label_pattern.test(body_of(state)) && !label_pattern.test(draft.raw ?? "") && (draft.raw ?? "").includes(EDITED_TEXT), `draft ${JSON.stringify((draft.raw ?? "").slice(-300))}`);
+  await instance.ask("close_compose");
+  await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, "the app survived the external editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
 }
@@ -1980,6 +2018,10 @@ async function run_quick_replies(instance) {
   check(app, kind, "the signature survives below the quote", at_signature > at_quote, `quote at ${at_quote}, signature at ${at_signature}`);
   check(app, kind, "a blank line separates the slot text from the cite line", /line<\/b>\.\n\n+On /.test(body), `body ${JSON.stringify(body)}`);
   note(app, kind, "quick reply draft layout", `text at ${at_text}, quote at ${at_quote}, signature at ${at_signature} (-1 means absent), body ${JSON.stringify(body)}`);
+  const quick_draft = await instance.ask("save_draft_raw", 30000);
+  // An element of the label, even an empty one, would show as markup after the body of a saved HTML draft.
+  const label_free = !/-- (INSERT|NORMAL) --/.test(quick_draft.raw ?? "") && (kind !== "quick_reply_html" || /<\/body>\s*<\/html>/.test(quick_draft.raw ?? ""));
+  check(app, kind, "the mode label leaves no text and no element in the saved draft", /Quick reply one/.test(quick_draft.raw ?? "") && label_free, `draft ${JSON.stringify((quick_draft.raw ?? "").slice(-200))}`);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_after_gr1_${kind}`), name: `after_gr1_${kind}`, line: "compose window with the quick reply above the quote" });
   await instance.ask("close_compose");
   await sleep(1500);
