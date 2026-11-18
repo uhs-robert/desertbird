@@ -537,3 +537,17 @@ test("the scroll step setting rejects 0 and anything below 1, and the body scrip
     window.press("j");
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`, `by ${MESSAGE_SCROLL_STEP_PX}`]);
 });
+
+test("a user key for a message command works in a message, and a user key for any other command stays out", async () => {
+    const { compile_message_keymap } = await import("../src/background/commands/index.ts");
+    const tree = JSON.stringify(compile_message_keymap({ X: { id: "msg.archive" }, Y: { id: "motion.down" }, Z: { id: "repeat.last" } }).compiled.modes.normal);
+    assert.match(tree, /"X"/);
+    assert.doesNotMatch(tree, /"Y"|"Z"/);
+});
+
+test("a user key never carries tab.close_mail in a message, and a null binding removes no message key", async () => {
+    const { compile_message_keymap } = await import("../src/background/commands/index.ts");
+    const tree = JSON.stringify(compile_message_keymap({ X: { id: "tab.close_mail" }, j: null }).compiled.modes.normal);
+    assert.doesNotMatch(tree, /tab\.close_mail|"X"/);
+    assert.match(tree, /message\.scroll_down/);
+});

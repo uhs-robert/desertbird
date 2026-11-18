@@ -61,12 +61,31 @@ const mail_keys_for_message = Object.fromEntries(MESSAGE_MAIL_GROUPS.flatMap((gr
 // The keys of the message document. The body script walks this tree, not the one of the mail tab. The reading keys come last, so `j`, `k`, `/` and the rest keep their message meaning.
 export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, mail_keys_for_message, ...Object.values(GROUPS).map((group) => group.message_keys)) };
 
-export function compile_message_keymap(): CompileResult {
-    return compile_keymap(MESSAGE_KEYMAP, {}, resolve_command);
+// Closes the tab on chords that must copy and cut in a message body, so no user key may carry it there.
+const NEVER_REBOUND_IN_MESSAGE: ReadonlySet<string> = new Set(["tab.close_mail"]);
+
+// The commands a user key may run in a message: those of the message groups and the reading keys. A binding of any other command (a list motion, `repeat.last`) stays in the mail tab. A `null` binding stays there too, so removing a list key does not take away a message key.
+const REBINDABLE_IN_MESSAGE: ReadonlySet<string> = new Set([
+    ...MESSAGE_MAIL_GROUPS.flatMap((group) => Object.keys(group.commands)),
+    ...Object.values(MESSAGE_KEYMAP.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : [])).map((invocation) => invocation.id),
+].filter((id) => !NEVER_REBOUND_IN_MESSAGE.has(id)));
+
+/** The message keys with the user's bindings of message commands on top. */
+export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig {
+    const kept = Object.entries(user ?? {}).filter(([, binding]) => binding !== null && !Array.isArray(binding) && REBINDABLE_IN_MESSAGE.has(binding.id));
+    return { normal: { ...MESSAGE_KEYMAP.normal, ...Object.fromEntries(kept) } };
 }
 
-/** The ids of the background commands a message key binds. The background runs a request of the body script only for these. */
+export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
+    return compile_keymap(message_keymap(user), {}, resolve_command);
+}
+
+const invocations_of = (keymap: KeymapConfig) => Object.values(keymap.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []));
+
+/** The ids of the background commands a message key may run, by default or by a user key. The background runs a request of the body script only for these. A command bound only to a list key (`mR`) stays out, since it needs the list. */
 export function message_background_commands(): Set<string> {
-    const bound = Object.values(MESSAGE_KEYMAP.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []));
-    return new Set(bound.map((invocation) => invocation.id).filter((id) => registry.get(id)?.runs_in === "background"));
+    const in_message = new Set(invocations_of(MESSAGE_KEYMAP).map((invocation) => invocation.id));
+    const list_only = invocations_of({ normal: Object.fromEntries(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => LIST_ONLY_KEYS.has(keys))) }).map((invocation) => invocation.id);
+    const needs_list = new Set(list_only.filter((id) => !in_message.has(id)));
+    return new Set([...REBINDABLE_IN_MESSAGE].filter((id) => !needs_list.has(id) && registry.get(id)?.runs_in === "background"));
 }
