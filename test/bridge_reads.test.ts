@@ -61,7 +61,7 @@ test("folders lists id, name, path, account and counts, and skips account roots"
 
 test("messages gives the newest rows first with the opaque folder id, never its name", async () => {
     const { read } = reads_under_test({ folders: [INBOX], headers: [header(1), header(3, { flagged: true }), header(2, { read: true })], page_size: 1 });
-    const answer = (await read("messages", { folder: INBOX.id, limit: 2 })) as { ok: true; messages: { id: number; folder: string }[]; truncated: boolean };
+    const answer = (await read("messages", { folder: INBOX.id, limit: 2 })) as unknown as { ok: true; messages: { id: number; folder: string }[]; truncated: boolean };
     assert.deepEqual(answer.messages, [
         { id: 3, from: "Ann <ann@x.invalid>", subject: "Subject 3", date: "2026-01-03T00:00:00.000Z", folder: "a1://INBOX", read: false, flagged: true },
         { id: 2, from: "Ann <ann@x.invalid>", subject: "Subject 2", date: "2026-01-02T00:00:00.000Z", folder: "a1://INBOX", read: true, flagged: false },
@@ -72,7 +72,7 @@ test("messages gives the newest rows first with the opaque folder id, never its 
 
 test("messages with unread_only asks Thunderbird for unread mail only", async () => {
     const { read, calls } = reads_under_test({ folders: [INBOX], headers: [header(1), header(2, { read: true })] });
-    const answer = (await read("messages", { folder: INBOX.id, unread_only: true })) as { messages: { id: number }[] };
+    const answer = (await read("messages", { folder: INBOX.id, unread_only: true })) as unknown as { messages: { id: number }[] };
     assert.deepEqual(answer.messages.map((row) => row.id), [1]);
     assert.ok(calls.includes('messages.query {"folderId":"a1://INBOX","unread":true}'));
 });
@@ -116,7 +116,7 @@ test("a message comes back as untrusted, cleaned text, with its encryption kept 
 
 test("an HTML-only message is converted to text by Thunderbird and marked html_stripped", async () => {
     const { read, calls } = reads_under_test({ headers: [header(1)], full: { 1: text_part('<p>Hello <a href="https://x.invalid/track">there</a></p>', "text/html") } });
-    const answer = (await read("message", { id: 1 })) as { message: { body: string; html_stripped: boolean } };
+    const answer = (await read("message", { id: 1 })) as unknown as { message: { body: string; html_stripped: boolean } };
     assert.equal(answer.message.body, "Hello there");
     assert.equal(answer.message.html_stripped, true);
     assert.ok(calls.includes("convertToPlainText"));
@@ -125,7 +125,7 @@ test("an HTML-only message is converted to text by Thunderbird and marked html_s
 test("a body over 64 KiB of UTF-8 is cut at a code point and marked truncated", async () => {
     // Each emoji is a surrogate pair of four UTF-8 bytes. One leading byte puts the cut inside a pair.
     const { read } = reads_under_test({ headers: [header(1)], full: { 1: text_part(`a${"\u{1F600}".repeat(MAX_BODY_BYTES / 4 + 10)}`) } });
-    const answer = (await read("message", { id: 1 })) as { message: { body: string; truncated: boolean } };
+    const answer = (await read("message", { id: 1 })) as unknown as { message: { body: string; truncated: boolean } };
     assert.equal(answer.message.truncated, true);
     assert.ok(new TextEncoder().encode(answer.message.body).length <= MAX_BODY_BYTES);
     assert.doesNotMatch(answer.message.body, /[\ud800-\udbff]$/, "no lone high surrogate at the end");
@@ -159,5 +159,5 @@ test("200 rows of the longest fields stay under the reply cap", async () => {
     const { read } = reads_under_test({ folders: [{ ...INBOX, id: folder_id }], headers: rows.map((row) => ({ ...row, folder: folder_id })) });
     const answer = await read("messages", { folder: folder_id, limit: 200 });
     assert.ok(new TextEncoder().encode(JSON.stringify(answer)).length <= MAX_REPLY_BYTES);
-    assert.equal((answer as { truncated: boolean }).truncated, true);
+    assert.equal((answer as unknown as { truncated: boolean }).truncated, true);
 });
