@@ -1,10 +1,13 @@
 import { archive, delete_messages } from "../handlers/message.ts";
 import type { TrashApi } from "../handlers/message.ts";
-import { add_tag, move_messages, read_all, set_read, toggle_flag, toggle_junk } from "../handlers/message_state.ts";
+import { add_tag, copy_messages, move_messages, read_all, set_read, toggle_flag, toggle_junk } from "../handlers/message_state.ts";
+import { ACCOUNT_PARAM } from "./account_param.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.tag` and `msg.move` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
+// `msg.tag`, `msg.move` and `msg.copy` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
+const FOLDER_PARAM = { name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^\\S.*" } as const;
+
 export const messages: CommandGroup = {
     commands: {
         "msg.archive": { bridge: false, runs_in: "background", label: "Archive", intent: "Archive the selected messages. A count archives that many rows from the current one.", count: "repeat", run: scoped<TrashApi>(archive) },
@@ -42,8 +45,18 @@ export const messages: CommandGroup = {
             name: "move",
             label: "Move",
             intent: "Move the selected messages to a folder by its path.",
-            params: [{ name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^\\S.*" }],
+            params: [FOLDER_PARAM, ACCOUNT_PARAM],
             run: scoped(move_messages),
+        },
+        "msg.copy": {
+            bridge: false,
+            repeatable: false,
+            runs_in: "background",
+            name: "copy",
+            label: "Copy",
+            intent: "Copy the selected messages to a folder by its path. The originals stay where they are.",
+            params: [FOLDER_PARAM, ACCOUNT_PARAM],
+            run: scoped(copy_messages),
         },
     },
     normal_keys: {

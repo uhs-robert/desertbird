@@ -227,3 +227,28 @@ test("msg.junk says in its intent that it moves nothing", () => {
 test("every command of this group states bridge false", () => {
     for (const id of ["msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move", "msg.forward", "msg.new"]) assert.equal(registry.get(id)?.bridge, false, id);
 });
+
+const two_accounts = { accounts: [{ id: "a1", type: "imap", name: "Work" }, { id: "a2", type: "imap", name: "Home" }], folders: [{ id: "f1", accountId: "a1", path: "/Archive" }, { id: "fx", accountId: "a2", path: "/Archive" }] };
+
+test("msg.move --account moves to the named account's folder, also for a selection of another account", async () => {
+    const { api, calls } = fake_api({ ...two_accounts, messages: [{ id: 4, folder: a1 }, { id: 5, folder: { accountId: "a2" } }] });
+    await create_router(registry, api).run(invoke("msg.move", { folder: "/Archive", account: "Home" }, [4, 5]));
+    assert.ok(calls.includes("messages.move 4,5 fx"));
+});
+
+test("msg.copy copies to the selection's account and leaves the originals", async () => {
+    const { api, calls } = fake_api({ ...two_accounts, messages: [{ id: 4, folder: a1 }, { id: 5, folder: a1 }] });
+    await create_router(registry, api).run(invoke("msg.copy", { folder: "/Archive" }, [4, 5]));
+    assert.ok(calls.includes("messages.copy 4,5 f1"));
+    assert.equal(calls.some((call) => call.startsWith("messages.move") || call.startsWith("messages.delete")), false);
+});
+
+test("msg.copy refuses an empty selection, a mixed selection and a missing folder, and copies nothing", async () => {
+    const { api, calls } = fake_api({ ...two_accounts, messages: [{ id: 4, folder: a1 }, { id: 5, folder: { accountId: "a2" } }] });
+    const router = create_router(registry, api);
+    await router.run(invoke("msg.copy", { folder: "/Archive" }, []));
+    await router.run(invoke("msg.copy", { folder: "/Archive" }, [4, 5]));
+    await router.run(invoke("msg.copy", { folder: "/Nowhere" }, [4]));
+    assert.equal(calls.some((call) => call.startsWith("messages.copy")), false);
+    assert.equal(notifications(calls).length, 3);
+});

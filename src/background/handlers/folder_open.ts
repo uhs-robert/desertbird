@@ -6,13 +6,15 @@ import type { HandlerScope } from "./message.ts";
 import { special_folder } from "./special_folder.ts";
 import type { SpecialFolderApi, SpecialUse } from "./special_folder.ts";
 import type { FolderStateApi } from "./folder_state.ts";
+import { account_id_named } from "./account_choice.ts";
+import type { AccountsApi } from "./account_choice.ts";
 
 export interface FolderMailTab {
     id: number;
     displayedFolder?: MailFolder | null;
 }
 
-export interface FolderApi extends SpecialFolderApi, FolderStateApi {
+export interface FolderApi extends SpecialFolderApi, FolderStateApi, AccountsApi {
     mailTabs: {
         query(query: { windowId?: number; active: true }): Promise<FolderMailTab[]>;
         update(tab_id: number, update: { displayedFolder: MailFolder }): Promise<unknown>;
@@ -79,7 +81,11 @@ export async function open_folder(scope: FolderScope, args: CheckedArgs): Promis
     if (special !== "") return show_folder(scope, await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, account_id), tab);
     const path = String(args.folder);
     if (path === "") throw new RuntimeRefusal("Name a folder.");
-    const folder = await folder_by_path(scope, path, account_id);
-    if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path}.`);
+    // A named account is the only place to look: the same path in another account is a different folder.
+    // An omitted optional string reaches the handler as the empty text.
+    const account_name = String(args.account ?? "");
+    const named = account_name === "" ? undefined : await account_id_named(scope.api, account_name);
+    const folder = named === undefined ? await folder_by_path(scope, path, account_id) : (await scope.api.folders.query({ accountId: named, path }))[0];
+    if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path}${named === undefined ? "" : ` in account ${account_name}`}.`);
     return show_folder(scope, folder, tab);
 }

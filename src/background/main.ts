@@ -4,6 +4,7 @@ import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { create_folder_source } from "./cmdline/folder_rows.ts";
 import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
@@ -199,7 +200,7 @@ const search = create_search_service({
 const cmdline = create_cmdline_service({
     registry,
     sources: {
-        folders: async () => [...new Set((await messenger.folders.query({})).map((folder) => folder.path))].sort(),
+        folders: create_folder_source(messenger),
         tags: async () => (await messenger.messages.tags.list()).map((entry) => entry.tag),
     },
     overlay: command_line_overlay,

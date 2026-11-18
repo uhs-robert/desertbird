@@ -3,7 +3,9 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { displayed_folder } from "./displayed_folder.ts";
 import type { DisplayedFolderApi } from "./displayed_folder.ts";
 import { for_each_message, require_messages } from "./each_message.ts";
-import type { HandlerScope, MessageApi } from "./message.ts";
+import type { HandlerScope, MessageApi, MessageHeader } from "./message.ts";
+import { account_id_named } from "./account_choice.ts";
+import type { MailFolder } from "./displayed_folder.ts";
 import { record_moved, record_state } from "./undo.ts";
 import type { UndoApi } from "./undo.ts";
 import type { StateField } from "../undo_log.ts";
@@ -48,16 +50,33 @@ export async function add_tag(scope: HandlerScope, args: CheckedArgs): Promise<v
     });
 }
 
-// The folder is a path such as `/Archive/2026`, looked up in the one account the selected messages share. The path stays unchecked until now, because only the account knows which folders exist.
+// The folder is a path such as `/Archive/2026`. It is looked up in the account `--account` names, else in the one account the selected messages share. The path stays unchecked until now, because only the account knows which folders exist.
+async function destination_folder(scope: StateScope, args: CheckedArgs, selected: MessageHeader[]): Promise<MailFolder> {
+    let account_id: string | undefined;
+    const named = String(args["account"] ?? "");
+    if (named !== "") account_id = await account_id_named(scope.api, named);
+    else {
+        const account_ids = new Set(selected.map((message) => message.folder?.accountId));
+        if (account_ids.size > 1) throw new RuntimeRefusal("The selected messages belong to more than one account, so they cannot go to one folder. Select messages of one account.");
+        [account_id] = account_ids;
+    }
+    const path = String(args["folder"]);
+    const [folder] = await scope.api.folders.query({ ...(account_id !== undefined && { accountId: account_id }), path });
+    if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path} in this account.`);
+    return folder;
+}
+
+const headers_of = (scope: StateScope): Promise<MessageHeader[]> => Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
+
 export function move_messages(scope: StateScope, args: CheckedArgs): Promise<void> {
     return record_moved(scope, "move", async () => {
-        const selected = await Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
-        const account_ids = new Set(selected.map((message) => message.folder?.accountId));
-        if (account_ids.size > 1) throw new RuntimeRefusal("The selected messages belong to more than one account, so they cannot move to one folder. Select messages of one account.");
-        const [account_id] = account_ids;
-        const path = String(args["folder"]);
-        const [folder] = await scope.api.folders.query({ ...(account_id !== undefined && { accountId: account_id }), path });
-        if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path} in this account.`);
+        const folder = await destination_folder(scope, args, await headers_of(scope));
         return { ids: scope.message_ids, act: () => scope.api.messages.move(scope.message_ids, folder.id), destination_of: async () => ({ to_folder_ids: [folder.id], to_subfolders: false }) };
     });
+}
+
+// A copy leaves every original where it is, so there is nothing for `u` to move back and no undo item. Undo never deletes, and the new copy is not a move.
+export async function copy_messages(scope: StateScope, args: CheckedArgs): Promise<void> {
+    const folder = await destination_folder(scope, args, await headers_of(scope));
+    await scope.api.messages.copy(scope.message_ids, folder.id);
 }

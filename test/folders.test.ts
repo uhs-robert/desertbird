@@ -162,3 +162,14 @@ test("mark.set with no folder displayed refuses", async () => {
     await run(api, "mark.set", { slot: "a" });
     assert.deepEqual(notifications(calls), ["No folder is displayed."]);
 });
+
+test("folder.open --account opens the path in that account and refuses an unknown account or a path it lacks", async () => {
+    const accounts = [{ id: "a1", type: "imap", name: "Work" }, { id: "a2", type: "imap", name: "Home" }];
+    const { api, calls } = fake_api({ folders: FOLDERS, accounts, displayed: FOLDERS[0] as MailFolder });
+    await run(api, "folder.open", { folder: "/Inbox", account: "home" });
+    assert.deepEqual(updates(calls), ["mailTabs.update 1 a2:/Inbox"]);
+    await run(api, "folder.open", { folder: "/Inbox", account: "Nowhere" });
+    await run(api, "folder.open", { folder: "/Work/Plans", account: "Home" });
+    assert.equal(updates(calls).length, 1);
+    assert.deepEqual(notifications(calls), ["There is no account named Nowhere.", "There is no folder /Work/Plans in account Home."]);
+});

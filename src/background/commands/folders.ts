@@ -4,6 +4,7 @@ import { jump_to_mark, set_mark } from "../handlers/folder_marks.ts";
 import { collapse_folder } from "../handlers/folder_collapse.ts";
 import type { CollapseApi } from "../handlers/folder_collapse.ts";
 import { jump_back, jump_forward } from "../handlers/jump_history.ts";
+import { ACCOUNT_PARAM } from "./account_param.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 import type { CommandDefinition } from "./define.ts";
@@ -43,6 +44,7 @@ export const folders: CommandGroup = {
                     pattern: "^(\\S.*)?$",
                     pattern_arms: [{ pattern: "^$", when: { special: SPECIAL } }],
                 },
+                ACCOUNT_PARAM,
             ],
             run: scoped<FolderApi>(open_folder),
         },

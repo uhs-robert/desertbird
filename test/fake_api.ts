@@ -22,7 +22,7 @@ interface FakeOptions {
     /** The default account. `null` means there is none. */
     default_account?: { id: string } | null;
     /** The accounts `accounts.list` returns. */
-    accounts?: { id: string; type: string }[];
+    accounts?: { id: string; type: string; name?: string }[];
     /** The attachments `messages.listAttachments` returns per message id. */
     attachments?: Record<number, { name: string; partName: string; contentDisposition?: string; type?: string }[]>;
     /** The end state of each download. Defaults to complete. */
@@ -75,6 +75,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 return new Blob([`${id}/${part_name}`]);
             },
             move: async (ids, folder_id) => void calls.push(`messages.move ${ids.join(",")} ${folder_id}`),
+            copy: async (ids, folder_id) => void calls.push(`messages.copy ${ids.join(",")} ${folder_id}`),
             query: async (query) => (calls.push(`messages.query ${query.headerMessageId}`), { messages: [] }),
             continueList: async () => ({ messages: [] }),
             getFull: async (id) => (calls.push(`messages.getFull ${id}`), { ...(options.headers?.[id] && { headers: options.headers[id] }) }),
