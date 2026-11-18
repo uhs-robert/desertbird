@@ -118,6 +118,11 @@ test("tab rows show the tabs of the window, insert the number and highlight the 
     assert.deepEqual(word.rows.map((row) => row.insert), ["3 "]);
     assert.equal(word.highlight_first, true);
     assert.equal((await ask("tab 2", 5, no_selection)).highlight_first, undefined);
+    assert.equal((await ask("tab 20", 6, no_selection)).highlight_first, undefined);
+    const twins = create_completer(registry, { ...sources, tabs: async () => [{ number: 1, title: "Re: Budget", is_active: false }, { number: 2, title: "Budget", is_active: false }] });
+    const budget = await twins("tab Budget", 10, no_selection);
+    assert.equal(budget.highlight_first, true);
+    assert.equal(budget.rows[0]!.insert, "2 ");
 });
 
 test("open takes a fuzzy word and move takes any word, and the validator passes both", () => {
