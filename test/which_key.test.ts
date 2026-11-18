@@ -80,3 +80,14 @@ test("`;` is a prefix whose panel lists f, c and y, and each resolves to a pick 
         assert.deepEqual(actions, [[id, "focus"], [id, "activate"], [id, "yank"]]);
     }
 });
+
+test("every panel reads in DesertFox order: letters, other keys, chords, groups by name, Escape last", () => {
+    const step = { invocation: { id: "motion.down" }, runs_in: "chrome" as const, count_rule: "ignore" as const };
+    const leaf = (label: string) => ({ kind: "leaf" as const, label, steps: [step] });
+    const group = (label: string): TreeBranch => ({ kind: "branch", label, children: { x: leaf("x") } });
+    const root: TreeBranch = {
+        kind: "branch",
+        children: { g: { kind: "branch", children: { "<Escape>": leaf("e"), r: group("zed"), "<C-x>": leaf("c"), B: leaf("B"), "1": leaf("1"), p: group("Alpha"), b: leaf("b"), a: leaf("a"), ".": leaf("d") } } },
+    };
+    assert.deepEqual(which_key_panel(root, ["g"], settings_with({}))?.rows.map((row) => row.key), ["a", "b", "B", ".", "1", "<C-x>", "p", "r", "<Escape>"]);
+});
