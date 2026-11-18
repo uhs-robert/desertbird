@@ -21,7 +21,7 @@ export const app: CommandGroup = {
             runs_in: "background",
             name: "undo",
             label: "Undo",
-            intent: "Undo DesertBird's last delete, archive, move or mark. The marks are read, star and junk. Snooze, tags, mark folder read and changes made in Thunderbird itself are not undone.",
+            intent: "Undo DesertBird's last delete, archive, move or mark. The marks are read, star and junk, and a tag toggle. Snooze, mark folder read and changes made in Thunderbird itself are not undone.",
             run: scoped<UndoApi>(undo),
         },
         "thread.open_conversation": {
