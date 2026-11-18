@@ -210,12 +210,12 @@ async function run_default(instance) {
   state = await instance.ask("state");
   check(app, kind, "no message is junk after the motions", Object.values(state.flags).every((flags) => !flags.junk));
 
-  // s, a and 1 must change nothing: same selection, folders and flags. The m key leads the message state keys now, so a lone m followed by a break key stands in for it: the stray m is dropped and a is unbound.
+  // s, w and 1 must change nothing: same selection, folders and flags. The m key leads the message state keys now, so a lone m followed by a break key stands in for it: the stray m is dropped. w is unbound in every default tree (a archives, so it cannot stand here).
   const before = await instance.ask("state");
-  for (const key of ["s", "m", "a", "1"]) await instance.press([key]);
+  for (const key of ["s", "m", "w", "1"]) await instance.press([key]);
   await sleep(1200);
   const after = await instance.ask("state");
-  check(app, kind, "s, m a and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
+  check(app, kind, "s, m w and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
 
   // With the thread list's context menu open (Shift+F10), keys belong to the menu: j moves nothing and k is the menu's access key for Mark.
   const before_menu = first_selected(await instance.ask("state"));
@@ -672,7 +672,7 @@ async function run_visual(instance, { app, kind, shot }) {
   check(app, kind, "Escape ends visual mode on the current row", same(ids(state.selected), [rows[1]]), `selected ${ids(state.selected).join(" ")}`);
   state = await keys(["j"]);
   check(app, kind, "after Escape j moves one row again", same(ids(state.selected), [rows[2]]), `selected ${ids(state.selected).join(" ")}`);
-  // A range upward from row 5, then m s flags the whole range and ends the mode.
+  // A range upward from row 5, then m s flags the whole range and keeps the mode on.
   await keys(["g", "g"]);
   await keys(["5", "j"]);
   await keys(["v"]);
@@ -684,8 +684,10 @@ async function run_visual(instance, { app, kind, shot }) {
   state = await key_and_state(instance, ["s"], 2000);
   const flagged_after = range.map((id) => state.flags[id]?.flagged === true);
   check(app, kind, "m s in visual mode flags every message of the range", flagged_after.every(Boolean), `before ${flagged_before.join()}, after ${flagged_after.join()}`);
+  check(app, kind, "m s keeps the range selected", same(ids(state.selected), range), `selected ${ids(state.selected).join(" ")}`);
+  state = await keys(["Escape"]);
   state = await keys(["j"]);
-  check(app, kind, "the command ended visual mode, so j selects one row", state.selected.length === 1, `selected ${state.selected.length}`);
+  check(app, kind, "Escape ends visual mode, so j selects one row", state.selected.length === 1, `selected ${state.selected.length}`);
   // x archives the range once. `.` then archives once more, the one row selected at the dot, since u can undo it.
   await keys(["g", "g"]);
   await keys(["v"]);
