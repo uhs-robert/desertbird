@@ -259,3 +259,37 @@ test("msg.copy refuses an empty selection, a mixed selection and a missing folde
     assert.equal(calls.some((call) => call.startsWith("messages.copy")), false);
     assert.equal(notifications(calls).length, 3);
 });
+
+const list_rows = (collapsed_at: number[] = []) => [1, 2, 3, 4].map((id, index) => ({ index, id, depth: 0, collapsed: collapsed_at.includes(index), unread: false, flags: 0 }));
+const counted = (command: string, args: Record<string, string>, count: number, options: { rows?: ReturnType<typeof list_rows>; current?: number } = {}) => {
+    const { api, calls } = fake_api({ messages: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }] });
+    const rows = options.rows ?? list_rows();
+    api.keys!.viewRows = async ({ first, last }) => ({ current: options.current ?? 0, rows: rows.filter((row) => row.index >= first && row.index <= last) });
+    return { api, calls, run: () => create_router(registry, api).run({ ...invoke(command, args, [1]), count }) };
+};
+
+test("3 m r marks the current row and the two below it, and a count of 1 marks the row alone", async () => {
+    const three = counted("msg.read", { state: "read" }, 3);
+    await three.run();
+    assert.deepEqual(updates(three.calls), [1, 2, 3].map((id) => `messages.update ${id} {"read":true}`));
+    const one = counted("msg.read", { state: "unread" }, 1);
+    await one.run();
+    assert.deepEqual(updates(one.calls), ['messages.update 1 {"read":false}']);
+});
+
+test("a count on the msg.read toggle follows the first message", async () => {
+    const { api, calls } = fake_api({ messages: [{ id: 1, read: true }, { id: 2, read: false }] });
+    api.keys!.viewRows = async () => ({ current: 0, rows: list_rows().slice(0, 2) });
+    await create_router(registry, api).run({ ...invoke("msg.read", { state: "toggle" }, [1]), count: 2 });
+    assert.deepEqual(updates(calls), ['messages.update 1 {"read":false}', 'messages.update 2 {"read":false}']);
+});
+
+test("a count on msg.read refuses in a closed thread and with no list, and marks nothing", async () => {
+    const closed = counted("msg.read", { state: "read" }, 3, { rows: list_rows([2]) });
+    await closed.run();
+    assert.match(notifications(closed.calls)[0] ?? "", /closed thread/);
+    const no_list = counted("msg.read", { state: "read" }, 2, { current: -1 });
+    await no_list.run();
+    assert.match(notifications(no_list.calls)[0] ?? "", /only in the thread list/);
+    for (const refused of [closed, no_list]) assert.deepEqual(updates(refused.calls), []);
+});

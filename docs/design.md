@@ -60,7 +60,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 
 | Command (proposed id) | Default keys | Side | How |
 | --- | --- | --- | --- |
-| `msg.read {state: read, unread, toggle}` | `m r`, `m u` | Standard | `messages.update` |
+| `msg.read {state: read, unread, toggle}` | `m r`, `m u` | Standard | `messages.update`. Takes a count: `5 m r` marks five rows from the current row, by the rule of `x` and `d d` (the selection plus the rows below, one undo entry for all ids, a refusal when the range reaches into a closed thread or the view is not the thread list). A toggle with a count follows the first message. A plain repeat on the same selection would change nothing after the first run, so the count takes rows instead. |
 | `folder.read_all` | `m R` | Standard | `folders.markAsRead` |
 | `msg.flag` | `m s` | Standard | `messages.update` |
 | `msg.junk` | `m j` | Standard | `messages.update` |
