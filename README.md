@@ -32,7 +32,15 @@ Four more settings, each off by default and each inert while `bridge` is off, le
 | `bridge_share_bodies` | The text of one message, with `bridge_share_headers` on too. HTML turns into plain text, the text is cut at 64 KiB, and an encrypted message is never sent |
 | `bridge_share_attachments` | Attachment names, sizes and types. Never the files |
 
-With all four off, the bridge sends no mail, no folder names and no tags. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
+With all four off, the bridge sends no mail, no folder names and no tags.
+
+One setting lets a script write, off by default and inert while `bridge` is off:
+
+| Setting | What it allows |
+| --- | --- |
+| `bridge_allow_drafts` | Save a plain-text draft in the Drafts folder: up to 10 To and 10 Cc addresses, a subject and a body of at most 64 KiB, from one of your identities. No Bcc and no attachments. The answer is only ok or a refusal, never mail data |
+
+Saving a draft needs the `compose.save` permission, which Thunderbird shows on install. The add-on never sends mail: it does not hold the `compose.send` permission. Thunderbird saves a draft only from a compose window, so the window opens for a moment, and the add-on closes it once the draft is saved. You review the draft and press Send yourself. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
 
 ## License
 

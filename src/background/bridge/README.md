@@ -6,6 +6,7 @@ The add-on's end of the native bridge host. A program outside Thunderbird, such 
 | --- | --- |
 | `run.ts` | The one path a `run` takes: the first word against the bridge rules, then the parse, the rules again, `check_args`, and `router.route` in the last focused main window. Also `list_bridge_commands`, the commands `run` accepts |
 | `reads.ts` | The four read frames, each behind its own share setting: `folders`, `messages`, `message` and `attachments`. It cleans every string a sender controls and refuses an encrypted body |
+| `drafts.ts` | The `draft` frame behind `bridge_allow_drafts`: checks every field, picks the identity, opens a plain-text compose, saves it to Drafts and closes that window. It never sends |
 | `port.ts` | The port: connect while `bridge` is on, the `ready` handshake, the backoff, the answers to `list`, `run` and `state`, and the `mode` frames |
 
 ## Setup
@@ -74,3 +75,31 @@ Each read needs `bridge` and its own share setting, all off by default. The add-
 - A list reply over 900 KiB drops rows from its end and says `truncated`, so it stays under the host's 1 MiB cap. `messages` reads every page of the folder and keeps only the newest `limit` rows so far, so it finds the newest mail of any folder with memory for one page plus `limit` rows.
 - The CLI wraps a body in delimiters with a nonce it makes itself. The add-on makes no nonce.
 - `list` never carries folder names or tags, whatever `bridge_share_folders` says: a dynamic param gives only its `{ from }` source.
+
+## Drafts
+
+A `draft` frame needs `bridge` and `bridge_allow_drafts`, both off by default and read from storage at each request. Either off answers `off`. A draft writes to the mailbox and syncs to an IMAP server, so it has its own setting apart from the reads.
+
+```json
+{ "verb": "draft", "request_id": 5, "to": ["ann@example.org"], "cc": [], "subject": "...", "body": "...", "from": "me@example.org", "reply_to_id": 42 }
+{ "verb": "reply", "request_id": 5, "ok": true }
+{ "verb": "reply", "request_id": 5, "ok": false, "message": "bad address" }
+```
+
+| Field | Rule |
+| --- | --- |
+| `to` | 1 to 10 addresses, or 0 to 10 with `reply_to_id`. An empty list on a reply keeps the recipients Thunderbird picks |
+| `cc` | Optional, 0 to 10 addresses |
+| `subject` | At most 998 characters, no control characters. Format characters (zero-width and bidirectional marks) are removed |
+| `body` | At most 64 KiB of UTF-8. It goes in as plain text, never as HTML. Line breaks and tabs stay, other controls and format characters go |
+| `from` | Optional. It must equal an identity's address exactly, else `no such identity`. Without it a new draft takes the default identity and a reply the identity the original was addressed to, as the keys do |
+| `reply_to_id` | Optional message id. It must resolve, else `no such message`. The draft is a reply to the sender |
+
+- Each address is a bare `local@domain` with a dotted domain. A display name, a comma or a group is `bad address`, so one entry never carries more recipients past the cap.
+- Any other field is refused, Bcc and attachments among them.
+- Every check runs before the first compose call. Each refusal is a fixed text and never echoes the request.
+- The reply is `ok` or a refusal. It never carries the draft, its id or any mail data.
+- The add-on never sends. It holds no `compose.send` permission, so Thunderbird refuses a send from it, and `test/bridge_drafts.test.ts` checks the manifest for that.
+- Saving needs the `compose.save` permission. Thunderbird has no other way to save a draft that it builds itself (threading, identity, Drafts folder). An add-on with an Experiment cannot ask for it as optional, so it is always granted.
+- Thunderbird saves only from a compose window. The add-on opens one, saves it with `compose.saveMessage` in `draft` mode, and closes that window, matched by the id the compose call returned, on every path, a failed save included. The window shows for that moment and takes the focus. Then the add-on gives the focus back to the Thunderbird window that had it. When another program had the focus, it raises no Thunderbird window.
+- Drafts run one at a time, so a second compose window never opens while the first is still up.
