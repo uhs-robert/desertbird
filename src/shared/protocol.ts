@@ -48,6 +48,12 @@ export interface BodyInvokeRequest {
     count: number;
 }
 
+/** The keys typed so far in a half-typed sequence in a message document, counts left out. No keys means no sequence is pending. The background takes the window from the sender and shows the which-key panel of the message keys for it. */
+export interface BodyPendingRequest {
+    type: "body.pending";
+    keys: string[];
+}
+
 /** The background asks the body script of a tab to find text and highlight it. The pattern is literal text, never a regular expression. */
 export interface BodyFindRequest {
     type: "body.find";

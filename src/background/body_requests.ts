@@ -1,7 +1,7 @@
 // The requests of the body script, which runs in a message document. A key of that document whose command lives in the background (`/` opens the command line) arrives here.
 
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
-import type { BodyInvokeRequest, BodyOpenLinkRequest, HintsApi, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, HintsApi, JsonValue, KeysInvocation } from "../shared/protocol.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 
@@ -17,6 +17,8 @@ export interface BodyRequestDeps {
     allowed: ReadonlySet<string>;
     /** The Experiment that sends the Enter of a hint pick. Absent when it failed to load, and the pick then leaves the Enter to the user. */
     hints?: Pick<HintsApi, "sendEnter"> | undefined;
+    /** The hud, told which keys a message document has typed of a sequence. Absent in a setup with no hud. */
+    which_key?: { on_body_pending(window_id: number, keys: string[]): Promise<void> } | undefined;
     /** Runs one invocation through the router and its validator. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
@@ -29,6 +31,13 @@ function read_invoke(message: unknown): BodyInvokeRequest | undefined {
     const { command, args, count } = request;
     if (typeof command !== "string" || typeof args !== "object" || args === null || Array.isArray(args) || typeof count !== "number" || !Number.isInteger(count) || count < 1) return undefined;
     return { type: "body.invoke", command, args: args as Record<string, JsonValue>, count };
+}
+
+function read_pending(message: unknown): BodyPendingRequest | undefined {
+    const request = message as Partial<Record<string, unknown>> | null;
+    if (typeof request !== "object" || request === null || request["type"] !== "body.pending") return undefined;
+    const { keys } = request;
+    return Array.isArray(keys) && keys.every((key) => typeof key === "string") ? { type: "body.pending", keys: keys as string[] } : undefined;
 }
 
 type Sender = { tab?: { id?: number; windowId?: number } };
@@ -57,6 +66,8 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
     }
 
     return (message, sender) => {
+        const pending = read_pending(message);
+        if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys).then(() => ({}));
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
         const request = read_invoke(message);
         return request === undefined ? undefined : invoke(request, sender);

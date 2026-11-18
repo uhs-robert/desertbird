@@ -7,7 +7,7 @@ import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, HINT_STYLE_STORAGE_KEY, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
-import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkRequest, JsonValue } from "../shared/protocol.ts";
+import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, JsonValue } from "../shared/protocol.ts";
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
@@ -35,7 +35,7 @@ export interface BodyStorage {
 
 /** The ways to reach the background page: send a request, and answer the ones it sends. */
 export interface BodyRuntime {
-    sendMessage(message: BodyInvokeRequest | BodyOpenLinkRequest): Promise<unknown>;
+    sendMessage(message: BodyInvokeRequest | BodyOpenLinkRequest | BodyPendingRequest): Promise<unknown>;
     onMessage: { addListener(listener: (message: unknown) => Promise<BodyFindReply> | undefined): void };
 }
 
@@ -83,6 +83,20 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     let hint_colors = "background: #ffd33d !important;";
     const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, open_pick, () => hint_colors) };
 
+    // Tells the background the typed prefix for which-key. It sends only a change, so a plain key with no sequence sends nothing.
+    let reported = "";
+    function report(keys: string[]): void {
+        const joined = keys.join(" ");
+        if (joined === reported) return;
+        reported = joined;
+        runtime.sendMessage({ type: "body.pending", keys }).catch(() => {});
+    }
+
+    function reset_sequence(): void {
+        matcher?.reset();
+        report([]);
+    }
+
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {
             const count = typed_count ?? step.invocation.count ?? 1;
@@ -103,12 +117,13 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     function on_keydown(event: BodyKeyEvent): void {
         if (context.hints.active()) return on_hint_key(event);
         if (!matcher) return;
-        if (is_typing_element(event.target as FocusNode | null)) return void matcher.reset();
+        if (is_typing_element(event.target as FocusNode | null)) return reset_sequence();
         const token = event_to_token(event);
         if (token === null) return;
         // Escape ends a half-typed sequence or count and goes on to Thunderbird, which may use it.
-        if (token === "<Escape>") return void matcher.reset();
+        if (token === "<Escape>") return reset_sequence();
         const result = matcher.feed(NORMAL_MODE, token);
+        report(result.kind_ === "pending" ? result.typed_ : []);
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         if (result.kind_ === "no_match" && !is_plain_printable(token)) return;
         // Thunderbird binds single keys such as `a` and `r`, so a plain key stops here whether or not it matched.
@@ -130,13 +145,14 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
             root_element.removeAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE);
             context.hints.cancel();
         }
+        report([]);
     }
 
     window.addEventListener("keydown", on_keydown, true);
     // The labels sit at fixed places. They end when the page moves under them, the window loses the focus or a click lands elsewhere.
     for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, () => context.hints.cancel(), true);
     // A half-typed `d` must not wait across a tab switch, or `d`, `<C-j>`, `<C-k>`, `d` trashes a message.
-    window.addEventListener("blur", () => matcher?.reset(), true);
+    window.addEventListener("blur", reset_sequence, true);
     runtime.onMessage.addListener((message) => {
         const request = message as Partial<BodyFindRequest> | null;
         return request?.type === "body.find" && typeof request.pattern === "string" ? Promise.resolve({ found: context.finder.start(request.pattern) }) : undefined;
