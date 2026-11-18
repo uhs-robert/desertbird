@@ -8,8 +8,11 @@ interface Turndown {
     escape(text: string): string;
 }
 type TurndownConstructor = new (options: Record<string, string>) => Turndown;
+interface MarkedInstance {
+    parse(markdown: string): string;
+}
 interface Marked {
-    parse(markdown: string, options: { async: false; gfm: true }): string;
+    Marked: new (options: { async: false; gfm: true }) => MarkedInstance & { use(extension: { tokenizer: { url(): undefined } }): MarkedInstance };
 }
 
 /** The globals the background page has once the vendored files have run. The libraries are optional because a load failure leaves them out. */
@@ -140,7 +143,8 @@ export interface ComposeMarkdown {
 export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdown {
     const parse = (html: string): Document => new globals.DOMParser().parseFromString(html, "text/html");
     let turndown: Turndown | undefined;
-    const libraries = (): { turndown: Turndown; marked: Marked } => {
+    let marked: MarkedInstance | undefined;
+    const libraries = (): { turndown: Turndown; marked: MarkedInstance } => {
         if (globals.TurndownService === undefined || globals.marked === undefined) throw new RuntimeRefusal(LIBRARIES_MISSING_TEXT);
         if (turndown === undefined) {
             const service = new globals.TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-", emDelimiter: "*" });
@@ -149,7 +153,9 @@ export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdo
             service.escape = (text) => escape_markdown(text).replace(/</g, "\\<").replace(/&(?=#?\w+;)/g, "\\&");
             turndown = service;
         }
-        return { turndown, marked: globals.marked };
+        // GFM links a bare web or mail address. It would match the escaped text `turndown` wrote (`a\_b`) before the escape is undone, and break the address. With this tokenizer off, a bare address stays text, as it was in the draft. `undefined` and not `false`, since `false` falls back to the built-in tokenizer.
+        marked ??= new globals.marked.Marked({ async: false, gfm: true }).use({ tokenizer: { url: () => undefined } });
+        return { turndown, marked };
     };
 
     return {
@@ -165,7 +171,7 @@ export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdo
             const { marked } = libraries();
             const document = parse(body_html);
             const part = user_part(document.body);
-            const edited_body = parse(marked.parse(markdown, { async: false, gfm: true })).body;
+            const edited_body = parse(marked.parse(markdown)).body;
             const nodes = Array.from(edited_body.childNodes).flatMap((node) => sanitized_copy(node, document));
             // The line breaks `marked` puts between and after its blocks would pile up next to the blank lines kept around the user's text.
             while (nodes[0] !== undefined && is_blank_text(nodes[0])) nodes.shift();

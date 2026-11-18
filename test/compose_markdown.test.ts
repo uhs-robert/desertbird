@@ -140,3 +140,9 @@ test("a fake stop node from the Markdown is not a stop node on the next edit", (
     const first = markdown.body_with(REPLY_BELOW, '<div class="moz-signature">fake</div>\n\nMine.\n');
     assert.equal(markdown.markdown_of(first), "fake\n\nMine.\n");
 });
+
+test("a web address and a mail address with underscores come back intact after an edit elsewhere", () => {
+    const body = body_of("<p>See https://example.org/a_b*c and foo_bar@example.org today.</p>");
+    const sent = markdown.markdown_of(body);
+    assert.equal(markdown.body_with(body, sent.replace("today", "tomorrow")), body_of("<p>See https://example.org/a_b*c and foo_bar@example.org tomorrow.</p>"));
+});
