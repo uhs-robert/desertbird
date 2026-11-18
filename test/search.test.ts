@@ -211,7 +211,7 @@ test("Enter keeps the filter, selects the first row, stores the register and say
     await service.commit(3, "invoice");
     assert.equal(state.selected, 0);
     assert.deepEqual(said, ["ok 1 of 3"]);
-    assert.deepEqual(storage.data[SEARCH_REGISTER_STORAGE_KEY], { text: "invoice", direction: "forward" });
+    assert.deepEqual(storage.data[SEARCH_REGISTER_STORAGE_KEY], { text: "invoice", direction: "forward", kind: "threads" });
     assert.equal(state.filter.text?.text, "invoice");
     // The search is over: a later Escape has nothing to restore.
     await service.cancel(3);
@@ -239,7 +239,7 @@ test("an empty line on Enter repeats the register, and with no register it refus
     const { service, register, state } = setup();
     await service.start(3, "forward");
     await assert.rejects(service.commit(3, ""), /No earlier search/);
-    await register.write({ text: "lunch", direction: "backward" });
+    await register.write({ text: "lunch", direction: "backward", kind: "threads" });
     await service.commit(3, "");
     assert.equal(state.filter.text?.text, "lunch");
 });
@@ -513,4 +513,10 @@ test("Escape while an Enter is still committing cancels the search, and the late
     assert.deepEqual(await pending, { ok: false, message: "Not found: zzz" });
     assert.deepEqual(log, ["commit zzz", "cancel 3", "unmount 3"]);
     assert.deepEqual(await ask(service, { type: "cmdline.hello", windowId: 3 }), { open: false });
+});
+
+test("a register stored before folder search has no kind and counts as a thread search", async () => {
+    const { storage, register } = setup();
+    storage.data[SEARCH_REGISTER_STORAGE_KEY] = { text: "x", direction: "forward" };
+    assert.deepEqual(await register.read(), { text: "x", direction: "forward", kind: "threads" });
 });
