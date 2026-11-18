@@ -4,7 +4,7 @@ import { focused_pane } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
-import type { FolderpaneFoldArgs } from "../shared/protocol.ts";
+import type { FolderpaneFoldArgs, FolderpaneFocusedArgs } from "../shared/protocol.ts";
 
 interface FolderRowLike {
     classList: { contains(name: string): boolean };
@@ -50,14 +50,17 @@ function fold_folders(tree: FolderTreeLike, { open, extent }: Pick<FolderpaneFol
 }
 
 export function get_folderpane_api(context: ExtensionContext) {
+    const pane_of = (window_id: number) => mail_pane_of(context, window_id) as unknown as FolderPane;
+    const has_focus = (pane: FolderPane) => focused_pane(pane.browsingContext.topChromeWindow.document) === 0;
     return {
         folderpane: {
             fold: guard("folderpane.fold", ({ windowId, open, extent }: FolderpaneFoldArgs): boolean => {
-                const pane = mail_pane_of(context, windowId) as unknown as FolderPane;
-                const in_folder_pane = focused_pane(pane.browsingContext.topChromeWindow.document) === 0;
+                const pane = pane_of(windowId);
+                const in_folder_pane = has_focus(pane);
                 if (in_folder_pane) fold_folders(pane.folderTree, { open, extent });
                 return in_folder_pane;
             }),
+            focused: guard("folderpane.focused", ({ windowId }: FolderpaneFocusedArgs): boolean => has_focus(pane_of(windowId))),
         },
     };
 }
