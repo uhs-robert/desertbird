@@ -16,11 +16,19 @@ export type BridgeAnswer = { ok: true } | { ok: false; message: string };
 const NEVER_GROUPS: readonly string[] = ["config", "settings", "native", "permissions", "clipboard", "hint"];
 // `repeat.last` replays the last command of the window, which can be any command a key ran. `mark.set` writes stored state and `msg.undo` moves mail back.
 // Send, delete and move (archive, junk and snooze move too) are on the list as well as `bridge: false`, so a later flag change alone cannot let them through.
-const NEVER_IDS: readonly string[] = ["repeat.last", "mark.set", "msg.undo", "msg.delete", "msg.move", "msg.archive", "msg.junk", "msg.snooze", "msg.reply", "msg.forward", "msg.new", "msg.reply_with"];
+// `search.message` succeeds only when its text is in the shown message, so its answer would leak the body one probe at a time.
+const NEVER_IDS: readonly string[] = ["search.message", "repeat.last", "mark.set", "msg.undo", "msg.delete", "msg.move", "msg.archive", "msg.junk", "msg.snooze", "msg.reply", "msg.forward", "msg.new", "msg.reply_with"];
 // Commands that open an address taken from mail or typed by the caller.
 const OPENS_URL_IDS: readonly string[] = ["hint.pick", "msg.open", "msg.unsubscribe", "app.open_page", "help.open"];
 
 const NEVER_GROUP_IDS: ReadonlySet<string> = new Set(NEVER_GROUPS.flatMap((name) => Object.keys(GROUPS[name]?.commands ?? {})));
+
+// The ok or failed answer tells whether a typed name matched, so a command that matches text against mail names takes only values that name nothing.
+const ARG_RULES: Record<string, (args: Record<string, unknown>) => string | undefined> = {
+    // A title would be matched against tab titles, which are message subjects.
+    "tab.switch": (args) => (/^\d+$/.test(String(args["tab"]).trim()) ? undefined : "tab.switch takes only a tab number through the bridge"),
+    "folder.open": (args) => (args["folder"] === "" && !args["account"] ? undefined : "folder.open takes only a special folder through the bridge"),
+};
 
 export const never_listed = (id: string): boolean => NEVER_GROUPS.includes(id.split(".")[0] ?? "") || NEVER_GROUP_IDS.has(id) || NEVER_IDS.includes(id) || OPENS_URL_IDS.includes(id);
 
@@ -67,6 +75,8 @@ export function create_bridge_run(deps: BridgeRunDeps) {
         if (Object.values(parsed.invocation.args ?? {}).some((value) => typeof value === "object" && value !== null)) return refuse(`${command.id} does not take @sources through the bridge`);
         const checked = check_args(command, parsed.invocation.args);
         if (!checked.ok) return refuse(checked.error);
+        const arg_refusal = ARG_RULES[command.id]?.(checked.args);
+        if (arg_refusal !== undefined) return refuse(arg_refusal);
         const window_id = await deps.target_window();
         if (window_id === undefined) return refuse("no mail window is open");
         try {

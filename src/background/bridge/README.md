@@ -14,6 +14,7 @@ The add-on's end of the native bridge host. A program outside Thunderbird, such 
 - The never-list wins over the `bridge` field. Groups `config`, `settings`, `native`, `permissions`, `clipboard` and `hint` (as an id prefix or a group file). `repeat.last` is on it because it replays any command a key ran. So are `mark.set`, `msg.undo`, every command that sends, deletes or moves mail, and every command that opens an address (`hint.pick`, `msg.open`, `msg.unsubscribe`, `app.open_page`, `help.open`).
 - A refused command is refused on its first word, before its args are parsed. The parse and the validator read no dynamic value list. `list` gives a folder, tag or tab param only its `{ from }` source, so no folder name or tag leaves.
 - A handler failure answers `<id> failed` and nothing more: its text can name a folder or a subject.
+- The ok or failed answer itself tells whether a typed name matched. So `search.message` is on the never-list, `tab.switch` takes only a tab number, and `folder.open` takes only a special folder with no account.
 - `test/registry.test.ts` holds the audited `bridge: true` set. A command newly marked `true` fails it until it is reviewed.
 
 ## Backoff
