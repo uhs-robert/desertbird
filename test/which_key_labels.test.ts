@@ -6,6 +6,9 @@ import { parse_command_line } from "../vendor/desertfox/registry/command_line.ts
 import { GROUP_NAMES, compile_default_keymap, compile_message_keymap, registry } from "../src/background/commands/index.ts";
 import { settings_with } from "./hud_fakes.ts";
 
+// `M` and `'` are capture branches: they take the label of their leaf.
+const CAPTURE_NAMES: Record<string, string> = { M: "Set mark", "'": "Jump to mark" };
+
 const mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch;
 const message_root = compile_message_keymap().compiled.modes.normal as TreeBranch;
 
@@ -28,7 +31,7 @@ function each_branch(root: TreeBranch, path: string[] = []): { path: string[]; b
 
 test("every group of both trees has a name, and the panel title is the chain of names", () => {
     for (const root of [mail_root, message_root]) {
-        for (const { path, branch } of each_branch(root)) assert.equal(branch.label, GROUP_NAMES[path.join("")], path.join(""));
+        for (const { path, branch } of each_branch(root)) assert.equal(branch.label, GROUP_NAMES[path.join("")] ?? CAPTURE_NAMES[path.join("")], path.join(""));
     }
     assert.deepEqual(which_key_panel(mail_root, [], settings_with({}))?.title, ["keys"]);
     assert.deepEqual(which_key_panel(mail_root, ["g", "p"], settings_with({}))?.title, ["+Go", "+Pages"]);
@@ -47,6 +50,8 @@ test("the rows carry the short labels", () => {
     assert.deepEqual(rows_of(mail_root, ["m", "f"]), { d: "In 1 day", t: "In 3 days", w: "In 1 week", c: "Cancel" });
     assert.deepEqual(rows_of(mail_root, ["y"]), { y: "Message", s: "Subject", f: "Sender", a: "Address", i: "Message ID" });
     assert.deepEqual(rows_of(mail_root, ["g", "r"])["1"], "Slot 1");
+    assert.deepEqual(rows_of(mail_root, ["M"]), { "<key>": "Set mark" });
+    assert.deepEqual(rows_of(mail_root, ["'"]), { "<key>": "Jump to mark" });
     assert.deepEqual(rows_of(mail_root, [";"]), { ";": "Hint command line", f: "Focus target", c: "Click target", y: "Copy target" });
     assert.deepEqual(rows_of(message_root, [";"]), { f: "Focus link", c: "Click link", y: "Copy link" });
     assert.equal(rows_of(mail_root, [])["H"], "Collapse folder or go to folders");

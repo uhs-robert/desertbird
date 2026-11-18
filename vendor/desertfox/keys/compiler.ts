@@ -5,12 +5,12 @@ import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BindingTable } from "../settings_table.ts";
-import { MAX_BIND_STEPS } from "../table_constants.ts";
-import type { BoundInvocation, KeyBinding, Prompt } from "../invocation.ts";
+import { MAX_BIND_CHOICES, MAX_BIND_STEPS } from "../table_constants.ts";
+import { is_choice_list, type BoundInvocation, type KeyBinding, type Prompt } from "../invocation.ts";
 import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
@@ -67,7 +67,11 @@ function modifier_variants(modifiers: Record<string, Modifier>, taken: Map<strin
     else return [{ sequence, tokens: parsed.tokens, args }];
     return [];
   });
-  const modifier_keys = parsed_modifiers.map(({ tokens }) => tokens.join(""));
+  // Every declared modifier counts, also one that was skipped because a user key took its place. Otherwise the keys under it turn into sources for the other modifiers.
+  const modifier_keys = Object.keys(modifiers).flatMap((sequence) => {
+    const parsed = parse_sequence(sequence);
+    return parsed.error === undefined && parsed.tokens.length >= 2 ? [parsed.tokens.join("")] : [];
+  });
   const sources = [...taken.values()].filter(({ tokens, binding }) => {
     const joined = tokens.join("");
     return !Array.isArray(binding) && binding.args?.action === undefined && !modifier_keys.some((key) => joined.startsWith(key));
@@ -142,9 +146,10 @@ function entries_for_mode(
         continue;
       }
       const normalized = parsed.tokens.join("");
-      // A keymap binding replaces no other binding, so it has nothing to run when focus is elsewhere. The skip comes before the default keys it extends are dropped.
-      if (binding !== null && [binding].flat()[0]?.when_focus !== undefined) {
-        warnings.push(`${mode}: skipped "${sequence}": when_focus works only in a site row bind`);
+      // A keymap binding replaces no other binding, so it has nothing to run when its guard fails. The skip comes before the default keys it extends are dropped.
+      const guard = binding === null ? undefined : (["when_focus", "when_present"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined);
+      if (guard !== undefined) {
+        warnings.push(`${mode}: skipped "${sequence}": ${guard} works only in a site row bind`);
         continue;
       }
       if (binding === null) {
@@ -225,6 +230,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
   let label: string | undefined;
   let intent: string | undefined;
   let when_focus: string | undefined;
+  let when_present: string | undefined;
   for (const invocation of invocations) {
     const info = resolve(invocation.id);
     if (!info) {
@@ -244,6 +250,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
       intent = invocation.intent;
       when_focus = invocation.when_focus;
+      when_present = invocation.when_present;
       label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
@@ -253,14 +260,14 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, when_present: _when_present, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count, ...(info.bundle && { bundle: info.bundle }) });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label, intent, when_focus };
+  return { steps, label, intent, when_focus, when_present };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
@@ -325,7 +332,8 @@ const key_sequences = (text: string, warnings: string[]): string[][] =>
 export const is_default_value = (name: FrameSiteName, value: unknown): boolean => JSON.stringify(value) === JSON.stringify(DEFAULT_SETTINGS[name]);
 
 // A bind with a bad key, an unknown command or too many steps is skipped with a warning, and the row's other binds stay. The label comes from the first step, as for a keymap entry. The args are checked later, in `compile.ts`, where the registry validator is. A bind still in text form never went through the build, so it is skipped.
-function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[], scope = ""): Record<string, SiteBind> {
+// A choice list becomes a chain of leaves: each choice's `otherwise` is the next choice. The graft puts the leaf the bind replaced at the end (`graft_binds`).
+function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, warnings: string[], scope = "", mode: KeymapMode = "normal"): Record<string, SiteBind> {
   const binds: Record<string, SiteBind> = {};
   for (const [sequence, written] of Object.entries(table)) {
     const parsed = parse_sequence(sequence);
@@ -333,42 +341,53 @@ function compile_binds(table: BindingTable, resolve: ResolveCommand, settings: P
       warnings.push(`site_rules: ${scope}skipped bind "${sequence}": ${parsed.error}`);
       continue;
     }
-    const steps = [written].flat() as unknown[];
-    if (steps.length > MAX_BIND_STEPS) {
-      warnings.push(`site_rules: ${scope}skipped bind "${sequence}": more than ${MAX_BIND_STEPS} steps`);
+    const skip = (reason: string) => warnings.push(`site_rules: ${scope}skipped bind "${sequence}": ${reason}`);
+    const choices = is_choice_list(written) ? written : [written];
+    if (choices.length > MAX_BIND_CHOICES) {
+      skip(`more than ${MAX_BIND_CHOICES} choices`);
       continue;
     }
-    if (steps.some((step) => typeof step !== "object" || step === null || "run" in step)) {
-      warnings.push(`site_rules: ${scope}skipped bind "${sequence}": the binding was not resolved by the config build`);
-      continue;
-    }
-    const binding = steps.map((step) => ({ ...(step as BoundInvocation) }));
-    const step_warnings: string[] = [];
-    const resolved = to_steps("normal", { sequence, tokens: parsed.tokens, binding, source_index: 0, layer: "user" }, resolve, settings, sources, [], step_warnings);
-    if (resolved === undefined) {
-      warnings.push(...step_warnings.map((warning) => `site_rules: ${scope}bind ${warning.replace(/^normal: /, "")}`));
-      continue;
-    }
-    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), ...(resolved.when_focus === undefined ? {} : { when_focus: resolved.when_focus }), steps: resolved.steps } };
+    const leaves = choices.map((choice) => choice_leaf(choice, { sequence, tokens: parsed.tokens }, mode, resolve, settings, sources, scope, warnings));
+    if (!leaves.every((leaf) => leaf !== undefined)) continue;
+    binds[parsed.tokens.join("")] = { tokens: parsed.tokens, leaf: leaves.reduceRight((otherwise, leaf) => ({ ...leaf, otherwise })) };
   }
   return binds;
+}
+
+// One choice of a bind, or the whole of a plain bind, as a leaf. Undefined after a warning.
+function choice_leaf(written: unknown, keys: Pick<Entry, "sequence" | "tokens">, mode: KeymapMode, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, scope: string, warnings: string[]): TreeLeaf | undefined {
+  const skip = (reason: string) => warnings.push(`site_rules: ${scope}skipped bind "${keys.sequence}": ${reason}`);
+  const steps = [written].flat() as unknown[];
+  if (steps.length > MAX_BIND_STEPS) return void skip(`more than ${MAX_BIND_STEPS} steps`);
+  if (steps.some((step) => typeof step !== "object" || step === null || "run" in step)) return void skip("the binding was not resolved by the config build");
+  const binding = steps.map((step) => ({ ...(step as BoundInvocation) }));
+  const step_warnings: string[] = [];
+  const resolved = to_steps(mode, { ...keys, binding, source_index: 0, layer: "user" }, resolve, settings, sources, [], step_warnings);
+  if (resolved === undefined) {
+    warnings.push(...step_warnings.map((warning) => `site_rules: ${scope}bind ${warning.replace(`${mode}: `, "")}`));
+    return undefined;
+  }
+  const { label, intent, when_focus, when_present } = resolved;
+  return { kind: "leaf", ...(label === undefined ? {} : { label }), ...(intent === undefined ? {} : { intent }), ...(when_focus === undefined ? {} : { when_focus }), ...(when_present === undefined ? {} : { when_present }), steps: resolved.steps };
 }
 
 // Rows that bind a key and a longer key under it. The shorter bind wins and the longer is dropped when the binds are grafted, as in a keymap, where a complete binding hides the keys under it.
 // Rows of one pattern are checked against each other. Rows of other patterns are checked too unless their hosts are provably different, as a page can fit both. Order does not matter.
 function warn_prefix_binds(rows: readonly { site: string; rule: SiteRule }[], warnings: string[]) {
-  type Scope = { site: string; mode: string; binds: SiteBind[] };
+  // `merges_as` names the group of scopes whose binds merge across rows: `normal` for `bind`, a keymap mode for its table, and nothing for a site mode.
+  type Scope = { site: string; merges_as: string | undefined; binds: SiteBind[] };
   const scopes = new Map<string, Scope>();
-  // A mode has binds of its own, so its keys are checked against each other and not against the row's.
-  const add = (site: string, regex: string, mode: string, binds: Record<string, SiteBind> | undefined) => {
-    const key = `${regex} mode ${mode}`;
-    const scope = scopes.get(key) ?? { site, mode, binds: [] };
+  // A table has binds of its own, so its keys are checked against each other and not against another table's.
+  const add = (site: string, regex: string, scope_name: string, merges_as: string | undefined, binds: Record<string, SiteBind> | undefined) => {
+    const key = `${regex} ${scope_name}`;
+    const scope = scopes.get(key) ?? { site, merges_as, binds: [] };
     scope.binds.push(...Object.values(binds ?? {}));
     scopes.set(key, scope);
   };
   for (const { site, rule } of rows) {
-    add(site, rule.regex, "", rule.bind);
-    for (const [name, mode] of Object.entries(rule.modes ?? {})) add(site, rule.regex, name, mode.bind);
+    add(site, rule.regex, "keymap normal", "normal", rule.bind);
+    for (const [mode, binds] of Object.entries(rule.keymap ?? {})) add(site, rule.regex, `keymap ${mode}`, mode, binds);
+    for (const [name, mode] of Object.entries(rule.modes ?? {})) add(site, rule.regex, `mode ${name}`, undefined, mode.bind);
   }
   const under = (longer: SiteBind, binds: SiteBind[]) => binds.find((other) => other.tokens.length < longer.tokens.length && other.tokens.every((token, index) => longer.tokens[index] === token));
   for (const scope of scopes.values()) {
@@ -378,11 +397,11 @@ function warn_prefix_binds(rows: readonly { site: string; rule: SiteRule }[], wa
         warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}": "${shorter.tokens.join("")}" is already a complete bind for the same site`);
         continue;
       }
-      // Only the row's own binds merge across rows. A named mode comes whole from the first matching row, so its binds never meet those of another row.
-      if (scope.mode !== "") continue;
+      // Only the binds of a keymap mode merge across rows. A named site mode comes whole from the first matching row, so its binds never meet those of another row.
+      if (scope.merges_as === undefined) continue;
       for (const other of scopes.values()) {
         // Disjoint hosts are skipped, though an embedded cross-site frame resolves rules by both its own URL and the tab's and can still meet both rows.
-        const hiding = other === scope || other.mode !== "" || hosts_disjoint(scope.site, other.site) ? undefined : under(longer, other.binds);
+        const hiding = other === scope || other.merges_as !== scope.merges_as || hosts_disjoint(scope.site, other.site) ? undefined : under(longer, other.binds);
         if (hiding) warnings.push(`site_rules: skipped bind "${longer.tokens.join("")}" of "${scope.site}": "${hiding.tokens.join("")}" is already a complete bind of "${other.site}", which can match the same pages`);
       }
     }
@@ -400,10 +419,12 @@ function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, se
   return rules.flatMap((row, index): { site: string; rule: SiteRule }[] => {
     const regex = match_regex_source([row.site]);
     if (regex === undefined) return [];
-    const { keys, bind, modes, ...columns } = site_row_columns(row);
-    const compiled_bind = bind === undefined ? {} : { bind: compile_binds(bind as BindingTable, resolve, settings, sources, warnings) };
-    const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
-    const rule: SiteRule = { ...(row_sources[index] ?? { origin: "user" }), site: row.site, regex, ...columns, ...compiled_bind, ...compiled_modes };
+    const { keys, bind, keymap, modes, ...columns } = site_row_columns(row);
+    const from_keymap = compile_binds((row.keymap?.normal ?? {}) as BindingTable, resolve, settings, sources, warnings, `keymap "normal" `);
+    const compiled_bind = bind === undefined ? {} : { bind: { ...from_keymap, ...compile_binds((row.bind ?? {}) as BindingTable, resolve, settings, sources, warnings) } };
+    const compiled_keymap = keymap === undefined ? {} : { keymap: Object.fromEntries(Object.entries(keymap).map(([mode, table]) => [mode, compile_binds(table as BindingTable, resolve, settings, sources, warnings, `keymap "${mode}" `, mode as KeymapMode)])) };
+    const compiled_modes = modes === undefined ? {} : { modes: Object.fromEntries(Object.entries(modes).map(([name, mode]) => [name, { label: mode.label, ...(mode.sticky && { sticky: true }), bind: compile_binds(mode.bind as BindingTable, resolve, settings, sources, warnings, `mode "${name}" `) }])) };
+    const rule: SiteRule = { ...(row_sources[index] ?? { origin: "user" }), site: row.site, regex, ...columns, ...compiled_bind, ...compiled_keymap, ...compiled_modes };
     if (keys === undefined) return [{ site: row.site, rule }];
     return [{ site: row.site, rule: { ...rule, keys: "pass" in keys ? { pass: key_sequences(keys.pass, warnings) } : { only: key_sequences(keys.only, warnings) } } }];
   });
@@ -438,6 +459,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     ...(settings.bridge === true ? { bridge: true as const } : {}),
     ...(settings.bridge === true && settings.bridge_share_tabs === true ? { bridge_share_tabs: true as const } : {}),
+    ...(settings.item_navigator === true ? { item_navigator: true as const } : {}),
     ...(Object.keys(frame_site_globals).length > 0 ? { frame_site_globals } : {}),
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,

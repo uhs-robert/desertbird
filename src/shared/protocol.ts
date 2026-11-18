@@ -376,7 +376,6 @@ export type HudRequest = { type: "hud.state"; windowId: number };
 
 /** The title of the panel at the root. A group in a chain starts with `+`, so no chain equals it. */
 export const WHICH_KEY_ROOT_TITLE = "keys";
-export const WHICH_KEY_TITLE_SEPARATOR = " \u00bb ";
 
 /** The which-key panel as the page draws it: the chain of group names as a title (`["+Go", "+Pages"]`, or `["keys"]` at the root) and one row per key that can follow. */
 export interface WhichKeyPanel {

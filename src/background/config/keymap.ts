@@ -2,9 +2,8 @@
 
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { Settings } from "./settings.ts";
-import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
-import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, resolve_command } from "../commands/index.ts";
+import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_bindings } from "../commands/index.ts";
 
 /** What the user stores: normal-mode bindings only. A `null` binding removes a default key. */
 export type UserKeymap = Pick<KeymapConfig, "normal">;
@@ -15,7 +14,7 @@ export function effective_keymap(user: UserKeymap): KeymapConfig {
 }
 
 export function compile_effective_keymap(user: UserKeymap, settings: Partial<Settings> = {}): CompileResult {
-    return compile_keymap(effective_keymap(user), settings, resolve_command, undefined, DEFAULT_KEYMAP);
+    return compile_bindings(effective_keymap(user), settings, DEFAULT_KEYMAP);
 }
 
 /** Keeps the `normal` bindings that are objects or `null`. Stored data is untrusted. */

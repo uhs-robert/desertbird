@@ -7,4 +7,4 @@ export const match_regex_source = (_patterns: readonly string[]): string | undef
 
 export const hosts_disjoint = (_left: string, _right: string): boolean => true;
 
-export const site_row_columns = (_row: SiteRuleRow): { off?: boolean; keys?: { pass: string } | { only: string }; bind?: Readonly<Record<string, unknown>>; modes?: Readonly<Record<string, { label: string; bind: Readonly<Record<string, unknown>> }>> } => ({});
+export const site_row_columns = (_row: SiteRuleRow): { off?: boolean; keys?: { pass: string } | { only: string }; bind?: Readonly<Record<string, unknown>>; keymap?: Readonly<Record<string, Readonly<Record<string, unknown>>>>; modes?: Readonly<Record<string, { label: string; sticky?: boolean; bind: Readonly<Record<string, unknown>> }>> } => ({});
