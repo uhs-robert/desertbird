@@ -26,6 +26,7 @@ interface Stored {
     read?: boolean;
     flagged?: boolean;
     junk?: boolean;
+    tags?: string[];
     /** The Date header, in ms. Copies that share a Message-ID differ here. */
     date?: number;
     size?: number;
@@ -43,8 +44,9 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
     const notices: string[] = [];
     let hide_lookups = 0;
     const failing_accounts = new Set<string>();
+    let tag_keys = ["work", "home"];
     const folder = (id: string) => folders.find((entry) => entry.id === id)!;
-    const header_of = (message: Stored): MessageHeader => ({ id: message.id, date: new Date(message.date ?? 0), ...(message.size !== undefined && { size: message.size }), ...(message.header !== undefined && { headerMessageId: message.header }), read: message.read === true, flagged: message.flagged === true, junk: message.junk === true, folder: { ...folder(message.folder) } });
+    const header_of = (message: Stored): MessageHeader => ({ id: message.id, date: new Date(message.date ?? 0), ...(message.size !== undefined && { size: message.size }), ...(message.header !== undefined && { headerMessageId: message.header }), read: message.read === true, flagged: message.flagged === true, junk: message.junk === true, ...(message.tags !== undefined && { tags: [...message.tags] }), folder: { ...folder(message.folder) } });
     const known = (id: number) => {
         const message = box.get(id);
         if (message === undefined) throw new Error(`Message not found: ${id}.`);
@@ -94,6 +96,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
                 return { messages: [...box.values()].filter((message) => message.header === query.headerMessageId && inside(message)).map(header_of) };
             },
             continueList: async () => ({ messages: [] }),
+            tags: { list: async () => tag_keys.map((key) => ({ key, tag: key })) },
         },
         folders: {
             query: async (query: { accountId?: string; specialUse?: string[]; path?: string }) => {
@@ -113,6 +116,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
         calls,
         notices,
         storage,
+        delete_tag: (key: string) => void (tag_keys = tag_keys.filter((other) => other !== key)),
         hide_next_lookups: (count: number) => void (hide_lookups = count),
         /** Where each Message-ID sits now, as `header@folder`, sorted. */
         places: () => [...box.values()].map((message) => `${message.header ?? "-"}@${message.folder}`).sort(),
@@ -397,7 +401,7 @@ test("a count refuses when the selection moved, or when it would reach into a cl
 });
 
 test("an unreadable or newer stored record reads as an empty stack", async () => {
-    assert.equal(migrate_undo_record({ record_version: 2, entries: [] }), undefined);
+    assert.equal(migrate_undo_record({ record_version: 3, entries: [] }), undefined);
     assert.equal(migrate_undo_record(undefined), undefined);
     const record = migrate_undo_record({ record_version: 1, entries: [{ id: "e", kind: "moved", action: "delete", items: [] }, { id: "f", kind: "state", field: "read", items: [{ header_message_id: "a", folder_id: "f", old: true }] }, null] });
     assert.deepEqual(record?.entries.map((entry) => entry.id), ["f"]);
@@ -489,4 +493,98 @@ test("x runs while an undo waits for its copies", async () => {
     await log.record(async () => void order.push("record"));
     await undoing;
     assert.deepEqual(order, ["record", "undo"]);
+});
+
+test("m t then u: the tag goes back off every message that gained it, as one step", async () => {
+    const mail = mail_store([inbox("a@x", 1, { tags: ["home"] }), inbox("b@x", 2), inbox("c@x", 3, { tags: ["work"] })]);
+    await mail.run("msg.tag", [1, 2, 3], { tag: "work" });
+    assert.deepEqual([mail.message("a@x")!.tags, mail.message("b@x")!.tags, mail.message("c@x")!.tags], [["home", "work"], ["work"], ["work"]]);
+    assert.equal(mail.entries(), 1);
+    await mail.run("msg.undo");
+    assert.deepEqual([mail.message("a@x")!.tags, mail.message("b@x")!.tags, mail.message("c@x")!.tags], [["home"], [], ["work"]]);
+    assert.equal(mail.notices.at(-1), "Undid the tag change of 2 messages.");
+});
+
+test("m t that removes a tag then u puts it back only where the message had it", async () => {
+    const mail = mail_store([inbox("a@x", 1, { tags: ["work", "home"] }), inbox("b@x", 2), inbox("c@x", 3, { tags: ["work"] })]);
+    await mail.run("msg.tag", [1, 2, 3], { tag: "work" });
+    assert.deepEqual([mail.message("a@x")!.tags, mail.message("b@x")!.tags], [["home"], undefined]);
+    await mail.run("msg.undo");
+    assert.deepEqual([mail.message("a@x")!.tags, mail.message("b@x")!.tags, mail.message("c@x")!.tags], [["home", "work"], undefined, ["work"]]);
+});
+
+test("a tag undo keeps a tag added by hand since", async () => {
+    const mail = mail_store([inbox("a@x", 1)]);
+    await mail.run("msg.tag", [1], { tag: "work" });
+    mail.message("a@x")!.tags!.push("home");
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.message("a@x")!.tags, ["home"]);
+});
+
+test("m t on a message with no Message-ID warns and records nothing for it", async () => {
+    const mail = mail_store([{ id: 1, folder: "inbox" }, inbox("b@x", 2)]);
+    await mail.run("msg.tag", [1, 2], { tag: "work" });
+    assert.match(mail.notices.at(-1) ?? "", /^u cannot undo this for 1 of 2 messages/);
+    assert.equal(mail.top_items(), 1);
+});
+
+test("a tag undo that must put back a tag deleted since fails that item and keeps the step", async () => {
+    const mail = mail_store([inbox("a@x", 1, { tags: ["work"] })]);
+    await mail.run("msg.tag", [1], { tag: "work" });
+    mail.delete_tag("work");
+    await mail.run("msg.undo");
+    assert.match(mail.notices.at(-1) ?? "", /1 message could not go back: the tag work no longer exists\. The step keeps it\.$/);
+    assert.deepEqual(mail.message("a@x")!.tags, []);
+    assert.equal(mail.entries(), 1);
+});
+
+test("a tag undo of an added tag succeeds when the tag was deleted since", async () => {
+    const mail = mail_store([inbox("a@x", 1)]);
+    await mail.run("msg.tag", [1], { tag: "work" });
+    mail.delete_tag("work");
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.message("a@x")!.tags, []);
+    assert.equal(mail.entries(), 0);
+});
+
+test("a tag undo of a message that left its folder is refused, then dropped on the next u", async () => {
+    const mail = mail_store([inbox("a@x", 1)]);
+    await mail.run("msg.tag", [1], { tag: "work" });
+    mail.drop("a@x");
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 1);
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 0);
+});
+
+test("tag entries count toward the stack limit", async () => {
+    const mail = mail_store([inbox("a@x", 1)]);
+    for (let turn = 0; turn < UNDO_STACK_LIMIT + 3; turn++) await mail.run("msg.tag", [1], { tag: "work" });
+    assert.equal(mail.entries(), UNDO_STACK_LIMIT);
+});
+
+test("a version 1 record keeps its entries and is re-stamped, a version 2 record round trips with a tag entry", () => {
+    const moved = { id: "m", kind: "moved", action: "delete", items: [{ header_message_id: "a", from_folder_id: "f", to_folder_ids: ["t"], to_subfolders: false }] };
+    const state = { id: "s", kind: "state", field: "read", items: [{ header_message_id: "a", folder_id: "f", old: true }] };
+    const tag = { id: "t", kind: "tag", items: [{ header_message_id: "a", folder_id: "f", tag_key: "work", had: false }] };
+    const old = migrate_undo_record({ record_version: 1, entries: [moved, state] });
+    assert.equal(old?.record_version, 2);
+    assert.deepEqual(old?.entries.map((entry) => entry.id), ["m", "s"]);
+    assert.deepEqual(migrate_undo_record({ record_version: 2, entries: [moved, state, tag, { id: "bad", kind: "tag", items: [{ header_message_id: "a" }] }] })?.entries.map((entry) => entry.id), ["m", "s", "t"]);
+    assert.equal(migrate_undo_record({ record_version: 3, entries: [tag] }), undefined);
+});
+
+test("m t and u at once: u waits for the tag entry, so it undoes the tag and not the older delete", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)]);
+    await mail.run("msg.delete", [1]);
+    await Promise.all([mail.run("msg.tag", [2], { tag: "work" }), mail.run("msg.undo")]);
+    assert.deepEqual(mail.places(), ["a@x@trash", "b@x@inbox"]);
+    assert.deepEqual(mail.message("b@x")!.tags, []);
+});
+
+test("a tag undo picks the copy that still carries the change among two copies of one Message-ID", async () => {
+    const mail = mail_store([inbox("a@x", 1, { tags: ["home"] }), inbox("a@x", 2)]);
+    await mail.run("msg.tag", [2], { tag: "work" });
+    await mail.run("msg.undo");
+    assert.deepEqual([mail.message_by_id(1)!.tags, mail.message_by_id(2)!.tags], [["home"], []]);
 });
