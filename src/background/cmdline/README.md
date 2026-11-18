@@ -12,6 +12,7 @@
 - The parser, the printer and the tokenizer are copies of DesertFox code under `vendor/desertfox/` (see `VENDOR.md`). The completer is written here because DesertFox's reads tabs, bookmarks and history.
 - Command words come from the registry: a command's `name`, else its id. Enum params are typed as flags (`sort --date --descending`, `filter --tag --tag=$label1`).
 - `check_args` runs on the line before it runs, so the page can show the reason. The router checks again. A refusal while the command runs ends in a notification, after the line has closed.
+- A bridge confirm prompt (`../bridge/confirm.ts`) replaces an open command line in its window and ends the session. The service's overlay comes through `yielding_overlay`, so a command line that opens or closes in that window ends the prompt as a no.
 - The session lives in memory only. It is a few seconds of interface state tied to one open overlay: the overlay is gone when the background restarts, and the Experiment's `onClosed` event drops the session when the overlay leaves on its own.
 - `@source` values in a line are refused: DesertBird has no context sources.
 - The default keys `:`, `m t`, `m m`, `m c`, `F t` and `T` all run `cmdline.open`. The last five start the line with a command typed in.

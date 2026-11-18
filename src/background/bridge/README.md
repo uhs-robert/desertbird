@@ -6,6 +6,7 @@ The add-on's end of the native bridge host. A program outside Thunderbird, such 
 | --- | --- |
 | `run.ts` | The one path a `run` takes: the first word against the bridge rules, then the parse, the rules again, `check_args`, and `router.route` in the last focused main window. Also `list_bridge_commands`, the commands `run` accepts |
 | `reads.ts` | The four read frames, each behind its own share setting: `folders`, `messages`, `message` and `attachments`. It cleans every string a sender controls and refuses an encrypted body |
+| `confirm.ts` | The y or n prompt a write waits on: `request_confirm` resolves `yes`, `no`, `timeout` or `busy`. One request at a time, in memory only. It mounts the command line surface in the last focused main window, and only that page's `confirm.answer` with the prompt's token counts |
 | `port.ts` | The port: connect while `bridge` is on, the `ready` handshake, the backoff, the answers to `list`, `run` and `state`, and the `mode` frames |
 
 ## Setup
@@ -21,6 +22,14 @@ The bridge needs the DesertFox host and its `desertbird_bridge.json` manifest. A
 - A handler failure answers `<id> failed` and nothing more: its text can name a folder or a subject.
 - The ok or failed answer itself tells whether a typed text matched mail, alone or through a step that reads the filtered list. So no caller text reaches a match against mail: `search.message` and `search.threads` are on the never-list, `filter.set` takes no tag, `tab.switch` takes only a tab number, and `folder.open` takes only a special folder with no account.
 - `test/registry.test.ts` holds the audited `bridge: true` set. A command newly marked `true` fails it until it is reviewed.
+
+## Confirm prompt
+
+- One pending request. A second resolves `busy` at once and leaves the first alone. The entry holds the token, the window and the display list, never a message body.
+- The list shows the action, the count, up to 10 subjects and senders through the reads' cleaner, cut to 80 characters, `and N more`, the target folder name and the line "Requested by a program outside Thunderbird".
+- 30 s without an answer is `timeout`. No main window, no Experiment or a failed mount is `no`.
+- An answer counts only from the command line page of the prompt's window (its address, compared as text), with the token made for the prompt, and at least 300 ms after the mount. No frame, registry command or other script has a way to answer.
+- Every exit (an answer, the timeout, Escape in the chrome, a tab change, a closed window, a command line opening or closing in that window) settles the promise once, clears the timer and frees the slot. The surface is unmounted unless it is gone or being replaced. A background restart drops the prompt: the host call times out, and the old page closes on its next key.
 
 ## Backoff
 

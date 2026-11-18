@@ -101,7 +101,7 @@ const utf8 = new TextEncoder();
 const byte_length = (text: string): number => utf8.encode(text).length;
 
 /** Cuts at a code point, never inside a surrogate pair. */
-function cut_to_chars(text: string, max_chars: number): { text: string; cut: boolean } {
+export function cut_to_chars(text: string, max_chars: number): { text: string; cut: boolean } {
     const points = Array.from(text);
     return points.length <= max_chars ? { text, cut: false } : { text: points.slice(0, max_chars).join(""), cut: true };
 }

@@ -1,14 +1,15 @@
 // The command line page. It draws the line and the completion rows and reads keys. Parsing, completion and running live in the background: this page sends the text and shows the answer.
 
-import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, SearchDirection } from "../shared/protocol.ts";
+import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, ConfirmAnswerRequest, ConfirmAnswerResult, ConfirmPrompt, SearchDirection } from "../shared/protocol.ts";
 import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
+import { show_confirm } from "./confirm.ts";
 import { accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, read_history, rows_fit_after_wait, settle_latest, shown_highlight } from "./line_edit.ts";
 
 declare const messenger: {
-    runtime: { sendMessage(message: CmdlineRequest): Promise<unknown> };
+    runtime: { sendMessage(message: CmdlineRequest | ConfirmAnswerRequest): Promise<unknown> };
     storage: { local: { get(key: string): Promise<Record<string, unknown>> }; onChanged: { addListener(listener: (changes: Record<string, unknown>, area: string) => void): void } };
 };
 
@@ -26,6 +27,8 @@ let search_direction: SearchDirection | undefined;
 const history_key = (): string => (search_direction ? SEARCH_HISTORY_STORAGE_KEY : CMDLINE_HISTORY_STORAGE_KEY);
 // A later note replaces an earlier one that arrives after it.
 let latest_search = 0;
+// Set when the background mounted this page for a confirm prompt. The command line keys, completion and history then do nothing.
+let confirming = false;
 
 let completion: CmdlineCompletion = { rows: [], start: 0, end: 0 };
 // The text and caret the current completion was computed for. Enter uses a row only while the line still matches them.
@@ -44,7 +47,7 @@ let history_cursor: HistoryCursor = create_history_cursor(history);
 // Up and Down walk the history until the user types or uses a completion key. After that they put the next or previous row in the text, as in DesertFox.
 let walking_history = true;
 
-const send = <Answer>(message: CmdlineRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
+const send = <Answer>(message: CmdlineRequest | ConfirmAnswerRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
 
 function show_status(text: string, is_error: boolean): void {
     status_element.textContent = text;
@@ -192,7 +195,7 @@ function report_failure(error: unknown): void {
 window.addEventListener(
     "keydown",
     (event) => {
-        if (closing) return;
+        if (closing || confirming) return;
         if (event.key === "Escape") {
             event.preventDefault();
             close_line();
@@ -219,21 +222,38 @@ window.addEventListener(
 );
 
 messenger.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && history_key() in changes) load_history().catch(report_failure);
+    if (area === "local" && !confirming && history_key() in changes) load_history().catch(report_failure);
 });
 
 input.addEventListener("input", () => {
+    if (confirming) return;
     walking_history = false;
     preview_base = null;
     history_cursor = create_history_cursor(history);
     refresh_line().catch(report_failure);
 });
 
+function start_confirm(prompt: ConfirmPrompt): void {
+    confirming = true;
+    document.body.classList.add("confirming");
+    input.blur();
+    window.focus();
+    show_confirm(prompt, {
+        create: (tag) => document.createElement(tag),
+        show: (prompt_element) => document.body.append(prompt_element),
+        on_key: (listener) => window.addEventListener("keydown", listener, true),
+        now_ms: () => performance.now(),
+        send_answer: (answer) => send<ConfirmAnswerResult>({ type: "confirm.answer", windowId: window_id, token: prompt.token, answer }),
+        close: close_line,
+    });
+}
+
 async function start(): Promise<void> {
     const hello = await send<CmdlineHello>({ type: "cmdline.hello", windowId: window_id });
     if (!hello.open) {
+        if (hello.confirm) start_confirm(hello.confirm);
         // The background has no session for this window, so nothing here can run.
-        close_line();
+        else close_line();
         return;
     }
     input.value = hello.text;

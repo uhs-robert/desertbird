@@ -33,3 +33,11 @@ body.search #rows { display: none; }
 body.search { justify-content: flex-end; border-top: 0; }
 body.search #status { background: var(--surface); border-top: 2px solid var(--accent); }
 body.search #line { background: var(--surface); }
+/* A confirm prompt (confirm.ts) replaces the rows, the status and the input line. */
+body.confirming #rows, body.confirming #status, body.confirming #line { display: none; }
+.confirm { flex: 1; min-height: 0; overflow: hidden; padding: 6px 10px; }
+.confirm > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.confirm .source { color: var(--error_text); font-weight: 700; }
+.confirm .headline { font-weight: 700; margin: 4px 0; }
+.confirm .more { color: var(--muted); }
+.confirm .keys { margin-top: 6px; font-family: monospace; color: var(--accent); }

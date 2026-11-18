@@ -319,8 +319,31 @@ export interface CmdlineCompletion {
 
 export type SearchDirection = "forward" | "backward";
 
-/** `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. */
-export type CmdlineHello = { open: true; text: string; search?: SearchDirection } | { open: false };
+/** `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. `confirm` is set when the background mounted the page for a confirm prompt and not for a command line. */
+export type CmdlineHello = { open: true; text: string; search?: SearchDirection } | { open: false; confirm?: ConfirmPrompt };
+
+export type ConfirmAction = "archive" | "trash" | "move";
+
+/** A confirm prompt as the page draws it. Every string is cleaned and cut in the background. The page shows them as plain text. */
+export interface ConfirmPrompt {
+    /** Made by the background for this prompt. An answer counts only with it. */
+    token: string;
+    action: ConfirmAction;
+    count: number;
+    items: { subject: string; from: string }[];
+    /** How many of `count` the list leaves out. */
+    more: number;
+    target_folder_name?: string;
+}
+
+/** The page ignores every key for this long after it draws a prompt, and the background ignores answers for this long after the mount, so a key held from before cannot answer. */
+export const CONFIRM_KEY_GRACE_MS = 300;
+
+/** The confirm page's answer. Only `y` sends `yes`. */
+export type ConfirmAnswerRequest = { type: "confirm.answer"; windowId: number; token: string; answer: "yes" | "no" };
+
+/** `stale` means the background holds no prompt with this token (it timed out, or the background restarted), so the page closes itself. */
+export type ConfirmAnswerResult = { outcome: "settled" | "ignored" | "stale" };
 
 /** The note under the search line after a keystroke. `stale` means a newer keystroke replaced this one, so the page draws nothing. */
 export type CmdlineSearchNote = { note: string; is_error: boolean } | { stale: true };
