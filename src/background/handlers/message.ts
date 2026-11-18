@@ -70,7 +70,7 @@ export interface HandlerScope<Api = MessageApi> {
 export type TrashApi = MessageApi & UndoApi & { keys: Pick<KeysApi, "viewRows"> | undefined };
 
 // A count acts on that many rows from the current one, as `3dd` deletes three lines in vim. The rows are read when the command runs, so the current row must still be one the key press selected.
-async function counted_messages(scope: HandlerScope<TrashApi>): Promise<number[]> {
+export async function counted_messages(scope: HandlerScope<TrashApi>): Promise<number[]> {
     const ids = require_messages(scope.message_ids);
     if (scope.count <= 1) return ids;
     const keys = scope.api.keys;

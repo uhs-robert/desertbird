@@ -3,7 +3,8 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { displayed_folder } from "./displayed_folder.ts";
 import type { DisplayedFolderApi } from "./displayed_folder.ts";
 import { require_messages } from "./each_message.ts";
-import type { HandlerScope, MessageApi, MessageHeader } from "./message.ts";
+import { counted_messages } from "./message.ts";
+import type { HandlerScope, MessageApi, MessageHeader, TrashApi } from "./message.ts";
 import { account_id_named } from "./account_choice.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { record_moved, record_state, record_tag } from "./undo.ts";
@@ -19,14 +20,15 @@ type StateScope = HandlerScope<MessageApi & UndoApi>;
 
 // A toggle on a mixed selection follows the first message: if it is read, every message becomes unread, and the reverse. One answer for the whole selection beats each message flipping on its own.
 // The headers are read up front, since the undo item needs the old value and the Message-ID of each message.
-function set_state(scope: StateScope, field: StateField, value: boolean | "toggle"): Promise<void> {
+function set_state(scope: StateScope, field: StateField, value: boolean | "toggle", ids_of: (scope: StateScope) => Promise<number[]> | number[] = (own) => require_messages(own.message_ids)): Promise<void> {
     return record_state(scope, field, async () => {
-        const messages = await Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
+        const messages = await Promise.all((await ids_of(scope)).map((id) => scope.api.messages.get(id)));
         return { messages, value: value === "toggle" ? messages[0]![field] !== true : value };
     });
 }
 
-export const set_read = (scope: StateScope, args: CheckedArgs): Promise<void> => set_state(scope, "read", args["state"] === "toggle" ? "toggle" : args["state"] === "read");
+// Only read state takes a count. The rows come from `counted_messages`, as for `x` and `dd`, so a toggle follows the first of them.
+export const set_read = (scope: HandlerScope<TrashApi>, args: CheckedArgs): Promise<void> => set_state(scope, "read", args["state"] === "toggle" ? "toggle" : args["state"] === "read", () => counted_messages(scope));
 export const toggle_flag = (scope: StateScope): Promise<void> => set_state(scope, "flagged", "toggle");
 export const toggle_junk = (scope: StateScope): Promise<void> => set_state(scope, "junk", "toggle");
 
