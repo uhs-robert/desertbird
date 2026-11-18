@@ -111,3 +111,15 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
         },
     };
 }
+
+/** How long a loaded page has to answer an Escape before the host closes the overlay itself. */
+export const ESCAPE_ANSWER_MS = 300;
+
+/**
+ * What the host does on an Escape keydown. A page that has loaded decides the key: it answers by changing its title, as the command line does when the first Escape only closes its list. When the title is empty (the page never loaded) the host closes at once, and when it does not change in time (the page hangs) the host closes after the wait.
+ */
+export function on_escape_key(read_title: () => string, wait: (run: () => void, ms: number) => void, close: () => void): void {
+    const before = read_title();
+    if (before === "") close();
+    else wait(() => (read_title() === before ? close() : undefined), ESCAPE_ANSWER_MS);
+}

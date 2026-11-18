@@ -60,6 +60,8 @@ let history_cursor: HistoryCursor = create_history_cursor(history);
 let walking_history = true;
 
 const FALLBACK_ROW_HEIGHT_PX = 20;
+const PAGE_TITLE = document.title;
+let escapes_answered = 0;
 
 const send = <Answer>(message: CmdlineRequest | ConfirmAnswerRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
 
@@ -249,6 +251,8 @@ window.addEventListener(
             if (list_shown && completion.rows.length > 0) {
                 list_shown = false;
                 draw_rows();
+                // The host closes the overlay on an Escape the page does not answer. A new title is the answer.
+                document.title = `${PAGE_TITLE} ${++escapes_answered}`;
             } else close_line();
         } else if (event.key === "Enter") {
             event.preventDefault();

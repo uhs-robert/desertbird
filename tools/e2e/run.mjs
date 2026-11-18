@@ -1419,6 +1419,15 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await sleep(800);
   check(app, kind, "the app survived the command line", instance.exited() === null);
 
+  // The first Escape closes the list and keeps the line, the second closes the line.
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["-k", "Escape"]);
+  await sleep(900);
+  await shot("cmdline_list_closed", "after the first Escape: the list is gone and the input line stays");
+  await instance.press(["-k", "Escape"]);
+  await sleep(900);
+  await shot("cmdline_list_closed_twice", "after the second Escape: no command line");
   // A selected row puts its usage in the note row, and a missing value shows in the note in the error color.
   await instance.press([":"]);
   await sleep(1200);

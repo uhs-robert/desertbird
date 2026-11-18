@@ -5,7 +5,7 @@ import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROW
 import { capture_focus, in_text_field } from "./focus.ts";
 import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
-import { create_overlay_host } from "./overlay.ts";
+import { create_overlay_host, on_escape_key } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
@@ -186,7 +186,9 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
         },
         on_escape(window, listener) {
             const handler = (event: KeydownEvent) => {
-                if (event.key === "Escape") listener();
+                if (event.key !== "Escape") return;
+                const browser = (window.document as unknown as { getElementById(id: string): { contentTitle?: string } | null }).getElementById(OVERLAY_BROWSER_ID);
+                on_escape_key(() => browser?.contentTitle ?? "", (run, ms) => void (window as unknown as { setTimeout(run: () => void, ms: number): number }).setTimeout(run, ms), listener);
             };
             window.addEventListener("keydown", handler, true);
             return () => window.removeEventListener("keydown", handler, true);
