@@ -37,6 +37,12 @@ export function mode_label_colors(theme: StoredTheme): ModeLabelColors {
     return { dark: scheme_of(theme.dark), light: scheme_of(theme.light) };
 }
 
+/** The declarations of a message hint label. `light-dark()` follows the scheme the document shows, so one string serves both. Literal values, because a custom property would pass through `all: initial` and a mail could set it. */
+export function hint_label_style(colors: HintLabelColors): string {
+    const pair = (role: keyof HintLabelScheme) => `light-dark(${colors.light[role]}, ${colors.dark[role]})`;
+    return `color-scheme: light dark !important; background: ${pair("fill")} !important; color: ${pair("text")} !important;`;
+}
+
 /** The hint label sits on the window it labels, so the box takes the brand color and the letters the theme background of the matching set. */
 export function hint_label_colors(theme: StoredTheme): HintLabelColors {
     const scheme = (colors: RoleColors): HintLabelScheme => ({ fill: colors.primary, text: colors.bg_core });

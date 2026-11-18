@@ -3,7 +3,7 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
-import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_background_commands, registry } from "./commands/index.ts";
 import { tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -13,9 +13,6 @@ import { create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
-import { create_message_style } from "./theme/message_style.ts";
-import type { MessageStyleApi } from "./theme/message_style.ts";
-import { resolve_theme } from "./theme/palette.ts";
 import { publish_theme } from "./theme/publish.ts";
 import { themed_hints } from "./theme/themed_hints.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
@@ -62,7 +59,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay">, MessageStyleApi {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
     windows: BodyRequestApi["windows"] &
         RouterApi["windows"] & {
             getAll(query: { windowTypes: string[] }): Promise<{ id?: number }[]>;
@@ -93,8 +90,8 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
 
 declare const messenger: Messenger;
 
-// The commands that open the overlay. The registry says so through `needs`, so the key runtime learns "these take the keyboard" and no command name.
-const HOLD_COMMANDS = registry.list().filter((command) => command.needs?.includes("overlay.mount")).map((command) => command.id);
+// The commands after which the key runtime holds plain keys. The registry says so through `needs`, so the runtime learns "these take the keyboard" and no command name.
+const HOLD_COMMANDS = hold_command_ids();
 
 async function hash_of(value: unknown): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
@@ -258,11 +255,9 @@ messenger.storage.onChanged.addListener((changes, area) => {
     publish_current_theme();
 });
 
-const style_messages = create_message_style(messenger);
-
 // The pages read the theme from storage, so it is published at every start and again when the setting changes.
 function publish_current_theme(): void {
-    config_store.read().then(({ settings }) => Promise.all([publish_theme(messenger.storage.local, settings.theme), style_messages(resolve_theme(settings.theme))])).catch(console.error);
+    config_store.read().then(({ settings }) => publish_theme(messenger.storage.local, settings.theme)).catch(console.error);
 }
 publish_current_theme();
 

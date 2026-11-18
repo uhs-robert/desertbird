@@ -262,6 +262,9 @@ export interface HintsSendEnterArgs {
     windowId: number;
 }
 
+/** The key in `storage.local` that holds the CSS declarations of a message hint label: its colors as literal values for both color schemes. The body script puts them in the inline style of each label, which no style sheet of a mail can override. */
+export const HINT_STYLE_STORAGE_KEY = "desertbird_hint_style";
+
 /** The two colors of a hint label, each as `#rrggbb`: the box and the letters. */
 export interface HintLabelScheme {
     fill: string;

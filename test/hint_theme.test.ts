@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pick_in_window } from "../src/background/handlers/hint_window.ts";
 import type { HintWindowApi } from "../src/background/handlers/hint_window.ts";
-import { create_message_style, message_style_css } from "../src/background/theme/message_style.ts";
-import { contrast_ratio, hint_label_colors, resolve_theme } from "../src/background/theme/palette.ts";
+import { contrast_ratio, hint_label_colors, hint_label_style, resolve_theme } from "../src/background/theme/palette.ts";
 import { themed_hints } from "../src/background/theme/themed_hints.ts";
 import { OASIS_THEME_NAMES } from "../src/shared/theme_choice.ts";
 
@@ -38,26 +37,18 @@ test("the hint command refuses when nothing is labelled, and says nothing when s
     await assert.rejects(pick_in_window(scope(0)), /Nothing on screen/);
 });
 
-test("the message style defines the two tokens of the label in both schemes", () => {
-    const theme = resolve_theme("oasis_sol");
-    const css = message_style_css(theme);
-    assert.ok(css.includes(`--desertfox-primary: ${theme.dark.primary}`) && css.includes(`--desertfox-bg-core: ${theme.dark.bg_core}`));
-    assert.ok(css.includes("@media (prefers-color-scheme: light)") && css.includes(`--desertfox-primary: ${theme.light.primary}`));
+test("the message label style is literal colors for both schemes, with no custom property", () => {
+    const colors = hint_label_colors(resolve_theme("oasis_sol"));
+    const style = hint_label_style(colors);
+    assert.ok(style.includes(`background: light-dark(${colors.light.fill}, ${colors.dark.fill}) !important`));
+    assert.ok(style.includes(`color: light-dark(${colors.light.text}, ${colors.dark.text}) !important`));
+    assert.ok(style.includes("color-scheme: light dark !important") && !style.includes("var("));
 });
 
-test("a new style sheet goes in before the old one comes out", async () => {
-    const log: string[] = [];
-    let count = 0;
-    const apply = create_message_style({
-        messageDisplayScripts: {
-            register: async () => {
-                const id = ++count;
-                log.push(`register ${id}`);
-                return { unregister: async () => void log.push(`unregister ${id}`) };
-            },
-        },
-    });
-    await apply(resolve_theme("oasis_sol"));
-    await apply(resolve_theme("oasis_moonlight"));
-    assert.deepEqual(log, ["register 1", "register 2", "unregister 1"]);
+test("the hint command holds plain keys after it, is not replayed by `.`, and has no command line use", async () => {
+    const { hold_command_ids, registry, UNREPEATABLE_IDS } = await import("../src/background/commands/index.ts");
+    assert.ok(hold_command_ids().includes("hint.window"), "f d d in one burst must not reach the key runtime before the labels take the keys");
+    assert.ok(hold_command_ids().includes("cmdline.open"));
+    assert.ok(UNREPEATABLE_IDS.has("hint.window"));
+    assert.equal(registry.get("hint.window")?.completion, "hidden");
 });

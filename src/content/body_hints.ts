@@ -15,9 +15,9 @@ const OPENABLE = "a[href], button";
 // The host of the labels. Its own rules are inline and `!important`, so a style sheet of the mail cannot hide, move or fade it.
 const CONTAINER_STYLE = "all: initial !important; position: fixed !important; inset: 0 !important; pointer-events: none !important; z-index: 2147483647 !important; display: block !important; opacity: 1 !important; transform: none !important;";
 
-// `!important` on each property, because the mail's own style sheet shares the document. The colors are the theme tokens of the style sheet the background registers for message documents, and the options page carries the same tokens from `follow_theme`. The fallback shows where neither reached.
-const LABEL_STYLE = (top: number, left: number): string =>
-    `all: initial !important; position: fixed !important; top: ${top}px !important; left: ${left}px !important; z-index: 2147483647 !important; background: var(--desertfox-primary, #ffd33d) !important; color: var(--desertfox-bg-core, #000) !important; font: bold 12px monospace !important; padding: 1px 3px !important; border: 1px solid !important;`;
+// `!important` on each property, because the mail's own style sheet shares the document. `colors` are literal declarations from the background: a custom property would pass through `all: initial` and a mail could recolor or hide the label.
+const LABEL_STYLE = (top: number, left: number, colors: string): string =>
+    `all: initial !important; position: fixed !important; top: ${top}px !important; left: ${left}px !important; z-index: 2147483647 !important; ${colors} font: bold 12px monospace !important; padding: 1px 3px !important; border: 1px solid !important;`;
 
 export type HintKey = { kind: "typed"; letter: string } | { kind: "cancel" };
 
@@ -33,7 +33,7 @@ export interface HintSession {
 }
 
 /** `open` runs on a picked link or button, after it has the focus. In a mail it asks for a trusted Enter, since a script click would skip Thunderbird's check for a link that lies about its address. */
-export function create_hint_session(window: HintWindow, open: (element: HintElement) => void): HintSession {
+export function create_hint_session(window: HintWindow, open: (element: HintElement) => void, colors: () => string): HintSession {
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";
@@ -58,7 +58,7 @@ export function create_hint_session(window: HintWindow, open: (element: HintElem
                 const node = window.document.createElement("span");
                 const box = element.getBoundingClientRect();
                 node.textContent = labels[index]!.toUpperCase();
-                node.style.cssText = LABEL_STYLE(Math.max(box.top, 0), Math.max(box.left, 0));
+                node.style.cssText = LABEL_STYLE(Math.max(box.top, 0), Math.max(box.left, 0), colors());
                 shadow.append(node);
                 return { label: labels[index]!, element, node };
             });

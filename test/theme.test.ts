@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SETTING_DEFAULTS, SETTING_KINDS, setting_problem } from "../src/background/config/settings.ts";
 import { contrast_ratio, mode_label_colors, resolve_theme } from "../src/background/theme/palette.ts";
+import { HINT_STYLE_STORAGE_KEY } from "../src/shared/protocol.ts";
+import { hint_label_colors, hint_label_style } from "../src/background/theme/palette.ts";
 import { publish_theme } from "../src/background/theme/publish.ts";
 import { OASIS_THEME_NAMES, DEFAULT_THEME } from "../src/shared/theme_choice.ts";
 import { THEME_STORAGE_KEY, theme_css } from "../src/shared/theme_css.ts";
@@ -66,9 +68,10 @@ test("publish_theme writes the resolved theme, and writes again only when it cha
     await publish_theme(storage, "oasis_desert");
     assert.deepEqual(storage.data[THEME_STORAGE_KEY], resolve_theme("oasis_desert"));
     await publish_theme(storage, "oasis_desert");
-    assert.equal(storage.writes.length, 1);
+    assert.equal(storage.writes.length, 2, "the theme and the hint label style");
     await publish_theme(storage, "oasis_sol");
-    assert.equal(storage.writes.length, 2);
+    assert.equal(storage.writes.length, 4);
+    assert.equal(storage.data[HINT_STYLE_STORAGE_KEY], hint_label_style(hint_label_colors(resolve_theme("oasis_sol"))));
     assert.deepEqual(storage.data[THEME_STORAGE_KEY], resolve_theme("oasis_sol"));
 });
 

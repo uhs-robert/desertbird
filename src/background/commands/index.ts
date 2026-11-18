@@ -33,6 +33,9 @@ export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose,
 
 export const registry = create_registry();
 
+/** The commands after which the key runtime drops plain keys for a moment: the ones that open the overlay, and the hint pick. A burst such as `f d d` would otherwise reach the runtime before the labels take the keys, and the `d` would delete. */
+export const hold_command_ids = (): string[] => registry.list().filter((command) => command.needs?.includes("overlay.mount") || command.needs?.includes("hints.pick")).map((command) => command.id);
+
 const define = (id: string, input: CommandDefinition) => registry.define(id, input);
 
 for (const group of Object.values(GROUPS)) for (const [id, input] of Object.entries(group.commands)) define(id, input);

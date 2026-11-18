@@ -165,6 +165,8 @@ async function run_default(instance) {
   if (process.env.E2E_ONLY === "search") return run_search(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "hints") return run_window_hints(instance, { app, kind, shot });
+  // Right after the Inbox opens, while the window still has the layout the fixed labels were read from.
+  await run_window_hints(instance, { app, kind, shot });
   await run_mode_label(instance, { app, kind, shot });
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
@@ -1233,23 +1235,28 @@ async function run_window_hints(instance, { app, kind, shot }) {
   await instance.press(["f"]);
   await sleep(1000);
   await shot("window_hints", "f in the thread list: labels over the toolbar, folder rows, message rows and buttons");
-  // Hint letters are home row keys that are also commands (a archives, d deletes). While the labels show they must reach the labels only.
-  await instance.press(["a"]);
+  // Hint letters are home row keys that are also commands (j moves down, s stars). While the labels show they must reach the labels only: the selection must not move.
+  await instance.press(["j"]);
   await sleep(500);
   await instance.press(["-k", "Escape"]);
   await sleep(500);
   let state = await instance.ask("state");
-  check(app, kind, "window hints: a typed while the labels show runs no command, and Escape ends them", state.listed.length === rows_before && selection_of(state) === selection_of(top), `listed ${state.listed.length} of ${rows_before}`);
+  check(app, kind, "window hints: j typed while the labels show runs no command, and Escape ends them", state.listed.length === rows_before && selection_of(state) === selection_of(top), `listed ${state.listed.length} of ${rows_before}, selected ${selection_of(state)}`);
   await shot("window_hints_ended", "the labels are gone after a letter and Escape");
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], 600);
+  // The whole gesture in one burst: x archives, and neither x may reach the runtime, before the labels take the keys or after they end.
+  await instance.press(["fxx"]);
+  await sleep(2000);
+  state = await instance.ask("state");
+  check(app, kind, "window hints: f x x in one burst archives nothing", state.listed.length === rows_before, `listed ${state.listed.length} of ${rows_before}`);
   // A key that no label continues with ends the labels, and swallows the key.
   await instance.press(["f"]);
   await sleep(800);
   await instance.press(["z"]);
-  await sleep(500);
+  await sleep(1700);
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "window hints: a key no label starts with ends them, then j moves", selection_of(state) !== selection_of(top), `selected ${selection_of(state)}`);
   // A message row: one pick selects it and leaves the focus in the list.
