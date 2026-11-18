@@ -116,10 +116,10 @@ test("the body script bundle stays within its size guard", () => {
     assert.ok(size <= CONTENT_MAX_BYTES, `message_display.js is ${size} bytes, over ${CONTENT_MAX_BYTES}`);
 });
 
-test("the compose script bundle takes only its own files and the shared protocol, and stays within its guard", () => {
+test("the compose script bundle takes only its own files and the shared protocol (which names the matcher file for a type, shaken out of the bundle), and stays within its guard", () => {
     const bundle_inputs = Object.keys((JSON.parse(readFileSync(join(out_dir, "meta/compose_keys.json"), "utf8")) as { inputs: object }).inputs);
     assert.ok(bundle_inputs.length > 0);
-    for (const input of bundle_inputs) assert.match(input, /^src\/(content\/compose_[a-z_]+|shared\/protocol)\.ts$/);
+    for (const input of bundle_inputs) assert.match(input, /^(src\/(content\/compose_[a-z_]+|shared\/protocol)|vendor\/desertfox\/prefix_tree)\.ts$/);
     assert.ok(COMPOSE_MAX_BYTES > 0 && COMPOSE_MAX_BYTES < 10000);
     const size = readFileSync(join(out_dir, "content/compose_keys.js")).length;
     assert.ok(size <= COMPOSE_MAX_BYTES, `compose_keys.js is ${size} bytes, over ${COMPOSE_MAX_BYTES}`);

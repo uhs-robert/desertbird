@@ -13,7 +13,7 @@ export interface LabelDocument {
     adoptedStyleSheets: LabelSheet[];
 }
 
-// An element in a shadow root, which the first version used, still left an empty `div` after the body in a saved HTML draft. System colors keep the label neutral in a light or dark window. The mouse passes through it.
+// A node, even in a shadow root, shows as markup after the body of a saved HTML draft, so the label is a style. System colors keep the label neutral in a light or dark window. The mouse passes through it.
 const label_css = (state: LabelState): string =>
     state === "hidden"
         ? ""
