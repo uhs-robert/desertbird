@@ -29,6 +29,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Help page generated from the registry | [`src/help/README.md`](src/help/README.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
 | Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |
+| Pinned `marked` and `turndown` release files for HTML compose | [`vendor/marked/VENDOR.md`](vendor/marked/VENDOR.md), [`vendor/turndown/VENDOR.md`](vendor/turndown/VENDOR.md) |
 | Measured Thunderbird and Betterbird behavior the design rests on | [`docs/thunderbird-behavior.md`](docs/thunderbird-behavior.md) |
 | Phase 0 measurement probe and how to rerun it | [`tools/measure/README.md`](tools/measure/README.md) |
 
@@ -73,7 +74,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
-- `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `content/page_keys.js`, `content/compose_keys.js`, `experiment/keys.js`, `experiment/overlay.js`, `experiment/folderpane.js`, `experiment/hints.js`, their schemas, `overlay/`, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes its size budget.
+- `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `content/page_keys.js`, `content/compose_keys.js`, `experiment/keys.js`, `experiment/overlay.js`, `experiment/folderpane.js`, `experiment/hints.js`, their schemas, `overlay/`, the vendored `vendor/marked/` and `vendor/turndown/` files as they are, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes its size budget.
 - `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, wlrctl, grim, zip, unzip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
 
 ## Planning

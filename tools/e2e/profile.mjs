@@ -17,6 +17,9 @@ const IDENTITY_PREFS = {
 // The quick reply kinds give the identity a signature, in plain or HTML compose, so the run can see whether a draft keeps it.
 const QUICK_REPLY_SIGNATURE = { "mail.identity.id1.htmlSigText": "E2E signature line", "mail.identity.id1.htmlSigFormat": false, "mail.identity.id1.attach_signature": false };
 
+// A reply above the quote with the signature above it too, the layout where the user's text and the signature share one side.
+const REPLY_ON_TOP = { "mail.identity.id1.compose_html": true, "mail.identity.id1.reply_on_top": 1, "mail.identity.id1.sig_bottom": false };
+
 const BASE_PREFS = {
   "mail.accountmanager.accounts": "account1",
   "mail.accountmanager.defaultaccount": "account1",
@@ -140,7 +143,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
     mkdirSync(mail_dir, { recursive: true });
     writeFileSync(join(mail_dir, "Inbox"), mail_account_inbox());
   }
-  const quick_reply_prefs = kind === "quick_reply_plain" || kind === "compose_editor" ? QUICK_REPLY_SIGNATURE : kind === "quick_reply_html" ? { ...QUICK_REPLY_SIGNATURE, "mail.identity.id1.compose_html": true } : {};
+  const quick_reply_prefs = kind === "quick_reply_plain" || kind === "compose_editor" ? QUICK_REPLY_SIGNATURE : kind === "quick_reply_html" || kind === "compose_editor_html" ? { ...QUICK_REPLY_SIGNATURE, "mail.identity.id1.compose_html": true } : kind === "compose_editor_html_top" ? { ...QUICK_REPLY_SIGNATURE, ...REPLY_ON_TOP } : {};
   const identity_prefs = kind === "reply_no_identity" || kind === "mail_account" ? {} : { ...IDENTITY_PREFS, ...quick_reply_prefs };
   const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.

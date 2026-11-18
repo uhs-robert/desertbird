@@ -47,6 +47,8 @@ import { create_bridge_drafts } from "./bridge/drafts.ts";
 import { create_bridge_acts } from "./bridge/acts.ts";
 import type { ActsApi } from "./bridge/acts.ts";
 import type { DraftsApi } from "./bridge/drafts.ts";
+import { create_compose_markdown } from "./compose_markdown.ts";
+import type { MarkdownGlobals } from "./compose_markdown.ts";
 import { EDITOR_HOST_NAME, create_compose_requests, create_editor_client, create_external_editor } from "./external_editor.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
@@ -256,6 +258,8 @@ const external_editor = create_external_editor({
     session: messenger.storage.session ?? { get: no_session, set: no_session },
     client: create_editor_client((message) => messenger.runtime.sendNativeMessage(EDITOR_HOST_NAME, message)),
     compose: messenger.compose,
+    // The manifest loads the vendored `turndown` and `marked` before this bundle, and they leave their globals here.
+    markdown: create_compose_markdown(globalThis as unknown as MarkdownGlobals),
     async compose_tab_in(window_id) {
         if ((await messenger.windows.get(window_id).catch(() => undefined))?.type !== COMPOSE_WINDOW_TYPE) return undefined;
         // A compose window holds exactly one tab.

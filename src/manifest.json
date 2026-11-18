@@ -10,7 +10,7 @@
         }
     },
     "background": {
-        "scripts": ["background.js"],
+        "scripts": ["vendor/turndown/turndown.js", "vendor/marked/marked.umd.js", "background.js"],
         "persistent": true
     },
     "options_ui": {

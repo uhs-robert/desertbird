@@ -51,12 +51,21 @@ function setup(options: { enabled?: boolean; body?: string; plain?: boolean; ses
         compose: {
             async getComposeDetails(tab_id) {
                 if (tab_id !== COMPOSE_TAB || !state.compose_open) throw new Error("Invalid tab");
-                return { isPlainText: state.plain, plainTextBody: state.body };
+                return state.plain ? { isPlainText: true, plainTextBody: state.body } : { isPlainText: false, body: state.body };
             },
             async setComposeDetails(_tab_id, details) {
-                writes.push(details.plainTextBody);
-                state.body = details.plainTextBody;
+                state.body = "body" in details ? details.body : details.plainTextBody;
+                writes.push(state.body);
             },
+        },
+        // The conversion has its own tests. This stand-in marks its output so a write shows which path ran.
+        markdown: {
+            markdown_of(html) {
+                if (html.includes("both sides")) throw new RuntimeRefusal("The message has text on both sides of the quote.");
+                return `md(${html})\n`;
+            },
+            body_with: (html, markdown) => `html(${html} + ${markdown.trimEnd()})`,
+            dropped_images: (_html, markdown) => (markdown.match(/!\[file\]/g) ?? []).length,
         },
         compose_tab_in: async (window_id) => (window_id === COMPOSE_WINDOW && state.compose_open ? COMPOSE_TAB : undefined),
         tab_exists: async (tab_id) => live_tabs.has(tab_id),
@@ -145,10 +154,11 @@ test("a window that is not a compose window refuses and sends nothing", async ()
     assert.deepEqual(harness.host, []);
 });
 
-test("an HTML message refuses with a word that HTML comes later", async () => {
-    const harness = setup({ plain: false });
-    assert.match(await refusal_of(harness.editor.open(COMPOSE_WINDOW)), /plain-text messages only.*HTML messages come in a later version/);
+test("an HTML message with text on both sides of the quote refuses and sends nothing", async () => {
+    const harness = setup({ plain: false, body: "<p>text on both sides</p>" });
+    assert.match(await refusal_of(harness.editor.open(COMPOSE_WINDOW)), /both sides of the quote/);
     assert.deepEqual(harness.host, []);
+    assert.deepEqual(harness.jobs(), {});
 });
 
 test("a host refusal shows its text and keeps no job", async () => {
@@ -225,6 +235,76 @@ test("a window that closed without its event when the editor ends drops the text
     await settle();
     assert.deepEqual(harness.writes, []);
     assert.match(harness.said[0]!.text, /gone when the editor ended/);
+});
+
+// --- HTML messages
+
+const HTML_BODY = "<p>Hi</p>";
+
+test("an HTML message goes to the editor as Markdown with the md extension", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    assert.deepEqual(harness.starts, [{ text: "md(<p>Hi</p>)\n", ext: "md", insert: false, private: false }]);
+});
+
+test("changed Markdown is written back as HTML when the body is still the original", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.deepEqual(harness.writes, ["html(<p>Hi</p> + Edited)"]);
+    assert.deepEqual(harness.said, []);
+});
+
+test("an image the edit drops is named in a toast after the write", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited ![file](file:///a.png) ![file](cid:b)\n" });
+    await settle();
+    assert.equal(harness.writes.length, 1);
+    assert.match(harness.said[0]!.text, /^2 images of the edited text/);
+});
+
+test("Markdown that differs only in the closing newline writes nothing", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    harness.collects[0]!.answer({ done: true, changed: true, text: "md(<p>Hi</p>)" });
+    await settle();
+    assert.deepEqual(harness.writes, []);
+    assert.match(harness.said[0]!.text, /no change/);
+});
+
+test("an HTML body changed in the window meanwhile is not overwritten", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    harness.state.body = "<p>Hi there</p>";
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.deepEqual(harness.writes, []);
+    assert.match(harness.said[0]!.text, /body changed in the compose window/);
+});
+
+test("an HTML message turned to plain text meanwhile is not overwritten", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    harness.state.plain = true;
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.deepEqual(harness.writes, []);
+    assert.match(harness.said[0]!.text, /turned to plain text/);
+});
+
+test("an HTML job whose window closed collects to the end and writes nothing", async () => {
+    const harness = await opened({ plain: false, body: HTML_BODY });
+    await harness.editor.compose_gone(COMPOSE_TAB);
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.deepEqual(harness.writes, []);
+    assert.deepEqual(harness.jobs(), {});
+});
+
+test("an HTML job resumed after a restart still writes HTML", async () => {
+    const first = await opened({ plain: false, body: HTML_BODY });
+    const harness = setup({ plain: false, body: HTML_BODY, session: first.session });
+    await harness.editor.resume();
+    await settle();
+    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.deepEqual(harness.writes, ["html(<p>Hi</p> + Edited)"]);
 });
 
 // --- the compose window going away

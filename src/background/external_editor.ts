@@ -1,10 +1,11 @@
-// The external editor of a compose window. The host opens the user's editor on the plain-text body, and this module collects the result and writes it back when the body is still the one the editor started from.
+// The external editor of a compose window. The host opens the user's editor on the plain-text body, or on the Markdown of the user's text in an HTML body (`compose_markdown.ts`), and this module collects the result and writes it back when the body is still the one the editor started from.
 // The jobs live in `storage.session`, one per compose tab, and the collect loops are derived from them, so a restarted background resumes the loops with `resume`.
 // The add-on writes no file. The host owns the scratch file and removes it only on the collect that ends the job. So a job whose compose window is gone is orphaned, not dropped: its loop keeps collecting until the editor ends, then discards the text.
 // A dropped job (the setting turned off, failed collects) leaves its file until a later `editor_start` sweeps job files a day old.
 
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import type { ComposeEditRequest } from "../shared/protocol.ts";
+import type { ComposeMarkdown } from "./compose_markdown.ts";
 
 export const EDITOR_HOST_NAME = "desertbird_host";
 export const EDITOR_JOBS_STORAGE_KEY = "desertbird_editor_jobs";
@@ -59,8 +60,10 @@ export interface ComposeEditJob {
     job: string;
     tab_id: number;
     window_id: number;
-    /** The plain-text body the editor started from. The result is written only while the body still equals it. */
+    /** The body the editor started from, plain text or HTML. The result is written only while the body still equals it. */
     original: string;
+    /** Set for an HTML message: the Markdown of the user's text that went to the editor. */
+    markdown?: string;
     /** The compose window closed or sent its message. The loop still collects, so the host removes its file, and the text is discarded. */
     orphaned?: true;
 }
@@ -72,9 +75,10 @@ export interface ExternalEditorDeps {
     session: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
     client: EditorClient;
     compose: {
-        getComposeDetails(tab_id: number): Promise<{ isPlainText?: boolean; plainTextBody?: string }>;
-        setComposeDetails(tab_id: number, details: { plainTextBody: string }): Promise<unknown>;
+        getComposeDetails(tab_id: number): Promise<{ isPlainText?: boolean; plainTextBody?: string; body?: string }>;
+        setComposeDetails(tab_id: number, details: { plainTextBody: string } | { body: string }): Promise<unknown>;
     };
+    markdown: ComposeMarkdown;
     /** The compose tab of the window, or undefined when the window is not a compose window. */
     compose_tab_in(window_id: number): Promise<number | undefined>;
     tab_exists(tab_id: number): Promise<boolean>;
@@ -91,20 +95,23 @@ const MIN_POLL_MS = 1000;
 const MAX_COLLECT_FAILURES = 3;
 // The host's refusal for a job it does not hold. Retrying cannot help.
 const UNKNOWN_JOB = /unknown editor job/;
-// The scratch file is named for nvim and other editors that set the mail file type from the extension.
+// The scratch file is named for nvim and other editors that set the file type from the extension.
 const MAIL_EXT = "eml";
+const MARKDOWN_EXT = "md";
 
 export const EDITOR_OFF_TEXT = "The external editor is off. Turn on the external_editor setting in the DesertBird options to edit a message in your editor.";
 const GATE_OFF_DROP_TEXT = "The external_editor setting is off, so DesertBird stopped waiting for the editor and will not read its text. Save the text elsewhere from the editor to keep it.";
 const NOT_COMPOSE_TEXT = "The external editor works only in a compose window. Press Ctrl+E in the message body.";
 const ALREADY_ACTIVE_TEXT = "An external editor session is already active for this message.";
-const HTML_LATER_TEXT = "The external editor edits plain-text messages only for now. HTML messages come in a later version.";
 export const WINDOW_CLOSED_TEXT = "The compose window closed while the external editor was open. DesertBird will discard the edited text, so save it elsewhere from the editor to keep it.";
 const RESTART_GONE_TEXT = "The compose window was gone when DesertBird restarted, so it will discard the text of its external editor. Save it elsewhere from the editor to keep it.";
 const UNCHANGED_TEXT = "The editor closed with no change, so the message was left as it was.";
 const GONE_AT_END_TEXT = "The compose window was gone when the editor ended, so the edited text was dropped.";
 const TURNED_HTML_TEXT = "The message turned to HTML while the editor was open, so the edited text was not written.";
+const TURNED_PLAIN_TEXT = "The message turned to plain text while the editor was open, so the edited text was not written.";
 const BODY_CHANGED_TEXT = "The message body changed in the compose window while the editor was open, so the edited text was not written.";
+const dropped_images_text = (count: number): string =>
+    `${count === 1 ? "One image" : `${count} images`} of the edited text had a source DesertBird does not write back (only web addresses and embedded PNG, JPEG, GIF or WebP data), so the message lost ${count === 1 ? "it" : "them"}. Insert ${count === 1 ? "it" : "them"} again in the compose window.`;
 const SCRATCH_FOLDER_HINT = " The edited text stays in the host's scratch folder (desertfox/editor under $XDG_RUNTIME_DIR, else under the cache folder) until a later editor start, a day or more on, sweeps it.";
 
 const failure_text = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -152,10 +159,15 @@ export function create_external_editor(deps: ExternalEditorDeps) {
     async function apply(held: ComposeEditJob, text: string): Promise<void> {
         const details = await deps.compose.getComposeDetails(held.tab_id).catch(() => undefined);
         if (details === undefined) return deps.say(held.window_id, GONE_AT_END_TEXT, true);
-        if (details.isPlainText !== true) return deps.say(held.window_id, TURNED_HTML_TEXT, true);
-        if (details.plainTextBody !== held.original) return deps.say(held.window_id, BODY_CHANGED_TEXT, true);
+        const is_html = held.markdown !== undefined;
+        if (details.isPlainText === is_html) return deps.say(held.window_id, is_html ? TURNED_PLAIN_TEXT : TURNED_HTML_TEXT, true);
+        if ((is_html ? details.body : details.plainTextBody) !== held.original) return deps.say(held.window_id, BODY_CHANGED_TEXT, true);
+        // An editor that only adds or drops the closing newline changed no Markdown, and a rewrite would still reformat the HTML.
+        if (is_html && text.trimEnd() === held.markdown!.trimEnd()) return deps.say(held.window_id, UNCHANGED_TEXT, false);
         try {
-            await deps.compose.setComposeDetails(held.tab_id, { plainTextBody: text });
+            await deps.compose.setComposeDetails(held.tab_id, is_html ? { body: deps.markdown.body_with(held.original, text) } : { plainTextBody: text });
+            const dropped = is_html ? deps.markdown.dropped_images(held.original, text) : 0;
+            if (dropped > 0) await deps.say(held.window_id, dropped_images_text(dropped), true);
         } catch (error) {
             await deps.say(held.window_id, `The edited text could not be written: ${failure_text(error)}`, true);
         }
@@ -215,15 +227,16 @@ export function create_external_editor(deps: ExternalEditorDeps) {
                 const jobs = await read_jobs();
                 if (jobs[tab_id] !== undefined) throw new RuntimeRefusal(ALREADY_ACTIVE_TEXT);
                 const details = await deps.compose.getComposeDetails(tab_id);
-                if (details.isPlainText !== true) throw new RuntimeRefusal(HTML_LATER_TEXT);
-                const original = details.plainTextBody ?? "";
+                const is_html = details.isPlainText !== true;
+                const original = (is_html ? details.body : details.plainTextBody) ?? "";
+                const markdown = is_html ? deps.markdown.markdown_of(original) : undefined;
                 let job: string;
                 try {
-                    job = await deps.client.editor_start({ text: original, ext: MAIL_EXT, insert: false, private: false });
+                    job = await deps.client.editor_start({ text: markdown ?? original, ext: is_html ? MARKDOWN_EXT : MAIL_EXT, insert: false, private: false });
                 } catch (error) {
                     throw new RuntimeRefusal(failure_text(error));
                 }
-                const started: ComposeEditJob = { job, tab_id, window_id, original };
+                const started: ComposeEditJob = markdown === undefined ? { job, tab_id, window_id, original } : { job, tab_id, window_id, original, markdown };
                 await write_jobs({ ...jobs, [tab_id]: started });
                 return started;
             });
