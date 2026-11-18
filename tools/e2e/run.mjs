@@ -1419,15 +1419,36 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await sleep(800);
   check(app, kind, "the app survived the command line", instance.exited() === null);
 
-  // The first Escape closes the list and keeps the line, the second closes the line.
+  // The first Escape closes the list and keeps the line, the second closes the line. Keys m s toggle the star of the selected message when the list has them, and are typed into the line when it is open.
+  const keys_reach_list = async () => {
+    const id = (await instance.ask("state")).selected[0]?.header_id;
+    const flagged = async () => (await instance.ask("state")).flags[id]?.flagged;
+    const before = await flagged();
+    await instance.press(["m"]);
+    await instance.press(["s"]);
+    await sleep(900);
+    if ((await flagged()) === before) return false;
+    await instance.press(["m"]);
+    await instance.press(["s"]);
+    await sleep(900);
+    return true;
+  };
+  // Escape three times leave no line open, whatever the list held: one hides the list, one closes the line, one goes to the list.
+  const close_line = async () => {
+    for (let count = 0; count < 3; count++) {
+      await instance.press(["-k", "Escape"]);
+      await sleep(700);
+    }
+  };
   await instance.press([":"]);
   await sleep(1200);
   await instance.press(["-k", "Escape"]);
   await sleep(900);
   await shot("cmdline_list_closed", "after the first Escape: the list is gone and the input line stays");
-  await instance.press(["-k", "Escape"]);
-  await sleep(900);
-  await shot("cmdline_list_closed_twice", "after the second Escape: no command line");
+  check(app, kind, "the first Escape keeps the line open: m s is typed into it", !(await keys_reach_list()));
+  await close_line();
+  check(app, kind, "after Escape three times the line is closed and keys reach the list", await keys_reach_list());
+  await shot("cmdline_list_closed_twice", "after the Escapes: no command line");
   // A selected row puts its usage in the note row, and a missing value shows in the note in the error color.
   await instance.press([":"]);
   await sleep(1200);
@@ -1435,18 +1456,15 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await instance.press(["-k", "Tab"]);
   await sleep(700);
   await shot("cmdline_selected_note", "the line after two Tabs: the second row is in the line and the note row above the input shows its usage");
-  await instance.press(["-k", "Escape"]);
-  await sleep(800);
+  await close_line();
   await instance.press([":"]);
   await sleep(1200);
   await instance.press(["step.unread"]);
   await instance.press(["-k", "Return"]);
   await sleep(800);
   await shot("cmdline_typed_error", "step.unread typed and run: the note row shows the error in the error color");
-  await instance.press(["-k", "Escape"]);
-  await sleep(600);
-  await instance.press(["-k", "Escape"]);
-  await sleep(800);
+  await close_line();
+  check(app, kind, "the line is closed before the next scenario", await keys_reach_list());
 
   // Enter takes the highlighted row: a fuzzy word picks a folder without Tab.
   await instance.ask("show_folder", 20000, { path: "/Views" });
