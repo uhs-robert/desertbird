@@ -406,14 +406,18 @@ test("a list prefix swallows its next key in a message, so u and a after it run 
     assert.deepEqual(sent, [invoked("msg.undo")]);
 });
 
-// `g t` binds nothing in a message. The matcher retries `t` as a first key, and `t` is a list prefix that swallows one key. A typed `g t` must not eat the key after it.
-test("a key that no sequence binds, retried as a list prefix, does not swallow the key after it", async () => {
+// A mail sequence that the message tree lacks must complete and run nothing. Broken partway, the matcher retries the rest from the root, where `a` archives and `; y` copies a link.
+test("a mail sequence typed in a message runs nothing, also under a prefix the message tree has", async () => {
     const { window, sent } = await started();
-    for (const keys of [["g", "t"], ["g", "z"], ["g", "M"], ["m", "M"]]) {
+    window.elements = [Object.assign(new StubElement(), { href: "https://example.org/x" })];
+    // `y ] a`: a stray `y` must not stop `] a` from being a list sequence.
+    for (const keys of [["g", "p", "a"], [";", ";", "y"], ["]", "a"], ["F", "a"], [",", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
         for (const key of keys) window.press(key);
-        window.press("u");
-        assert.deepEqual(sent.splice(0), [invoked("msg.undo")], keys.join(" "));
+        assert.deepEqual(sent.splice(0), [], keys.join(" "));
+        assert.deepEqual(window.appended, [], `${keys.join(" ")} shows no labels`);
     }
+    for (const key of ["g", "t", "u"]) window.press(key);
+    assert.deepEqual(sent, [invoked("msg.undo")], "g t completes, so u stays free");
 });
 
 test("a half-typed d does not survive the window losing the focus", async () => {

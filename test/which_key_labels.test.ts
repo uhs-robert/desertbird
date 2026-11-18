@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
-import { which_key_panel } from "../src/background/hud/which_key.ts";
+import { runs_nothing, which_key_panel } from "../src/background/hud/which_key.ts";
 import { parse_command_line } from "../vendor/desertfox/registry/command_line.ts";
 import { GROUP_NAMES, compile_default_keymap, compile_message_keymap, registry } from "../src/background/commands/index.ts";
 import { settings_with } from "./hud_fakes.ts";
@@ -20,11 +20,10 @@ const command_at = (root: TreeBranch, keys: readonly string[]): { id: string; ar
 };
 const rows_of = (root: TreeBranch, keys: readonly string[]) => Object.fromEntries((which_key_panel(root, keys, settings_with({}))?.rows ?? []).map((row) => [row.key, row.label]));
 
-// The message tree holds prefixes that only swallow a key (see below). They have no name and no row.
-const is_swallow = (branch: TreeBranch) => Object.values(branch.children).every((child) => child.kind === "leaf" && child.steps.length === 0);
+// The message tree holds keys that complete a mail sequence and run nothing. They have no name and no row.
 
 function each_branch(root: TreeBranch, path: string[] = []): { path: string[]; branch: TreeBranch }[] {
-    return Object.entries(root.children).flatMap(([key, child]) => (child.kind === "branch" && !is_swallow(child) ? [{ path: [...path, key], branch: child }, ...each_branch(child, [...path, key])] : []));
+    return Object.entries(root.children).flatMap(([key, child]) => (child.kind === "branch" && !runs_nothing(child) ? [{ path: [...path, key], branch: child }, ...each_branch(child, [...path, key])] : []));
 }
 
 test("every group of both trees has a name, and the panel title is the chain of names", () => {
@@ -76,19 +75,26 @@ test("the keys that act on the displayed message resolve in the message tree", (
     assert.equal(command_at(message_root, ["a"])?.id, "msg.archive");
 });
 
+test("which-key in a message shows no row and no panel for a mail sequence that runs nothing there", () => {
+    for (const keys of [["]"], ["F"], ["g", "p"], [";", ";"]]) assert.equal(which_key_panel(message_root, keys, settings_with({})), null, keys.join(" "));
+    for (const key of ["]", "F", ","]) assert.equal(rows_of(message_root, [])[key], undefined, key);
+    assert.equal(rows_of(message_root, ["g"])["p"], undefined);
+    assert.deepEqual(rows_of(message_root, [";"]), { f: "Focus link", c: "Click link", y: "Copy link" });
+});
+
 test("; ; opens the command line on hint in the mail tree only, and its first word is a known command that parses", () => {
     const binding = command_at(mail_root, [";", ";"]);
     assert.deepEqual(binding, { id: "cmdline.open", args: { text: "hint " } });
     const typed = `${String(binding?.args?.["text"])}--yank`;
     assert.deepEqual(parse_command_line(registry, typed), { kind: "invocation", invocation: { id: "hint.window", args: { action: "yank" } } });
-    assert.equal(node_at(message_root, [";", ";"]), undefined);
+    assert.deepEqual(node_at(message_root, [";", ";"]), { kind: "leaf", steps: [] }, "in a message ; ; ends and runs nothing");
 });
 
 test("every row has a label and none is long", () => {
     for (const root of [mail_root, message_root]) {
         for (const { path, branch } of [{ path: [] as string[], branch: root }, ...each_branch(root)]) {
             for (const [key, child] of Object.entries(branch.children)) {
-                if (child.kind !== "leaf") continue;
+                if (child.kind !== "leaf" || runs_nothing(child)) continue;
                 const label = child.label ?? "";
                 assert.ok(label.length > 0 && label.length <= 34, `${path.join("")}${key}: ${label}`);
             }

@@ -122,12 +122,8 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         if (token === null) return;
         // Escape ends a half-typed sequence or count and goes on to Thunderbird, which may use it.
         if (token === "<Escape>") return reset_sequence();
-        const was_pending = reported !== "";
         const result = matcher.feed(NORMAL_MODE, token);
-        // A key that breaks a sequence is retried as a first key. When the retry lands on a prefix that only swallows a key, the user typed no list sequence, so the next key stays free.
-        const retried_into_swallow = was_pending && result.kind_ === "pending" && Object.values(result.node.children).every((child) => child.kind === "leaf" && child.steps.length === 0);
-        if (retried_into_swallow) matcher.reset();
-        report(result.kind_ === "pending" && !retried_into_swallow ? result.typed_ : []);
+        report(result.kind_ === "pending" ? result.typed_ : []);
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         if (result.kind_ === "no_match" && !is_plain_printable(token)) return;
         // Thunderbird binds single keys such as `a` and `r`, so a plain key stops here whether or not it matched.

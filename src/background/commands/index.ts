@@ -117,15 +117,16 @@ export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig 
 // The message keys are the default layer, so a user key that extends a message key (`gfz` over `gf`) drops that key as it does in the mail tab.
 export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
     const result = compile_keymap(message_keymap(user), {}, resolve_command, undefined, MESSAGE_KEYMAP);
-    swallow_list_prefixes(result.compiled.modes.normal as TreeBranch);
+    complete_mail_sequences(result.compiled.modes.normal as TreeBranch, compile_default_keymap().compiled.modes.normal as TreeBranch);
     return result;
 }
 
-// A prefix of the mail tab that the message tree lacks (`]`, `F`, `,` and the rest) would drop its first key and let the second run alone, and `u` and `a` are bound in a message. So each such prefix becomes a branch that takes any one key and runs nothing. The compiler has no leaf for that, so this adds it after the compile. A user key under the prefix keeps its place, because only an absent prefix is filled.
-function swallow_list_prefixes(message_root: TreeBranch): void {
-    const mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch;
-    for (const [token, node] of Object.entries(mail_root.children)) {
-        if (node.kind === "branch" && !message_root.children[token]) message_root.children[token] = { kind: "branch", children: { [ANY_KEY]: { kind: "leaf", steps: [] } } };
+// A mail sequence that the message tree lacks (`] a`, `g p a`, `; ; y`) would break partway, and the matcher retries the rest from the root, where `a` archives and `; y` copies a link. So every such sequence gets a leaf that runs nothing. A prefix the message tree lacks also takes any one key, so after a list prefix no key runs (`2 t a`). A mail key of one token stays out: nothing shorter can run in its place, and an absent chord must reach Thunderbird. A mail leaf whose key a capture (`ANY_KEY`) of the message branch takes is no gap. The compiler has no empty leaf, so this adds them after the compile.
+function complete_mail_sequences(message_branch: TreeBranch, mail_branch: TreeBranch, is_root = true): void {
+    for (const [token, mail_node] of Object.entries(mail_branch.children)) {
+        if (mail_node.kind === "leaf" && (is_root || (message_branch.children[ANY_KEY] && [...token].length === 1))) continue;
+        const message_node = (message_branch.children[token] ??= mail_node.kind === "leaf" ? { kind: "leaf", steps: [] } : { kind: "branch", children: { [ANY_KEY]: { kind: "leaf", steps: [] } } });
+        if (mail_node.kind === "branch" && message_node.kind === "branch") complete_mail_sequences(message_node, mail_node, false);
     }
 }
 
