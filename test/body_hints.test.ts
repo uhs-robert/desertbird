@@ -183,34 +183,21 @@ test("the label carries the colors the background published as literal declarati
     assert.doesNotMatch(styles[0]!, /var\(/);
 });
 
-test("choose labels nothing, and f, c and y pick the action: focus only, focus and open, copy", () => {
-    for (const [key, acted, opens, copies] of [["f", ["focus"], 0, []], ["c", ["focus"], 1, []], ["y", [], 0, ["https://example.org/x"]]] as const) {
+test("focus, activate and yank pick the action: focus only, focus and open, copy", () => {
+    for (const [action, acted, opens, copies] of [["focus", ["focus"], 0, []], ["activate", ["focus"], 1, []], ["yank", [], 0, ["https://example.org/x"]]] as const) {
         opened.length = 0;
         copied.length = 0;
         const link = fake_element("link", { href: "https://example.org/x" });
         const { window, appended } = fake_window([link]);
         const session = create_hint_session(window, () => opened.push(1), () => "", (text) => copied.push(text));
-        assert.equal(session.begin("choose"), 1);
+        assert.equal(session.begin(action), 1);
         assert.equal(session.active(), true);
-        assert.equal(appended.length, 0);
-        session.feed(typed(key));
-        assert.equal(appended.length, 1, key);
+        assert.equal(appended.length, 1, action);
         session.feed(typed("a"));
-        assert.deepEqual(link.acted, acted, key);
-        assert.equal(opened.length, opens, key);
-        assert.deepEqual(copied, copies, key);
+        assert.deepEqual(link.acted, acted, action);
+        assert.equal(opened.length, opens, action);
+        assert.deepEqual(copied, copies, action);
         assert.equal(session.active(), false);
-    }
-});
-
-test("a key after choose that is no action, or Escape, ends the pick with no label", () => {
-    for (const key of [typed("z"), { kind: "cancel" } as const]) {
-        const { window, appended } = fake_window([fake_element("link")]);
-        const session = create_hint_session(window, () => {}, () => "", () => {});
-        session.begin("choose");
-        session.feed(key);
-        assert.equal(session.active(), false);
-        assert.equal(appended.length, 0);
     }
 });
 
@@ -227,11 +214,4 @@ test("a yank copies the address, else the trimmed text, and labels no element wi
     assert.equal(session.begin("yank"), 2);
     session.feed(typed("a"));
     assert.deepEqual(copied, ["Reply", "https://example.org/x"]);
-});
-
-test("a choose with nothing on screen stays inactive", () => {
-    const { window } = fake_window([]);
-    const session = create_hint_session(window, () => {}, () => "", () => {});
-    assert.equal(session.begin("choose"), 0);
-    assert.equal(session.active(), false);
 });

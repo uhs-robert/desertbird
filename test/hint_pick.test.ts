@@ -144,42 +144,13 @@ test("a yank with no text on screen starts nothing", () => {
     assert.equal(state.key, null);
 });
 
-test("choose draws nothing until f, c or y, then labels for that action", () => {
-    for (const [key, result] of [["f", ["focus t0"]], ["c", ["t0"]], ["C", ["t0"]]] as const) {
-        const { host, press } = fake_host();
-        const { window, containers } = fake_window("only");
-        const acted: string[] = [];
-        assert.equal(start_pick(host, targets_in(window, 2, acted), SCHEME, "choose"), 2);
-        assert.equal(containers.length, 0);
-        assert.equal(press(key).prevented, true);
-        assert.equal(containers.length, 1);
-        press("a");
-        assert.deepEqual(acted, result, key);
-    }
-    const { host, state, press } = fake_host();
-    start_pick(host, targets_in(fake_window("only").window, 2, []), SCHEME, "choose");
-    press("y");
-    press("s");
-    assert.deepEqual(state.copied, ["text1"]);
-});
-
-test("a key that is no action, Escape and a chord end a choose with nothing drawn and nothing run", () => {
-    for (const [key, chord] of [["z", {}], ["Escape", {}], ["f", { ctrlKey: true }]] as const) {
+test("focus, activate and yank each run their own act on the picked target", () => {
+    for (const [action, result, copied] of [["focus", ["focus t0"], []], ["activate", ["t0"], []], ["yank", [], ["text0"]]] as const) {
         const { host, state, press } = fake_host();
-        const { window, containers } = fake_window("only");
         const acted: string[] = [];
-        start_pick(host, targets_in(window, 2, acted), SCHEME, "choose");
-        const seen = press(key, chord);
-        assert.equal(seen.prevented && seen.stopped, true, key);
-        assert.equal(containers.length, 0, key);
-        assert.deepEqual(state.stopped.sort(), ["disturb", "keys"], key);
-        assert.deepEqual(acted, []);
+        assert.equal(start_pick(host, targets_in(fake_window("only").window, 2, acted), SCHEME, action), 2);
+        press("a");
+        assert.deepEqual(acted, result, action);
+        assert.deepEqual(state.copied, copied, action);
     }
-});
-
-test("a choose of yank with no text ends quietly", () => {
-    const { host, state, press } = fake_host();
-    start_pick(host, targets_in(fake_window("only").window, 2, [], "t", () => ""), SCHEME, "choose");
-    press("y");
-    assert.deepEqual(state.stopped.sort(), ["disturb", "keys"]);
 });

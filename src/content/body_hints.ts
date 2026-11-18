@@ -20,15 +20,12 @@ const CONTAINER_STYLE = "all: initial !important; position: fixed !important; in
 const LABEL_STYLE = (top: number, left: number, colors: string): string =>
     `all: initial !important; position: fixed !important; top: ${top}px !important; left: ${left}px !important; z-index: 2147483647 !important; ${colors} font: bold 12px monospace !important; padding: 1px 3px !important; border: 1px solid !important;`;
 
-/** The key after `;`. Anything else ends the pick. */
-const ACTION_KEYS: Record<string, Exclude<HintAction, "choose">> = { f: "focus", c: "activate", y: "yank" };
-
 export type HintKey = { kind: "typed"; letter: string } | { kind: "cancel" };
 
 export interface HintSession {
     /** True between `begin` and the pick or the cancel. While it is, every key goes to `feed`. */
     active(): boolean;
-    /** Labels the clickable elements on screen. Returns how many it labelled, and stays inactive when none. With `choose` it labels nothing yet: the next key is `f`, `c` or `y`, and any other key ends the pick. A `yank` labels only the elements with an address or text. */
+    /** Labels the clickable elements on screen. Returns how many it labelled, and stays inactive when none. A `yank` labels only the elements with an address or text. */
     begin(action?: HintAction): number;
     /** Removes the labels with no pick. The page moved or the focus left, so they no longer sit on their targets. */
     cancel(): void;
@@ -41,22 +38,20 @@ export function create_hint_session(window: HintWindow, open: (element: HintElem
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";
-    let action: Exclude<HintAction, "choose"> | null = null;
-    let on_screen: HintElement[] = [];
-    let choosing = false;
+    let action: HintAction | null = null;
 
     function end(): void {
         container?.remove();
         container = null;
         targets = [];
         typed = "";
-        choosing = false;
     }
 
     const yank_text = (element: HintElement): string => (element.href ?? element.textContent ?? "").trim();
 
-    function show(chosen: Exclude<HintAction, "choose">): number {
+    function show(chosen: HintAction): number {
         action = chosen;
+        const on_screen = [...window.document.querySelectorAll(CLICKABLE)].filter((element) => is_on_screen(window, element));
         const elements = chosen === "yank" ? on_screen.filter((element) => yank_text(element) !== "") : on_screen;
         if (elements.length === 0) return 0;
         const labels = hint_labels(elements.length);
@@ -76,21 +71,10 @@ export function create_hint_session(window: HintWindow, open: (element: HintElem
     }
 
     return {
-        active: () => container !== null || choosing,
-        begin(chosen = "activate") {
-            on_screen = [...window.document.querySelectorAll(CLICKABLE)].filter((element) => is_on_screen(window, element));
-            if (chosen !== "choose") return show(chosen);
-            choosing = on_screen.length > 0;
-            return on_screen.length;
-        },
+        active: () => container !== null,
+        begin: (chosen = "activate") => show(chosen),
         cancel: end,
         feed(key) {
-            if (choosing) {
-                const chosen = key.kind === "typed" ? ACTION_KEYS[key.letter] : undefined;
-                choosing = false;
-                if (chosen !== undefined) show(chosen);
-                return;
-            }
             const candidates = key.kind === "typed" ? labels_matching(targets.map((target) => target.label), typed + key.letter) : [];
             if (key.kind === "cancel" || candidates.length === 0) {
                 return end();

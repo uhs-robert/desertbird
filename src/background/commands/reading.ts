@@ -20,7 +20,7 @@ export const reading: CommandGroup = {
             label: "Pick a link",
             intent: "Label the links on screen, then open, focus or copy one.",
             count: "ignore",
-            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank", "choose"], default: "activate", description: { focus: "Focus the link.", yank: "Copy the address of the link, else its text.", choose: "Ask for the action first: f focuses, c activates, y yanks." } }],
+            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank"], default: "activate", description: { focus: "Focus the link.", yank: "Copy the address of the link, else its text." } }],
         },
         "search.message": {
             bridge: true,
@@ -44,6 +44,8 @@ export const reading: CommandGroup = {
         n: { id: "message.find_next" },
         N: { id: "message.find_prev" },
         f: { id: "hint.pick" },
-        ";": { id: "hint.pick", args: { action: "choose" } },
+        ";f": { id: "hint.pick", args: { action: "focus" } },
+        ";c": { id: "hint.pick", args: { action: "activate" } },
+        ";y": { id: "hint.pick", args: { action: "yank" } },
     },
 };

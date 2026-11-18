@@ -297,12 +297,12 @@ export interface HintLabelColors {
 export interface HintsPickArgs {
     windowId: number;
     colors: HintLabelColors;
-    /** What a typed label does. `choose` waits for `f`, `c` or `y` first. Absent means `activate`. */
+    /** What a typed label does. Absent means `activate`. */
     action?: HintAction;
 }
 
 /** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */
-export type HintAction = "focus" | "activate" | "yank" | "choose";
+export type HintAction = "focus" | "activate" | "yank";
 
 export interface HintsApi {
     sendEnter(args: HintsSendEnterArgs): Promise<void>;
