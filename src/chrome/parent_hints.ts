@@ -13,7 +13,7 @@ import type { HintWindow } from "../shared/hint_view.ts";
 import { mail_pane_of } from "./view.ts";
 
 declare const Services: { wm: { getEnumerator(type: string | null): Iterable<EnterWindow> } };
-declare const Cc: Record<string, { createInstance(iface: unknown): TextInputProcessor }>;
+declare const Cc: Record<string, { createInstance(iface: unknown): TextInputProcessor; getService(iface: unknown): { copyString(text: string): void } }>;
 declare const Ci: Record<string, unknown>;
 
 interface TextInputProcessor {
@@ -71,8 +71,12 @@ function listen(target: ListenerTarget, type: string, listener: (event: never) =
     return () => target.removeEventListener(type, listener, true);
 }
 
+// The clipboard service of the parent. The label is typed later, inside this Experiment, and the background cannot wait for that key. So the pick writes the text here when the label completes.
+const copy_to_clipboard = (text: string): void => Cc["@mozilla.org/widget/clipboardhelper;1"]!.getService(Ci["nsIClipboardHelper"]).copyString(text);
+
 function pick_host(main: PickMainWindow, documents: ListenerTarget[]): PickHost {
     return {
+        copy: copy_to_clipboard,
         on_key: (listener) => listen(main.windowRoot ?? main, "keydown", listener as (event: PickKeyEvent) => void),
         on_disturb(listener) {
             // The blur lands on the focused element when focus moves inside the window too, so only a window that lost the focus counts.
@@ -92,12 +96,12 @@ export function get_hints_api(context: ExtensionContext) {
                 if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
-            pick: guard("hints.pick", ({ windowId, colors }: HintsPickArgs): number => {
+            pick: guard("hints.pick", ({ windowId, colors, action }: HintsPickArgs): number => {
                 const pane = mail_pane_of(context, windowId) as unknown as HintMailPane & { browsingContext: { topChromeWindow: PickMainWindow & HintWindow } };
                 const main = pane.browsingContext.topChromeWindow;
                 const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
                 const scheme = main.matchMedia("(prefers-color-scheme: light)").matches ? colors.light : colors.dark;
-                return start_pick(pick_host(main, [main, pane as unknown as ListenerTarget, ...(message ? [message] : [])]), collect_targets(main, pane), scheme);
+                return start_pick(pick_host(main, [main, pane as unknown as ListenerTarget, ...(message ? [message] : [])]), collect_targets(main, pane), scheme, action);
             }),
         },
     };

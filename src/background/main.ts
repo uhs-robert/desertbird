@@ -15,6 +15,7 @@ import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
 import { publish_theme } from "./theme/publish.ts";
 import { themed_hints } from "./theme/themed_hints.ts";
+import { write_to_clipboard } from "./handlers/clipboard.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -269,7 +270,7 @@ const bridge = create_bridge_port({
     },
 });
 
-const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: messenger.hints });
+const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: messenger.hints, write_text: write_to_clipboard });
 
 // The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
 messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));

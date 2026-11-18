@@ -6,5 +6,5 @@ import { hint_label_colors, resolve_theme } from "./palette.ts";
 
 /** `read_theme_name` reads the setting at each pick, so a change of theme shows on the next one. */
 export function themed_hints(hints: HintsApi | undefined, read_theme_name: () => Promise<string>): ThemedHints | undefined {
-    return hints && { sendEnter: (args) => hints.sendEnter(args), pick: async ({ windowId }) => hints.pick({ windowId, colors: hint_label_colors(resolve_theme(await read_theme_name())) }) };
+    return hints && { sendEnter: (args) => hints.sendEnter(args), pick: async ({ windowId, action }) => hints.pick({ windowId, ...(action && { action }), colors: hint_label_colors(resolve_theme(await read_theme_name())) }) };
 }
