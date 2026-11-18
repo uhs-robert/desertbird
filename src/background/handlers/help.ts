@@ -18,3 +18,12 @@ export async function open_help(scope: HandlerScope<HelpApi>): Promise<void> {
     if (open_id !== undefined) await scope.api.tabs.update(open_id, { active: true });
     else await scope.api.tabs.create({ url, ...(scope.window_id >= 0 && { windowId: scope.window_id }) });
 }
+
+export interface WhichKeyApi {
+    which_key?: { show_root(window_id: number): Promise<void> };
+}
+
+/** Lists every key bound at the top of the keymap in the window's hud panel. */
+export async function show_root_keys(scope: HandlerScope<WhichKeyApi>): Promise<void> {
+    await scope.api.which_key?.show_root(scope.window_id);
+}

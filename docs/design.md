@@ -93,6 +93,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 | `search.message {query}` | `/` in the message pane, `n`, `N` | Standard | `messageDisplayScripts` find in the body |
 | `compose.edit_external` | `e`, `<C-e>`, `:edit` | Standard | `compose.getComposeDetails` and `setComposeDetails`, host `editor_start` and `editor_collect` |
 | `config.reload`, `help.open` | `:reload`, `:help` | Standard | Background, extension page |
+| `help.whichkey` | `g?` | Standard | Background. The root keys in the which-key panel of the window, until the next key. In a message document `g?` opens the help page. |
 | `motion.down`, `motion.up` | `j`, `k` | Experiment | Chrome runtime, `view.rows` and `view.select`. The thread list order, with collapsed threads, is only in the view. With the folder pane focused, `j`, `k`, `g g` and `G` move the folder selection instead. |
 | `motion.left`, `motion.right` | `h`, `l` | Experiment | `view.thread`, `folder_tree.expand`. Built for the thread list: `h` goes from a reply to its root or closes the thread, `l` opens a closed thread or goes to the first reply. In the folder pane they close and open the selected folder row through `folder_tree.expand`: the handler asks it first and goes on to the thread logic only when the folder pane does not have the focus. |
 | `motion.top`, `motion.bottom` | `g g`, `G` | Experiment | Chrome runtime |

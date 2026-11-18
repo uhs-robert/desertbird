@@ -19,6 +19,16 @@ function group_label(branch: TreeBranch): string {
     return branch.label ?? `${count} ${count === 1 ? "key" : "keys"}`;
 }
 
+// The root list reads in the order of DesertFox: letters (case-blind, so `t` before `T`), other plain keys, keys with a modifier, then groups. Each class goes by key.
+const root_rank = (row: { key: string; is_group: boolean }): number => (row.is_group ? 3 : /^<[SACM]+-/.test(row.key) ? 2 : /^[a-zA-Z]$/.test(row.key) ? 0 : 1);
+const by_code_point = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
+function compare_root_rows(left: { key: string; is_group: boolean }, right: { key: string; is_group: boolean }): number {
+    const rank = root_rank(left);
+    if (rank !== root_rank(right)) return rank - root_rank(right);
+    if (rank === 1 || rank === 2) return by_code_point(left.key, right.key);
+    return by_code_point(left.key.toLowerCase(), right.key.toLowerCase()) || by_code_point(right.key, left.key);
+}
+
 /** The panel for a half-typed sequence, or null when no key can follow it. The title is the chain of group names, else the typed keys. */
 export function which_key_panel(root: TreeBranch, keys: readonly string[], settings: Pick<Settings, "which_key_border">): WhichKeyPanel | null {
     const branch = branch_at(root, keys);
@@ -27,6 +37,7 @@ export function which_key_panel(root: TreeBranch, keys: readonly string[], setti
         is_branch(child) ? { key: token_label(token), label: group_label(child), is_group: true } : { key: token_label(token), label: child.label ?? child.steps[0]?.invocation.id ?? "", is_group: false },
     );
     if (rows.length === 0) return null;
+    if (keys.length === 0) rows.sort(compare_root_rows);
     return { title: keys.join(" "), rows, border: settings.which_key_border };
 }
 

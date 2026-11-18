@@ -125,11 +125,14 @@ async function run_threads(instance, { app, kind, shot }) {
 }
 
 // A hash of the bottom 80 px of the window, where the panel and the toasts draw, without the scrollbar strip. The mode label sits in it too and stays the same while the mode does. Higher up a message pane can still be loading.
-async function hud_pixels(instance, name) {
+async function hud_pixels(instance, name, region = "0,640 1260x80") {
   const { createHash } = await import("node:crypto");
   const { readFileSync } = await import("node:fs");
-  return createHash("sha256").update(readFileSync(await instance.shot_region(name, "0,640 1260x80"))).digest("hex");
+  return createHash("sha256").update(readFileSync(await instance.shot_region(name, region))).digest("hex");
 }
+
+// The region the root key list fills: it is about twelve rows tall above the status bar, taller than the strip of a toast.
+const KEY_LIST_REGION = "0,300 1260x420";
 
 // Waits out earlier toasts, presses the key, then reads the toast strip while a toast shows and again after it expired. A toast is proven by the strip differing while it shows and matching the strip from before once the toast time is over.
 async function toast_cycle(instance, name, press_args, lead_keys = [], { wait_out_toasts = true } = {}) {
@@ -1063,7 +1066,7 @@ async function run_mode_label(instance, { app, kind, shot }) {
   check(app, kind, "the app survived the mode label checks", instance.exited() === null);
 }
 
-// The which-key panel, a toast and the help page, in the Inbox with the thread list focused. The screenshots carry the E2E_THEME name. A panel is shown or gone when the window's pixels differ or match: the same selection and no panel draws the same window.
+// The which-key panel, the root key list, a toast and the help page, in the Inbox with the thread list focused. The screenshots carry the E2E_THEME name. A panel is shown or gone when the window's pixels differ or match: the same selection and no panel draws the same window.
 async function run_hud(instance, { app, kind, shot }) {
   const theme = process.env.E2E_THEME ?? "default";
   const pixels_of = (name) => hud_pixels(instance, `${app}_${name}_${theme}`);
@@ -1126,15 +1129,16 @@ async function run_hud(instance, { app, kind, shot }) {
   }
   check(app, kind, "a click under the toast reaches the folder pane", folder_after !== displayed, `displayed folder was ${displayed}, after ${folder_after}`);
   await sleep(6000);
-  // g ? opens the help page in a tab. ? is a backward search now.
+  // g ? shows the root key list in the window. ? is a backward search now.
   await instance.press(["g"]);
   await instance.press(["?"]);
   await sleep(2500);
-  await shot(`hud_help_${theme}`, "the help page");
-  check(app, kind, "the app survived the hud keys", instance.exited() === null);
-  // The help page is a tab no key runs in, so the helper closes it and the steps after this one run in the mail tab again.
-  await instance.ask("reset_tabs");
+  await shot(`hud_key_list_${theme}`, "the root key list panel");
+  const key_list_shown = await hud_pixels(instance, `${app}_key_list_shown_${theme}`, KEY_LIST_REGION);
+  await instance.press(["-k", "Escape"]);
   await sleep(1500);
+  check(app, kind, "the next key after g ? removes the key list", (await hud_pixels(instance, `${app}_key_list_gone_${theme}`, KEY_LIST_REGION)) !== key_list_shown);
+  check(app, kind, "the app survived the hud keys", instance.exited() === null);
   // The click above moved the shown folder, and the steps after this one start in the Inbox.
   await instance.press(["g"]);
   await instance.press(["i"]);
@@ -1472,7 +1476,7 @@ async function run_own_pages(instance) {
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(500);
   // The readable tabs take q, : and g? through the main-window runtime. Each opens by its Thunderbird shortcut.
-  // The address book focuses its search field, which keeps q as text, so a click on the folder list or the grid first puts the focus in the tab as a user's click does. g ? opens the help tab on top, and Alt+q closes it again.
+  // The address book focuses its search field, which keeps q as text, so a click on the folder list or the grid first puts the focus in the tab as a user's click does. g ? shows the root key list, and the next key removes it.
   for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
     await open();
     await sleep(3000);
@@ -1480,11 +1484,16 @@ async function run_own_pages(instance) {
     await instance.click(...click_at);
     await sleep(500);
     await shot(`${name.replace(" ", "_")}_tab`, `${name} tab before the keys`);
+    const list_before = await hud_pixels(instance, `${app}_${name}_list_before`, KEY_LIST_REGION);
     await instance.press(["g"]);
     const helped = await key_and_state(instance, ["?"], 3000);
-    check(app, kind, `g ? opens the help tab from the ${name} tab`, main_window_tabs(helped).length === before + 2, `tabs ${main_window_tabs(helped).length}, expected ${before + 2}`);
-    const back = await key_and_state(instance, ["-M", "alt", "q", "-m", "alt"], 2000);
-    check(app, kind, `Alt+q closes the help tab and returns to the ${name} tab`, main_window_tabs(back).length === before + 1, `tabs ${main_window_tabs(back).length}`);
+    check(app, kind, `g ? opens no tab from the ${name} tab`, main_window_tabs(helped).length === before + 1, `tabs ${main_window_tabs(helped).length}, expected ${before + 1}`);
+    const list_shown = await hud_pixels(instance, `${app}_${name}_list_shown`, KEY_LIST_REGION);
+    check(app, kind, `g ? shows the key list in the ${name} tab`, list_shown !== list_before);
+    await shot(`${name.replace(" ", "_")}_key_list`, `${name} tab after g ?: the root key list shows`);
+    await instance.press(["-k", "Escape"]);
+    await sleep(1500);
+    check(app, kind, `the next key removes the key list in the ${name} tab`, (await hud_pixels(instance, `${app}_${name}_list_gone`, KEY_LIST_REGION)) === list_before);
     await instance.press([":"]);
     await sleep(1500);
     await shot(`${name.replace(" ", "_")}_cmdline`, `${name} tab after the colon key: the command line shows`);
