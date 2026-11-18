@@ -43,6 +43,8 @@ import { create_bridge_reads } from "./bridge/reads.ts";
 import { create_confirm_service } from "./bridge/confirm.ts";
 import type { ReadsApi } from "./bridge/reads.ts";
 import { create_bridge_drafts } from "./bridge/drafts.ts";
+import { create_bridge_acts } from "./bridge/acts.ts";
+import type { ActsApi } from "./bridge/acts.ts";
 import type { DraftsApi } from "./bridge/drafts.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
@@ -236,7 +238,9 @@ const cmdline = create_cmdline_service({
     search,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
+// The keys and the bridge `act` frame share this API, so a bridge move lands in the same undo log as a key move.
+const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } };
+const router = create_router(registry, handler_api);
 
 // The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.
 const last_focused_main_window = async (): Promise<number | undefined> => {
@@ -246,6 +250,7 @@ const last_focused_main_window = async (): Promise<number | undefined> => {
 const bridge_run = create_bridge_run({ target_window: last_focused_main_window, route: (invocation) => router.route(invocation) });
 const bridge_reads = create_bridge_reads({ api: messenger as unknown as ReadsApi, read_settings: async () => (await config_store.read()).settings });
 const bridge_drafts = create_bridge_drafts({ api: messenger as unknown as DraftsApi, read_settings: async () => (await config_store.read()).settings, timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) } });
+const bridge_acts = create_bridge_acts({ api: handler_api as unknown as ActsApi, read_settings: async () => (await config_store.read()).settings, request_confirm: (request) => confirm.request_confirm(request), target_window: () => last_focused_main_window() });
 const bridge = create_bridge_port({
     connect: () => messenger.runtime.connectNative(BRIDGE_HOST_NAME),
     read_bridge_setting: async () => (await config_store.read()).settings.bridge,
@@ -255,6 +260,7 @@ const bridge = create_bridge_port({
     list_commands: list_bridge_commands,
     read: (verb, request) => bridge_reads.read(verb, request),
     draft: (request) => bridge_drafts.draft(request),
+    act: (request) => bridge_acts.act(request),
     async current_mode() {
         const window_id = await last_focused_main_window();
         if (window_id === undefined) return undefined;

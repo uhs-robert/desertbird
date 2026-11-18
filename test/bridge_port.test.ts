@@ -29,6 +29,10 @@ function bridge_under_test(options: { setting?: boolean; run?: (text: string) =>
             if (request["subject"] === "throws") throw new Error("Re: secret subject");
             return { ok: true, drafted: request["subject"] };
         },
+        act: async (request) => {
+            if (request["action"] === "throws") throw new Error("Re: secret subject");
+            return { ok: true, count: (request["ids"] as number[]).length };
+        },
     });
     const advance = (ms: number) => {
         clock_ms += ms;
@@ -271,5 +275,20 @@ test("a draft frame goes to the drafts with its fields, and a throw answers fixe
     assert.deepEqual(by_id, [
         { ok: true, drafted: "Hello", verb: "reply", request_id: 5 },
         { ok: false, message: "the command failed", verb: "reply", request_id: 6 },
+    ]);
+});
+
+test("an act frame goes to the acts with its fields, and a throw answers fixed text", async () => {
+    const { bridge, last, ready } = bridge_under_test();
+    await bridge.start();
+    await ready();
+    last().posted.length = 0;
+    last().host_says({ verb: "act", request_id: 7, action: "archive", ids: [1, 2] });
+    last().host_says({ verb: "act", request_id: 8, action: "throws", ids: [] });
+    await settle();
+    const by_id = [...last().posted].sort((left, right) => (left as { request_id: number }).request_id - (right as { request_id: number }).request_id);
+    assert.deepEqual(by_id, [
+        { ok: true, count: 2, verb: "reply", request_id: 7 },
+        { ok: false, message: "the command failed", verb: "reply", request_id: 8 },
     ]);
 });
