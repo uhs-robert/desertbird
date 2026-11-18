@@ -8,6 +8,10 @@ The add-on's end of the native bridge host. A program outside Thunderbird, such 
 | `reads.ts` | The four read frames, each behind its own share setting: `folders`, `messages`, `message` and `attachments`. It cleans every string a sender controls and refuses an encrypted body |
 | `port.ts` | The port: connect while `bridge` is on, the `ready` handshake, the backoff, the answers to `list`, `run` and `state`, and the `mode` frames |
 
+## Setup
+
+The bridge needs the DesertFox host and its `desertbird_bridge.json` manifest. A new host install writes it. An existing DesertFox user gets it only by running `host/install.sh` again or by running `:native.update` in Firefox. The automatic host update does not add it. Then turn `bridge` on in the options page. The `desertfox` CLI talks to Thunderbird only with `--app thunderbird`, for example `desertfox --app thunderbird run step.unread`.
+
 ## Rules
 
 - `bridge` (default `false`) gates everything. While it is off, `connectNative` is never called. Turning it off closes the port and stops the retry timer. A `run` reads the stored setting again before it runs, so a frame that lands between the write and `storage.onChanged` is refused.
