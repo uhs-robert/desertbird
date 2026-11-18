@@ -155,3 +155,17 @@ test("a table and underlined or struck text survive an edit elsewhere", () => {
     // The line breaks between the blocks come from `marked`, which writes the whole part anew.
     assert.equal(markdown.body_with(body, sent.replace("Hello.", "Hi.")), body_of("<p>Hi.</p>\n", struck, "\n", table));
 });
+
+test("an empty reply passes over line breaks between nodes to find the cursor line", () => {
+    const above = body_of(CURSOR_LINE, "\n", SIGNATURE_ABOVE, "\n", CITE_LINE, QUOTE, "\n");
+    assert.equal(markdown.body_with(above, "Thanks.\n"), body_of("<p>Thanks.</p>", "\n", SIGNATURE_ABOVE, "\n", CITE_LINE, QUOTE, "\n"));
+    const below = body_of(CITE_LINE, QUOTE, "\n", CURSOR_LINE, SIGNATURE_BELOW);
+    assert.equal(markdown.body_with(below, "Thanks.\n"), body_of(CITE_LINE, QUOTE, "\n", "<p>Thanks.</p>", SIGNATURE_BELOW));
+});
+
+test("a link to an entity-encoded script URL comes out with no live href", () => {
+    const part = user_html(markdown.body_with(body_of("<p>x</p>"), "[a](jav&#x61;script:alert(1)) and [b](https://example.org/)\n"));
+    assert.doesNotMatch(part, /javascript|&#x61;/i);
+    assert.match(part, /<a>a<\/a>/);
+    assert.match(part, /<a href="https:\/\/example\.org\/">b<\/a>/);
+});

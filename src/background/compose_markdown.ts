@@ -85,11 +85,13 @@ function user_part(body: HTMLElement): UserPart {
     return { nodes: run.slice(first, last + 1), insert_before: run[first]! };
 }
 
-// Nothing written yet: the text replaces the blank line Thunderbird put the cursor on. That is the first node after the quote when a blank run follows it, which is a bottom-posted reply, and else the first node of the first blank run (a top-posted reply, a forward, a new message with a signature).
+// Nothing written yet: the text replaces the blank line Thunderbird put the cursor on. That is the first line after the quote when one follows it, which is a bottom-posted reply, and else the first line of the first blank run (a top-posted reply, a forward, a new message with a signature).
 function empty_message_part(body: HTMLElement, runs: ChildNode[][]): UserPart {
     const quote = body.querySelector(":scope > blockquote[type=cite]");
     const after_quote = quote === null ? undefined : runs[Array.from(body.childNodes).filter(is_stop).indexOf(quote) + 1];
-    const cursor_line = after_quote?.[0] ?? runs.find((run) => run.length > 0)?.[0];
+    // A line break between two nodes is no line of the message, so it is passed over.
+    const first_line = (run: ChildNode[] | undefined): ChildNode | undefined => run?.find((node) => !is_blank_text(node));
+    const cursor_line = first_line(after_quote) ?? runs.map(first_line).find((line) => line !== undefined);
     if (cursor_line !== undefined) return { nodes: [cursor_line], insert_before: cursor_line };
     return { nodes: [], insert_before: Array.from(body.childNodes).find(is_stop) ?? null };
 }
