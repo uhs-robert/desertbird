@@ -5,8 +5,8 @@ import type { RecordStorageApi } from "./record_store.ts";
 
 export const UNDO_STORAGE_KEY = "desertbird_undo";
 
-/** Bumped when the stored record changes shape. Add a step to `migrate_undo_record` in the same change. */
-export const UNDO_RECORD_VERSION = 1;
+/** Bumped when the stored record changes shape. Add a step to `migrate_undo_record` in the same change. Version 2 added the tag entry. */
+export const UNDO_RECORD_VERSION = 2;
 
 /** The newest entries kept. An older one drops off, since the mail it names has likely changed by hand since. */
 export const UNDO_STACK_LIMIT = 20;
@@ -31,14 +31,23 @@ export interface StateItem {
     old: boolean;
 }
 
+export interface TagItem {
+    header_message_id: string;
+    folder_id: string;
+    /** The one tag the change toggled. The undo touches only this key, so a tag the user changed since stays. */
+    tag_key: string;
+    /** Whether the message carried the tag before the change. */
+    had: boolean;
+}
+
 export type MoveAction = "delete" | "archive" | "move";
 export type StateField = "read" | "flagged" | "junk";
 
 /** `refused` marks an entry whose undo found a message missing once. The next undo of it drops what is still missing. */
-export type UndoEntry = ({ kind: "moved"; action: MoveAction; items: MovedItem[] } | { kind: "state"; field: StateField; items: StateItem[] }) & { id: string; refused?: true };
+export type UndoEntry = NewUndoEntry & { id: string; refused?: true };
 
 /** An entry before the log gives it an id. */
-export type NewUndoEntry = { kind: "moved"; action: MoveAction; items: MovedItem[] } | { kind: "state"; field: StateField; items: StateItem[] };
+export type NewUndoEntry = { kind: "moved"; action: MoveAction; items: MovedItem[] } | { kind: "state"; field: StateField; items: StateItem[] } | { kind: "tag"; items: TagItem[] };
 
 interface UndoRecord {
     record_version: number;
@@ -77,18 +86,25 @@ function is_state_item(value: unknown): value is StateItem {
     return typeof item?.header_message_id === "string" && typeof item.folder_id === "string" && typeof item.old === "boolean";
 }
 
+function is_tag_item(value: unknown): value is TagItem {
+    const item = value as Partial<TagItem> | null;
+    return typeof item?.header_message_id === "string" && typeof item.folder_id === "string" && typeof item.tag_key === "string" && typeof item.had === "boolean";
+}
+
 function is_entry(value: unknown): value is UndoEntry {
     if ((value as { refused?: unknown } | null)?.refused !== undefined && (value as { refused?: unknown }).refused !== true) return false;
     const entry = value as { id?: unknown; kind?: unknown; action?: unknown; field?: unknown; items?: unknown } | null;
     if (typeof entry?.id !== "string" || !Array.isArray(entry.items) || entry.items.length === 0) return false;
     if (entry.kind === "moved") return ["delete", "archive", "move"].includes(entry.action as string) && entry.items.every(is_moved_item);
+    if (entry.kind === "tag") return entry.items.every(is_tag_item);
     return entry.kind === "state" && ["read", "flagged", "junk"].includes(entry.field as string) && entry.items.every(is_state_item);
 }
 
-/** The hook for a change to the stored shape: turn each older version into the next one here, then fall through to the current check. A record from a newer version reads as empty. */
+/** The hook for a change to the stored shape: turn each older version into the next one here, then fall through to the current check. A record from a newer version reads as empty. Version 1 only lacks the tag entry, so each of its entries stays valid as it is. */
 export function migrate_undo_record(stored: unknown): UndoRecord | undefined {
     const record = stored as { record_version?: unknown; entries?: unknown } | null | undefined;
-    if (record?.record_version !== UNDO_RECORD_VERSION || !Array.isArray(record.entries)) return undefined;
+    if (record?.record_version !== UNDO_RECORD_VERSION && record?.record_version !== 1) return undefined;
+    if (!Array.isArray(record.entries)) return undefined;
     return { record_version: UNDO_RECORD_VERSION, entries: record.entries.filter(is_entry) };
 }
 
