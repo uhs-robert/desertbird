@@ -109,22 +109,35 @@ function safe_attribute(name: string, value: string): boolean {
     return true;
 }
 
+// Thunderbird and Betterbird give the image of a stored message back as a link to its part. Such an image is kept only when the body sent to the editor held the same source, so Markdown cannot reach any other part of the mail store.
+const STORED_PART_SCHEMES = new Set(["mailbox", "imap"]);
+
+/** The image sources a body holds that point into the mail store. */
+function stored_part_sources(body: Document): Set<string> {
+    const sources = Array.from(body.querySelectorAll("img")).map((image) => image.getAttribute("src") ?? "");
+    return new Set(sources.filter((src) => STORED_PART_SCHEMES.has(scheme_of(src) ?? "")));
+}
+
+const keeps_image = (src: string, stored_parts: Set<string>): boolean => safe_attribute("src", src) || stored_parts.has(src);
+
 /** Rebuilds the nodes of `source` in `target`, keeping only the listed elements and attributes. Nothing of `source` itself moves, so no state of the parsed nodes comes along. */
-function sanitized_copy(source: Node, target: Document): Node[] {
+function sanitized_copy(source: Node, target: Document, stored_parts: Set<string>): Node[] {
     if (source.nodeType === TEXT_NODE) return [target.createTextNode(source.nodeValue ?? "")];
     if (source.nodeType !== ELEMENT_NODE) return [];
     const element = source as Element;
     const name = element.localName;
-    const children = (): Node[] => Array.from(element.childNodes).flatMap((child) => sanitized_copy(child, target));
+    const children = (): Node[] => Array.from(element.childNodes).flatMap((child) => sanitized_copy(child, target, stored_parts));
     // SVG and MathML parse by rules of their own, where text can turn into markup on a second parse.
     if (element.namespaceURI !== HTML_NAMESPACE || DROPPED_ELEMENTS.has(name)) return [];
     if (!KEPT_ELEMENTS.has(name)) return children();
     // An image with no safe source would show as a broken image.
-    if (name === "img" && !safe_attribute("src", element.getAttribute("src") ?? "")) return [];
+    const src = element.getAttribute("src") ?? "";
+    if (name === "img" && !keeps_image(src, stored_parts)) return [];
     const copy = target.createElement(name);
     for (const attribute of KEPT_ATTRIBUTES[name] ?? []) {
         const value = element.getAttribute(attribute);
-        if (value !== null && safe_attribute(attribute, value)) copy.setAttribute(attribute, value);
+        const kept = name === "img" && attribute === "src" ? keeps_image(src, stored_parts) : value !== null && safe_attribute(attribute, value);
+        if (value !== null && kept) copy.setAttribute(attribute, value);
     }
     copy.append(...children());
     return [copy];
@@ -141,8 +154,8 @@ export interface ComposeMarkdown {
     markdown_of(body_html: string): string;
     /** The body with the user's text replaced by the HTML of `markdown`. The stop nodes are left as they were. */
     body_with(body_html: string, markdown: string): string;
-    /** How many images of `markdown` `body_with` leaves out, because their source is not one it keeps (a file, a `cid:` part, a `blob:`). */
-    dropped_images(markdown: string): number;
+    /** How many images of `markdown` `body_with` leaves out, because their source is not one it keeps (a file, a `cid:` part, a `blob:`, a stored mail part `body_html` did not hold). */
+    dropped_images(body_html: string, markdown: string): number;
 }
 
 export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdown {
@@ -179,7 +192,7 @@ export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdo
             const document = parse(body_html);
             const part = user_part(document.body);
             const edited_body = parse(marked.parse(markdown)).body;
-            const nodes = Array.from(edited_body.childNodes).flatMap((node) => sanitized_copy(node, document));
+            const nodes = Array.from(edited_body.childNodes).flatMap((node) => sanitized_copy(node, document, stored_part_sources(document)));
             // The line breaks `marked` puts between and after its blocks would pile up next to the blank lines kept around the user's text.
             while (nodes[0] !== undefined && is_blank_text(nodes[0])) nodes.shift();
             while (nodes.at(-1) !== undefined && is_blank_text(nodes.at(-1)!)) nodes.pop();
@@ -188,9 +201,10 @@ export function create_compose_markdown(globals: MarkdownGlobals): ComposeMarkdo
             for (const node of part.nodes) node.remove();
             return serialize(document);
         },
-        dropped_images(markdown) {
+        dropped_images(body_html, markdown) {
             const { marked } = libraries();
-            return Array.from(parse(marked.parse(markdown)).querySelectorAll("img")).filter((image) => !safe_attribute("src", image.getAttribute("src") ?? "")).length;
+            const stored_parts = stored_part_sources(parse(body_html));
+            return Array.from(parse(marked.parse(markdown)).querySelectorAll("img")).filter((image) => !keeps_image(image.getAttribute("src") ?? "", stored_parts)).length;
         },
     };
 }

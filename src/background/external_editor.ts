@@ -166,7 +166,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
         if (is_html && text.trimEnd() === held.markdown!.trimEnd()) return deps.say(held.window_id, UNCHANGED_TEXT, false);
         try {
             await deps.compose.setComposeDetails(held.tab_id, is_html ? { body: deps.markdown.body_with(held.original, text) } : { plainTextBody: text });
-            const dropped = is_html ? deps.markdown.dropped_images(text) : 0;
+            const dropped = is_html ? deps.markdown.dropped_images(held.original, text) : 0;
             if (dropped > 0) await deps.say(held.window_id, dropped_images_text(dropped), true);
         } catch (error) {
             await deps.say(held.window_id, `The edited text could not be written: ${failure_text(error)}`, true);

@@ -176,11 +176,32 @@ test("an embedded image as Thunderbird gives it back from a draft survives an ed
     const body = body_of(`<p>Image draft.</p><p>${image}</p>`);
     const sent = markdown.markdown_of(body);
     assert.equal(markdown.body_with(body, sent.replace("Image draft.", "Image kept.")), body_of("<p>Image kept.</p>\n", `<p>${image}</p>`));
-    assert.equal(markdown.dropped_images(sent), 0);
+    assert.equal(markdown.dropped_images(body, sent), 0);
 });
 
 test("images with a file, cid or blob source are left out and counted", () => {
     const edited = "![a](file:///home/u/a.png) ![b](cid:part1.abc) ![c](blob:x) ![d](https://example.org/d.png)\n";
-    assert.equal(markdown.dropped_images(edited), 3);
+    assert.equal(markdown.dropped_images(body_of("<p>x</p>"), edited), 3);
     assert.doesNotMatch(user_html(markdown.body_with(body_of("<p>x</p>"), edited)), /file:|cid:|blob:/);
+});
+
+// Recorded on Betterbird by the e2e kind compose_editor_html: the image of a saved draft opened again.
+const DRAFT_IMAGE_SRC = "mailbox:///tmp/e2e/profile/Mail/Local%20Folders/Drafts?number=1&part=1.2&type=image/png&filename=pixel.png";
+
+test("a mailbox image the draft already held survives an edit elsewhere", () => {
+    const image = `<img src="${DRAFT_IMAGE_SRC.replace(/&/g, "&amp;")}" alt="pixel">`;
+    const body = body_of(`<p>Image draft.</p><p>${image}</p>`);
+    const sent = markdown.markdown_of(body);
+    const edited = sent.replace("Image draft.", "Image kept.");
+    assert.equal(markdown.body_with(body, edited), body_of("<p>Image kept.</p>\n", `<p>${image}</p>`));
+    assert.equal(markdown.dropped_images(body, edited), 0);
+});
+
+test("a mailbox or imap image the original did not hold is dropped, and a mailbox link never keeps its href", () => {
+    const body = body_of(`<p>x</p><p><img src="${DRAFT_IMAGE_SRC.replace(/&/g, "&amp;")}"></p>`);
+    const typed = `![a](mailbox:///home/u/Mail/Inbox?number=7&part=1.2) ![b](imap://u@host/INBOX?part=1.2) [c](${DRAFT_IMAGE_SRC})\n`;
+    const part = user_html(markdown.body_with(body, typed));
+    assert.doesNotMatch(part, /mailbox:|imap:/);
+    assert.match(part, /<a>c<\/a>/);
+    assert.equal(markdown.dropped_images(body, typed), 2);
 });

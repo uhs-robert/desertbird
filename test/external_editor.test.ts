@@ -65,7 +65,7 @@ function setup(options: { enabled?: boolean; body?: string; plain?: boolean; ses
                 return `md(${html})\n`;
             },
             body_with: (html, markdown) => `html(${html} + ${markdown.trimEnd()})`,
-            dropped_images: (markdown) => (markdown.match(/!\[file\]/g) ?? []).length,
+            dropped_images: (_html, markdown) => (markdown.match(/!\[file\]/g) ?? []).length,
         },
         compose_tab_in: async (window_id) => (window_id === COMPOSE_WINDOW && state.compose_open ? COMPOSE_TAB : undefined),
         tab_exists: async (tab_id) => live_tabs.has(tab_id),
