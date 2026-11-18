@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_runtime } from "../src/chrome/runtime.ts";
 import type { KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
 import { compile_default_keymap } from "../src/background/commands/index.ts";
-import { mark_unrepeatable } from "../src/background/config/keymap.ts";
+import { mark_steps } from "../src/background/config/keymap.ts";
 import { create_list_port } from "../src/chrome/view.ts";
 import type { About3PaneLike, ListPort } from "../src/chrome/view.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
@@ -97,6 +97,7 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
 const step = (id: string, runs_in: "chrome" | "background") => ({ invocation: { id }, runs_in, count_rule: "repeat" as const });
 const leaf = (id: string, runs_in: "chrome" | "background") => ({ kind: "leaf" as const, steps: [step(id, runs_in)] });
 const unrepeatable = (id: string) => ({ kind: "leaf" as const, steps: [{ ...step(id, "background"), repeatable: false }] });
+const keeps_selection = (id: string) => ({ kind: "leaf" as const, steps: [{ ...step(id, "background"), keeps_selection: true }] });
 const tree = () => ({
     version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION,
     root: {
@@ -110,6 +111,7 @@ const tree = () => ({
             ".": leaf("repeat.last", "chrome"),
             v: leaf("visual.toggle", "chrome"),
             r: leaf("msg.read", "background"),
+            s: keeps_selection("msg.flag"),
             D: unrepeatable("msg.delete"),
             g: { kind: "branch", children: { g: leaf("motion.top", "chrome") } },
             d: { kind: "branch", children: { d: leaf("msg.delete", "background") } },
@@ -866,7 +868,7 @@ test("a tab switch ends a half-typed sequence but not the last run", () => {
 // The real chain: the default keymap, the background's tagging, the runtime. A hand-built tree could not catch a tag that never reaches a leaf.
 function default_tree(tag: boolean) {
     const root = JSON.parse(JSON.stringify(compile_default_keymap().compiled.modes.normal));
-    if (tag) mark_unrepeatable(root);
+    if (tag) mark_steps(root);
     return { version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION, root };
 }
 
@@ -1044,6 +1046,26 @@ test("visual mode: a command collapses the selection to the current row, and a k
     press(window, "a", { target: { localName: "input" } });
     press(window, "j");
     assert.equal(window.range, null, "a key that went to a text field ended the mode");
+});
+
+test("visual mode: a command that leaves the rows keeps the range, and a delete still ends it", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, "v");
+    press(window, "j");
+    press(window, "s");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [102, 103]);
+    assert.deepEqual(window.range, [2, 3], "the flag command kept the range");
+    press(window, "s");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [102, 103], "a second command acts on the same range");
+    press(window, "j");
+    assert.deepEqual(window.range, [2, 4], "j still extends from the anchor");
+    press(window, "d");
+    press(window, "d");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [102, 103, 104]);
+    assert.equal(window.range, null, "delete ended visual mode");
 });
 
 test("visual mode: a message inserted inside an upward range drops the mode", () => {

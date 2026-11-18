@@ -3,7 +3,7 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
-import { UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_keymap, message_background_commands, registry } from "./commands/index.ts";
 import { tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -16,7 +16,7 @@ import { create_search_service } from "./search/service.ts";
 import { publish_theme } from "./theme/publish.ts";
 import { themed_hints } from "./theme/themed_hints.ts";
 import { write_to_clipboard } from "./handlers/clipboard.ts";
-import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
+import { compile_effective_keymap, effective_keymap, mark_steps } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
@@ -130,7 +130,7 @@ function is_current_record(value: unknown, source_hash: string): value is Keymap
 function tree_of(result: CompileResult): KeymapTree {
     for (const warning of result.warnings) console.warn(`desertbird keymap: ${warning}`);
     const root: KeymapTree["root"] = JSON.parse(JSON.stringify(result.compiled.modes.normal ?? { kind: "branch", children: {} }));
-    mark_unrepeatable(root as object);
+    mark_steps(root as object);
     return { version: COMPILED_KEYMAP_VERSION, root };
 }
 
@@ -149,7 +149,7 @@ let installed_tree_json: string | undefined;
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: message_keymap(config.user_keymap.normal), unrepeatable: [...UNREPEATABLE_IDS], settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: message_keymap(config.user_keymap.normal), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);

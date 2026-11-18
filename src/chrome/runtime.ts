@@ -90,7 +90,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         deps.emit({ command: "mode", mode: on ? "visual" : "normal", windowId: deps.window_id_of(told) });
     };
 
-    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command ends it too, so `x` or `d` acts on the range once.
+    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command that removes or moves rows ends it too, so `x` or `d` acts on the range once. One that leaves the rows (`m r`, `m s`) keeps it.
     let visual_anchor = -1;
     // Where the mode last put the current row, and the view and message keys at both ends of the range then. A key that finds anything else means the list changed under the mode (a click, new mail, a row inserted or removed inside the range, a sort or folder change), so the mode ends and the old anchor never reaches into the new list.
     let visual_end = -1;
@@ -120,8 +120,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
                 deps.emit({ command: step.invocation.id, args, count: step_count ?? 1, windowId: deps.window_id_of(window), messageIds: port.selected_message_ids() });
                 // The panel of the key list is not a typed prefix, so the next key reports the end of it.
                 if (step.invocation.id === KEY_LIST) was = 1;
-                // The range is taken. Collapsing to the current row keeps a following `d d` to one message.
-                if (visual_anchor >= 0) end_visual(port);
+                // The range is taken. Collapsing to the current row keeps a following `d d` to one message. A command whose rows stay in the list keeps the range.
+                if (visual_anchor >= 0 && !("keeps_selection" in step)) end_visual(port);
             }
         }
     }
