@@ -41,6 +41,8 @@ import { BRIDGE_HOST_NAME, create_bridge_port } from "./bridge/port.ts";
 import type { NativePort } from "./bridge/port.ts";
 import { create_bridge_reads } from "./bridge/reads.ts";
 import type { ReadsApi } from "./bridge/reads.ts";
+import { create_bridge_drafts } from "./bridge/drafts.ts";
+import type { DraftsApi } from "./bridge/drafts.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
@@ -229,6 +231,7 @@ const last_focused_main_window = async (): Promise<number | undefined> => {
 };
 const bridge_run = create_bridge_run({ target_window: last_focused_main_window, route: (invocation) => router.route(invocation) });
 const bridge_reads = create_bridge_reads({ api: messenger as unknown as ReadsApi, read_settings: async () => (await config_store.read()).settings });
+const bridge_drafts = create_bridge_drafts({ api: messenger as unknown as DraftsApi, read_settings: async () => (await config_store.read()).settings });
 const bridge = create_bridge_port({
     connect: () => messenger.runtime.connectNative(BRIDGE_HOST_NAME),
     read_bridge_setting: async () => (await config_store.read()).settings.bridge,
@@ -237,6 +240,7 @@ const bridge = create_bridge_port({
     run_command: (command_text) => bridge_run.run(command_text),
     list_commands: list_bridge_commands,
     read: (verb, request) => bridge_reads.read(verb, request),
+    draft: (request) => bridge_drafts.draft(request),
     async current_mode() {
         const window_id = await last_focused_main_window();
         if (window_id === undefined) return undefined;

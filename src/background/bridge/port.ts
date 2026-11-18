@@ -1,4 +1,4 @@
-// Talks to the bridge host over one `connectNative` port while the `bridge` setting is on. It publishes the mode of the last focused main window and answers the host's `list`, `run` and `state` requests. The frame shapes are the hand-off contract with the host (see README.md here).
+// Talks to the bridge host over one `connectNative` port while the `bridge` setting is on. It publishes the mode of the last focused main window and answers the host's `list`, `run`, `state`, read and `draft` requests. The frame shapes are the hand-off contract with the host (see README.md here).
 
 import type { KeysMode } from "../../shared/protocol.ts";
 import type { Timers } from "../hud/toasts.ts";
@@ -37,6 +37,8 @@ export interface BridgePortDeps {
     current_mode(): Promise<ModeSnapshot | undefined>;
     /** Answers a read frame. It checks its own settings and fields. */
     read(verb: ReadVerb, request: Record<string, unknown>): Promise<object>;
+    /** Answers a draft frame. It checks its own settings and fields. */
+    draft(request: Record<string, unknown>): Promise<object>;
 }
 
 export const FIRST_RETRY_MS = 1000;
@@ -48,12 +50,13 @@ const MODE_LABELS: Record<KeysMode["mode"], string> = { normal: "NORMAL", visual
 
 export const BRIDGE_OFF = { ok: false, message: "the bridge is off, set bridge to true" } as const;
 
-type Asked = { verb: "run"; command: string } | { verb: "list" } | { verb: "state" } | { verb: "read"; read: ReadVerb; request: Record<string, unknown> };
+type Asked = { verb: "run"; command: string } | { verb: "list" } | { verb: "state" } | { verb: "read"; read: ReadVerb; request: Record<string, unknown> } | { verb: "draft"; request: Record<string, unknown> };
 
 function asked_by(request: { verb?: unknown; command?: unknown }): Asked | undefined {
     if (request.verb === "list" || request.verb === "state") return { verb: request.verb };
     const read = READ_VERBS.find((verb) => verb === request.verb);
     if (read) return { verb: "read", read, request: request as Record<string, unknown> };
+    if (request.verb === "draft") return { verb: "draft", request: request as Record<string, unknown> };
     if (request.verb === "run" && typeof request.command === "string") return { verb: "run", command: request.command };
     return undefined;
 }
@@ -91,6 +94,7 @@ export function create_bridge_port(deps: BridgePortDeps) {
                 return snapshot ? { ok: true, mode: mode_fields(snapshot) } : { ok: false, message: "no mail window is open" };
             }
             if (asked.verb === "read") return await deps.read(asked.read, asked.request);
+            if (asked.verb === "draft") return await deps.draft(asked.request);
             // Read from storage, not from the flag: the setting can go off between the write and the `storage.onChanged` that closes this port.
             if (!(await deps.read_bridge_setting())) return BRIDGE_OFF;
             return await deps.run_command(asked.command);
