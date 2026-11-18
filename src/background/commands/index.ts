@@ -115,9 +115,10 @@ export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig 
 }
 
 // The message keys are the default layer, so a user key that extends a message key (`gfz` over `gf`) drops that key as it does in the mail tab.
-export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
+// `mail_root` is the mail tree with the user's keys, so a user's mail sequence ends in a message too.
+export function compile_message_keymap(user: KeymapConfig["normal"] = {}, mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch): CompileResult {
     const result = compile_keymap(message_keymap(user), {}, resolve_command, undefined, MESSAGE_KEYMAP);
-    complete_mail_sequences(result.compiled.modes.normal as TreeBranch, compile_default_keymap().compiled.modes.normal as TreeBranch);
+    complete_mail_sequences(result.compiled.modes.normal as TreeBranch, mail_root);
     return result;
 }
 
