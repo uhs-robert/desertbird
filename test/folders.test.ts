@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
+import { create_matcher } from "../vendor/desertfox/keys/matcher.ts";
+import { ANY_KEY } from "../vendor/desertfox/prefix_tree.ts";
+import { DEFAULT_KEYMAP, compile_bindings, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import type { MailFolder } from "../src/background/handlers/displayed_folder.ts";
 import { read_folder_state } from "../src/background/handlers/folder_state.ts";
 import { start_jump_history } from "../src/background/handlers/jump_history.ts";
@@ -16,15 +18,30 @@ const run = (api: RouterApi, command: string, args?: Record<string, string>, cou
 const notifications = (calls: string[]) => calls.filter((call) => call.startsWith("notify")).map((call) => call.slice(7));
 const updates = (calls: string[]) => calls.filter((call) => call.startsWith("mailTabs.update"));
 
-test("the keymap binds 21 mark leaves and 21 jump leaves with a fixed slot, and compiles with no warning", () => {
+test("M and ' bind one capture row each, and the key press fills the slot", () => {
     const { compiled, warnings } = compile_default_keymap();
     assert.deepEqual(warnings, []);
-    const normal = JSON.stringify(compiled.modes.normal);
-    for (const key of ["M", "'"]) assert.ok(normal.includes(`"${key}"`), `prefix ${key} is bound`);
-    const marks = ["a", "b", "c", "e", "h", "i", "j", "k", "l", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y"];
-    for (const slot of marks) for (const [command, key] of [["mark.set", "M"], ["mark.jump", "'"]] as const) assert.deepEqual(DEFAULT_KEYMAP.normal?.[`${key}${slot}`], { id: command, args: { slot } }, `${key}${slot}`);
-    assert.equal((normal.match(/"mark\.set"/g) ?? []).length, 21);
-    assert.equal((normal.match(/"mark\.jump"/g) ?? []).length, 21);
+    const normal = compiled.modes.normal as { children: Record<string, { kind: string; children: Record<string, { steps: { capture?: string }[] }> }> };
+    for (const [key, id] of [["M", "mark.set"], ["'", "mark.jump"]] as const) {
+        assert.equal(normal.children[key]?.kind, "branch", key);
+        assert.deepEqual(Object.keys(normal.children[key]?.children ?? {}), [ANY_KEY], key);
+        assert.equal(normal.children[key]?.children[ANY_KEY]?.steps[0]?.capture, "slot", key);
+        const matcher = create_matcher(compiled);
+        assert.equal(matcher.feed("normal", key).kind_, "pending");
+        const result = matcher.feed("normal", "q");
+        assert.equal(result.kind_, "match");
+        assert.deepEqual((result as { leaf: { steps: { invocation: unknown }[] } }).leaf.steps[0]?.invocation, { id, args: { slot: "q" } });
+    }
+    assert.equal(create_matcher(compiled).feed("normal", "M").kind_, "pending");
+});
+
+test("a saved binding of one slot keeps working, and the default capture row yields to it with a warning", () => {
+    const { compiled, warnings } = compile_bindings({ ...DEFAULT_KEYMAP, normal: { ...DEFAULT_KEYMAP.normal, Ma: { id: "mark.set", args: { slot: "a" } } } }, {}, DEFAULT_KEYMAP);
+    assert.deepEqual(warnings, ['normal: dropped default keys that your keys extend: "M" by Ma']);
+    const matcher = create_matcher(compiled);
+    matcher.feed("normal", "M");
+    const result = matcher.feed("normal", "a");
+    assert.deepEqual((result as { leaf: { steps: { invocation: unknown }[] } }).leaf.steps[0]?.invocation, { id: "mark.set", args: { slot: "a" } });
 });
 
 test("m p stays unbound in the default keymap and g p holds the Thunderbird pages", () => {
@@ -148,8 +165,8 @@ test("an unset mark and a mark on a deleted folder refuse with a readable messag
     assert.deepEqual(notifications(gone.calls), ["Mark q points to /Work/Plans, which no longer exists."]);
 });
 
-test("the slot reaches the handler as an argument and the validator rejects any other slot", async () => {
-    for (const slot of ["z", "ab", "", "A"]) {
+test("the slot reaches the handler as an argument and the validator rejects a slot that is not one key", async () => {
+    for (const slot of ["ab", ""]) {
         const { api, calls } = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder });
         await run(api, "mark.set", { slot });
         assert.equal(calls.some((call) => call.startsWith("storage.set")), false, `slot ${JSON.stringify(slot)}`);

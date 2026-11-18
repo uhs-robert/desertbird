@@ -11,11 +11,8 @@ import type { CommandDefinition } from "./define.ts";
 
 const SPECIAL = ["inbox", "trash", "drafts", "sent", "archive", "junk"];
 
-// The slots the marks bind. A slot is one key, and the keymap holds one leaf per slot because the chrome matcher passes no typed key on to a command.
-const SLOTS = [..."abcehijklnopqrstuvwxy"];
-const SLOT_PARAM = { name: "slot", type: "string", main: true, pattern: `^[${SLOTS.join("")}]$`, description: "Name the one-letter slot of the mark." } as const;
-
-const slot_keys = (prefix: string, id: string) => Object.fromEntries(SLOTS.map((slot) => [`${prefix}${slot}`, { id, args: { slot } }]));
+// The slot is a `key` param that the bindings leave out, so the key press after `M` or `'` fills it (`with_captures` in `commands/captures.ts` builds the branch).
+const SLOT_PARAM = { name: "slot", type: "key", description: "Name the one-key slot of the mark." } as const;
 
 // `o` opens the command line on `open `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
 export const folders: CommandGroup = {
@@ -69,7 +66,7 @@ export const folders: CommandGroup = {
         gs: { id: "folder.open", args: { special: "sent" }, label: "Sent" },
         "<C-o>": { id: "jump.back" },
         "<C-i>": { id: "jump.forward" },
-        ...slot_keys("M", "mark.set"),
-        ...slot_keys("'", "mark.jump"),
+        M: { id: "mark.set", label: "Set mark" },
+        "'": { id: "mark.jump", label: "Jump to mark" },
     },
 };

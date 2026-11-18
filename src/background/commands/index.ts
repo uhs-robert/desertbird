@@ -4,6 +4,8 @@ import { create_registry } from "../../../vendor/desertfox/registry/define.ts";
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult, ResolveCommand } from "../../../vendor/desertfox/keys/compiler.ts";
+import type { Settings } from "../config/settings.ts";
+import { with_captures } from "./captures.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
 import { app } from "./app.ts";
 import { attachments } from "./attachments.ts";
@@ -62,8 +64,6 @@ export const GROUP_NAMES: Record<string, string> = {
     ";": "Hints",
     "]": "Next",
     "[": "Previous",
-    M: "Set mark",
-    "'": "Jump to mark",
     d: "Delete",
 };
 
@@ -74,8 +74,15 @@ export const resolve_command: ResolveCommand = (command_id) => {
     return command && { runs_in: command.runs_in, label: command.label, count: command.count ?? "ignore", ...(command.params && { params: command.params }) };
 };
 
+/** The vendored compiler plus the capture branches of the leaves that wait for a key (`M` and `'`). */
+export function compile_bindings(keymap: KeymapConfig, settings: Partial<Settings>, default_layer?: KeymapConfig): CompileResult {
+    const result = compile_keymap(keymap, settings, resolve_command, undefined, default_layer);
+    if (result.compiled.modes.normal) with_captures(result.compiled.modes.normal, (id) => registry.get(id));
+    return result;
+}
+
 export function compile_default_keymap(): CompileResult {
-    return compile_keymap(DEFAULT_KEYMAP, {}, resolve_command);
+    return compile_bindings(DEFAULT_KEYMAP, {});
 }
 
 // The groups whose mail keys also work while a message has the focus. They act on the displayed messages, which the body request reads from the sender tab. Every other group needs the thread list or the mail tab, so its keys stay out.
@@ -114,7 +121,7 @@ export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig 
 
 // The message keys are the default layer, so a user key that extends a message key (`gfz` over `gf`) drops that key as it does in the mail tab.
 export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
-    return compile_keymap(message_keymap(user), {}, resolve_command, undefined, MESSAGE_KEYMAP);
+    return compile_bindings(message_keymap(user), {}, MESSAGE_KEYMAP);
 }
 
 /** The ids of the background commands a message key may run, by default or by a user key. The background runs a request of the body script only for these. A command bound only to a list key (`mR`) stays out, since it needs the list. */
