@@ -118,40 +118,34 @@ function step_history(direction: 1 | -1): void {
     refresh_line().catch(report_failure);
 }
 
-function step_highlight(step: 1 | -1): void {
-    highlighted = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
-    draw_rows();
-}
-
-// While C-n and C-p preview rows, the rows and the text they apply to stay as they were. A new completion would reset the highlight to the first row. Typing or Tab ends the preview.
+// While Tab, C-n, C-p and the arrow keys preview rows, the rows and the text they apply to stay as they were. A new completion would reset the highlight to the first row. Typing ends the preview.
 let preview_base: string | null = null;
 
-function preview_row(step: 1 | -1): void {
-    walking_history = false;
-    if (completion.rows.length === 0) return;
+function preview_at(index: number): void {
     preview_base ??= input.value;
-    highlighted = cycle_index(highlighted, step, completion.rows.length);
-    const picked = apply_pick(preview_base, { start: completion.start, end: completion.end, insert: completion.rows[highlighted]!.insert });
+    highlighted = index;
+    const picked = apply_pick(preview_base, { start: completion.start, end: completion.end, insert: completion.rows[index]!.insert });
     input.value = picked.text;
     input.setSelectionRange(picked.caret, picked.caret);
     draw_rows();
 }
 
-/** Puts a row into the line. Tab takes the highlighted row, or the first. */
-function accept_row(index: number): void {
+// Tab, C-n and A-Down step next, S-Tab, C-p and A-Up step back, and both wrap. A single match goes into the line at once and the rows are ranked for the new text.
+function cycle_rows(step: 1 | -1): void {
     walking_history = false;
-    if (preview_base !== null) {
-        // The preview already put the row in. Tab keeps it and asks for the rows of the new text.
+    const row_count = completion.rows.length;
+    if (row_count === 0) return;
+    preview_at(cycle_index(highlighted, step, row_count));
+    if (row_count === 1) {
         preview_base = null;
         refresh_completion().catch(report_failure);
-        return;
     }
-    const row = completion.rows[index];
-    if (!row) return;
-    const picked = apply_pick(input.value, { start: completion.start, end: completion.end, insert: row.insert });
-    input.value = picked.text;
-    input.setSelectionRange(picked.caret, picked.caret);
-    refresh_completion().catch(report_failure);
+}
+
+// Up and Down stop at the ends, as in DesertFox, and put the row in the line like the cycle keys.
+function step_rows(step: 1 | -1): void {
+    const target = move_highlight(shown_highlight(highlighted, completion.rows.length, completion.highlight_first), step, completion.rows.length);
+    if (target >= 0) preview_at(target);
 }
 
 function line_to_run(): string {
@@ -195,18 +189,20 @@ window.addEventListener(
         } else if (event.key === "Enter") {
             event.preventDefault();
             run_line().catch(report_failure);
+        } else if (!search_direction && (event.key === "Tab" || (event.ctrlKey && (event.key === "n" || event.key === "p")) || (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")))) {
+            event.preventDefault();
+            const forward = event.key === "Tab" ? !event.shiftKey : event.key === "n" || event.key === "ArrowDown";
+            cycle_rows(forward ? 1 : -1);
         } else if (event.key === "Tab") {
             event.preventDefault();
-            if (!search_direction) accept_row(highlighted < 0 ? 0 : highlighted);
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             const step = event.key === "ArrowDown" ? 1 : -1;
             if (search_direction || arrow_target(walking_history, completion.rows.length) === "history") step_history(step);
-            else step_highlight(step);
-        } else if (event.ctrlKey && (event.key === "n" || event.key === "p")) {
+            else step_rows(step);
+        } else if (search_direction && event.ctrlKey && (event.key === "n" || event.key === "p")) {
             event.preventDefault();
-            if (search_direction) step_history(event.key === "n" ? 1 : -1);
-            else preview_row(event.key === "n" ? 1 : -1);
+            step_history(event.key === "n" ? 1 : -1);
         }
     },
     true,
@@ -239,9 +235,9 @@ async function start(): Promise<void> {
     window.focus();
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
-    if (!search_direction) await refresh_completion();
-    // After the line is ready: a slow or failed read must not hold up typing.
+    // History is a local read, so it goes first: a failed completion request must not skip it.
     await load_history();
+    if (!search_direction) await refresh_completion();
 }
 
 start().catch(report_failure);
