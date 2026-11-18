@@ -315,7 +315,7 @@ function line_setup(options: { commit_error?: string; commit_gate?: Promise<void
     const histories: string[] = [];
     const service = create_cmdline_service({
         registry,
-        sources: { folders: async () => [], tags: async () => [] },
+        sources: { folders: async () => [], tags: async () => [], tabs: async () => [] },
         overlay: { mount: async () => {}, unmount: async (args) => void log.push(`unmount ${args.windowId}`), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         history: { record: async () => {} },
         search_history: { record: async (line) => void histories.push(line) },
@@ -407,12 +407,12 @@ test("the search keys open the line as a search line and a failed mount drops th
     assert.ok(calls.includes("search.step 3 same") && calls.includes("search.step 3 opposite"));
 });
 
-test("? is backward search and g? is help, / and n and N are bound in the mail tab and ? is free in no other place", async () => {
+test("? is backward search and g? is the key list, / and n and N are bound in the mail tab and ? is free in no other place", async () => {
     const { DEFAULT_KEYMAP, MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
     const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: Record<string, unknown> }>;
     assert.deepEqual(normal["?"], { id: "search.open", args: { direction: "backward" } });
     assert.deepEqual(normal["/"], { id: "search.open", args: { direction: "forward" } });
-    assert.equal(normal["g?"]?.id, "help.open");
+    assert.equal(normal["g?"]?.id, "help.whichkey");
     assert.deepEqual([normal["n"]?.id, normal["N"]?.id], ["search.next", "search.prev"]);
     // The message pane keeps its own find on / n N.
     const message = MESSAGE_KEYMAP.normal as Record<string, { id: string }>;

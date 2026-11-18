@@ -4,6 +4,8 @@ import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { tab_choices } from "./handlers/tabs.ts";
+import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
 import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
@@ -69,7 +71,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
             /** Fires with -1 when no window of the application has the focus. */
             onFocusChanged: { addListener(listener: (window_id: number) => void): void };
         };
-    tabs: { onActivated: { addListener(listener: () => void): void } };
+    tabs: Pick<TabsApi["tabs"], "query"> & { onActivated: { addListener(listener: () => void): void } };
     messages: RouterApi["messages"] & NewMailApi["messages"];
     mailTabs: RouterApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> };
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
@@ -206,6 +208,7 @@ const cmdline = create_cmdline_service({
     sources: {
         folders: create_folder_source(messenger),
         tags: async () => (await messenger.messages.tags.list()).map((entry) => entry.tag),
+        tabs: (window_id) => tab_choices(messenger, window_id),
     },
     overlay: command_line_overlay,
     history: create_cmdline_history(messenger.storage.local),
@@ -213,7 +216,7 @@ const cmdline = create_cmdline_service({
     search,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
+const router = create_router(registry, { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation), hints: messenger.hints });
 

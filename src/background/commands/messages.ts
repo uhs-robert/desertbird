@@ -1,11 +1,11 @@
 import { archive, delete_messages } from "../handlers/message.ts";
 import type { TrashApi } from "../handlers/message.ts";
-import { add_tag, copy_messages, move_messages, read_all, set_read, toggle_flag, toggle_junk } from "../handlers/message_state.ts";
+import { copy_messages, move_messages, read_all, set_read, toggle_flag, toggle_junk, toggle_tag } from "../handlers/message_state.ts";
 import { ACCOUNT_PARAM } from "./account_param.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// `msg.tag`, `msg.move` and `msg.copy` take a typed value, so they have no default key until the command line exists. Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
+// `msg.tag`, `msg.move` and `msg.copy` take a typed value, so they open on the command line (`mt`, `mm`, `mc`). Their `values.from` feeds that line's completion only. The tag pattern rejects text with spaces at either end, the folder pattern takes any non-empty word, so a fuzzy word reaches the handler.
 const FOLDER_PARAM = { name: "folder", type: "string", main: true, values: { from: "folders" }, pattern: "^\\S.*" } as const;
 
 export const messages: CommandGroup = {
@@ -33,10 +33,10 @@ export const messages: CommandGroup = {
             bridge: false,
             runs_in: "background",
             name: "tag",
-            label: "Tag",
-            intent: "Add a tag to the selected messages.",
+            label: "Toggle tag",
+            intent: "Toggle a tag on the selection. The first message decides: if it has the tag, the tag comes off every message, else it goes on every message.",
             params: [{ name: "tag", type: "string", main: true, values: { from: "tags" }, pattern: "^\\S(.*\\S)?$" }],
-            run: scoped(add_tag),
+            run: scoped(toggle_tag),
         },
         "msg.move": {
             bridge: false,

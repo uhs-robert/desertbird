@@ -8,7 +8,7 @@ import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
 import type { KeysInstallArgs, KeysEvent } from "../shared/protocol.ts";
 import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
-import { create_list_port, front_about_3pane, view_verbs } from "./view.ts";
+import { create_list_port, front_about_3pane, tab_kind, view_verbs } from "./view.ts";
 import type { About3PaneLike } from "./view.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
@@ -36,6 +36,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             const about_3pane = front_about_3pane(tabmail_of(window));
             return about_3pane && create_list_port(about_3pane, mail_extension_id_of);
         },
+        tab_kind_of: (window) => tab_kind(tabmail_of(window)),
         folder_port_of(window) {
             const tree = focused_pane(window.document) === 0 ? front_about_3pane<About3PaneLike & { folderTree: FolderTreeLike }>(tabmail_of(window))?.folderTree : null;
             // The setter selects the row, scrolls it into view and opens the folder, as Thunderbird's own Down key does.

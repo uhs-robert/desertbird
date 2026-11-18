@@ -28,6 +28,8 @@ export interface HudService {
     toast(window_id: number, text: string, is_error: boolean): Promise<boolean>;
     /** The command line opened or closed in the window. Its box covers the bottom of the window, so the toasts move above it. */
     set_lifted(window_id: number, lifted: boolean): void;
+    /** Shows the panel of the root keys in the window, with no typed prefix and no delay. It stays until the next key is reported, a tab change or a window blur. */
+    show_root(window_id: number): Promise<void>;
     /** Closes the which-key panel of every window, or of every window but one. A tab change or a window losing focus calls this. */
     close_which_key(except_window_id?: number): void;
     /** A main window exists. The mode label may need to show in it. */
@@ -184,6 +186,17 @@ export function create_hud_service(deps: HudDeps): HudService {
             const hud = hud_of(window_id);
             hud.lifted = lifted;
             void changed(window_id);
+        },
+        async show_root(window_id) {
+            if (window_id < 0) return;
+            // Any other window's panel is stale once this one shows.
+            for (const [other_id, other] of windows) if (other_id !== window_id) void end_which_key(other_id, other);
+            const hud = hud_of(window_id);
+            hud.sequence++;
+            deps.timers.clear(hud.delay_timer);
+            hud.delay_timer = undefined;
+            hud.which_key_keys = [];
+            await changed(window_id);
         },
         close_which_key(except_window_id) {
             for (const [window_id, hud] of windows) if (window_id !== except_window_id) void end_which_key(window_id, hud);

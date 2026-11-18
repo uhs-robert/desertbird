@@ -12,7 +12,7 @@ declare const messenger: {
 
 follow_theme();
 
-// A panel with more keys than this is cut, so it never grows past the box it sits in.
+// A panel after a typed prefix with more keys than this is cut, so it never grows past the box it sits in. The root list is the key list itself and shows every key, in more columns.
 const MAX_ROWS = 24;
 
 const window_id = Number(new URLSearchParams(location.search).get("window"));
@@ -29,15 +29,17 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, class_name: string,
 function draw_which_key(panel: HudState["which_key"]): void {
     which_key_element.hidden = panel === null;
     if (panel === null) return;
-    which_key_element.className = panel.border;
+    const is_root = panel.title === "";
+    which_key_element.className = is_root ? `${panel.border} root` : panel.border;
+    const shown_rows = is_root ? panel.rows : panel.rows.slice(0, MAX_ROWS);
     const rows = make("div", "rows");
-    for (const row of panel.rows.slice(0, MAX_ROWS)) {
+    for (const row of shown_rows) {
         const line = make("div", "row");
         line.append(make("span", "key", row.key), make("span", row.is_group ? "group" : "command", row.is_group ? `+${row.label}` : row.label));
         rows.append(line);
     }
-    if (panel.rows.length > MAX_ROWS) rows.append(make("div", "row group", `... ${panel.rows.length - MAX_ROWS} more`));
-    which_key_element.replaceChildren(make("div", "title", `after ${panel.title}`), rows);
+    const hidden_count = panel.rows.length - shown_rows.length;
+    which_key_element.replaceChildren(make("div", "title", is_root ? "keys" : `after ${panel.title}`), rows, ...(hidden_count > 0 ? [make("div", "row group", `... ${hidden_count} more`)] : []));
 }
 
 function draw(state: HudState): void {

@@ -47,8 +47,16 @@ test("the user's bindings change the listed keys: a rebound key moves and an unb
     assert.deepEqual(archive?.keys.map((key) => key.keys), ["X"]);
 });
 
-test("help.open is bound to g? and opens the page in the key's window", async () => {
-    assert.deepEqual(all_entries().find((entry) => entry.id === "help.open")?.keys, [{ keys: "g?", args: "", where: "" }]);
+test("g? shows the root keys and the help page keeps no key outside a message", async () => {
+    assert.deepEqual(all_entries().find((entry) => entry.id === "help.whichkey")?.keys, [{ keys: "g?", args: "", where: "" }]);
+    assert.deepEqual(DEFAULT_KEYMAP.normal?.["g?"], { id: "help.whichkey" });
+    const shown: number[] = [];
+    const api = { notifications: { create: async () => "n" }, keys: undefined, which_key: { show_root: async (window_id: number) => void shown.push(window_id) } };
+    await create_router(registry, api as unknown as RouterApi).run({ command: "help.whichkey", args: {}, count: 1, windowId: 4, messageIds: [] });
+    assert.deepEqual(shown, [4]);
+});
+
+test("help.open opens the page in the key's window", async () => {
     const calls: string[] = [];
     const api = {
         runtime: { getURL: (path: string) => `moz-extension://x/${path}` },
