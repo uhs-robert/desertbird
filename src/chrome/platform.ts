@@ -45,7 +45,9 @@ export function load_platform(): Platform {
     };
 }
 
-export const open_main_windows = (): MainWindow[] => Array.from(Services.wm.getEnumerator(MAIN_WINDOW_TYPE));
+export const open_windows = (type: string): MainWindow[] => Array.from(Services.wm.getEnumerator(type));
+
+export const open_main_windows = (): MainWindow[] => open_windows(MAIN_WINDOW_TYPE);
 
 export const tabmail_of = (window: MainWindow): TabmailLike | null => window.document.getElementById("tabmail") as TabmailLike | null;
 

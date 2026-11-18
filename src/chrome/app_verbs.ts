@@ -2,7 +2,7 @@
 
 import { focused_pane } from "./focus.ts";
 import type { MainWindow, ExtensionContext } from "./platform.ts";
-import { guard } from "./platform.ts";
+import { guard, open_main_windows, open_windows, tabmail_of } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
 import type { ThreadVerbPane } from "./view.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
@@ -37,7 +37,22 @@ interface AppPane extends ThreadVerbPane {
     browsingContext: { topChromeWindow: AppWindow };
 }
 
-const CONTROLLERS = { cmd_openConversation: (pane: AppPane) => pane.commandController as Controller };
+interface ControllerHolder {
+    commandController?: Controller;
+}
+
+const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
+
+// `about:3pane`, `about:message` of a message tab or window: each controller acts on its own page's message.
+const CONTROLLERS = { cmd_openConversation: (holder: ControllerHolder) => holder.commandController };
+
+function controller_holder_of(context: ExtensionContext, window_id: number): ControllerHolder | null | undefined {
+    const is_window = (candidate: MainWindow) => context.extension.windowManager.getWrapper(candidate)?.id === window_id;
+    const message_window = open_windows(MESSAGE_WINDOW_TYPE).find(is_window) as (MainWindow & { messageBrowser?: { contentWindow?: ControllerHolder | null } }) | undefined;
+    if (message_window) return message_window.messageBrowser?.contentWindow;
+    const main_window = open_main_windows().find(is_window);
+    return main_window && (tabmail_of(main_window)?.currentTabInfo?.chromeBrowser?.contentWindow as ControllerHolder | null | undefined);
+}
 
 const PAGES = {
     addons: (window: AppWindow) => window.openAddonsMgr("addons://list/extension"),
@@ -69,7 +84,9 @@ export function app_verbs(context: ExtensionContext) {
             return !!element;
         }),
         appCommand: guard("keys.appCommand", ({ windowId, name }: KeysAppCommandArgs): boolean => {
-            const controller = CONTROLLERS[name](pane_of(windowId));
+            const holder = controller_holder_of(context, windowId);
+            const controller = holder && CONTROLLERS[name](holder);
+            if (!controller) throw new Error("the window shows no message");
             const enabled = controller.isCommandEnabled(name);
             if (enabled) controller.doCommand(name);
             return enabled;

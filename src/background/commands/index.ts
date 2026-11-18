@@ -4,6 +4,8 @@ import { create_registry } from "../../../vendor/desertfox/registry/define.ts";
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult, ResolveCommand } from "../../../vendor/desertfox/keys/compiler.ts";
+import { ANY_KEY } from "../../../vendor/desertfox/prefix_tree.ts";
+import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { Settings } from "../config/settings.ts";
 import { with_captures } from "./captures.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
@@ -121,7 +123,18 @@ export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig 
 
 // The message keys are the default layer, so a user key that extends a message key (`gfz` over `gf`) drops that key as it does in the mail tab.
 export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
-    return compile_bindings(message_keymap(user), {}, MESSAGE_KEYMAP);
+    const result = compile_bindings(message_keymap(user), {}, MESSAGE_KEYMAP);
+    complete_mail_sequences(result.compiled.modes.normal as TreeBranch, compile_default_keymap().compiled.modes.normal as TreeBranch);
+    return result;
+}
+
+// A mail sequence that the message tree lacks (`] a`, `g p a`, `; ; y`) would break partway, and the matcher retries the rest from the root, where `a` archives and `; y` copies a link. So every such sequence gets a leaf that runs nothing. A prefix the message tree lacks also takes any one key, so after a list prefix no key runs (`2 t a`). A mail key of one token stays out: nothing shorter can run in its place, and an absent chord must reach Thunderbird. A mail leaf whose key a capture (`ANY_KEY`) of the message branch takes is no gap. The compiler has no empty leaf, so this adds them after the compile.
+function complete_mail_sequences(message_branch: TreeBranch, mail_branch: TreeBranch, is_root = true): void {
+    for (const [token, mail_node] of Object.entries(mail_branch.children)) {
+        if (mail_node.kind === "leaf" && (is_root || (message_branch.children[ANY_KEY] && [...token].length === 1))) continue;
+        const message_node = (message_branch.children[token] ??= mail_node.kind === "leaf" ? { kind: "leaf", steps: [] } : { kind: "branch", children: { [ANY_KEY]: { kind: "leaf", steps: [] } } });
+        if (mail_node.kind === "branch" && message_node.kind === "branch") complete_mail_sequences(message_node, mail_node, false);
+    }
 }
 
 /** The ids of the background commands a message key may run, by default or by a user key. The background runs a request of the body script only for these. A command bound only to a list key (`mR`) stays out, since it needs the list. */

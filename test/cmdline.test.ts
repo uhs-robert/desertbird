@@ -142,6 +142,15 @@ test("completion offers the flags of a command and the value of an enum flag", a
     assert.ok(flags.rows.some((row) => row.name.startsWith("--descending")));
 });
 
+test("hint is a typed command: it parses with its action flags and completion lists it", async () => {
+    assert.deepEqual(parse("hint"), { kind: "invocation", invocation: { id: "hint.window" } });
+    assert.deepEqual(parse("hint --yank"), { kind: "invocation", invocation: { id: "hint.window", args: { action: "yank" } } });
+    const flags = await complete("hint --", 7, no_selection);
+    assert.ok(flags.rows.some((row) => row.name.startsWith("--focus")));
+    assert.ok(flags.rows.some((row) => row.name.startsWith("--yank")));
+    assert.ok((await complete("hin", 3, no_selection)).rows.some((row) => row.name.startsWith("hint")));
+});
+
 test("completion gives nothing inside a quote or for an unknown command", async () => {
     assert.deepEqual((await complete('tag "Wo', 7, no_selection)).rows, []);
     assert.deepEqual((await complete("bogus x", 7, no_selection)).rows, []);
