@@ -1,7 +1,7 @@
 // The keys of a compose body: Ctrl+E, and the modes with their `e`. It holds no browser global: `start_compose_keys` takes the window, the runtime and the label as arguments, so node tests drive it with stubs.
 
 import type { ComposeEditRequest } from "../shared/protocol.ts";
-import type { ComposeMode } from "./compose_mode_label.ts";
+import type { ComposeMode, LabelState } from "./compose_mode_label.ts";
 
 export interface ComposeKeyEvent {
     key: string;
@@ -32,15 +32,15 @@ const is_plain_chord = (event: ComposeKeyEvent, key: string, ctrl: boolean): boo
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "NumLock", "OS"]);
 
 /**
- * Insert mode holds while the body has focus: every key passes to the editor except Ctrl+E and Ctrl+O. Ctrl+O and Escape make the next key a normal-mode key. In that key `e` asks the background to edit this message, and any other key passes unchanged and ends the one-shot. Focus leaving the body shows normal mode, though a key typed elsewhere never reaches this script.
+ * Insert mode holds while the body has focus: every key passes to the editor except Ctrl+E and Ctrl+O. Ctrl+O and Escape make the next key a normal-mode key. In that key `e` asks the background to edit this message, and any other key passes unchanged and ends the one-shot. Focus leaving the body hides the label and drops a pending one-shot. A key typed outside the body never reaches this script.
  * The setting is checked in the background, which says so when it is off.
  */
-export function start_compose_keys(window: ComposeWindow, runtime: ComposeRuntime, show_mode: (mode: ComposeMode) => void, has_focus: boolean): void {
-    let mode: ComposeMode = has_focus ? "insert" : "normal";
+export function start_compose_keys(window: ComposeWindow, runtime: ComposeRuntime, show_mode: (state: LabelState) => void, has_focus: boolean): void {
+    let mode: ComposeMode = "insert";
     // A held `e` or Ctrl+O repeats after the first press took it. The repeats must not reach the body or spend the one-shot.
     let swallow_repeat = false;
     const set_mode = (next: ComposeMode): void => void (show_mode((mode = next)));
-    show_mode(mode);
+    show_mode(has_focus ? mode : "hidden");
 
     const ask_to_edit = (event: ComposeKeyEvent): void => {
         event.preventDefault();
@@ -51,7 +51,7 @@ export function start_compose_keys(window: ComposeWindow, runtime: ComposeRuntim
     };
 
     window.addEventListener("focus", () => set_mode("insert"), false);
-    window.addEventListener("blur", () => set_mode("normal"), false);
+    window.addEventListener("blur", () => void ((mode = "insert"), show_mode("hidden")), false);
     window.addEventListener(
         "keydown",
         (event) => {

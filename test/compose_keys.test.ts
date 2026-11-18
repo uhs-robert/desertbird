@@ -3,11 +3,11 @@ import { test } from "node:test";
 import { start_compose_keys } from "../src/content/compose_edit_key.ts";
 import type { ComposeKeyEvent } from "../src/content/compose_edit_key.ts";
 import { create_mode_label } from "../src/content/compose_mode_label.ts";
-import type { ComposeMode, LabelDocument } from "../src/content/compose_mode_label.ts";
+import type { LabelDocument, LabelState } from "../src/content/compose_mode_label.ts";
 
 function setup(has_focus = true) {
     const sent: unknown[] = [];
-    const modes: ComposeMode[] = [];
+    const modes: LabelState[] = [];
     let key_listener: ((event: ComposeKeyEvent) => void) | undefined;
     const plain_listeners: Record<string, () => void> = {};
     let capture = false;
@@ -61,16 +61,19 @@ test("a held Ctrl+E asks once and still keeps the repeats from the editor", () =
     assert.equal(sent.length, 1);
 });
 
-test("the label starts as insert with focus in the body and as normal without", () => {
+test("the label starts as insert with focus in the body and hidden without", () => {
     assert.deepEqual(setup(true).modes, ["insert"]);
-    assert.deepEqual(setup(false).modes, ["normal"]);
+    assert.deepEqual(setup(false).modes, ["hidden"]);
 });
 
-test("focus out of the body shows normal and focus back shows insert", () => {
-    const { modes, blur, focus } = setup();
+test("focus out of the body hides the label, drops a pending one-shot and focus back shows insert", () => {
+    const { sent, modes, press, blur, focus } = setup();
+    press("o", { ctrlKey: true });
     blur();
     focus();
-    assert.deepEqual(modes, ["insert", "normal", "insert"]);
+    assert.deepEqual(modes, ["insert", "normal", "hidden", "insert"]);
+    assert.ok(untouched(press("e")));
+    assert.deepEqual(sent, []);
 });
 
 test("in insert mode `e` and every other plain key pass to the editor", () => {
@@ -186,4 +189,6 @@ test("the label is a style sheet on the document and adds no node", () => {
     assert.match(sheet.css, /pointer-events:none/);
     show("normal");
     assert.match(sheet.css, /content:"-- NORMAL --"/);
+    show("hidden");
+    assert.equal(sheet.css, "");
 });

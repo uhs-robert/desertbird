@@ -1917,6 +1917,9 @@ async function run_compose_editor(instance) {
   const draft = await instance.ask("save_draft_raw", 30000);
   state = await instance.ask("state");
   const label_pattern = /-- (INSERT|NORMAL) --/;
+  await instance.press(["-M", "shift", "-k", "Tab", "-m", "shift"]);
+  await sleep(500);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_unfocused_label`), name: "unfocused_label", line: "compose window with focus out of the body, no label" });
   check(app, kind, "the mode label is in neither the body nor the saved draft", !label_pattern.test(compose_tab(state)?.html ?? "") && !label_pattern.test(body_of(state)) && !label_pattern.test(draft.raw ?? "") && (draft.raw ?? "").includes(EDITED_TEXT), `draft ${JSON.stringify((draft.raw ?? "").slice(-300))}`);
   await instance.ask("close_compose");
   await sleep(1500);

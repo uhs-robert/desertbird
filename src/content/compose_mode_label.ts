@@ -2,6 +2,9 @@
 
 export type ComposeMode = "insert" | "normal";
 
+/** What the label shows: a mode, or nothing while the body has no focus. */
+export type LabelState = ComposeMode | "hidden";
+
 export interface LabelSheet {
     replaceSync(css: string): void;
 }
@@ -11,12 +14,14 @@ export interface LabelDocument {
 }
 
 // An element in a shadow root, which the first version used, still left an empty `div` after the body in a saved HTML draft. System colors keep the label neutral in a light or dark window. The mouse passes through it.
-const label_css = (mode: ComposeMode): string =>
-    `html::after{content:"-- ${mode.toUpperCase()} --";position:fixed;right:6px;bottom:4px;z-index:2147483647;pointer-events:none;font:11px monospace;padding:1px 5px;color:CanvasText;background:Canvas;border:1px solid GrayText;border-radius:3px;opacity:0.85}`;
+const label_css = (state: LabelState): string =>
+    state === "hidden"
+        ? ""
+        : `html::after{content:"-- ${state.toUpperCase()} --";position:fixed;right:6px;bottom:4px;z-index:2147483647;pointer-events:none;font:11px monospace;padding:1px 5px;color:CanvasText;background:Canvas;border:1px solid GrayText;border-radius:3px;opacity:0.85}`;
 
 /** Adds the label to the document and returns the function that sets its text. */
-export function create_mode_label(document: LabelDocument, new_sheet: () => LabelSheet): (mode: ComposeMode) => void {
+export function create_mode_label(document: LabelDocument, new_sheet: () => LabelSheet): (state: LabelState) => void {
     const sheet = new_sheet();
     document.adoptedStyleSheets.push(sheet);
-    return (mode) => sheet.replaceSync(label_css(mode));
+    return (state) => sheet.replaceSync(label_css(state));
 }
