@@ -100,7 +100,7 @@ test("with no main window open nothing runs", async () => {
 
 test("a handler failure comes back as fixed text, so no folder name or subject leaves", async () => {
     const { run } = run_under_test({ route: () => Promise.reject(new Error("No folder named Secret Plans")) });
-    assert.deepEqual(await run("folder.open --folder=Secret"), { ok: false, message: "folder.open failed" });
+    assert.deepEqual(await run("pane.toggle folder"), { ok: false, message: "pane.toggle failed" });
 });
 
 test("list holds exactly the commands run accepts", async () => {
@@ -120,4 +120,27 @@ test("list withholds folder, tag and tab names: a dynamic param carries only its
     for (const [id, values] of dynamic) assert.deepEqual(Object.keys(values as object), ["from"], id as string);
     const listed = list_bridge_commands();
     assert.ok(listed.every((command) => Object.keys(command).every((key) => ["id", "label", "name", "aliases", "intent", "params", "count"].includes(key))));
+});
+
+// The ok or failed bit of a run is an oracle: a caller can probe text against mail it may not read.
+test("search.message is refused, so a caller cannot probe the shown message body", async () => {
+    const { run, routed } = run_under_test();
+    assert.deepEqual(await run("search.message Password"), { ok: false, message: "search.message never runs through the bridge" });
+    assert.deepEqual(routed, []);
+});
+
+test("tab.switch takes only a tab number, never a title to match", async () => {
+    const { run, routed } = run_under_test();
+    assert.deepEqual(await run("tab.switch Budget"), { ok: false, message: "tab.switch takes only a tab number through the bridge" });
+    assert.deepEqual(await run("tab.switch 2"), { ok: true });
+    assert.deepEqual(routed.map((invocation) => invocation.args), [{ tab: "2" }]);
+});
+
+test("folder.open takes only a special folder, never a folder path or an account name", async () => {
+    const { run, routed } = run_under_test();
+    const refusal = { ok: false, message: "folder.open takes only a special folder through the bridge" };
+    assert.deepEqual(await run("folder.open Inbox/Private"), refusal);
+    assert.deepEqual(await run("folder.open --special=inbox --account=Work"), refusal);
+    assert.deepEqual(await run("folder.open --special=inbox"), { ok: true });
+    assert.equal(routed.length, 1);
 });
