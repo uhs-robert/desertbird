@@ -10,7 +10,7 @@ The script that runs in each message document: the reading pane, a message tab a
 | `body_find.ts` | Find in the message with `window.find`, and `n` and `N` with a wrap done by the script |
 | `body_hints.ts` | Hint labels: collects the clickable elements on screen, draws the labels, focuses the one typed |
 
-The options and help pages are content tabs, which the main-window runtime does not serve and the manifest injects nothing into, so they load `page_keys.js` themselves and get the message keys: `q` closes the tab, and `:`, `?`, `j`, `k`, `gg`, `G`, `<C-d>`, `<C-u>`, `f` and `/` work. The keymap editor takes bindings as typed text in inputs, so no recording mode exists to step aside for, and keys typed in an input, a text area or a select pass. A page has no displayed message, so a mail key there acts on none.
+The options and help pages are content tabs, which the main-window runtime does not serve and the manifest injects nothing into, so they load `page_keys.js` themselves and get the message keys: `q` closes the tab, and `:`, `g?`, `j`, `k`, `gg`, `G`, `<C-d>`, `<C-u>`, `f` and `/` work. The keymap editor takes bindings as typed text in inputs, so no recording mode exists to step aside for, and keys typed in an input, a text area or a select pass. On a page `f` clicks the picked link or button by script, since the trusted Enter works only in the message pane. A page has no displayed message, so a mail key there acts on none.
 
 ## Rules
 

@@ -1422,6 +1422,21 @@ async function run_own_pages(instance) {
     const closed = await key_and_state(instance, ["q"], 2000);
     check(app, kind, `q closes the ${page} page`, main_window_tabs(closed).length === before, `tabs ${main_window_tabs(closed).length}, expected ${before}`);
   }
+  // `/` sends the find to the page through tabs.sendMessage. A refusal shows a toast in the strip below the page, so the strip staying unchanged and the selection on screen show the page took the find.
+  await open_page("options");
+  await instance.click(1150, 450);
+  await sleep(500);
+  const strip_before_find = await hud_pixels(instance, `${app}_own_find_before`);
+  await instance.press(["/"]);
+  await sleep(1500);
+  await instance.press(["Key bindings"]);
+  await sleep(400);
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  await shot("options_find", "options page after / and Key bindings: the heading is selected");
+  check(app, kind, "/ finds text on the options page with no refusal toast", (await hud_pixels(instance, `${app}_own_find_after`)) === strip_before_find);
+  await instance.ask("remove_tab", 20000, { index: before });
+  await sleep(1000);
   // A click on the first setting, a text input.
   await open_page("options");
   await instance.click(590, 250);

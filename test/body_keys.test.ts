@@ -12,6 +12,7 @@ const PAGE_HEIGHT = 5000;
 /** A link or button of the stub document. `focuses` counts the focus calls it got. `style` is what the computed style gives. */
 class StubElement {
     focuses = 0;
+    clicks = 0;
     box: { top: number; left: number; width: number; height: number };
     style = { display: "inline", visibility: "visible", opacity: "1" };
     constructor(box = { top: 10, left: 10, width: 50, height: 12 }, style: Partial<StubElement["style"]> = {}) {
@@ -26,6 +27,9 @@ class StubElement {
     }
     focus() {
         this.focuses++;
+    }
+    click() {
+        this.clicks++;
     }
     matches() {
         return true;
@@ -170,11 +174,11 @@ function record() {
     return { message_tree: { version: COMPILED_KEYMAP_VERSION, root } };
 }
 
-async function started(stored: Record<string, unknown> = { [KEYMAP_STORAGE_KEY]: record() }) {
+async function started(stored: Record<string, unknown> = { [KEYMAP_STORAGE_KEY]: record() }, own_page = false) {
     const window = new StubWindow();
     const { storage, change } = stub_storage(stored);
     const { runtime, sent, receive } = stub_runtime();
-    await start_body_script(window, storage, runtime);
+    await (own_page ? start_body_script(window, storage, runtime, (element) => element.click()) : start_body_script(window, storage, runtime));
     return { window, change, sent, receive };
 }
 
@@ -407,6 +411,7 @@ test("f labels the links on screen and the typed label focuses the link and asks
     assert.deepEqual(window.press("s"), { cancelled: true, stopped: true });
     assert.deepEqual(links.map((link) => link.focuses), [0, 1, 0, 0]);
     assert.deepEqual(sent, [{ type: "body.open_link" }], "the pick asks the background for a trusted Enter");
+    assert.deepEqual(links.map((link) => link.clicks), [0, 0, 0, 0], "a message link is never clicked by script");
     assert.equal(window.appended[0]!.removed, true, "the labels go away after the pick");
     assert.equal(window.press("j").cancelled, true);
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after the pick");
@@ -443,6 +448,16 @@ test("Escape cancels the labels and is cancelled itself, and f with nothing to l
     window.press("f");
     assert.equal(window.press("j").cancelled, true);
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "j scrolls, so no hint mode swallowed it");
+});
+
+test("on an own page the pick clicks the element by script and asks the background for nothing", async () => {
+    const { window, sent } = await started(undefined, true);
+    const button = new StubElement();
+    window.elements = [button];
+    window.press("f");
+    window.press("a");
+    assert.deepEqual([button.focuses, button.clicks], [1, 1]);
+    assert.deepEqual(sent, []);
 });
 
 test("after a pick the picked link has the focus and Enter is not cancelled, since no message key binds it", async () => {

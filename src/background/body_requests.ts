@@ -45,7 +45,7 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
             return {};
         }
         // A page of the add-on is a tab with no message. The call may refuse for it, and the key then runs with no messages.
-        const message_ids = (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch(() => [])).map((message) => message.id);
+        const message_ids = (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch((error: unknown) => (console.error("desertbird body request:", error), []))).map((message) => message.id);
         await deps.run({ command: request.command, args: request.args, count: request.count, windowId: window_id, messageIds: message_ids });
         return {};
     }

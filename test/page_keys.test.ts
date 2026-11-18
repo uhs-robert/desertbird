@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyWindow } from "../src/content/body_keys.ts";
-import { compile_message_keymap } from "../src/background/commands/index.ts";
+import { MESSAGE_KEYMAP, compile_message_keymap } from "../src/background/commands/index.ts";
 import { KEYMAP_STORAGE_KEY } from "../src/shared/protocol.ts";
 
 // The own pages run the message key script as it is, so these tests drive it the way an options or help tab does.
@@ -46,6 +46,12 @@ test("q typed in an option input, a text area or a select is left to the page", 
 test("both own pages load the page key script before their own script", () => {
     for (const html of ["src/options/options.html", "src/help/help.html"]) {
         const text = readFileSync(html, "utf8");
-        assert.ok(text.indexOf("../content/page_keys.js") >= 0, html);
+        const shared = text.indexOf("../content/page_keys.js");
+        assert.ok(shared >= 0, html);
+        assert.ok(shared < text.indexOf(html.includes("options") ? 'src="options.js"' : 'src="help.js"'), `${html} loads page_keys.js before its own script`);
     }
+});
+
+test("the message keys bind g? to the help page", () => {
+    assert.deepEqual(MESSAGE_KEYMAP.normal?.["g?"], { id: "help.open" });
 });
