@@ -379,6 +379,16 @@ test("3 d d deletes the current row and the two below it, as one undo step", asy
     assert.deepEqual(mail.notices, ["Undid the delete of 3 messages."]);
 });
 
+test("3 m r marks three rows read, and one u writes all three back", async () => {
+    const rows = [1, 2, 3, 4].map((id, index) => ({ index, id, depth: 0, collapsed: false, unread: true, flags: 0 }));
+    const mail = mail_store([1, 2, 3, 4].map((id) => inbox(`m${id}@x`, id, { read: false })), { rows, current: 0 });
+    await mail.run("msg.read", [1], { state: "read" }, 3);
+    assert.deepEqual([1, 2, 3, 4].map((id) => mail.message(`m${id}@x`)!.read), [true, true, true, false]);
+    await mail.run("msg.undo");
+    assert.deepEqual([1, 2, 3, 4].map((id) => mail.message(`m${id}@x`)!.read), [false, false, false, false]);
+    assert.deepEqual(mail.notices.at(-1), "Undid the read change of 3 messages.");
+});
+
 test("a count near the end of the list takes the rows that are there", async () => {
     const rows = [1, 2].map((id, index) => ({ index, id, depth: 0, collapsed: false, unread: false, flags: 0 }));
     const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)], { rows, current: 1 });

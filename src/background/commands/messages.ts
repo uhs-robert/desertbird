@@ -16,9 +16,10 @@ export const messages: CommandGroup = {
             bridge: false,
             runs_in: "background",
             label: "Read state",
-            intent: "Mark the selected messages read or unread. With no flag, the first message decides.",
+            intent: "Mark the selected messages read or unread. With no flag, the first message decides. A count marks that many rows from the current one.",
+            count: "repeat",
             params: [{ name: "state", type: "enum", values: ["read", "unread", "toggle"], default: "toggle", short: { read: "r", unread: "u" }, description: { read: "Mark the messages read.", unread: "Mark the messages unread." } }],
-            run: scoped(set_read),
+            run: scoped<TrashApi>(set_read),
         },
         "folder.read_all": {
             bridge: false,
