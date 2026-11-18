@@ -26,6 +26,7 @@ test("each read refuses while its setting is off and makes no API call", async (
     const cases: [ReadVerb, Partial<ShareSettings>, RegExp][] = [
         ["folders", { bridge_share_folders: false }, /bridge_share_folders/],
         ["messages", { bridge_share_headers: false }, /bridge_share_headers/],
+        ["messages", { bridge_share_folders: false }, /bridge_share_folders/],
         ["message", { bridge_share_bodies: false }, /bridge_share_bodies/],
         ["message", { bridge_share_headers: false }, /bridge_share_headers/],
         ["attachments", { bridge_share_attachments: false }, /bridge_share_attachments/],
@@ -109,7 +110,7 @@ test("a message comes back as untrusted, cleaned text, with its encryption kept 
     const { read, calls } = reads_under_test({ headers: [header(1, { subject: "Hi‮\u0000 there", author: "Ann‍ <ann@x.invalid>", recipients: ["b@x.invalid\u0007"] })], full: { 1: text_part("Line one\r\nLine​ two\u0001\tend") } });
     assert.deepEqual(await read("message", { id: 1 }), {
         ok: true,
-        message: { id: 1, from: "Ann <ann@x.invalid>", to: ["b@x.invalid"], subject: "Hi there", date: "2026-01-01T00:00:00.000Z", content_type: "message/rfc822", body: "Line one\nLine two\tend", untrusted: true, html_stripped: false, truncated: false },
+        message: { id: 1, from: "Ann <ann@x.invalid>", to: ["b@x.invalid"], subject: "Hi there", date: "2026-01-01T00:00:00.000Z", content_type: "text/plain", body: "Line one\nLine two\tend", untrusted: true, html_stripped: false, truncated: false },
     });
     assert.ok(calls.includes('messages.getFull 1 {"decrypt":false}'));
 });
@@ -138,6 +139,9 @@ test("an encrypted message is refused, never returned, for each kind of encrypti
         "application/pkcs7-mime": { contentType: "message/rfc822", parts: [{ contentType: "application/pkcs7-mime; smime-type=enveloped-data" }] },
         "application/pgp-encrypted": { contentType: "message/rfc822", parts: [{ contentType: "multipart/mixed", parts: [{ contentType: "application/pgp-encrypted", body: "Version: 1" }] }] },
         "inline PGP": text_part("Hi\n-----BEGIN PGP MESSAGE-----\nhQEMA...\n-----END PGP MESSAGE-----"),
+        "signed, then encrypted": { contentType: "message/rfc822", parts: [{ contentType: "multipart/signed", parts: [{ contentType: "application/pkcs7-mime; smime-type=enveloped-data" }, { contentType: "application/pkcs7-signature" }] }] },
+        "inline PGP in an HTML part": text_part("<p>-----BEGIN PGP MESSAGE-----<br>hQEMA</p>", "text/html"),
+        "skipped by Thunderbird": { contentType: "message/rfc822", decryptionStatus: "skipped", parts: [{ contentType: "text/plain", body: "x" }] },
         "decrypted by Thunderbird": { contentType: "message/rfc822", decryptionStatus: "success", parts: [{ contentType: "text/plain", body: "secret" }] },
     };
     for (const [kind, full] of Object.entries(encrypted)) {
@@ -154,10 +158,31 @@ test("attachments give cleaned names and sizes, never bytes", async () => {
 
 test("200 rows of the longest fields stay under the reply cap", async () => {
     const long = "\u{1F600}".repeat(5000);
-    const rows = Array.from({ length: 250 }, (_, index) => header(index + 1, { subject: long, author: long }));
+    const rows = Array.from({ length: 200 }, (_, index) => header(index + 1, { subject: long, author: long }));
     const folder_id = `a1://${"é".repeat(1000)}`;
     const { read } = reads_under_test({ folders: [{ ...INBOX, id: folder_id }], headers: rows.map((row) => ({ ...row, folder: folder_id })) });
     const answer = await read("messages", { folder: folder_id, limit: 200 });
     assert.ok(new TextEncoder().encode(JSON.stringify(answer)).length <= MAX_REPLY_BYTES);
     assert.equal((answer as unknown as { truncated: boolean }).truncated, true);
+});
+
+test("a plain message under decrypt: false reports none and is returned", async () => {
+    // Thunderbird marks the original tree "skipped" when it holds encrypted parts and "none" when it does not.
+    const { read } = reads_under_test({ headers: [header(1)], full: { 1: { contentType: "message/rfc822", decryptionStatus: "none", parts: [{ contentType: "text/plain", body: "hello" }] } } });
+    assert.equal(((await read("message", { id: 1 })) as unknown as { message: { body: string } }).message.body, "hello");
+});
+
+test("attachments of an encrypted message are refused before Thunderbird lists, and so decrypts, them", async () => {
+    const { read, calls } = reads_under_test({ headers: [header(1)], full: { 1: { contentType: "message/rfc822", decryptionStatus: "skipped", parts: [{ contentType: "multipart/encrypted" }] } }, attachments: { 1: [{ name: "secret.pdf", partName: "1.2" }] } });
+    assert.deepEqual(await read("attachments", { id: 1 }), { ok: false, message: "the message is encrypted, so its body never leaves Thunderbird" });
+    assert.ok(calls.includes('messages.getFull 1 {"decrypt":false}'));
+    assert.equal(calls.some((call) => call.startsWith("messages.listAttachments")), false);
+});
+
+test("messages finds the newest rows of the whole folder, however large", async () => {
+    const rows = Array.from({ length: 25_000 }, (_, index) => ({ id: index + 1, folder: INBOX.id, date: new Date(Date.UTC(2020, 0, 1) + index * 60_000) }));
+    const { read } = reads_under_test({ folders: [INBOX], headers: rows, page_size: 1000 });
+    const answer = (await read("messages", { folder: INBOX.id, limit: 3 })) as unknown as { messages: { id: number }[]; truncated: boolean };
+    assert.deepEqual(answer.messages.map((row) => row.id), [25_000, 24_999, 24_998]);
+    assert.equal(answer.truncated, true);
 });

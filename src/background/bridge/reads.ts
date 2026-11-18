@@ -51,7 +51,6 @@ export interface ReadsApi {
         getFull(id: number, options: { decrypt: false }): Promise<FullPart>;
         query(query: { folderId: string; unread?: true }): Promise<{ id: string | null; messages: ReadHeader[] }>;
         continueList(list_id: string): Promise<{ id: string | null; messages: ReadHeader[] }>;
-        abortList?(list_id: string): Promise<void>;
         listAttachments(id: number): Promise<{ name?: string; partName: string; size?: number; contentType?: string }[]>;
     };
     messengerUtilities: { convertToPlainText(html: string): Promise<string> };
@@ -74,7 +73,8 @@ const ENCRYPTED = refuse("the message is encrypted, so its body never leaves Thu
 
 const GATES: Record<ReadVerb, { settings: (keyof ShareSettings)[]; refusal: string }> = {
     folders: { settings: ["bridge_share_folders"], refusal: "folder sharing is off, set bridge_share_folders to true" },
-    messages: { settings: ["bridge_share_headers"], refusal: "header sharing is off, set bridge_share_headers to true" },
+    // A folder id is the folder's path, so a "no such folder" answer would confirm a guessed name while folder sharing is off.
+    messages: { settings: ["bridge_share_headers", "bridge_share_folders"], refusal: "header or folder sharing is off, set bridge_share_headers and bridge_share_folders to true" },
     message: { settings: ["bridge_share_headers", "bridge_share_bodies"], refusal: "body sharing is off, set bridge_share_headers and bridge_share_bodies to true" },
     attachments: { settings: ["bridge_share_attachments"], refusal: "attachment sharing is off, set bridge_share_attachments to true" },
 };
@@ -89,8 +89,6 @@ export const MAX_FIELD_CHARS = 512;
 const MAX_RECIPIENTS = 100;
 const MAX_ATTACHMENTS = 500;
 const MAX_FOLDERS = 5000;
-// The newest rows are picked from this many headers at most, so a huge folder cannot stall the background page.
-const MAX_SCANNED = 20_000;
 // Kept under the host's 1 MiB cap with room for the reply envelope. A list over it drops rows from its end and says `truncated`.
 export const MAX_REPLY_BYTES = 900 * 1024;
 
@@ -130,7 +128,7 @@ export const clean_body = (text: string): string => text.replace(/\r\n?/g, "\n")
 const ENCRYPTED_TYPES = ["multipart/encrypted", "application/pkcs7-mime", "application/x-pkcs7-mime", "application/pgp-encrypted"];
 const INLINE_PGP = "-----BEGIN PGP MESSAGE-----";
 
-/** True when any part is encrypted, by content type, by Thunderbird's decryption status, or as inline PGP text. */
+/** True when any part is encrypted, by content type, by Thunderbird's decryption status, or as inline PGP text. Under `decrypt: false` Thunderbird marks the root `skipped` when it holds encrypted parts and `none` when it does not. */
 export function is_encrypted(part: FullPart): boolean {
     const type = part.contentType?.toLowerCase().split(";")[0]?.trim() ?? "";
     if (ENCRYPTED_TYPES.includes(type)) return true;
@@ -181,18 +179,19 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
         } catch {
             return NO_SUCH_FOLDER;
         }
-        // Thunderbird lists a folder in storage order, oldest first, so the newest rows are picked after the scan.
-        const scanned: ReadHeader[] = [];
+        // Thunderbird lists a folder in storage order, oldest first. Every page is read, and only the newest `limit` rows so far are kept, so memory stays at one page plus `limit`.
+        const by_newest = (left: ReadHeader, right: ReadHeader) => new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime();
+        let newest: ReadHeader[] = [];
+        let seen = 0;
         let page = await api.messages.query({ folderId: folder, ...(unread_only && { unread: true as const }) });
-        scanned.push(...page.messages);
-        while (page.id !== null && scanned.length < MAX_SCANNED) {
+        for (;;) {
+            seen += page.messages.length;
+            newest = [...newest, ...page.messages].sort(by_newest).slice(0, limit as number);
+            if (page.id === null) break;
             page = await api.messages.continueList(page.id);
-            scanned.push(...page.messages);
         }
-        if (page.id !== null) await api.messages.abortList?.(page.id).catch(() => {});
-        const newest = scanned.sort((left, right) => new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime()).slice(0, limit as number);
         const rows = newest.map((header) => ({ id: header.id, from: clean_line(header.author), subject: clean_line(header.subject), date: iso_date(header.date), folder, read: header.read === true, flagged: header.flagged === true }));
-        return fit_rows(rows, (kept, truncated) => ({ ok: true, messages: kept, truncated }), scanned.length > rows.length || page.id !== null);
+        return fit_rows(rows, (kept, truncated) => ({ ok: true, messages: kept, truncated }), seen > rows.length);
     }
 
     async function message(request: Record<string, unknown>): Promise<Reply> {
@@ -219,7 +218,8 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
                 to: (header.recipients ?? []).slice(0, MAX_RECIPIENTS).map(clean_line),
                 subject: clean_line(header.subject),
                 date: iso_date(header.date),
-                content_type: clean_line(root.contentType),
+                // The root of `getFull` is always `message/rfc822`. The message's own top-level type is its first part.
+                content_type: clean_line(root.parts?.[0]?.contentType ?? root.contentType),
                 body: body.text,
                 untrusted: true,
                 html_stripped,
@@ -233,6 +233,8 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
         if (!is_message_id(id)) return BAD_REQUEST;
         let listed: Awaited<ReturnType<ReadsApi["messages"]["listAttachments"]>>;
         try {
+            // `listAttachments` decrypts an encrypted message, which can ask for a passphrase and lists encrypted names. So the check comes first.
+            if (is_encrypted(await api.messages.getFull(id, { decrypt: false }))) return ENCRYPTED;
             listed = await api.messages.listAttachments(id);
         } catch {
             return NO_SUCH_MESSAGE;

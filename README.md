@@ -28,11 +28,11 @@ Four more settings, each off by default and each inert while `bridge` is off, le
 | Setting | What leaves Thunderbird |
 | --- | --- |
 | `bridge_share_folders` | Folder names, paths, account names and unread and total counts |
-| `bridge_share_headers` | Sender, subject, date and read and flagged state of the messages in one folder, at most 200 at a time |
+| `bridge_share_headers` | Sender, subject, date and read and flagged state of the messages in one folder, at most 200 at a time. Needs `bridge_share_folders` on too |
 | `bridge_share_bodies` | The text of one message, with `bridge_share_headers` on too. HTML turns into plain text, the text is cut at 64 KiB, and an encrypted message is never sent |
 | `bridge_share_attachments` | Attachment names, sizes and types. Never the files |
 
-With all four off, the bridge sends no mail, no folder names and no tags.
+With all four off, the bridge sends no mail, no folder names and no tags. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
 
 ## License
 
