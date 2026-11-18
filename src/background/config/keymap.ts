@@ -27,10 +27,12 @@ export function sanitize_user_keymap(raw: unknown): UserKeymap {
 }
 
 /** Tags each step of a command with `repeatable: false` (so the chrome runtime never replays it) or `keeps_selection: true` (so visual mode stays on after it) in the compiled tree. The compiler has no field for either, and the runtime knows no command ids beyond its motions. */
-export function mark_unrepeatable(node: object): void {
+export function mark_steps(node: object): void {
     const { steps, otherwise, children } = node as { steps?: Array<{ invocation: { id: string } }>; otherwise?: object; children?: Record<string, object> };
-    for (const step of steps ?? []) if (UNREPEATABLE_IDS.has(step.invocation.id)) Object.assign(step, { repeatable: false });
-    for (const step of steps ?? []) if (KEEPS_SELECTION_IDS.has(step.invocation.id)) Object.assign(step, { keeps_selection: true });
-    if (otherwise) mark_unrepeatable(otherwise);
-    for (const child of Object.values(children ?? {})) mark_unrepeatable(child);
+    for (const step of steps ?? []) {
+        if (UNREPEATABLE_IDS.has(step.invocation.id)) Object.assign(step, { repeatable: false });
+        if (KEEPS_SELECTION_IDS.has(step.invocation.id)) Object.assign(step, { keeps_selection: true });
+    }
+    if (otherwise) mark_steps(otherwise);
+    for (const child of Object.values(children ?? {})) mark_steps(child);
 }

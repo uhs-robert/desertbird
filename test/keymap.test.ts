@@ -108,8 +108,8 @@ test("the command line opener is unrepeatable", async () => {
     assert.deepEqual([...UNREPEATABLE_IDS].sort(), ["cmdline.open", "hint.window", "msg.copy", "msg.move", "msg.remind", "msg.remind_cancel", "msg.reply_with", "msg.snooze", "msg.undo", "msg.unsubscribe", "notify.toggle", "search.open"]);
 });
 
-test("mark_unrepeatable tags the steps of move and snooze, and not delete or archive, which u undoes", async () => {
-    const { mark_unrepeatable } = await import("../src/background/config/keymap.ts");
+test("mark_steps tags the steps of move and snooze, and not delete or archive, which u undoes", async () => {
+    const { mark_steps } = await import("../src/background/config/keymap.ts");
     const step = (id: string) => ({ invocation: { id } });
     const root = {
         kind: "branch",
@@ -120,7 +120,7 @@ test("mark_unrepeatable tags the steps of move and snooze, and not delete or arc
             r: { kind: "leaf", steps: [step("msg.read")] },
         },
     };
-    mark_unrepeatable(root);
+    mark_steps(root);
     const flags = (node: { steps: object[] }) => node.steps.map((entry) => (entry as { repeatable?: boolean }).repeatable);
     assert.deepEqual(flags(root.children.x), [undefined]);
     assert.deepEqual(flags(root.children.d.children.d), [false]);
@@ -129,13 +129,13 @@ test("mark_unrepeatable tags the steps of move and snooze, and not delete or arc
     assert.deepEqual(flags(root.children.r), [undefined]);
 });
 
-test("mark_unrepeatable tags the steps of the commands that keep the selection, and not delete or archive", async () => {
-    const { mark_unrepeatable } = await import("../src/background/config/keymap.ts");
+test("mark_steps tags the steps of the commands that keep the selection, and not delete or archive", async () => {
+    const { mark_steps } = await import("../src/background/config/keymap.ts");
     const { KEEPS_SELECTION_IDS } = await import("../src/background/commands/index.ts");
     assert.deepEqual([...KEEPS_SELECTION_IDS].sort(), ["msg.copy", "msg.flag", "msg.junk", "msg.read", "msg.tag"]);
     const step = (id: string) => ({ invocation: { id } });
     const root = { kind: "branch", children: { s: { kind: "leaf", steps: [step("msg.flag")] }, x: { kind: "leaf", steps: [step("msg.archive")] } } };
-    mark_unrepeatable(root);
+    mark_steps(root);
     const flags = (node: { steps: object[] }) => node.steps.map((entry) => (entry as { keeps_selection?: boolean }).keeps_selection);
     assert.deepEqual(flags(root.children.s), [true]);
     assert.deepEqual(flags(root.children.x), [undefined]);

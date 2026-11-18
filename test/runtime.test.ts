@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { create_runtime } from "../src/chrome/runtime.ts";
 import type { KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
 import { compile_default_keymap } from "../src/background/commands/index.ts";
-import { mark_unrepeatable } from "../src/background/config/keymap.ts";
+import { mark_steps } from "../src/background/config/keymap.ts";
 import { create_list_port } from "../src/chrome/view.ts";
 import type { About3PaneLike, ListPort } from "../src/chrome/view.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
@@ -868,7 +868,7 @@ test("a tab switch ends a half-typed sequence but not the last run", () => {
 // The real chain: the default keymap, the background's tagging, the runtime. A hand-built tree could not catch a tag that never reaches a leaf.
 function default_tree(tag: boolean) {
     const root = JSON.parse(JSON.stringify(compile_default_keymap().compiled.modes.normal));
-    if (tag) mark_unrepeatable(root);
+    if (tag) mark_steps(root);
     return { version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION, root };
 }
 

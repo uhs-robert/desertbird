@@ -16,7 +16,7 @@ import { create_search_service } from "./search/service.ts";
 import { publish_theme } from "./theme/publish.ts";
 import { themed_hints } from "./theme/themed_hints.ts";
 import { write_to_clipboard } from "./handlers/clipboard.ts";
-import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
+import { compile_effective_keymap, effective_keymap, mark_steps } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
@@ -130,7 +130,7 @@ function is_current_record(value: unknown, source_hash: string): value is Keymap
 function tree_of(result: CompileResult): KeymapTree {
     for (const warning of result.warnings) console.warn(`desertbird keymap: ${warning}`);
     const root: KeymapTree["root"] = JSON.parse(JSON.stringify(result.compiled.modes.normal ?? { kind: "branch", children: {} }));
-    mark_unrepeatable(root as object);
+    mark_steps(root as object);
     return { version: COMPILED_KEYMAP_VERSION, root };
 }
 
