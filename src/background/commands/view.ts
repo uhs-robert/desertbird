@@ -3,7 +3,7 @@ import type { ViewApi } from "../handlers/view.ts";
 import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-const UNTAGGED_STATES = ["unread", "all", "starred", "attachment"];
+const UNTAGGED_STATES = ["unread", "all", "starred", "toggle_starred", "attachment"];
 
 // A sort key names its order because the column alone leaves it open: dates read newest first and every other column reads smallest first.
 const sort_key = (by: string, order: string) => ({ id: "sort.set", args: { by, order } });
@@ -21,8 +21,8 @@ export const view: CommandGroup = {
                 {
                     name: "state",
                     type: "enum",
-                    values: ["unread", "all", "starred", "tag", "attachment"],
-                    description: { unread: "Show the unread messages.", all: "Clear the filter and show every message.", starred: "Show the starred messages.", tag: "Show the messages with one tag.", attachment: "Show the messages with an attachment." },
+                    values: ["unread", "all", "starred", "toggle_starred", "tag", "attachment"],
+                    description: { unread: "Show the unread messages.", all: "Clear the filter and show every message.", starred: "Show the starred messages.", toggle_starred: "Toggle the starred filter.", tag: "Show the messages with one tag.", attachment: "Show the messages with an attachment." },
                 },
                 // A tag needs its key and the other states take none. The default list is what makes the tag required, because a param with `when` cannot be.
                 {
@@ -94,8 +94,8 @@ export const view: CommandGroup = {
     normal_keys: {
         Fu: { id: "filter.set", args: { state: "unread" } },
         Fa: { id: "filter.set", args: { state: "all" } },
-        Fs: { id: "filter.set", args: { state: "starred" } },
-        Ff: { id: "filter.set", args: { state: "attachment" } },
+        Fs: { id: "filter.set", args: { state: "toggle_starred" } },
+        FA: { id: "filter.set", args: { state: "attachment" } },
         ",d": sort_key("date", "descending"),
         ",s": sort_key("subject", "ascending"),
         ",f": sort_key("author", "ascending"),
@@ -103,6 +103,8 @@ export const view: CommandGroup = {
         ",t": sort_key("tags", "ascending"),
         ",a": sort_key("attachments", "ascending"),
         ",u": sort_key("unread", "ascending"),
+        ",r": sort_key("received", "descending"),
+        ",p": sort_key("priority", "descending"),
         ",o": sort_key("current", "toggle"),
         tm: { id: "pane.toggle", args: { pane: "message" } },
         tf: { id: "pane.toggle", args: { pane: "folder" } },

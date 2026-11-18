@@ -99,6 +99,22 @@ test("a window with no mail tab refuses and changes nothing", async () => {
     assert.equal(calls.filter((call) => call.startsWith("notify")).length, 1);
 });
 
+test("toggle_starred sets the starred filter and clears it when it already shows", async () => {
+    const { run, calls } = view_fake();
+    await run("filter.set", { state: "toggle_starred" });
+    await run("filter.set", { state: "toggle_starred" });
+    assert.deepEqual(calls.filter((call) => call.startsWith("mailTabs.setQuickFilter")), ['mailTabs.setQuickFilter 9 {"flagged":true}', "mailTabs.setQuickFilter 9 {}"]);
+});
+
+test("F f and , , open the filter and sort pickers, F s toggles starred, F A is the attachment filter, and C-x C-c C-h close the tab", () => {
+    const normal = DEFAULT_KEYMAP.normal ?? {};
+    assert.deepEqual(normal["Ff"], { id: "cmdline.open", args: { text: "filter " } });
+    assert.deepEqual(normal[",,"], { id: "cmdline.open", args: { text: "sort " } });
+    assert.deepEqual(normal["Fs"], { id: "filter.set", args: { state: "toggle_starred" } });
+    assert.deepEqual(normal["FA"], { id: "filter.set", args: { state: "attachment" } });
+    for (const key of ["<C-x>", "<C-c>", "<C-h>"]) assert.deepEqual(normal[key], { id: "tab.close" }, key);
+});
+
 test("the view commands are bridge safe and only the fixed states, panes and sorts have keys", () => {
     for (const id of ["filter.set", "search.threads", "sort.set", "pane.toggle"]) assert.equal(registry.get(id)?.bridge, true, id);
     const bound = Object.values(DEFAULT_KEYMAP.normal ?? {}).flatMap((binding) => (binding && !Array.isArray(binding) ? [binding] : []));
@@ -118,6 +134,8 @@ test("the sort keys name a column and the default order of that column", () => {
         ",a": ["attachments", "ascending"],
         ",u": ["unread", "ascending"],
         ",o": ["current", "toggle"],
+        ",r": ["received", "descending"],
+        ",p": ["priority", "descending"],
     };
     for (const [keys, [by, order]] of Object.entries(planned)) assert.deepEqual(normal[keys], { id: "sort.set", args: { by, order } }, keys);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);

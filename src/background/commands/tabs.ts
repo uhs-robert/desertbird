@@ -23,6 +23,9 @@ export const tabs: CommandGroup = {
         "<C-j>": { id: "tab.next" },
         "<C-k>": { id: "tab.prev" },
         q: { id: "tab.close" },
+        "<C-x>": { id: "tab.close" },
+        "<C-c>": { id: "tab.close" },
+        "<C-h>": { id: "tab.close" },
         "<A-q>": { id: "tab.close" },
     },
 };

@@ -111,8 +111,8 @@ const FIXED_FILTERS: Record<string, QuickFilter> = {
 
 export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const state = args["state"] as string;
-    const filter = state === "tag" ? { tags: { mode: "any" as const, tags: { [args["tag"] as string]: true as const } } } : FIXED_FILTERS[state]!;
     const tab = await list_mail_tab(scope);
+    const filter = state === "tag" ? { tags: { mode: "any" as const, tags: { [args["tag"] as string]: true as const } } } : state === "toggle_starred" ? (remembered_filter(tab.id).flagged ? {} : FIXED_FILTERS["starred"]!) : FIXED_FILTERS[state]!;
     await apply_filter(scope.api.mailTabs, tab.id, filter);
 }
 
