@@ -237,7 +237,7 @@ test("an unbound plain key is swallowed so Thunderbird's single-key shortcuts do
 test("named keys and unbound chords pass, a bound chord is cancelled", async () => {
     const { window } = await started();
     for (const key of ["Enter", "ArrowDown", "Tab", " ", "PageDown"]) assert.equal(window.press(key).cancelled, false, key);
-    assert.equal(window.press("z", { ctrlKey: true }).cancelled, false);
+    assert.equal(window.press("c", { ctrlKey: true }).cancelled, false);
     assert.equal(window.press("n", { ctrlKey: true }).cancelled, false);
     assert.deepEqual(window.scrolls, []);
 });

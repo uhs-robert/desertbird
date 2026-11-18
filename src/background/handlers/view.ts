@@ -34,6 +34,7 @@ export interface MailTabUpdate {
 }
 
 export interface ViewApi {
+    messages?: { tags: { list(): Promise<{ key: string; tag: string }[]> } };
     mailTabs: {
         query(query: { windowId: number; active: true }): Promise<MailTab[]>;
         update(tab_id: number, update: MailTabUpdate): Promise<unknown>;
@@ -109,10 +110,21 @@ const FIXED_FILTERS: Record<string, QuickFilter> = {
     attachment: { attachment: true },
 };
 
+// The typed text is a tag key or a tag name in any letter case, as for `msg.tag`. An unknown text passes through as a key.
+async function tag_key(scope: ViewScope, wanted: string): Promise<string> {
+    const known = (await scope.api.messages?.tags.list()) ?? [];
+    return (known.find((entry) => entry.key === wanted) ?? known.find((entry) => entry.tag.toLowerCase() === wanted.toLowerCase()))?.key ?? wanted;
+}
+
+// Only the star changes, so an unread, tag or text filter stays. The hidden-bar marker goes when the star comes on, because Thunderbird should show the bar for a filter the user can see.
+function toggled_starred({ show: _hidden, flagged, ...rest }: QuickFilter): QuickFilter {
+    return flagged ? rest : { ...rest, flagged: true };
+}
+
 export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const state = args["state"] as string;
     const tab = await list_mail_tab(scope);
-    const filter = state === "tag" ? { tags: { mode: "any" as const, tags: { [args["tag"] as string]: true as const } } } : state === "toggle_starred" ? (remembered_filter(tab.id).flagged ? {} : FIXED_FILTERS["starred"]!) : FIXED_FILTERS[state]!;
+    const filter = state === "tag" ? { tags: { mode: "any" as const, tags: { [await tag_key(scope, args["tag"] as string)]: true as const } } } : state === "toggle_starred" ? toggled_starred(remembered_filter(tab.id)) : FIXED_FILTERS[state]!;
     await apply_filter(scope.api.mailTabs, tab.id, filter);
 }
 

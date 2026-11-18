@@ -12,7 +12,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
     snooze: { runs_in: "background", ids: ["msg.snooze"] },
-    tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close"] },
+    tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close", "tab.close_mail"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
     reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message"], background_ids: ["search.message"] },
     folders: { runs_in: "background", ids: ["folder.open", "folder.collapse", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
@@ -197,5 +197,5 @@ test("the message keymap carries the mail keys of the message-capable groups wit
         assert.equal(excluded.test(id), false, keys);
         assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? ""), keys);
     }
-    for (const keys of ["mR", "Ft", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
+    for (const keys of ["mR", "Ft", "Ff", ",,", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
 });

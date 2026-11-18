@@ -28,7 +28,8 @@ export const view: CommandGroup = {
                 {
                     name: "tag",
                     type: "string",
-                    description: "Name the tag key for the tag state, for example $label1.",
+                    description: "Name the tag or its key (for example $label1).",
+                    values: { from: "tags" },
                     default: [{ value: "", when: { state: UNTAGGED_STATES } }],
                     pattern_arms: [
                         { pattern: "\\S", when: { state: ["tag"] } },
@@ -104,7 +105,7 @@ export const view: CommandGroup = {
         ",a": sort_key("attachments", "ascending"),
         ",u": sort_key("unread", "ascending"),
         ",r": sort_key("received", "descending"),
-        ",p": sort_key("priority", "descending"),
+        ",p": sort_key("priority", "ascending"),
         ",o": sort_key("current", "toggle"),
         tm: { id: "pane.toggle", args: { pane: "message" } },
         tf: { id: "pane.toggle", args: { pane: "folder" } },
