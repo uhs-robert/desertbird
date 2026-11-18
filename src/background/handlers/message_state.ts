@@ -7,7 +7,7 @@ import type { HandlerScope, MessageApi, MessageHeader } from "./message.ts";
 import { account_id_named } from "./account_choice.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { record_moved, record_state, record_tag } from "./undo.ts";
-import type { UndoApi } from "./undo.ts";
+import type { PreparedMove, UndoApi } from "./undo.ts";
 import type { StateField } from "../undo_log.ts";
 
 /** What `folder.read_all` needs: the displayed folder and the call that marks it. */
@@ -69,12 +69,14 @@ async function destination_folder(scope: StateScope, args: CheckedArgs, selected
 
 const headers_of = (scope: StateScope): Promise<MessageHeader[]> => Promise.all(require_messages(scope.message_ids).map((id) => scope.api.messages.get(id)));
 
+const move_into = (scope: StateScope, folder_id: string): PreparedMove => ({ ids: scope.message_ids, act: () => scope.api.messages.move(scope.message_ids, folder_id), destination_of: async () => ({ to_folder_ids: [folder_id], to_subfolders: false }) });
+
 export function move_messages(scope: StateScope, args: CheckedArgs): Promise<void> {
-    return record_moved(scope, "move", async () => {
-        const folder = await destination_folder(scope, args, await headers_of(scope));
-        return { ids: scope.message_ids, act: () => scope.api.messages.move(scope.message_ids, folder.id), destination_of: async () => ({ to_folder_ids: [folder.id], to_subfolders: false }) };
-    });
+    return record_moved(scope, "move", async () => move_into(scope, (await destination_folder(scope, args, await headers_of(scope))).id));
 }
+
+/** The move of `move_messages` to a folder already found by its id, with the same undo entry. The bridge `act` frame uses it. */
+export const move_to_folder = (scope: StateScope, folder_id: string): Promise<void> => record_moved(scope, "move", async () => move_into(scope, folder_id));
 
 // A copy leaves every original where it is, so there is nothing for `u` to move back and no undo item. Undo never deletes, and the new copy is not a move.
 export async function copy_messages(scope: StateScope, args: CheckedArgs): Promise<void> {

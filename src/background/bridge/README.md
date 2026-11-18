@@ -8,6 +8,7 @@ The add-on's end of the native bridge host. A program outside Thunderbird, such 
 | `reads.ts` | The four read frames, each behind its own share setting: `folders`, `messages`, `message` and `attachments`. It cleans every string a sender controls and refuses an encrypted body |
 | `confirm.ts` | The y or n prompt a write waits on: `request_confirm` resolves `yes`, `no`, `timeout` or `busy`. One request at a time, in memory only. It mounts the command line surface in the last focused main window, and only that page's `confirm.answer` with the prompt's token counts |
 | `drafts.ts` | The `draft` frame behind `bridge_allow_drafts`: checks every field, picks the identity, opens a plain-text compose, saves it to Drafts and closes that window. It never sends |
+| `acts.ts` | The `act` frame behind `bridge_allow_actions`: archive, trash or move after a yes on the confirm prompt, through the same handlers as the keys, so `u` reverses it. It never deletes |
 | `port.ts` | The port: connect while `bridge` is on, the `ready` handshake, the backoff, the answers to `list`, `run` and `state`, and the `mode` frames |
 
 ## Setup
@@ -113,3 +114,26 @@ A `draft` frame needs `bridge` and `bridge_allow_drafts`, both off by default an
 - Thunderbird saves only from a compose window. The add-on opens one, saves it with `compose.saveMessage` in `draft` mode, and closes that window, matched by the id the compose call returned, on every path, a failed save included. The window shows for that moment and takes the focus. Then the add-on gives the focus back to the Thunderbird window that had it. When another program had the focus, it raises no Thunderbird window.
 - Drafts run one at a time, so a second compose window never opens while the first is still up.
 - A draft that is not saved within 30 s answers `timed out` and frees the next draft. Its window stays open, because a save can wait on a Thunderbird prompt (a failed copy to an IMAP Drafts folder, a passphrase), and closing it could drop the draft. Check Drafts before you retry.
+
+## Acts
+
+An `act` frame needs `bridge` and `bridge_allow_actions`, both off by default and read from storage at each request. A move also needs `bridge_share_folders`, because a `no such folder` answer would confirm a guessed folder id. Any of them off answers `off`.
+
+```json
+{ "verb": "act", "request_id": 6, "action": "move", "ids": [101, 102], "folder": "imap://user@example.org/Archive" }
+{ "verb": "reply", "request_id": 6, "ok": true, "count": 2 }
+{ "verb": "reply", "request_id": 6, "ok": false, "message": "denied" }
+```
+
+| Field | Rule |
+| --- | --- |
+| `action` | `archive`, `trash` or `move` |
+| `ids` | 1 to 50 message ids, no id twice |
+| `folder` | An id from the `folders` read, at most 1024 characters. Required for `move` and refused with the others. An account root, a saved search or a unified folder is `no such folder` |
+
+- The fields are checked first, then the settings. Every id and the folder are found before the prompt. One missing id refuses the whole act with `no such message`, and nothing moves.
+- Nothing moves without a yes on the confirm prompt (see above). `n` or Escape answers `denied`, the 30 s limit `timed out`, and a prompt already showing `busy`.
+- After the yes, the settings are read and the messages found again. A setting turned off during the prompt answers `off` and moves nothing. A message moved by hand meanwhile is left out, and the reply is `moved <n> of <m>`. So is a move that fails part way.
+- `archive` runs the handler of the archive key. `move` runs the move handler of the move command. `trash` moves each message to the Trash of its own account and never calls `messages.delete`, which deletes a message already in Trash for good. A message already in Trash stays there.
+- Each act writes the same undo entry as the key, so `u` (`msg.undo`) moves the messages back. `msg.delete`, `msg.archive`, `msg.move` and `msg.undo` stay on the never-list: the frame does not run a registry command.
+- The reply is `ok` with the count, or a fixed refusal. It carries no subject, sender or folder name.

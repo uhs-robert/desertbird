@@ -34,11 +34,12 @@ Four more settings, each off by default and each inert while `bridge` is off, le
 
 With all four off, the bridge sends no mail, no folder names and no tags.
 
-One setting lets a script write, off by default and inert while `bridge` is off:
+Two settings let a script write, each off by default and inert while `bridge` is off:
 
 | Setting | What it allows |
 | --- | --- |
 | `bridge_allow_drafts` | Save a plain-text draft in the Drafts folder: up to 10 To and 10 Cc addresses, a subject and a body of at most 64 KiB, from one of your identities. No Bcc and no attachments. The answer is only ok or a refusal, never mail data |
+| `bridge_allow_actions` | Archive, move to Trash or move to a folder (with `bridge_share_folders` on) up to 50 messages, only after you press `y` on a prompt in Thunderbird. The prompt lists the subjects and senders and says the request came from outside. `n`, Escape or 30 s refuses. Nothing is deleted for good, and `u` moves the messages back. The answer is only a count or a refusal |
 
 Saving a draft needs the `compose.save` permission, which Thunderbird shows on install. The add-on never sends mail: it does not hold the `compose.send` permission. Thunderbird saves a draft only from a compose window, so the window opens for a moment, and the add-on closes it once the draft is saved. You review the draft and press Send yourself. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
 
