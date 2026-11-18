@@ -39,7 +39,7 @@ export interface EditExternalApi {
     external_editor: Pick<ExternalEditor, "open">;
 }
 
-// The window is the compose window of a Ctrl+E, or the main window of a `:edit`, which the editor refuses.
+// The window is the compose window of a Ctrl+E. A `:edit` comes from a main window, since the command line does not open in compose windows yet, and the editor refuses it.
 export async function edit_external(scope: HandlerScope<EditExternalApi>): Promise<void> {
     await scope.api.external_editor.open(scope.window_id);
 }

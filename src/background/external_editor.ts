@@ -1,6 +1,7 @@
 // The external editor of a compose window. The host opens the user's editor on the plain-text body, and this module collects the result and writes it back when the body is still the one the editor started from.
 // The jobs live in `storage.session`, one per compose tab, and the collect loops are derived from them, so a restarted background resumes the loops with `resume`.
-// The add-on writes no file. The host owns the scratch file and removes it on a collect that ends the job. A dropped job leaves its file to the host's sweep of stale jobs.
+// The add-on writes no file. The host owns the scratch file and removes it only on the collect that ends the job. So a job whose compose window is gone is orphaned, not dropped: its loop keeps collecting until the editor ends, then discards the text.
+// A dropped job (the setting turned off, failed collects) leaves its file until a later `editor_start` sweeps job files a day old.
 
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import type { ComposeEditRequest } from "../shared/protocol.ts";
@@ -60,6 +61,8 @@ export interface ComposeEditJob {
     window_id: number;
     /** The plain-text body the editor started from. The result is written only while the body still equals it. */
     original: string;
+    /** The compose window closed or sent its message. The loop still collects, so the host removes its file, and the text is discarded. */
+    orphaned?: true;
 }
 
 // Keyed by the compose tab id, so a tab holds one job at most.
@@ -96,13 +99,13 @@ const GATE_OFF_DROP_TEXT = "The external_editor setting is off, so DesertBird st
 const NOT_COMPOSE_TEXT = "The external editor works only in a compose window. Press Ctrl+E in the message body.";
 const ALREADY_ACTIVE_TEXT = "An external editor session is already active for this message.";
 const HTML_LATER_TEXT = "The external editor edits plain-text messages only for now. HTML messages come in a later version.";
-export const WINDOW_CLOSED_TEXT = "The compose window closed while the external editor was open. DesertBird will not read the edited text, so save it elsewhere from the editor to keep it.";
-const RESTART_GONE_TEXT = "The compose window was gone when DesertBird restarted, so it will not read the text of its external editor. Save it elsewhere from the editor to keep it.";
+export const WINDOW_CLOSED_TEXT = "The compose window closed while the external editor was open. DesertBird will discard the edited text, so save it elsewhere from the editor to keep it.";
+const RESTART_GONE_TEXT = "The compose window was gone when DesertBird restarted, so it will discard the text of its external editor. Save it elsewhere from the editor to keep it.";
 const UNCHANGED_TEXT = "The editor closed with no change, so the message was left as it was.";
 const GONE_AT_END_TEXT = "The compose window was gone when the editor ended, so the edited text was dropped.";
 const TURNED_HTML_TEXT = "The message turned to HTML while the editor was open, so the edited text was not written.";
 const BODY_CHANGED_TEXT = "The message body changed in the compose window while the editor was open, so the edited text was not written.";
-const SCRATCH_FOLDER_HINT = " The edited text stays in the host's scratch folder (desertfox/editor under $XDG_RUNTIME_DIR, else under the cache folder) until the host clears it after a day.";
+const SCRATCH_FOLDER_HINT = " The edited text stays in the host's scratch folder (desertfox/editor under $XDG_RUNTIME_DIR, else under the cache folder) until a later editor start, a day or more on, sweeps it.";
 
 const failure_text = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -120,18 +123,30 @@ export function create_external_editor(deps: ExternalEditorDeps) {
     const read_jobs = async (): Promise<Jobs> => ((await deps.session.get(EDITOR_JOBS_STORAGE_KEY))[EDITOR_JOBS_STORAGE_KEY] as Jobs | undefined) ?? {};
     const write_jobs = (jobs: Jobs) => deps.session.set({ [EDITOR_JOBS_STORAGE_KEY]: jobs });
 
-    /** Removes the job when the tab still holds it and returns true, so the caller speaks only for a job it ended. Must run inside a turn. */
-    async function end_if_held(held: ComposeEditJob): Promise<boolean> {
+    /** Removes the job when the tab still holds it and returns it as stored, so the caller speaks only for a job it ended and sees an orphaning that came while it waited. Must run inside a turn. */
+    async function end_if_held(held: ComposeEditJob): Promise<ComposeEditJob | undefined> {
         const jobs = await read_jobs();
-        if (jobs[held.tab_id]?.job !== held.job) return false;
+        const current = jobs[held.tab_id];
+        if (current?.job !== held.job) return undefined;
         delete jobs[held.tab_id];
         await write_jobs(jobs);
-        return true;
+        return current;
     }
 
     const drop = (held: ComposeEditJob, text: string): Promise<void> =>
         in_turn(async () => {
             if (await end_if_held(held)) await deps.say(held.window_id, text, true);
+        });
+
+    /** Marks the live job of the tab orphaned and says once that its text will be discarded. */
+    const orphan = (tab_id: number, text: string): Promise<void> =>
+        in_turn(async () => {
+            const jobs = await read_jobs();
+            const held = jobs[tab_id];
+            if (held === undefined || held.orphaned) return;
+            held.orphaned = true;
+            await write_jobs(jobs);
+            await deps.say(held.window_id, text, true);
         });
 
     async function apply(held: ComposeEditJob, text: string): Promise<void> {
@@ -148,8 +163,9 @@ export function create_external_editor(deps: ExternalEditorDeps) {
 
     const finish = (held: ComposeEditJob, reply: Exclude<EditorCollectReply, { pending: true }>): Promise<void> =>
         in_turn(async () => {
-            // A job dropped while its collect was in flight has spoken already.
-            if (!(await end_if_held(held))) return;
+            const current = await end_if_held(held);
+            // A job dropped while its collect was in flight has spoken already. An orphaned one said at its orphaning that the text is discarded.
+            if (current === undefined || current.orphaned) return;
             if (!reply.changed) return deps.say(held.window_id, UNCHANGED_TEXT, false);
             await apply(held, reply.text);
         });
@@ -213,18 +229,18 @@ export function create_external_editor(deps: ExternalEditorDeps) {
             });
             void collect_loop(held);
         },
-        /** The compose tab closed, or its message was sent: the job ends now and its loop stops before its next collect. */
-        async compose_gone(tab_id: number): Promise<void> {
-            const held = (await in_turn(read_jobs))[tab_id];
-            if (held !== undefined) await drop(held, WINDOW_CLOSED_TEXT);
-        },
-        /** At every start of the background: the jobs of live tabs collect again, and the jobs of gone tabs, or every job while the setting is off, are dropped. */
+        /** The compose tab closed, or its message was sent: the job is orphaned and its loop collects on, so the host removes its file. */
+        compose_gone: (tab_id: number): Promise<void> => orphan(tab_id, WINDOW_CLOSED_TEXT),
+        /** At every start of the background: every job collects again, and the job of a gone tab is orphaned first. While the setting is off, every job is dropped with no host call. */
         async resume(): Promise<void> {
             const enabled = await deps.is_enabled();
             for (const held of Object.values(await in_turn(read_jobs))) {
-                if (!enabled) await drop(held, GATE_OFF_DROP_TEXT);
-                else if (!(await deps.tab_exists(held.tab_id))) await drop(held, RESTART_GONE_TEXT);
-                else void collect_loop(held);
+                if (!enabled) {
+                    await drop(held, GATE_OFF_DROP_TEXT);
+                    continue;
+                }
+                if (!held.orphaned && !(await deps.tab_exists(held.tab_id))) await orphan(held.tab_id, RESTART_GONE_TEXT);
+                void collect_loop(held);
             }
         },
     };

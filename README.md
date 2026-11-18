@@ -21,7 +21,7 @@ Off by default. Thunderbird shows its own new-mail alert, so this one is opt-in.
 
 ## External editor
 
-Off by default. Turn on the `external_editor` setting on the options page, then press Ctrl+E in the body of a plain-text compose window. The DesertFox native host opens your editor on the message text and DesertBird writes the result back when you save and quit. The host runs the command in its `editor.toml` and has no default, so the host and that file must be set up first. The add-on reaches the host through its `desertbird_host` manifest. DesertBird writes back only when the text changed and the body in the window did not change meanwhile, and says why otherwise. Closing the compose window while the editor is open drops the edited text. HTML compose is not supported yet.
+Off by default. Turn on the `external_editor` setting on the options page, then press Ctrl+E in the body of a plain-text compose window. The DesertFox native host opens your editor on the message text and DesertBird writes the result back when you save and quit. The host runs the command in its `editor.toml` and has no default, so the host and that file must be set up first. The add-on reaches the host through its `desertbird_host` manifest. DesertBird writes back only when the text changed and the body in the window did not change meanwhile, and says why otherwise. Closing or sending the compose window while the editor is open discards the edited text. DesertBird keeps waiting for the editor, so the host can delete its scratch file when the editor closes. HTML compose is not supported yet.
 
 ## Bridge
 

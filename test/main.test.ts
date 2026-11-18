@@ -13,6 +13,7 @@ interface StorageChange {
 function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}) {
     const native_messages: { application: string; message: object }[] = [];
     const compose_scripts: unknown[] = [];
+    const after_send_listeners: ((tab: { id?: number }, send_info: { error?: string }) => void)[] = [];
     const change_listeners: ((changes: Record<string, StorageChange>, area: string) => void)[] = [];
     const installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
@@ -41,7 +42,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             onChanged: { addListener: (listener: (changes: Record<string, StorageChange>, area: string) => void) => void change_listeners.push(listener) },
         },
         composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
-        compose: { onAfterSend: { addListener: () => {} } },
+        compose: { onAfterSend: { addListener: (listener: (tab: { id?: number }, send_info: { error?: string }) => void) => void after_send_listeners.push(listener) } },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
         runtime: {
             onMessage: { addListener: () => {} },
@@ -62,7 +63,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -160,4 +161,18 @@ test("with external_editor on, a stored job of a live tab collects again from de
     await start_background();
     await settle();
     assert.deepEqual(native_messages[0], { application: "desertbird_host", message: { cmd: "editor_collect", job: "j1" } });
+});
+
+test("a failed send leaves the editor job alone, and a send that went out orphans it", async () => {
+    const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
+    const { after_send_listeners, session } = stub_messenger({ desertbird_settings: { external_editor: true } }, [], { desertbird_editor_jobs: { 70: job } });
+    await start_background();
+    await settle();
+    const stored_job = () => (session["desertbird_editor_jobs"] as Record<string, { orphaned?: true }>)[70];
+    after_send_listeners.forEach((listener) => listener({ id: 70 }, { error: "SMTP refused" }));
+    await settle();
+    assert.equal(stored_job()?.orphaned, undefined);
+    after_send_listeners.forEach((listener) => listener({ id: 70 }, {}));
+    await settle();
+    assert.equal(stored_job()?.orphaned, true);
 });

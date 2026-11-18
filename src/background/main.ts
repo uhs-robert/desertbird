@@ -85,7 +85,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
         onActivated: { addListener(listener: () => void): void };
         onRemoved: { addListener(listener: (tab_id: number) => void): void };
     };
-    compose: RouterApi["compose"] & { onAfterSend: { addListener(listener: (tab: { id?: number }) => void): void } };
+    compose: RouterApi["compose"] & { onAfterSend: { addListener(listener: (tab: { id?: number }, send_info: { error?: string }) => void): void } };
     composeScripts: { register(script: { js: { file: string }[] }): Promise<unknown> };
     messages: RouterApi["messages"] & NewMailApi["messages"];
     mailTabs: RouterApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> };
@@ -311,9 +311,9 @@ start_jump_history(messenger);
 // Registered at each start of this page, so compose windows opened from now on get Ctrl+E.
 messenger.composeScripts.register({ js: [{ file: "content/compose_keys.js" }] }).catch(console.error);
 messenger.tabs.onRemoved.addListener((tab_id) => void external_editor.compose_gone(tab_id).catch(console.error));
-// A sent message closes its window too. Whichever event comes first ends the job.
-messenger.compose.onAfterSend.addListener((tab) => {
-    if (tab.id !== undefined) external_editor.compose_gone(tab.id).catch(console.error);
+// A sent message closes its window too. Whichever event comes first orphans the job. A failed send keeps the window open, so it leaves the job alone.
+messenger.compose.onAfterSend.addListener((tab, send_info) => {
+    if (tab.id !== undefined && !send_info?.error) external_editor.compose_gone(tab.id).catch(console.error);
 });
 external_editor.resume().catch(console.error);
 

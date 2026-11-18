@@ -77,7 +77,7 @@ function setup(options: { enabled?: boolean; body?: string; plain?: boolean; ses
         collects,
         live_tabs,
         fail_start: (error: Error) => void (start_error = error),
-        jobs: () => (session[EDITOR_JOBS_STORAGE_KEY] ?? {}) as Record<string, { job: string }>,
+        jobs: () => (session[EDITOR_JOBS_STORAGE_KEY] ?? {}) as Record<string, { job: string; orphaned?: true }>,
     };
 }
 
@@ -229,25 +229,49 @@ test("a window that closed without its event when the editor ends drops the text
 
 // --- the compose window going away
 
-test("a compose window closed mid-edit drops the job with a toast naming the loss, and the loop stops", async () => {
+test("a compose window closed mid-edit orphans the job with one toast naming the loss, collects to done and writes nothing", async () => {
     const harness = await opened();
     await harness.editor.compose_gone(COMPOSE_TAB);
-    assert.deepEqual(harness.jobs(), {});
+    assert.equal(harness.jobs()[COMPOSE_TAB]?.orphaned, true);
     assert.deepEqual(harness.said, [{ window_id: COMPOSE_WINDOW, text: WINDOW_CLOSED_TEXT, is_error: true }]);
-    // The collect already in flight answers. The loop sees the job gone, writes nothing and calls the host no more.
-    harness.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    // The loop collects on, so the host can remove its scratch file when the editor ends.
+    harness.collects[0]!.answer({ pending: true });
     await settle();
-    assert.equal(harness.collects.length, 1);
+    assert.equal(harness.collects.length, 2);
+    harness.collects[1]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.equal(harness.collects.length, 2);
     assert.deepEqual(harness.writes, []);
+    assert.deepEqual(harness.jobs(), {});
     assert.equal(harness.said.length, 1);
 });
 
-test("a pending answer after the window closed starts no further collect", async () => {
+test("an orphaned job whose editor ends unchanged ends with no second toast", async () => {
     const harness = await opened();
     await harness.editor.compose_gone(COMPOSE_TAB);
+    harness.collects[0]!.answer({ done: true, changed: false });
+    await settle();
+    assert.deepEqual(harness.jobs(), {});
+    assert.equal(harness.said.length, 1);
+});
+
+test("the setting turned off while a job is orphaned drops it before the next collect", async () => {
+    const harness = await opened();
+    await harness.editor.compose_gone(COMPOSE_TAB);
+    harness.state.enabled = false;
     harness.collects[0]!.answer({ pending: true });
     await settle();
     assert.equal(harness.collects.length, 1);
+    assert.deepEqual(harness.jobs(), {});
+    assert.match(harness.said[1]!.text, /external_editor setting is off/);
+});
+
+test("a press after the setting went off sends nothing while an orphaned job waits", async () => {
+    const harness = await opened();
+    await harness.editor.compose_gone(COMPOSE_TAB);
+    harness.state.enabled = false;
+    await refusal_of(harness.editor.open(COMPOSE_WINDOW));
+    assert.equal(harness.starts.length, 1);
 });
 
 test("the close and the send event of one window toast once", async () => {
@@ -312,14 +336,39 @@ test("a restart resumes the loop of a live tab and writes the result", async () 
     assert.deepEqual(second.writes, ["Edited\n"]);
 });
 
-test("a restart drops the job of a gone tab without a collect", async () => {
+test("a restart orphans the job of a gone tab, says so once and collects it to done without writing", async () => {
     const first = await opened();
     const second = setup({ session: first.session, live_tabs: [] });
     await second.editor.resume();
     await settle();
+    assert.equal(second.jobs()[COMPOSE_TAB]?.orphaned, true);
+    assert.match(second.said[0]!.text, /gone when DesertBird restarted/);
+    assert.deepEqual(second.collects.map((collect) => collect.job), ["job1"]);
+    second.collects[0]!.answer({ done: true, changed: true, text: "Edited\n" });
+    await settle();
+    assert.deepEqual(second.writes, []);
+    assert.deepEqual(second.jobs(), {});
+    assert.equal(second.said.length, 1);
+});
+
+test("a restart keeps collecting a job orphaned before it, with no new toast", async () => {
+    const first = await opened();
+    await first.editor.compose_gone(COMPOSE_TAB);
+    const second = setup({ session: first.session, live_tabs: [] });
+    await second.editor.resume();
+    await settle();
+    assert.deepEqual(second.collects.map((collect) => collect.job), ["job1"]);
+    assert.deepEqual(second.said, []);
+});
+
+test("with the setting off, a restart drops an orphaned job with no host call", async () => {
+    const first = await opened();
+    await first.editor.compose_gone(COMPOSE_TAB);
+    const second = setup({ session: first.session, enabled: false, live_tabs: [] });
+    await second.editor.resume();
+    await settle();
     assert.deepEqual(second.host, []);
     assert.deepEqual(second.jobs(), {});
-    assert.match(second.said[0]!.text, /gone when DesertBird restarted/);
 });
 
 test("resume twice runs one loop per job", async () => {
