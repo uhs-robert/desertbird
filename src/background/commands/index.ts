@@ -4,6 +4,8 @@ import { create_registry } from "../../../vendor/desertfox/registry/define.ts";
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import { compile_keymap } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { CompileResult, ResolveCommand } from "../../../vendor/desertfox/keys/compiler.ts";
+import { ANY_KEY } from "../../../vendor/desertfox/prefix_tree.ts";
+import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { CommandDefinition, CommandGroup } from "./define.ts";
 import { app } from "./app.ts";
 import { attachments } from "./attachments.ts";
@@ -114,7 +116,17 @@ export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig 
 
 // The message keys are the default layer, so a user key that extends a message key (`gfz` over `gf`) drops that key as it does in the mail tab.
 export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
-    return compile_keymap(message_keymap(user), {}, resolve_command, undefined, MESSAGE_KEYMAP);
+    const result = compile_keymap(message_keymap(user), {}, resolve_command, undefined, MESSAGE_KEYMAP);
+    swallow_list_prefixes(result.compiled.modes.normal as TreeBranch);
+    return result;
+}
+
+// A prefix of the mail tab that the message tree lacks (`]`, `F`, `,` and the rest) would drop its first key and let the second run alone, and `u` and `a` are bound in a message. So each such prefix becomes a branch that takes any one key and runs nothing. The compiler has no leaf for that, so this adds it after the compile. A user key under the prefix keeps its place, because only an absent prefix is filled.
+function swallow_list_prefixes(message_root: TreeBranch): void {
+    const mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch;
+    for (const [token, node] of Object.entries(mail_root.children)) {
+        if (node.kind === "branch" && !message_root.children[token]) message_root.children[token] = { kind: "branch", children: { [ANY_KEY]: { kind: "leaf", steps: [] } } };
+    }
 }
 
 /** The ids of the background commands a message key may run, by default or by a user key. The background runs a request of the body script only for these. A command bound only to a list key (`mR`) stays out, since it needs the list. */

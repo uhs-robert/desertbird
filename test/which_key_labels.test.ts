@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { which_key_panel } from "../src/background/hud/which_key.ts";
-import { GROUP_NAMES, compile_default_keymap, compile_message_keymap } from "../src/background/commands/index.ts";
+import { parse_command_line } from "../vendor/desertfox/registry/command_line.ts";
+import { GROUP_NAMES, compile_default_keymap, compile_message_keymap, registry } from "../src/background/commands/index.ts";
 import { settings_with } from "./hud_fakes.ts";
 
 const mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch;
@@ -19,8 +20,11 @@ const command_at = (root: TreeBranch, keys: readonly string[]): { id: string; ar
 };
 const rows_of = (root: TreeBranch, keys: readonly string[]) => Object.fromEntries((which_key_panel(root, keys, settings_with({}))?.rows ?? []).map((row) => [row.key, row.label]));
 
+// The message tree holds prefixes that only swallow a key (see below). They have no name and no row.
+const is_swallow = (branch: TreeBranch) => Object.values(branch.children).every((child) => child.kind === "leaf" && child.steps.length === 0);
+
 function each_branch(root: TreeBranch, path: string[] = []): { path: string[]; branch: TreeBranch }[] {
-    return Object.entries(root.children).flatMap(([key, child]) => (child.kind === "branch" ? [{ path: [...path, key], branch: child }, ...each_branch(child, [...path, key])] : []));
+    return Object.entries(root.children).flatMap(([key, child]) => (child.kind === "branch" && !is_swallow(child) ? [{ path: [...path, key], branch: child }, ...each_branch(child, [...path, key])] : []));
 }
 
 test("every group of both trees has a name, and the panel title is the chain of names", () => {
@@ -72,8 +76,11 @@ test("the keys that act on the displayed message resolve in the message tree", (
     assert.equal(command_at(message_root, ["a"])?.id, "msg.archive");
 });
 
-test("; ; opens the command line on hint in the mail tree only, and hint is a typed command", () => {
-    assert.deepEqual(command_at(mail_root, [";", ";"]), { id: "cmdline.open", args: { text: "hint " } });
+test("; ; opens the command line on hint in the mail tree only, and its first word is a known command that parses", () => {
+    const binding = command_at(mail_root, [";", ";"]);
+    assert.deepEqual(binding, { id: "cmdline.open", args: { text: "hint " } });
+    const typed = `${String(binding?.args?.["text"])}--yank`;
+    assert.deepEqual(parse_command_line(registry, typed), { kind: "invocation", invocation: { id: "hint.window", args: { action: "yank" } } });
     assert.equal(node_at(message_root, [";", ";"]), undefined);
 });
 

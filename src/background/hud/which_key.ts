@@ -8,6 +8,9 @@ import type { WhichKeyPanel } from "../../shared/protocol.ts";
 
 const is_branch = (node: TreeNode | undefined): node is TreeBranch => node?.kind === "branch";
 
+/** A prefix the message tree keeps only to take the key after it: its one child runs nothing. It has no row in a panel. */
+const is_swallow = (node: TreeNode): boolean => is_branch(node) && Object.values(node.children).every((child) => child.kind === "leaf" && child.steps.length === 0);
+
 /** The branch the typed keys lead to, or null when they lead to a leaf or nowhere. */
 export function branch_at(root: TreeBranch, keys: readonly string[]): TreeBranch | null {
     let node: TreeNode | undefined = root;
@@ -40,7 +43,7 @@ function compare_root_rows(left: { key: string; is_group: boolean }, right: { ke
 export function which_key_panel(root: TreeBranch, keys: readonly string[], settings: Pick<Settings, "which_key_border">): WhichKeyPanel | null {
     const branch = branch_at(root, keys);
     if (branch === null) return null;
-    const rows = Object.entries(branch.children).map(([token, child]) =>
+    const rows = Object.entries(branch.children).filter(([, child]) => !is_swallow(child)).map(([token, child]) =>
         is_branch(child) ? { key: token_label(token), label: group_label(child), is_group: true } : { key: token_label(token), label: child.label ?? child.steps[0]?.invocation.id ?? "", is_group: false },
     );
     if (rows.length === 0) return null;
