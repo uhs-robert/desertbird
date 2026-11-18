@@ -1,4 +1,4 @@
-// Builds dist/: background.js, experiment/{keys,overlay}.{schema.json,js}, overlay/ (the command line and hud pages), help/, manifest.json and an unsigned desertbird.xpi.
+// Builds dist/: background.js, the vendored library files, experiment/{keys,overlay}.{schema.json,js}, overlay/ (the command line and hud pages), help/, manifest.json and an unsigned desertbird.xpi.
 //   node tools/build.mjs [--out <dir>]
 // The esbuild metafiles go to <out>/meta/ and stay out of the xpi. test/build.test.ts reads them.
 
@@ -36,6 +36,9 @@ const HINTS_MAX_BYTES = 11700;
 
 // The size guard of the compose script bundle (`content/compose_keys.js`), which runs in every compose body: its first measured size (717 bytes) plus 20 percent made 861, rounded up to 900. AGENTS.md records the same number.
 const COMPOSE_MAX_BYTES = 900;
+
+// The release files of `turndown` and `marked` and their licenses. Each folder's VENDOR.md holds the pin.
+const VENDORED_LIBRARY_FILES = ["vendor/turndown/turndown.js", "vendor/turndown/LICENSE", "vendor/marked/marked.umd.js", "vendor/marked/LICENSE"];
 
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
@@ -114,6 +117,12 @@ mkdirSync(join(out_dir, "help"), { recursive: true });
 await build({ ...shared_options, entryPoints: ["src/help/help.ts"], outfile: join(out_dir, "help", "help.js") });
 for (const file of ["help.html", "help.css"]) copyFileSync(join(root, "src", "help", file), join(out_dir, "help", file));
 
+// The vendored libraries ship as their exact release files, beside the bundle and never in it, so the store can match them against the release. The manifest loads them before `background.js`.
+for (const file of VENDORED_LIBRARY_FILES) {
+    mkdirSync(dirname(join(out_dir, file)), { recursive: true });
+    copyFileSync(join(root, file), join(out_dir, file));
+}
+
 copyFileSync(join(root, "src", "manifest.json"), join(out_dir, "manifest.json"));
 
 for (const [name, bytes] of parent_sizes) {
@@ -134,5 +143,5 @@ if (compose_keys_bytes > COMPOSE_MAX_BYTES) {
     process.exit(1);
 }
 
-execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help"], { cwd: out_dir });
+execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help", "vendor"], { cwd: out_dir });
 console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`, `compose_keys.js ${compose_keys_bytes} bytes`].join(", ")})`);

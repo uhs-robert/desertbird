@@ -1852,15 +1852,68 @@ function seed_storage(xpi, work_dir, records, extra_script = "") {
 const EDITED_TEXT = "Edited by the e2e editor.";
 const DESERTFOX_HOST = process.env.E2E_DESERTFOX_HOST ?? join(process.env.HOME ?? "", ".local/share/desertfox/desertfox-host");
 
-function install_editor_host(work_dir) {
+// The HTML kinds: Markdown the user writes, with a bold word, markup that must not turn live and tag text that must stay text.
+const EDITED_MARKDOWN = "**Edited** by the e2e editor.\n\n<img src=\"x\" onerror=\"document.title='hit'\"> [a link](javascript:alert(1)) &lt;b&gt;kept as text&lt;/b&gt;\n";
+
+function install_editor_host(work_dir, kind) {
   const home = join(work_dir, "home");
   const manifests = join(home, ".mozilla", "native-messaging-hosts");
   mkdirSync(manifests, { recursive: true });
   writeFileSync(join(manifests, "desertbird_host.json"), JSON.stringify({ name: "desertbird_host", description: "DesertBird e2e editor host", path: DESERTFOX_HOST, type: "stdio", allowed_extensions: ["desertbird@uhs-robert"] }));
   const config = join(home, ".config", "desertfox");
   mkdirSync(config, { recursive: true });
+  if (kind in COMPOSE_EDITOR_HTML_KINDS) {
+    const markdown_file = join(home, "edited.md");
+    writeFileSync(markdown_file, EDITED_MARKDOWN);
+    // A JSON array of strings is a valid TOML array.
+    writeFileSync(join(config, "editor.toml"), `argv = ${JSON.stringify(["cp", markdown_file, "{file}"])}\n`);
+    return;
+  }
   // The scratch path holds no space, so `$1` goes unquoted and the TOML string needs no escape.
   writeFileSync(join(config, "editor.toml"), `argv = ["sh", "-c", "echo ${EDITED_TEXT} > $1", "sh", "{file}"]\n`);
+}
+
+// The HTML kinds and the layout each tests: a reply below the quote (Thunderbird's default), and a reply above the quote with the signature above it too.
+const COMPOSE_EDITOR_HTML_KINDS = { compose_editor_html: "below", compose_editor_html_top: "above" };
+
+async function run_compose_editor_html(instance) {
+  const app = instance.app;
+  const kind = instance.kind;
+  const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+  if (!existsSync(DESERTFOX_HOST)) {
+    note(app, kind, "external editor not run", `no DesertFox host at ${DESERTFOX_HOST}; set E2E_DESERTFOX_HOST`);
+    return;
+  }
+  const edited_html_checks = (label, html) => {
+    check(app, kind, `${label}: the Markdown came back as HTML`, html.includes("<strong>Edited</strong> by the e2e editor."), `html ${JSON.stringify(html)}`);
+    check(app, kind, `${label}: no event handler, script URL or live tag from the Markdown`, !/onerror|javascript:|<b>kept/i.test(html) && html.includes("&lt;b&gt;kept as text&lt;/b&gt;"), `html ${JSON.stringify(html)}`);
+  };
+  const edit_in = async (label) => {
+    const state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], 6000);
+    report.shots.push({ app, kind, path: await instance.shot(`${app}_${kind}_${label}`), name: `${kind}_${label}`, line: `HTML compose window after Ctrl+E (${label})` });
+    return compose_tab(state)?.html ?? "";
+  };
+  await sleep(2000);
+  await instance.press(["-k", "F6"]);
+  await instance.ask("select:inbox-s2@fixture.invalid", 30000);
+  await sleep(1000);
+  let state = await key_and_state(instance, ["r"], 4000);
+  const reply_before = compose_tab(state)?.html ?? "";
+  check(app, kind, "r opens an HTML reply", compose_tab(state)?.is_plain === false, `isPlainText ${compose_tab(state)?.is_plain}`);
+  note(app, kind, "HTML reply body before the editor", JSON.stringify(reply_before));
+  const reply_after = await edit_in("reply");
+  note(app, kind, "HTML reply body after the editor", JSON.stringify(reply_after));
+  edited_html_checks("reply", reply_after);
+  const at_text = reply_after.indexOf("<strong>Edited");
+  const at_quote = reply_after.indexOf('<blockquote type="cite"');
+  const at_signature = reply_after.indexOf("E2E signature line");
+  check(app, kind, "reply: the quote and the signature survive", at_quote >= 0 && at_signature >= 0 && reply_after.includes("Body of inbox-s2."), `quote at ${at_quote}, signature at ${at_signature}`);
+  const placed = COMPOSE_EDITOR_HTML_KINDS[kind] === "below" ? at_text > at_quote && at_text < at_signature : at_text < at_quote && at_text < at_signature;
+  check(app, kind, `reply: the text sits ${COMPOSE_EDITOR_HTML_KINDS[kind]} the quote where Thunderbird put the cursor`, at_text >= 0 && placed, `text at ${at_text}, quote at ${at_quote}, signature at ${at_signature}`);
+  await instance.ask("close_compose");
+  await sleep(1500);
+  state = await instance.ask("state");
+  check(app, kind, "the app survived the HTML editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
 }
 
 async function run_compose_editor(instance) {
@@ -2223,6 +2276,7 @@ async function run_assertions(instance) {
   else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
   else if (instance.kind === "own_pages") await run_own_pages(instance);
   else if (instance.kind === "compose_editor") await run_compose_editor(instance);
+  else if (instance.kind in COMPOSE_EDITOR_HTML_KINDS) await run_compose_editor_html(instance);
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
   else await run_no_identity(instance);
 }
@@ -2230,11 +2284,11 @@ async function run_assertions(instance) {
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,compose_editor").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,compose_editor,compose_editor_html,compose_editor_html_top").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
-    const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind === "compose_editor" ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];
-    if (kind === "compose_editor") install_editor_host(work_dir);
+    const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind.startsWith("compose_editor") ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];
+    if (kind.startsWith("compose_editor")) install_editor_host(work_dir, kind);
     const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path && kind === "own_pages" ? seed_storage(xpi_path, work_dir, {}, OPEN_OWN_PAGES_SCRIPT) : xpi_path;
     const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
     try {
