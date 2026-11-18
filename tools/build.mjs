@@ -34,6 +34,9 @@ const CONTENT_MAX_BYTES = 17650;
 // The `hints` API has a guard of its own, since it is a separate bundle and not chrome runtime code. Its first measured size was 3091 bytes, and the guard is that plus 20 percent (3709) rounded up to 3800. The check that the focus still sits on the picked link made it 3863, so the guard was 3800 plus 63 rounded up to 3900. The `pick` verb for the mail window (targets, labels per chrome document, typed label, act) made it 11670, so the guard was 11670 rounded up to 11700. The `;` action step (the action phase, a focus and a text per target, and the clipboard write in the parent) made it 12994 (1324 bytes over main), so the guard was that measured size rounded up to 13000. The card view subject lookup made it 13004 (4 bytes over that), so the guard is 13004 rounded up to 13050.
 const HINTS_MAX_BYTES = 13050;
 
+// The size guard of the compose script bundle (`content/compose_keys.js`), which runs in every compose body: its first measured size (717 bytes) plus 20 percent made 861, rounded up to 900. AGENTS.md records the same number.
+const COMPOSE_MAX_BYTES = 900;
+
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
 const PARENTS = [
@@ -87,6 +90,12 @@ const page_keys_file = join(out_dir, "content", "page_keys.js");
 await build({ ...shared_options, entryPoints: ["src/content/page_keys.ts"], outfile: page_keys_file });
 const page_keys_bytes = statSync(page_keys_file).size;
 
+// The compose script is registered by the background with `composeScripts.register`, so the manifest does not name it.
+const compose_keys_file = join(out_dir, "content", "compose_keys.js");
+const compose_keys = await build({ ...shared_options, entryPoints: ["src/content/compose_keys.ts"], outfile: compose_keys_file });
+writeFileSync(join(out_dir, "meta", "compose_keys.json"), JSON.stringify(compose_keys.metafile));
+const compose_keys_bytes = statSync(compose_keys_file).size;
+
 // The options page is an extension page: it bundles the settings code and the command table, and stays out of the parent bundle.
 mkdirSync(join(out_dir, "options"), { recursive: true });
 await build({ ...shared_options, entryPoints: ["src/options/options.ts"], outfile: join(out_dir, "options", "options.js") });
@@ -120,5 +129,10 @@ if (message_display_bytes > CONTENT_MAX_BYTES) {
     process.exit(1);
 }
 
+if (compose_keys_bytes > COMPOSE_MAX_BYTES) {
+    console.error(`build: content/compose_keys.js is ${compose_keys_bytes} bytes, over the ${COMPOSE_MAX_BYTES} byte compose script budget`);
+    process.exit(1);
+}
+
 execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help"], { cwd: out_dir });
-console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`].join(", ")})`);
+console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`, `compose_keys.js ${compose_keys_bytes} bytes`].join(", ")})`);

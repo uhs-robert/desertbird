@@ -3,6 +3,7 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { resolve_identity } from "./identity.ts";
 import { require_messages } from "./each_message.ts";
 import type { HandlerScope, MessageHeader, ReplyType } from "./message.ts";
+import type { ExternalEditor } from "../external_editor.ts";
 
 const REPLY_TYPE: Record<string, ReplyType> = { sender: "replyToSender", all: "replyToAll", list: "replyToList" };
 
@@ -32,4 +33,13 @@ export async function forward(scope: HandlerScope): Promise<void> {
 export async function new_message(scope: HandlerScope): Promise<void> {
     await resolve_identity(scope.api, {});
     await scope.api.compose.beginNew();
+}
+
+export interface EditExternalApi {
+    external_editor: Pick<ExternalEditor, "open">;
+}
+
+// The window is the compose window of a Ctrl+E. A `:edit` comes from a main window, since the command line does not open in compose windows yet, and the editor refuses it.
+export async function edit_external(scope: HandlerScope<EditExternalApi>): Promise<void> {
+    await scope.api.external_editor.open(scope.window_id);
 }

@@ -54,6 +54,11 @@ export interface BodyPendingRequest {
     keys: string[];
 }
 
+/** Ctrl+E in a compose body. The background takes the window from the sender and runs `compose.edit_external` there. */
+export interface ComposeEditRequest {
+    type: "compose.edit";
+}
+
 /** The background asks the body script of a tab to find text and highlight it. The pattern is literal text, never a regular expression. */
 export interface BodyFindRequest {
     type: "body.find";

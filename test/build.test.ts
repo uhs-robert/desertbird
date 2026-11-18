@@ -11,6 +11,7 @@ const PARENT_MAX_BYTES = Number(/PARENT_MAX_BYTES = (\d+);/.exec(readFileSync(jo
 const HINTS_MAX_BYTES = Number(/HINTS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const FOLDERPANE_MAX_BYTES = Number(/FOLDERPANE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const CONTENT_MAX_BYTES = Number(/CONTENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const COMPOSE_MAX_BYTES = Number(/COMPOSE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
 const PARENT_ALLOWED_INPUTS = [
@@ -99,6 +100,7 @@ test("AGENTS.md records the size guards", () => {
     assert.ok(agents.includes(`${PARENT_MAX_BYTES} bytes`));
     assert.ok(agents.includes(`${FOLDERPANE_MAX_BYTES} bytes`));
     assert.ok(agents.includes(`${HINTS_MAX_BYTES} bytes`));
+    assert.ok(agents.includes(`${COMPOSE_MAX_BYTES} bytes`));
 });
 
 test("the body script bundle takes only the matcher side, the shared files and its own folder", () => {
@@ -112,6 +114,17 @@ test("the body script bundle stays within its size guard", () => {
     assert.ok(CONTENT_MAX_BYTES > 0 && CONTENT_MAX_BYTES < 100000);
     const size = readFileSync(join(out_dir, "content/message_display.js")).length;
     assert.ok(size <= CONTENT_MAX_BYTES, `message_display.js is ${size} bytes, over ${CONTENT_MAX_BYTES}`);
+});
+
+test("the compose script bundle takes only its own files and the shared protocol, and stays within its guard", () => {
+    const bundle_inputs = Object.keys((JSON.parse(readFileSync(join(out_dir, "meta/compose_keys.json"), "utf8")) as { inputs: object }).inputs);
+    assert.ok(bundle_inputs.length > 0);
+    for (const input of bundle_inputs) assert.match(input, /^src\/(content\/compose_[a-z_]+|shared\/protocol)\.ts$/);
+    assert.ok(COMPOSE_MAX_BYTES > 0 && COMPOSE_MAX_BYTES < 10000);
+    const size = readFileSync(join(out_dir, "content/compose_keys.js")).length;
+    assert.ok(size <= COMPOSE_MAX_BYTES, `compose_keys.js is ${size} bytes, over ${COMPOSE_MAX_BYTES}`);
+    const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
+    assert.ok(listing.includes("content/compose_keys.js"));
 });
 
 test("the manifest injects the body script into message documents and the xpi holds it", () => {

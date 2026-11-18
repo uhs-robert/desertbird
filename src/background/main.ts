@@ -47,6 +47,7 @@ import { create_bridge_drafts } from "./bridge/drafts.ts";
 import { create_bridge_acts } from "./bridge/acts.ts";
 import type { ActsApi } from "./bridge/acts.ts";
 import type { DraftsApi } from "./bridge/drafts.ts";
+import { EDITOR_HOST_NAME, create_compose_requests, create_editor_client, create_external_editor } from "./external_editor.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
@@ -80,7 +81,13 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
             /** Fires with -1 when no window of the application has the focus. */
             onFocusChanged: { addListener(listener: (window_id: number) => void): void };
         };
-    tabs: Pick<TabsApi["tabs"], "query"> & { onActivated: { addListener(listener: () => void): void } };
+    tabs: Pick<TabsApi["tabs"], "query"> & {
+        get(tab_id: number): Promise<unknown>;
+        onActivated: { addListener(listener: () => void): void };
+        onRemoved: { addListener(listener: (tab_id: number) => void): void };
+    };
+    compose: RouterApi["compose"] & { onAfterSend: { addListener(listener: (tab: { id?: number }, send_info: { error?: string }) => void): void } };
+    composeScripts: { register(script: { js: { file: string }[] }): Promise<unknown> };
     messages: RouterApi["messages"] & NewMailApi["messages"];
     mailTabs: RouterApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> };
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
@@ -90,6 +97,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
         getURL(path: string): string;
         sendMessage(message: HudChanged): Promise<unknown>;
         connectNative(application: string): NativePort;
+        sendNativeMessage(application: string, message: object): Promise<unknown>;
     };
     storage: {
         local: { get(key: string | string[]): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
@@ -239,8 +247,29 @@ const cmdline = create_cmdline_service({
     search,
     run: (invocation) => router.run(invocation),
 });
+// The external editor of a compose window, behind the `external_editor` setting. Its jobs live in session storage, so a restart of this page resumes them. A build without session storage refuses the editor.
+const COMPOSE_WINDOW_TYPE = "messageCompose";
+const no_session = async (): Promise<never> => {
+    throw new Error("The external editor needs storage.session, which this Thunderbird lacks.");
+};
+const external_editor = create_external_editor({
+    session: messenger.storage.session ?? { get: no_session, set: no_session },
+    client: create_editor_client((message) => messenger.runtime.sendNativeMessage(EDITOR_HOST_NAME, message)),
+    compose: messenger.compose,
+    async compose_tab_in(window_id) {
+        if ((await messenger.windows.get(window_id).catch(() => undefined))?.type !== COMPOSE_WINDOW_TYPE) return undefined;
+        // A compose window holds exactly one tab.
+        return (await messenger.tabs.query({ windowId: window_id }))[0]?.id;
+    },
+    tab_exists: (tab_id) => messenger.tabs.get(tab_id).then(() => true, () => false),
+    is_enabled: async () => (await config_store.read()).settings.external_editor,
+    say: (window_id, text, is_error) => (is_error ? notify_refusal : notify_result)({ ...messenger, toasts: hud }, text, window_id),
+    now: () => Date.now(),
+    pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+});
+
 // The keys and the bridge `act` frame share this API, so a bridge move lands in the same undo log as a key move.
-const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } };
+const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS }, external_editor };
 const router = create_router(registry, handler_api);
 
 // The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.
@@ -270,14 +299,24 @@ const bridge = create_bridge_port({
     },
 });
 
+const compose_requests = create_compose_requests((window_id) => router.run({ command: "compose.edit_external", args: {}, count: 1, windowId: window_id, messageIds: [] }));
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: messenger.hints, write_text: write_to_clipboard });
 
 // The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
-messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? body_requests(message, sender));
+messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? compose_requests(message, sender) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
 messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? (confirm.surface_gone(windowId), cmdline.end(windowId), hud.set_lifted(windowId, false)) : hud.forget(windowId)));
 
 start_jump_history(messenger);
+
+// Registered at each start of this page, so compose windows opened from now on get Ctrl+E.
+messenger.composeScripts.register({ js: [{ file: "content/compose_keys.js" }] }).catch(console.error);
+messenger.tabs.onRemoved.addListener((tab_id) => void external_editor.compose_gone(tab_id).catch(console.error));
+// A sent message closes its window too. Whichever event comes first orphans the job. A failed send keeps the window open, so it leaves the job alone.
+messenger.compose.onAfterSend.addListener((tab, send_info) => {
+    if (tab.id !== undefined && !send_info?.error) external_editor.compose_gone(tab.id).catch(console.error);
+});
+external_editor.resume().catch(console.error);
 
 // Top level, so each page start registers the listeners again.
 create_new_mail_notifier(messenger, async () => (await config_store.read()).settings.notify_new_mail).register();

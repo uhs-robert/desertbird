@@ -140,7 +140,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
     mkdirSync(mail_dir, { recursive: true });
     writeFileSync(join(mail_dir, "Inbox"), mail_account_inbox());
   }
-  const quick_reply_prefs = kind === "quick_reply_plain" ? QUICK_REPLY_SIGNATURE : kind === "quick_reply_html" ? { ...QUICK_REPLY_SIGNATURE, "mail.identity.id1.compose_html": true } : {};
+  const quick_reply_prefs = kind === "quick_reply_plain" || kind === "compose_editor" ? QUICK_REPLY_SIGNATURE : kind === "quick_reply_html" ? { ...QUICK_REPLY_SIGNATURE, "mail.identity.id1.compose_html": true } : {};
   const identity_prefs = kind === "reply_no_identity" || kind === "mail_account" ? {} : { ...IDENTITY_PREFS, ...quick_reply_prefs };
   const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
