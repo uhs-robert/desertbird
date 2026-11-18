@@ -144,3 +144,16 @@ test("folder.open takes only a special folder, never a folder path or an account
     assert.deepEqual(await run("folder.open --special=inbox"), { ok: true });
     assert.equal(routed.length, 1);
 });
+
+test("search.threads is refused: a search then a step would tell whether a subject or sender matched", async () => {
+    const { run, routed } = run_under_test();
+    assert.deepEqual(await run("search.threads Invoice"), { ok: false, message: "search.threads never runs through the bridge" });
+    assert.deepEqual(routed, []);
+});
+
+test("filter.set refuses a tag, which a step after it would confirm, and keeps the other filters", async () => {
+    const { run, routed } = run_under_test();
+    assert.deepEqual(await run("filter.set --state=tag --tag=Private"), { ok: false, message: "filter.set takes no tag through the bridge" });
+    assert.deepEqual(await run("filter.set --state=unread"), { ok: true });
+    assert.equal(routed.length, 1);
+});
