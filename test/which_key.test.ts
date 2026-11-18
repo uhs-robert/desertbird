@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
 import { branch_at, may_open_by_itself, which_key_panel } from "../src/background/hud/which_key.ts";
+import { compile_default_keymap, compile_message_keymap } from "../src/background/commands/index.ts";
 import { sample_root, settings_with } from "./hud_fakes.ts";
 
 test("the panel lists the keys that follow the typed keys, leaves by label and groups by name or count", () => {
@@ -61,3 +63,16 @@ test("the root list orders letters, other keys, chords, then groups, and lists e
     assert.deepEqual(which_key_panel(mixed, [], settings_with({}))?.rows.map((row) => row.key), ["j", "t", "T", "1", "<C-x>", "d", "g"]);
 });
 const leaf_of = (label: string) => ({ kind: "leaf" as const, label, steps: [] });
+
+test("`;` is a prefix whose panel lists f, c and y, and each resolves to a pick with its action", () => {
+    for (const [compiled, id] of [[compile_default_keymap().compiled.modes.normal, "hint.window"], [compile_message_keymap().compiled.modes.normal, "hint.pick"]] as const) {
+        const root = compiled as TreeBranch;
+        assert.deepEqual(which_key_panel(root, [";"], settings_with({}))?.rows.map((row) => row.key), ["f", "c", "y"]);
+        const actions = ["f", "c", "y"].map((key) => {
+            const node = branch_at(root, [";"])?.children[key];
+            const step = node?.kind === "leaf" ? node.steps[0] : undefined;
+            return step?.runs_in === undefined ? undefined : [step.invocation.id, step.invocation.args?.["action"]];
+        });
+        assert.deepEqual(actions, [[id, "focus"], [id, "activate"], [id, "yank"]]);
+    }
+});

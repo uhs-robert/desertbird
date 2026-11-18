@@ -16,10 +16,8 @@ export interface PickTarget {
     text: string;
 }
 
-/** What a typed label does to its target. `choose` is only a start: the first key picks one of the three. */
+/** What a typed label does to its target. */
 export type PickAction = "focus" | "activate" | "yank";
-
-const ACTION_KEYS: Record<string, PickAction> = { f: "focus", c: "activate", y: "yank" };
 
 export interface PickKeyEvent {
     key: string;
@@ -69,30 +67,18 @@ function draw(target_window: HintWindow, elements: HintElement[], labels: string
     return { container, nodes };
 }
 
-/** Labels the targets and takes the keys until a pick or an end. Returns how many it labelled, or with `choose` how many targets the action may use. With none it starts nothing. A second call ends the first. With `choose` no label shows until `f`, `c` or `y` is typed, and any other key ends the pick. */
-export function start_pick(host: PickHost, targets: readonly PickTarget[], scheme: HintLabelScheme, start: PickAction | "choose" = "activate"): number {
+/** Labels the targets and takes the keys until a pick or an end. Returns how many it labelled. With none it starts nothing. A second call ends the first. A yank labels only the targets with text. */
+export function start_pick(host: PickHost, targets: readonly PickTarget[], scheme: HintLabelScheme, action: PickAction = "activate"): number {
     end_pick();
-    let action = start === "choose" ? null : start;
-    // A yank labels only what has text to copy.
-    const usable = (for_action: PickAction): readonly PickTarget[] => (for_action === "yank" ? targets.filter((target) => target.text !== "") : targets);
-    const count = usable(action ?? "activate").length;
-    if (count === 0) return 0;
-    let picks: readonly PickTarget[] = [];
-    let labels: string[] = [];
-    let drawn: { indexes: number[]; container: HintLabelNode; nodes: HintLabelNode[] }[] = [];
+    const picks = action === "yank" ? targets.filter((target) => target.text !== "") : targets;
+    if (picks.length === 0) return 0;
+    const labels = hint_labels(picks.length);
+    const windows = [...new Set(picks.map((target) => target.window))];
+    const drawn = windows.map((window) => {
+        const indexes = picks.flatMap((target, index) => (target.window === window ? [index] : []));
+        return { indexes, ...draw(window, indexes.map((index) => picks[index]!.element), indexes.map((index) => labels[index]!), scheme) };
+    });
     let typed = "";
-
-    function show(chosen: PickAction): void {
-        action = chosen;
-        picks = usable(chosen);
-        if (picks.length === 0) return end();
-        labels = hint_labels(picks.length);
-        const windows = [...new Set(picks.map((target) => target.window))];
-        drawn = windows.map((window) => {
-            const indexes = picks.flatMap((target, index) => (target.window === window ? [index] : []));
-            return { indexes, ...draw(window, indexes.map((index) => picks[index]!.element), indexes.map((index) => labels[index]!), scheme) };
-        });
-    }
 
     function end(): void {
         stop_keys();
@@ -106,7 +92,6 @@ export function start_pick(host: PickHost, targets: readonly PickTarget[], schem
         event.stopPropagation();
         if (MODIFIER_KEYS.has(event.key)) return;
         const letter = /^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? event.key.toLowerCase() : "";
-        if (action === null) return ACTION_KEYS[letter] ? show(ACTION_KEYS[letter]) : end();
         if (letter === "" || labels_matching(labels, typed + letter).length === 0) return end();
         typed += letter;
         // A label that stopped matching goes, so the ones left show what may follow.
@@ -121,6 +106,5 @@ export function start_pick(host: PickHost, targets: readonly PickTarget[], schem
     });
     const stop_disturb = host.on_disturb(end);
     end_current = end;
-    if (action !== null) show(action);
-    return count;
+    return picks.length;
 }
