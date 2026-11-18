@@ -400,7 +400,8 @@ test("show_root shows the root panel at once, and the next reported end removes 
 });
 
 test("a prefix typed in a message document lists the message keys, and the redraw reads the same tree", async () => {
-    const { timers, body_pending, pending, state } = setup();
+    const { hud, timers, body_pending, pending, state } = setup();
+    await hud.track(1);
     await body_pending(["g"]);
     timers.advance(300);
     await settle();
@@ -411,11 +412,38 @@ test("a prefix typed in a message document lists the message keys, and the redra
     await pending(["g"]);
     timers.advance(300);
     await settle();
-    assert.notDeepEqual((await state()).which_key?.rows.map((row) => row.label), ["Only in a message"], "the newest report, from the main tree, wins");
+    assert.ok((await state()).which_key?.rows.some((row) => row.label === "First row"), "the main tree rows show");
 });
 
-test("an empty prefix from a message document removes its panel", async () => {
+test("with a panel up, a report from the other source redraws at once with its own tree", async () => {
+    const { hud, timers, body_pending, pending, state } = setup();
+    await hud.track(1);
+    const labels = async () => (await state()).which_key?.rows.map((row) => row.label);
+    await body_pending(["g"]);
+    timers.advance(300);
+    await settle();
+    assert.deepEqual(await labels(), ["Only in a message"]);
+    await pending(["g"]);
+    await settle();
+    assert.ok((await labels())?.includes("First row"), "main after body");
+    await body_pending(["g"]);
+    await settle();
+    assert.deepEqual(await labels(), ["Only in a message"]);
+});
+
+test("a report from a window the hud does not track mounts nothing", async () => {
     const { log, timers, body_pending } = setup();
+    await body_pending(["g"], 9);
+    timers.advance(1000);
+    await settle();
+    assert.deepEqual(log, []);
+});
+
+
+test("an empty prefix from a message document removes its panel", async () => {
+    const { hud, log, timers, body_pending } = setup();
+    await hud.track(1);
+    log.length = 0;
     await body_pending(["g"]);
     timers.advance(300);
     await settle();
