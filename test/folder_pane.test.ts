@@ -72,7 +72,7 @@ function api_for(windows: Map<number, unknown>) {
     const platform = stub_platform([...windows.values()]);
     const ids = new Map([...windows].map(([id, window]) => [window, id]));
     const api = get_folderpane_api({ extension: { windowManager: { getWrapper: (window: unknown) => ({ id: ids.get(window)! }) }, messageManager: { convert: () => null } } } as never);
-    return { fold: api.folderpane.fold, restore: platform.restore };
+    return { fold: api.folderpane.fold, focused: api.folderpane.focused, restore: platform.restore };
 }
 
 const SHAPE: [string, unknown[]][] = [["Account", [["Inbox", [["Work", []], ["Home", []]]], ["Sent", []]]], ["Local", [["Trash", []]]]];
@@ -164,4 +164,13 @@ test("z M leaves an open subfolder inside a closed parent alone", async () => {
     await fold({ windowId: 1, open: false, extent: "all" });
     assert.deepEqual(closed.sort(), ["Account", "Local"]);
     restore();
+});
+
+test("focused tells the folder pane from the other panes", async () => {
+    const fake = folder_tree(SHAPE);
+    for (const folder_focused of [true, false]) {
+        const { focused, restore } = api_for(new Map([[1, window_with(fake.tree, folder_focused)]]));
+        assert.equal(await focused({ windowId: 1 }), folder_focused);
+        restore();
+    }
 });
