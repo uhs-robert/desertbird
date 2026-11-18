@@ -60,6 +60,14 @@ async function close_compose_windows() {
   for (const window of await browser.windows.getAll({ windowTypes: ["messageCompose"] })) await browser.windows.remove(window.id);
 }
 
+// Saves the open compose window as a draft and returns the raw source of the saved message, to check what a draft holds.
+async function save_draft_raw() {
+  const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["messageCompose"] });
+  const saved = await browser.compose.saveMessage(window.tabs[0].id, { mode: "draft" });
+  const raw = await browser.messages.getRaw(saved.messages[0].id, { data_format: "File" });
+  return await raw.text();
+}
+
 // Archive or delete what the mail tab has selected, through the API. It measures what Thunderbird leaves selected afterwards, independent of the keys.
 async function act_on_selected(name) {
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true });
@@ -237,6 +245,8 @@ async function poll_forever() {
       } else if (command.name === "close_message_windows") {
         for (const window of await browser.windows.getAll({ windowTypes: ["messageDisplay"] })) await browser.windows.remove(window.id);
         await post({ seq: command.seq, closed: true });
+      } else if (command.name === "save_draft_raw") {
+        await post({ seq: command.seq, raw: await save_draft_raw() });
       } else if (command.name === "close_compose") {
         await close_compose_windows();
         await post({ seq: command.seq, closed: true });
