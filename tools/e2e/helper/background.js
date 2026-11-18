@@ -135,6 +135,11 @@ async function tab_command(command) {
   const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
   const tabs = window.tabs;
   if (command.name === "open_content_tab") return { opened: (await browser.tabs.create({ url: "about:blank" })).id };
+  // The tabs API refuses another add-on's page, so the own_pages kind installs a copy of DesertBird that opens its pages on this message.
+  if (command.name === "open_own_page") {
+    const own = (await browser.management.getAll()).find((addon) => addon.name === "DesertBird");
+    return { opened: await browser.runtime.sendMessage(own.id, command.args.page) };
+  }
   if (command.name === "open_popup_window") return { opened: (await browser.windows.create({ type: "popup", url: "about:blank" })).id };
   if (command.name === "open_normal_window") return { opened: (await browser.windows.create({ type: "normal" })).id };
   // The remove call can outlast the answer on a main window, so it is not awaited.
@@ -250,7 +255,7 @@ async function poll_forever() {
       } else if (command.name === "clear_clipboard") {
         await clipboard_text("");
         await post({ seq: command.seq, cleared: true });
-      } else if (["open_content_tab", "open_popup_window", "close_popup_window", "open_normal_window", "close_normal_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
+      } else if (["open_content_tab", "open_own_page", "open_popup_window", "close_popup_window", "open_normal_window", "close_normal_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
       } else if (command.name === "click_link") {
         const [tab] = await browser.tabs.query({ active: true, currentWindow: true });

@@ -11,7 +11,7 @@ import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkReq
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
-import type { HintSession, HintWindow } from "./body_hints.ts";
+import type { HintElement, HintSession, HintWindow } from "./body_hints.ts";
 
 export interface BodyKeyEvent extends KeyEventLike {
     target: unknown;
@@ -75,11 +75,11 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
     return typeof tree?.version === "number" ? { version: tree.version, root: tree.root } : null;
 }
 
-/** Starts the keys of one message document. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
-export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime): Promise<void> {
+/** Starts the keys of one message document. `open_pick` runs on a picked link or button. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
+export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error))): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
-    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error))) };
+    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, open_pick) };
 
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {

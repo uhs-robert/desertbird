@@ -117,6 +117,14 @@ test("a mail key with no displayed message refuses with a notification and acts 
     assert.equal(base.calls.some((call) => /messages\.(delete|archive)/.test(call)), false);
 });
 
+test("body.invoke from a page of the add-on runs the key with no messages when the tab shows none", async () => {
+    const ran: KeysInvocation[] = [];
+    const api: BodyRequestApi = { messageDisplay: { getDisplayedMessages: async () => Promise.reject(new Error("not a message tab")) }, windows: { get: async () => ({ type: "normal" }) }, notifications: { create: async () => "n1" } };
+    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
+    await handle({ type: "body.invoke", command: "tab.close", args: {}, count: 1 }, sender);
+    assert.deepEqual(ran, [{ command: "tab.close", args: {}, count: 1, windowId: 9, messageIds: [] }]);
+});
+
 test("body.invoke refuses a message window with a notification and runs nothing", async () => {
     const { handle, ran, calls } = body_requests("messageDisplay");
     await handle(open_line, sender);

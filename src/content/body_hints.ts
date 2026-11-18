@@ -7,6 +7,8 @@ export interface HintElement {
     contains(other: unknown): boolean;
     /** Moves the keyboard focus to the element. A link then takes a real Enter, which Thunderbird handles as a click on it. */
     focus(): void;
+    /** A script click. Only a page of the add-on uses it, where `open` is the one to decide. */
+    click(): void;
     matches(selector: string): boolean;
 }
 
@@ -59,8 +61,8 @@ export interface HintSession {
     feed(key: HintKey): void;
 }
 
-/** `open` asks for a trusted Enter on the focused element. A script click would skip Thunderbird's check for a link that lies about its address, so the pick never clicks. */
-export function create_hint_session(window: HintWindow, open: () => void): HintSession {
+/** `open` runs on a picked link or button, after it has the focus. In a mail it asks for a trusted Enter, since a script click would skip Thunderbird's check for a link that lies about its address. */
+export function create_hint_session(window: HintWindow, open: (element: HintElement) => void): HintSession {
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";
@@ -113,7 +115,7 @@ export function create_hint_session(window: HintWindow, open: () => void): HintS
             if (picked === undefined) return;
             end();
             picked.element.focus();
-            if (picked.element.matches(OPENABLE)) open();
+            if (picked.element.matches(OPENABLE)) open(picked.element);
         },
     };
 }

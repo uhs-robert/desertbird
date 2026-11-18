@@ -1420,6 +1420,58 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
 const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
 
+// The own_pages kind installs a copy of the xpi that opens its options or help page when the helper add-on sends the page name.
+const OPEN_OWN_PAGES_SCRIPT = `messenger.runtime.onMessageExternal.addListener((page) => (page === "help" ? messenger.tabs.create({ url: messenger.runtime.getURL("help/help.html") }) : messenger.runtime.openOptionsPage()).then(() => true));\n`;
+
+// DesertBird's own pages run the message keys themselves: q closes the page tab, and q typed in an option input stays text.
+async function run_own_pages(instance) {
+  const app = instance.app;
+  const kind = "own_pages";
+  await open_inbox(instance);
+  const shot = async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
+  const tab_count = async () => main_window_tabs(await instance.ask("state")).length;
+  const before = await tab_count();
+  const open_page = async (page) => {
+    const reply = await instance.ask("open_own_page", 20000, { page });
+    await sleep(2500);
+    check(app, kind, `the ${page} page opens in a tab`, (await tab_count()) === before + 1, `reply ${JSON.stringify(reply)}`);
+  };
+  for (const page of ["options", "help"]) {
+    await open_page(page);
+    // A click on empty page area puts the focus in the page document, as a user's first click does.
+    await instance.click(1150, 450);
+    await sleep(500);
+    const closed = await key_and_state(instance, ["q"], 2000);
+    check(app, kind, `q closes the ${page} page`, main_window_tabs(closed).length === before, `tabs ${main_window_tabs(closed).length}, expected ${before}`);
+  }
+  // `/` sends the find to the page through tabs.sendMessage. A refusal shows a toast in the strip below the page, so the strip staying unchanged and the selection on screen show the page took the find.
+  await open_page("options");
+  await instance.click(1150, 450);
+  await sleep(500);
+  const strip_before_find = await hud_pixels(instance, `${app}_own_find_before`);
+  await instance.press(["/"]);
+  await sleep(1500);
+  await instance.press(["Key bindings"]);
+  await sleep(400);
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  await shot("options_find", "options page after / and Key bindings: the heading is selected");
+  check(app, kind, "/ finds text on the options page with no refusal toast", (await hud_pixels(instance, `${app}_own_find_after`)) === strip_before_find);
+  await instance.ask("remove_tab", 20000, { index: before });
+  await sleep(1000);
+  // A click on the first setting, a text input.
+  await open_page("options");
+  await instance.click(590, 250);
+  await sleep(500);
+  await shot("options_input_focused", "options page with the first control focused");
+  const typed = await key_and_state(instance, ["q"], 1500);
+  check(app, kind, "q in an options input does not close the tab", main_window_tabs(typed).length === before + 1, `tabs ${main_window_tabs(typed).length}`);
+  await instance.ask("remove_tab", 20000, { index: before });
+  await sleep(1000);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(500);
+}
+
 // Tab commands. The helper add-on opens, selects and closes tabs through the API, since wtype has no mouse.
 async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const app = instance.app;
@@ -1667,12 +1719,12 @@ async function run_mail_account(instance) {
 const QUICK_REPLY_SEED = ["Quick reply one.\nSecond & <b>line</b>.", "", "", "", "", "", "", "", ""];
 
 // A copy of the xpi whose background page writes the given records to `storage.local` at start, since the helper add-on cannot write another add-on's storage.
-function seed_storage(xpi, work_dir, records) {
+function seed_storage(xpi, work_dir, records, extra_script = "") {
   const stage = join(work_dir, "seed_stage");
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage, { recursive: true });
   execFileSync("unzip", ["-q", xpi, "-d", stage]);
-  appendFileSync(join(stage, "background.js"), `\nmessenger.storage.local.set(${JSON.stringify(records)});\n`);
+  appendFileSync(join(stage, "background.js"), `\nmessenger.storage.local.set(${JSON.stringify(records)});\n${extra_script}`);
   const seeded = join(work_dir, "desertbird_seeded.xpi");
   rmSync(seeded, { force: true });
   execFileSync("zip", ["-qr", seeded, "."], { cwd: stage });
@@ -1985,6 +2037,7 @@ async function run_assertions(instance) {
   else if (instance.kind === "message" || instance.kind === "message_remote") await run_message_scripts(instance);
   else if (instance.kind === "mail_account") await run_mail_account(instance);
   else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
+  else if (instance.kind === "own_pages") await run_own_pages(instance);
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
   else await run_no_identity(instance);
 }
@@ -1992,11 +2045,11 @@ async function run_assertions(instance) {
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
     const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : MODE_LABEL_KINDS[kind];
-    const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path;
+    const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path && kind === "own_pages" ? seed_storage(xpi_path, work_dir, {}, OPEN_OWN_PAGES_SCRIPT) : xpi_path;
     const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
     try {
       if (xpi_path) await run_assertions({ ...instance, kind });

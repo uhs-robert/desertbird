@@ -28,8 +28,8 @@ const PARENT_MAX_BYTES = 25800;
 // The size guard of the folder pane bundle (`experiment/folderpane.js`), which Thunderbird loads on the first folder pane call and not at startup: its first measured size (4891 bytes) plus 20 percent made 5869, rounded up to 5900. AGENTS.md records the same number.
 const FOLDERPANE_MAX_BYTES = 5900;
 
-// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard is 15879 rounded up to 15900. AGENTS.md records the same number.
-const CONTENT_MAX_BYTES = 15900;
+// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard rose to 15900. The injectable pick action for the own pages made it 15927, and the guard is 15927 rounded up to 15950. AGENTS.md records the same number.
+const CONTENT_MAX_BYTES = 15950;
 
 // The `hints` API has a guard of its own, since it is a separate bundle and not chrome runtime code. Its first measured size was 3091 bytes, and the guard is that plus 20 percent (3709) rounded up to 3800. The check that the focus still sits on the picked link made it 3863, so the guard is 3800 plus 63 rounded up to 3900.
 const HINTS_MAX_BYTES = 3900;
@@ -82,6 +82,11 @@ const message_display = await build({ ...shared_options, entryPoints: ["src/cont
 writeFileSync(join(out_dir, "meta", "message_display.json"), JSON.stringify(message_display.metafile));
 const message_display_bytes = statSync(message_display_file).size;
 
+// The own pages (options, help) run the message key script from one shared bundle, since a content tab gets no script from the manifest.
+const page_keys_file = join(out_dir, "content", "page_keys.js");
+await build({ ...shared_options, entryPoints: ["src/content/page_keys.ts"], outfile: page_keys_file });
+const page_keys_bytes = statSync(page_keys_file).size;
+
 // The options page is an extension page: it bundles the settings code and the command table, and stays out of the parent bundle.
 mkdirSync(join(out_dir, "options"), { recursive: true });
 await build({ ...shared_options, entryPoints: ["src/options/options.ts"], outfile: join(out_dir, "options", "options.js") });
@@ -116,4 +121,4 @@ if (message_display_bytes > CONTENT_MAX_BYTES) {
 }
 
 execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help"], { cwd: out_dir });
-console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`].join(", ")})`);
+console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`].join(", ")})`);
