@@ -384,3 +384,13 @@ test("the label gets the colors of the theme setting, and a theme change sends t
     await hud.settings_changed();
     assert.deepEqual(label_colors.at(-1), mode_label_colors(resolve_theme("oasis_sol")));
 });
+
+test("show_root shows the root panel at once, and the next reported end removes it", async () => {
+    const { hud, log, pending, state } = setup({ which_key_delay_ms: 0 });
+    await hud.show_root(1);
+    assert.deepEqual(log, ["mount hud@1"]);
+    assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["j", "g", "d"]);
+    await pending([]);
+    await settle();
+    assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);
+});

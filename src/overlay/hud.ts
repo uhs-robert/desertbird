@@ -37,7 +37,7 @@ function draw_which_key(panel: HudState["which_key"]): void {
         rows.append(line);
     }
     if (panel.rows.length > MAX_ROWS) rows.append(make("div", "row group", `... ${panel.rows.length - MAX_ROWS} more`));
-    which_key_element.replaceChildren(make("div", "title", `after ${panel.title}`), rows);
+    which_key_element.replaceChildren(make("div", "title", panel.title === "" ? "keys" : `after ${panel.title}`), rows);
 }
 
 function draw(state: HudState): void {

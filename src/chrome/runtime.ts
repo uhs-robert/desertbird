@@ -61,7 +61,8 @@ export interface Runtime {
 // How long plain keys are dropped after a command that opens the overlay. The overlay takes the focus a round trip later, so keys typed ahead would otherwise act on the list.
 const HOLD_MS = 1500;
 
-const PAGE_COMMANDS = ["tab.close", "cmdline.open", "help.open"];
+const KEY_LIST = "help.whichkey";
+const PAGE_COMMANDS = ["tab.close", "cmdline.open", KEY_LIST];
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
     const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
@@ -117,6 +118,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
                 // The selection is read here, inside the key's own handler, because the background answers later: by then a following `j` has moved the selection.
                 const args = (step.invocation.args ?? {}) as Record<string, JsonValue>;
                 deps.emit({ command: step.invocation.id, args, count: step_count ?? 1, windowId: deps.window_id_of(window), messageIds: port.selected_message_ids() });
+                // The panel of the key list is not a typed prefix, so the next key reports the end of it.
+                if (step.invocation.id === KEY_LIST) was = 1;
                 // The range is taken. Collapsing to the current row keeps a following `d d` to one message.
                 if (visual_anchor >= 0) end_visual(port);
             }
@@ -144,12 +147,14 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         }
         const kind = deps.tab_kind_of(window);
         if (kind) {
+            pend(window, []);
             // A remote page hides its text fields, so only a chord is safe there.
             if (kind > 1 ? is_plain_printable(token) : deps.is_typing_target(window, event) || deps.menu_is_open(window)) return matcher.reset();
             const result = matcher.feed(NORMAL_MODE, token);
             const { id, args } = result.kind_ === "match" ? result.leaf.steps[0]!.invocation : { id: "", args: undefined };
             if (!PAGE_COMMANDS.includes(id) || args) return;
             if (hold_commands.has(id)) hold_until = deps.now() + HOLD_MS;
+            if (id === KEY_LIST) was = 1;
             event.preventDefault();
             event.stopPropagation();
             return deps.emit({ command: id, args: {}, count: 1, windowId: deps.window_id_of(window), messageIds: [] });

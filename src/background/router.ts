@@ -1,5 +1,6 @@
 // Runs one invocation: look up, validate, check the Experiment, call the handler on the messages the invocation names. Each failure ends in a notification.
 
+import type { WhichKeyApi } from "./handlers/help.ts";
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
@@ -22,7 +23,7 @@ import type { NotificationsApi } from "./notify.ts";
 import type { ScopedContext } from "./commands/index.ts";
 
 // An intersection, not an interface that extends each part: the parts share `folders`, `messages` and `mailTabs` with different members.
-export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & FollowupApi & QuickReplyApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "keys"> & Pick<UndoApi, "undo"> & {
+export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & FollowupApi & QuickReplyApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "keys"> & Pick<UndoApi, "undo"> & WhichKeyApi & {
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
     overlay: OverlayApi | undefined;

@@ -243,7 +243,7 @@ const page_tree = () => ({
             x: leaf("msg.archive", "background"),
             o: { kind: "leaf" as const, steps: [{ ...step("cmdline.open", "background"), invocation: { id: "cmdline.open", args: { text: "open " } } }] },
             j: leaf("motion.down", "chrome"),
-            g: { kind: "branch", children: { "?": leaf("help.open", "background"), g: leaf("motion.top", "chrome") } },
+            g: { kind: "branch", children: { "?": leaf("help.whichkey", "background"), g: leaf("motion.top", "chrome") } },
             "<A-q>": leaf("tab.close", "background"),
             "<C-c>": leaf("tab.close_mail", "background"),
         },
@@ -274,13 +274,31 @@ test("a readable tab runs q, : and g? and passes every other key", () => {
     assert.equal(press(window, "?").cancelled, true);
     assert.deepEqual(
         emitted.map((event) => [event.command, event.messageIds]),
-        [["tab.close", []], ["cmdline.open", []], ["help.open", []]],
+        [["tab.close", []], ["cmdline.open", []], ["help.whichkey", []]],
     );
     for (const key of ["x", "j", "z", "o"]) assert.equal(press(window, key).cancelled, false, key);
     press(window, "g");
     assert.equal(press(window, "g").cancelled, false);
     assert.equal(emitted.length, 3);
     assert.equal(window.selected, 0);
+});
+
+test("the key list panel ends on the next key, in a page tab and in the mail tab", () => {
+    for (const tab_kind of [1, 0] as const) {
+        const { windows, pending, runtime } = setup();
+        runtime.install(page_tree());
+        const window = windows[0]!;
+        if (tab_kind) {
+            window.tab_kind = tab_kind;
+            window.in_mail_tab = false;
+        }
+        press(window, "g");
+        press(window, "?");
+        const before = pending.length;
+        press(window, "j");
+        press(window, "j");
+        assert.deepEqual(pending.slice(before).map((event) => event.keys), [[]], `kind ${tab_kind}`);
+    }
 });
 
 test("a readable tab holds plain keys after : so a fast :q does not close the tab", () => {
