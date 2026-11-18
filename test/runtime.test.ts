@@ -16,6 +16,8 @@ class FakeWindow implements KeyTarget {
     blur_listeners = new Set<() => void>();
     adds = 0;
     in_mail_tab = true;
+    /** The tab kind outside the mail tab: 1 readable, 2 remote. */
+    tab_kind: 1 | 2 = 2;
     in_reading_pane = false;
     /** The folder tree rows and selection while the folder pane has the focus, or null. */
     folder: { rows: number; selected: number } | null = null;
@@ -134,6 +136,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         },
         unregister_window_listener: () => void unregisters++,
         open_windows: () => windows,
+        tab_kind_of: (window) => (window.in_mail_tab ? 0 : (window.tab_kind ?? 2)),
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
         folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
         is_typing_target: (window, event) => (event.target as { localName: string }).localName === "input" || window.body_script_live,
@@ -228,6 +231,65 @@ test("a key in an input, outside the mail tab or from a bare modifier passes", (
     window.in_mail_tab = true;
     assert.equal(press(window, "Shift").cancelled, false);
     assert.equal(window.selected, 0);
+});
+
+const page_tree = () => ({
+    version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION,
+    root: {
+        kind: "branch",
+        children: {
+            q: leaf("tab.close", "background"),
+            ":": leaf("cmdline.open", "background"),
+            x: leaf("msg.archive", "background"),
+            j: leaf("motion.down", "chrome"),
+            g: { kind: "branch", children: { "?": leaf("help.open", "background"), g: leaf("motion.top", "chrome") } },
+            "<A-q>": leaf("tab.close", "background"),
+        },
+    },
+});
+
+test("a readable tab runs q, : and g? and passes every other key", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(page_tree());
+    const window = windows[0]!;
+    window.in_mail_tab = false;
+    window.tab_kind = 1;
+    assert.equal(press(window, "q").cancelled, true);
+    assert.equal(press(window, ":").cancelled, true);
+    press(window, "g");
+    assert.equal(press(window, "?").cancelled, true);
+    assert.deepEqual(
+        emitted.map((event) => [event.command, event.messageIds]),
+        [["tab.close", []], ["cmdline.open", []], ["help.open", []]],
+    );
+    for (const key of ["x", "j", "z"]) assert.equal(press(window, key).cancelled, false, key);
+    press(window, "g");
+    assert.equal(press(window, "g").cancelled, false);
+    assert.equal(emitted.length, 3);
+    assert.equal(window.selected, 0);
+});
+
+test("a readable tab leaves q to a text field or an open menu", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(page_tree());
+    const window = windows[0]!;
+    window.in_mail_tab = false;
+    window.tab_kind = 1;
+    assert.equal(press(window, "q", { target: { localName: "input" } }).cancelled, false);
+    window.menu_open = true;
+    assert.equal(press(window, "q").cancelled, false);
+    assert.equal(emitted.length, 0);
+});
+
+test("a remote tab runs a bound chord and passes plain keys, even q", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(page_tree());
+    const window = windows[0]!;
+    window.in_mail_tab = false;
+    for (const key of ["q", ":", "x"]) assert.equal(press(window, key).cancelled, false, key);
+    assert.equal(emitted.length, 0);
+    assert.equal(press(window, "q", { altKey: true }).cancelled, true);
+    assert.deepEqual(emitted.map((event) => event.command), ["tab.close"]);
 });
 
 test("Escape ends a half-typed sequence", () => {

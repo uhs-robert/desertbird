@@ -33,6 +33,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     open_windows(): Window[];
     /** The thread list of the window's front tab, or null when that tab is not the mail tab. Keys then pass through. */
     list_port_of(window: Window): ListPort | null;
+    /** The front tab: 0 the mail tab, 1 another tab with a readable document, 2 a tab whose document is out of reach. */
+    tab_kind_of(window: Window): 0 | 1 | 2;
     /** The folder tree while the folder pane has the focus, or null. The motions then move the folder selection instead of the thread list. */
     folder_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for someone else: a text field, or a message body that runs the body script. The event target is not enough: see `focus.ts`. */
@@ -58,6 +60,8 @@ export interface Runtime {
 
 // How long plain keys are dropped after a command that opens the overlay. The overlay takes the focus a round trip later, so keys typed ahead would otherwise act on the list.
 const HOLD_MS = 1500;
+
+const PAGE_COMMANDS = ["tab.close", "cmdline.open", "help.open"];
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
     const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
@@ -137,6 +141,17 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
                 event.stopPropagation();
                 return;
             }
+        }
+        const kind = deps.tab_kind_of(window);
+        if (kind) {
+            // A remote page hides its text fields, so only a chord is safe there.
+            if (kind > 1 ? is_plain_printable(token) : deps.is_typing_target(window, event) || deps.menu_is_open(window)) return matcher.reset();
+            const result = matcher.feed(NORMAL_MODE, token);
+            const id = result.kind_ === "match" && result.leaf.steps[0]!.invocation.id;
+            if (!id || !PAGE_COMMANDS.includes(id)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            return deps.emit({ command: id, args: {}, count: 1, windowId: deps.window_id_of(window), messageIds: [] });
         }
         const port = list_port_for(window, event);
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.

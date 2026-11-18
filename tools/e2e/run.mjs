@@ -1466,10 +1466,33 @@ async function run_own_pages(instance) {
   await shot("options_input_focused", "options page with the first control focused");
   const typed = await key_and_state(instance, ["q"], 1500);
   check(app, kind, "q in an options input does not close the tab", main_window_tabs(typed).length === before + 1, `tabs ${main_window_tabs(typed).length}`);
-  await instance.ask("remove_tab", 20000, { index: before });
-  await sleep(1000);
+  // Step 0 of the page keys: a keydown aimed at a remote page reaches the main-window listener. Alt+q closes the options tab with an input focused, and the page itself cannot have done it.
+  const chord_closed = await key_and_state(instance, ["-M", "alt", "q", "-m", "alt"], 2000);
+  check(app, kind, "Alt+q closes a remote page tab, input focused", main_window_tabs(chord_closed).length === before, `tabs ${main_window_tabs(chord_closed).length}, expected ${before}`);
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(500);
+  // The readable tabs take q, : and g? through the main-window runtime. Each opens by its Thunderbird shortcut.
+  // The address book focuses its search field, which keeps q as text, so a click on the folder list or the grid first puts the focus in the tab as a user's click does. g ? opens the help tab on top, and Alt+q closes it again.
+  for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
+    await open();
+    await sleep(3000);
+    check(app, kind, `the ${name} tab opens`, (await tab_count()) === before + 1, `tabs ${await tab_count()}`);
+    await instance.click(...click_at);
+    await sleep(500);
+    await shot(`${name.replace(" ", "_")}_tab`, `${name} tab before the keys`);
+    await instance.press(["g"]);
+    const helped = await key_and_state(instance, ["?"], 3000);
+    check(app, kind, `g ? opens the help tab from the ${name} tab`, main_window_tabs(helped).length === before + 2, `tabs ${main_window_tabs(helped).length}, expected ${before + 2}`);
+    const back = await key_and_state(instance, ["-M", "alt", "q", "-m", "alt"], 2000);
+    check(app, kind, `Alt+q closes the help tab and returns to the ${name} tab`, main_window_tabs(back).length === before + 1, `tabs ${main_window_tabs(back).length}`);
+    await instance.press([":"]);
+    await sleep(1500);
+    await shot(`${name.replace(" ", "_")}_cmdline`, `${name} tab after the colon key: the command line shows`);
+    await instance.press(["-k", "Escape"]);
+    await sleep(500);
+    const closed_here = await key_and_state(instance, ["q"], 2000);
+    check(app, kind, `q closes the ${name} tab`, main_window_tabs(closed_here).length === before, `tabs ${main_window_tabs(closed_here).length}, expected ${before}`);
+  }
 }
 
 // Tab commands. The helper add-on opens, selects and closes tabs through the API, since wtype has no mouse.
