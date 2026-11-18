@@ -545,9 +545,22 @@ test("a user key for a message command works in a message, and a user key for an
     assert.doesNotMatch(tree, /"Y"|"Z"/);
 });
 
-test("a user key never carries tab.close_mail in a message, and a null binding removes no message key", async () => {
+test("a user key never carries tab.close_mail in a message, and a null binding removes that key", async () => {
     const { compile_message_keymap } = await import("../src/background/commands/index.ts");
-    const tree = JSON.stringify(compile_message_keymap({ X: { id: "tab.close_mail" }, j: null }).compiled.modes.normal);
+    const tree = JSON.stringify(compile_message_keymap({ X: { id: "tab.close_mail" } }).compiled.modes.normal);
     assert.doesNotMatch(tree, /tab\.close_mail|"X"/);
-    assert.match(tree, /message\.scroll_down/);
+});
+
+test("a null user binding removes a message key, and one for a key the message lacks adds nothing", async () => {
+    const { compile_message_keymap } = await import("../src/background/commands/index.ts");
+    const tree = JSON.stringify(compile_message_keymap({ j: null, Q: null }).compiled.modes.normal);
+    assert.doesNotMatch(tree, /message\.scroll_down/);
+    assert.match(tree, /message\.scroll_up/);
+});
+
+test("a user key that opens the command line with the sort text stays out of a message, as the default does", async () => {
+    const { compile_message_keymap } = await import("../src/background/commands/index.ts");
+    const tree = JSON.stringify(compile_message_keymap({ X: { id: "cmdline.open", args: { text: "sort " } }, Y: { id: "cmdline.open", args: { text: "find " } } }).compiled.modes.normal);
+    assert.doesNotMatch(tree, /"X"/);
+    assert.match(tree, /"Y"/);
 });

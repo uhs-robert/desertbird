@@ -64,16 +64,23 @@ export const MESSAGE_KEYMAP: KeymapConfig = { normal: Object.assign({}, mail_key
 // Closes the tab on chords that must copy and cut in a message body, so no user key may carry it there.
 const NEVER_REBOUND_IN_MESSAGE: ReadonlySet<string> = new Set(["tab.close_mail"]);
 
-// The commands a user key may run in a message: those of the message groups and the reading keys. A binding of any other command (a list motion, `repeat.last`) stays in the mail tab. A `null` binding stays there too, so removing a list key does not take away a message key.
+// The commands a user key may run in a message: those of the message groups and the reading keys. A binding of any other command (a list motion, `repeat.last`) stays in the mail tab.
 const REBINDABLE_IN_MESSAGE: ReadonlySet<string> = new Set([
     ...MESSAGE_MAIL_GROUPS.flatMap((group) => Object.keys(group.commands)),
     ...Object.values(MESSAGE_KEYMAP.normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : [])).map((invocation) => invocation.id),
 ].filter((id) => !NEVER_REBOUND_IN_MESSAGE.has(id)));
 
-/** The message keys with the user's bindings of message commands on top. */
+// A user key with the same command and args as a list-only default (`,,` is `cmdline.open` with `sort `) needs the list as well.
+const LIST_ONLY_BINDINGS: ReadonlySet<string> = new Set(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => LIST_ONLY_KEYS.has(keys)).map(([, binding]) => JSON.stringify(binding)));
+
+/** The message keys with the user's bindings of message commands on top. A `null` removes the key only where the message keys have it. */
 export function message_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig {
-    const kept = Object.entries(user ?? {}).filter(([, binding]) => binding !== null && !Array.isArray(binding) && REBINDABLE_IN_MESSAGE.has(binding.id));
-    return { normal: { ...MESSAGE_KEYMAP.normal, ...Object.fromEntries(kept) } };
+    const normal = { ...MESSAGE_KEYMAP.normal };
+    for (const [keys, binding] of Object.entries(user ?? {})) {
+        if (binding === null) delete normal[keys];
+        else if (!Array.isArray(binding) && REBINDABLE_IN_MESSAGE.has(binding.id) && !LIST_ONLY_BINDINGS.has(JSON.stringify(binding))) normal[keys] = binding;
+    }
+    return { normal };
 }
 
 export function compile_message_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
