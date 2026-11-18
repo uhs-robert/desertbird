@@ -389,7 +389,7 @@ test("show_root shows the root panel at once, and the next reported end removes 
     const { hud, log, pending, state } = setup({ which_key_delay_ms: 0 });
     await hud.show_root(1);
     assert.deepEqual(log, ["mount hud@1"]);
-    assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["g", "d", "j"]);
+    assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["j", "d", "g"]);
     await pending([]);
     await settle();
     assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);

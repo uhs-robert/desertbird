@@ -50,11 +50,14 @@ test("a skip entry covers only its exact sequence", () => {
     assert.equal(may_open_by_itself(settings_with({ which_key_skip: ["g"] }), ["g", "u"], false), true);
 });
 
-test("the root list puts the groups first and lists every key, however many", () => {
+test("the root list orders letters, other keys, chords, then groups, and lists every key", () => {
     const children = Object.fromEntries(Array.from({ length: 40 }, (_, at) => [`k${at}`, { kind: "leaf" as const, label: `Key ${at}`, steps: [] }]));
     const root = { kind: "branch" as const, children: { ...children, ...sample_root().children } };
     const panel = which_key_panel(root, [], settings_with({}));
     assert.equal(panel?.rows.length, 43);
-    assert.deepEqual(panel?.rows.slice(0, 2).map((row) => row.is_group), [true, true]);
-    assert.equal(panel?.rows.slice(2).some((row) => row.is_group), false);
+    assert.deepEqual(panel?.rows.slice(-2).map((row) => row.is_group), [true, true]);
+    assert.equal(panel?.rows.slice(0, -2).some((row) => row.is_group), false);
+    const mixed = { kind: "branch" as const, children: { "<C-x>": leaf_of("a"), "1": leaf_of("b"), T: leaf_of("c"), t: leaf_of("d"), ...sample_root().children } };
+    assert.deepEqual(which_key_panel(mixed, [], settings_with({}))?.rows.map((row) => row.key), ["j", "t", "T", "1", "<C-x>", "d", "g"]);
 });
+const leaf_of = (label: string) => ({ kind: "leaf" as const, label, steps: [] });
