@@ -21,7 +21,7 @@ export const compose: CommandGroup = {
             runs_in: "background",
             name: "edit",
             label: "Edit in external editor",
-            intent: "Edit the plain-text message in the external editor.",
+            intent: "Edit the message in the external editor.",
             run: scoped<EditExternalApi>(edit_external),
         },
     },
