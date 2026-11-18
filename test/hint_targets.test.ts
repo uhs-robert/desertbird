@@ -12,6 +12,9 @@ interface FakeElement {
     index?: number;
     parentElement?: unknown;
     log?: string[];
+    href?: string;
+    textContent?: string;
+    parts?: Record<string, FakeElement>;
 }
 
 const tabs = { selectedItem: null as unknown };
@@ -26,6 +29,7 @@ function fake_window(by_selector: Record<string, FakeElement[]>) {
             focus: () => each.log!.push("focus"),
             click: () => each.log!.push("click"),
             matches: (selector: string) => selector === each.name.split(" ")[0],
+            querySelector: (selector: string) => each.parts?.[selector] ?? null,
             closest: (selector: string) => (selector === "tabs" ? tabs : selector === "#folderTree, tbody" && each.inside_row ? each : null),
         });
     };
@@ -43,14 +47,14 @@ function fixture() {
     const pane = {
         ...fake_window({
             [CONTROLS]: [{ name: "button pane" }, { name: "button row", inside_row: true }],
-            "#folderTree li:not(.unselectable) > .container": [{ name: "container folder", parentElement: folder_row }],
-            "#threadTree tbody tr": [{ name: "tr thread", index: 4 }],
+            "#folderTree li:not(.unselectable) > .container": [{ name: "container folder", parentElement: folder_row, textContent: " Inbox 3 ", parts: { ".name": { name: "name", textContent: " Inbox " } } }],
+            "#threadTree tbody tr": [{ name: "tr thread", index: 4, textContent: "9:41 Hello", parts: { ".subject-line, .subject": { name: "subject", textContent: " Hello there " } } }],
         }),
         folderTree: { rowCount: 3, selectedIndex: 0, getRowAtIndex: (index: number) => (index === 2 ? folder_row : {}), focus: () => log.push("folder focus") },
         threadTree: { selectedIndex: 0, table: { body: { focus: () => log.push("list focus") } } },
         messageBrowser: { contentWindow: fake_window({ [CONTROLS]: [{ name: "button message" }] }) },
     };
-    const main = fake_window({ [CONTROLS]: [{ name: "button main" }, { name: "button hidden", shown: false }, { name: "input field" }, { name: "tab strip" }] });
+    const main = fake_window({ [CONTROLS]: [{ name: "button main", textContent: " Write " }, { name: "button hidden", shown: false }, { name: "input field" }, { name: "tab strip", textContent: "Mail" }] });
     return { pane, main, log, targets: collect_targets(main as never, pane as unknown as HintMailPane) };
 }
 
@@ -78,4 +82,39 @@ test("a mail tab that shows no message draws no label in the message document", 
     const { pane, main } = fixture();
     pane.messageBrowser.contentWindow = null as never;
     assert.equal(collect_targets(main as never, pane as unknown as HintMailPane).some((target) => name_of(target) === "button message"), false);
+});
+
+test("a yank copies the link address, else the trimmed text, the folder name and the subject cell, and a target with no text gets none", () => {
+    const { targets } = fixture();
+    assert.deepEqual(targets.map((target) => [name_of(target), target.text]), [["button main", "Write"], ["input field", ""], ["tab strip", "Mail"], ["container folder", "Inbox"], ["tr thread", "Hello there"], ["button pane", ""], ["button message", ""]]);
+});
+
+test("a link target yanks its href over its text", () => {
+    const { pane, main } = fixture();
+    (pane.messageBrowser.contentWindow as { document: { querySelectorAll: (selector: string) => unknown[] } }).document.querySelectorAll = () => [{ name: "button link", href: "https://example.org/", textContent: "Click", getBoundingClientRect: () => ({ top: 10, left: 10, width: 20, height: 10 }), contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null }];
+    const [link] = collect_targets(main as never, pane as unknown as HintMailPane).filter((target) => name_of(target) === "button link");
+    assert.equal(link!.text, "https://example.org/");
+});
+
+test("the focus action focuses a control and selects a row like the pick does", () => {
+    const { targets, pane, log } = fixture();
+    const by_name = (name: string) => targets.find((target) => name_of(target) === name)!;
+    by_name("button main").focus();
+    assert.deepEqual((by_name("button main").element as unknown as FakeElement).log, ["focus"], "no click");
+    by_name("tr thread").focus();
+    assert.equal(pane.threadTree.selectedIndex, 4);
+    by_name("container folder").focus();
+    assert.equal(pane.folderTree.selectedIndex, 2);
+    assert.deepEqual(log, ["list focus", "folder focus"]);
+});
+
+test("a thread row in card view yanks its subject from the card subject element", () => {
+    const { pane, main } = fixture();
+    const subject = { textContent: " Card subject " };
+    const row = { name: "tr card", index: 1, getBoundingClientRect: () => ({ top: 10, left: 10, width: 20, height: 10 }), contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null, querySelector: (selector: string) => (selector.split(", ").includes(".subject") ? subject : null) };
+    const document = pane.document as unknown as { querySelectorAll: (selector: string) => unknown[] };
+    const original = document.querySelectorAll;
+    document.querySelectorAll = (selector) => (selector === "#threadTree tbody tr" ? [row] : original(selector));
+    const card = collect_targets(main as never, pane as unknown as HintMailPane).find((target) => name_of(target) === "tr card");
+    assert.equal(card?.text, "Card subject");
 });

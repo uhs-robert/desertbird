@@ -11,6 +11,15 @@ const api: BodyRequestApi = {
     notifications: { create: async () => "n1" },
 };
 
+test("the body yank request writes its text through the clipboard writer, and an empty one or another shape writes nothing", async () => {
+    const written: string[] = [];
+    const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {}, write_text: async (text) => void written.push(text) });
+    await handle({ type: "body.yank", text: "https://example.org/x" }, { tab: { id: 5, windowId: 9 } });
+    await handle({ type: "body.yank", text: "  " }, { tab: { id: 5, windowId: 9 } });
+    assert.equal(handle({ type: "body.yank", text: 5 }, {}), undefined);
+    assert.deepEqual(written, ["https://example.org/x"]);
+});
+
 test("the body open_link request presses Enter in the window of the sender and in no other", async () => {
     const sent: unknown[] = [];
     const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {}, hints: { sendEnter: async (args) => void sent.push(args) } });

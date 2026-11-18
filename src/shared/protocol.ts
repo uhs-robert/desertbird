@@ -297,7 +297,12 @@ export interface HintLabelColors {
 export interface HintsPickArgs {
     windowId: number;
     colors: HintLabelColors;
+    /** What a typed label does. `choose` waits for `f`, `c` or `y` first. Absent means `activate`. */
+    action?: HintAction;
 }
+
+/** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */
+export type HintAction = "focus" | "activate" | "yank" | "choose";
 
 export interface HintsApi {
     sendEnter(args: HintsSendEnterArgs): Promise<void>;
@@ -307,6 +312,12 @@ export interface HintsApi {
 /** The body script asks for the Enter that opens the link its hint pick focused. The window comes from the sender, never from this message. */
 export interface BodyOpenLinkRequest {
     type: "body.open_link";
+}
+
+/** The body script asks the background to copy the address or text of the link its hint pick chose. */
+export interface BodyYankRequest {
+    type: "body.yank";
+    text: string;
 }
 
 /** Messages from the command line page to the background, sent with `runtime.sendMessage`. The page learns its `windowId` from the address the overlay loaded it with. */
