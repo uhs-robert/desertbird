@@ -71,6 +71,13 @@ test("msg.tag adds the tag by name or key and keeps each message's own tags", as
     assert.deepEqual(updates(by_key.calls), ['messages.update 1 {"tags":["$label1"]}']);
 });
 
+test("msg.tag removes the tag from every message when the first message has it", async () => {
+    const tags = [{ key: "$label1", tag: "Important" }, { key: "work", tag: "Work" }];
+    const { api, calls } = fake_api({ tags, messages: [{ id: 1, tags: ["$label1", "work"] }, { id: 2, tags: ["work"] }, { id: 3 }] });
+    await create_router(registry, api).run(invoke("msg.tag", { tag: "work" }, [1, 2, 3]));
+    assert.deepEqual(updates(calls), ['messages.update 1 {"tags":["$label1"]}', 'messages.update 2 {"tags":[]}']);
+});
+
 test("msg.tag with an unknown tag refuses and changes nothing", async () => {
     const { api, calls } = fake_api({ tags: [{ key: "work", tag: "Work" }], messages: [{ id: 1 }] });
     await create_router(registry, api).run(invoke("msg.tag", { tag: "Nope" }, [1]));

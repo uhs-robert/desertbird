@@ -70,7 +70,7 @@ test("the usage line comes from the params", () => {
 });
 
 const choice = (path: string, account_name = "Work", account_id = "a1") => ({ path, account_name, account_id });
-const sources = { folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"] };
+const sources = { folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"], tabs: async () => [] };
 const no_selection = { window_id: 3, message_ids: [] };
 const complete = create_completer(registry, sources);
 
@@ -106,6 +106,18 @@ test("a typed folder or tag word highlights the first row, except a whole value,
     assert.equal((await complete("move /Archive", 13, no_selection)).highlight_first, undefined);
     assert.equal((await complete("move ", 5, no_selection)).highlight_first, undefined);
     assert.equal((await complete("mo", 2, no_selection)).highlight_first, undefined);
+});
+
+test("tab rows show the tabs of the window, insert the number and highlight the first row for a word", async () => {
+    const tabs = [{ number: 1, title: "Inbox", is_active: true }, { number: 2, title: "Inbox - Work", is_active: false }, { number: 3, title: "Report", is_active: false }];
+    const ask = create_completer(registry, { ...sources, tabs: async () => tabs });
+    const all = await ask("tab ", 4, no_selection);
+    assert.deepEqual(all.rows.map((row) => [row.name, row.insert, row.description]), [["Inbox", "1 ", "Tab 1, this tab"], ["Inbox - Work", "2 ", "Tab 2"], ["Report", "3 ", "Tab 3"]]);
+    assert.equal(all.highlight_first, undefined);
+    const word = await ask("tab rep", 7, no_selection);
+    assert.deepEqual(word.rows.map((row) => row.insert), ["3 "]);
+    assert.equal(word.highlight_first, true);
+    assert.equal((await ask("tab 2", 5, no_selection)).highlight_first, undefined);
 });
 
 test("open takes a fuzzy word and move takes any word, and the validator passes both", () => {

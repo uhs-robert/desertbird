@@ -52,6 +52,18 @@ export const next_tab = (scope: TabsScope): Promise<void> => step_active(scope, 
 /** Wraps from the first tab to the last. */
 export const previous_tab = (scope: TabsScope): Promise<void> => step_active(scope, -1);
 
+/** One row of the tab list: the place in the tab bar counted from 1, the title and whether the tab is the front one. */
+export interface TabChoice {
+    number: number;
+    title: string;
+    is_active: boolean;
+}
+
+export async function tab_choices(api: { tabs: Pick<TabsApi["tabs"], "query"> }, window_id: number): Promise<TabChoice[]> {
+    const tabs = await api.tabs.query(window_id >= 0 ? { windowId: window_id } : { currentWindow: true });
+    return [...tabs].sort((left, right) => left.index - right.index).map((tab, at) => ({ number: at + 1, title: tab.title ?? "", is_active: tab.active }));
+}
+
 const TAB_NUMBER = /^\d+$/;
 
 /** `tab` is a place in the tab bar counted from 1, or part of a tab title. */
