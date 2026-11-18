@@ -1431,11 +1431,28 @@ async function run_view_settings(instance, check_in) {
   let state = await instance.ask("state");
   check(app, kind, "the Views folder is displayed with 6 messages", state.mail_tab?.folder === "/Views" && state.listed.length === 6, `folder ${state.mail_tab?.folder}, listed ${state.listed.length}`);
   const listed_after = async (args, wait_ms = 1500) => (await key_and_state(instance, args, wait_ms)).listed.length;
-  for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "f"], 1], ["all", ["F", "a"], 6]]) {
+  for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "A"], 1], ["all", ["F", "a"], 6]]) {
     await instance.press([keys[0]]);
     const count = await listed_after([keys[1]]);
     check(app, kind, `F ${keys[1]} (${name}) shows ${expected} rows`, count === expected, `listed ${count}`);
   }
+  // F s from the unfiltered list, with no F u before it, must switch starred on and a second F s off again.
+  await instance.press(["F"]);
+  const starred_alone = await listed_after(["s"]);
+  await instance.press(["F"]);
+  const starred_off = await listed_after(["s"]);
+  check(app, kind, "F s on its own shows 2 rows and a second F s shows all 6 again", starred_alone === 2 && starred_off === 6, `listed ${starred_alone} then ${starred_off}`);
+  // F f is no filter key: it opens the command line, where j types text instead of moving, and Escape closes it.
+  const selected_before_f = (await instance.ask("state")).selected.map((message) => message.header_id).join(",");
+  await instance.press(["F"]);
+  await instance.press(["f"]);
+  await sleep(1200);
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "F f opens the command line, so j typed into it moves no selection", state.selected.map((message) => message.header_id).join(",") === selected_before_f, `selected ${selected_before_f} then ${state.selected.map((message) => message.header_id).join(",")}`);
+  await instance.press(["-k", "Escape"]);
+  await sleep(1000);
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "Escape closes the command line, so j moves the selection again", state.selected.map((message) => message.header_id).join(",") !== selected_before_f, `selected ${selected_before_f} then ${state.selected.map((message) => message.header_id).join(",")}`);
   await instance.ask("api_view", 20000, { filter: { tags: { mode: "any", tags: { $label1: true } } } });
   await sleep(1500);
   state = await instance.ask("state");
