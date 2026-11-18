@@ -119,13 +119,20 @@ export function create_bridge_acts(deps: BridgeActsDeps) {
         });
     }
 
+    // Two accounts can each hold an Archive, so the prompt names the account too.
+    async function folder_with_account(folder: ActFolder): Promise<string> {
+        const name = folder.name ?? folder.path ?? "";
+        const account = (await api.accounts.list().catch(() => [])).find((entry) => entry.id === folder.accountId);
+        return account?.name === undefined ? name : `${name} (${account.name})`;
+    }
+
     function run_move(act: CheckedAct, scope: HandlerScope<ActsApi>, headers: ActHeader[], trash_of: Map<string, string>, folder_id: string | undefined): Promise<void> {
         if (act.action === "archive") return archive(scope);
         if (act.action === "trash") return trash(scope, headers, trash_of);
         return move_to_folder(scope, folder_id!);
     }
 
-    // A message that left its folder by another hand since the prompt counts toward the total but not as moved. After a failure, a message counts as moved when it is gone from where it sat.
+    // A message counts as moved only when it is gone from where it sat. The archiver skips a message whose identity has archiving off and still resolves, and a message already in Trash stays, so a resolved call alone proves nothing.
     async function moved_count(headers: ActHeader[]): Promise<number> {
         const now = await Promise.all(headers.map((header) => header_of(header.id)));
         return now.filter((header, index) => header === undefined || header.folder?.id !== headers[index]!.folder?.id).length;
@@ -148,25 +155,22 @@ export function create_bridge_acts(deps: BridgeActsDeps) {
             action: checked.action,
             count: checked.ids.length,
             items: found.map((header) => ({ subject: header.subject ?? "", from: header.author ?? "" })),
-            ...(folder !== undefined && { target_folder_name: folder.name ?? folder.path ?? "" }),
+            ...(folder !== undefined && { target_folder_name: await folder_with_account(folder) }),
         });
         if (answer !== "yes") return CONFIRM_REFUSALS[answer];
 
         // The prompt took up to 30 s. A setting turned off meanwhile stops the act, and a message moved meanwhile is left out.
         if (!allows(await deps.read_settings(), checked)) return ACT_REFUSALS.off;
         if (folder !== undefined && (await target_folder(folder.id)) === undefined) return ACT_REFUSALS.no_such_folder;
+        // A message that left its folder by another hand during the prompt counts toward the total but not as moved.
         const still_there = (await Promise.all(found.map((header) => header_of(header.id)))).filter((header, index): header is ActHeader => header !== undefined && header.folder?.id === found[index]!.folder?.id);
         const total = checked.ids.length;
         if (still_there.length > 0) {
             const scope: HandlerScope<ActsApi> = { api, window_id: (await deps.target_window().catch(() => undefined)) ?? -1, message_ids: still_there.map((header) => header.id), count: 1 };
-            try {
-                await run_move(checked, scope, still_there, trash_of, folder?.id);
-            } catch {
-                const moved = await moved_count(still_there);
-                return refuse(`moved ${moved} of ${total}`);
-            }
+            await run_move(checked, scope, still_there, trash_of, folder?.id).catch(() => {});
         }
-        return still_there.length === total ? { ok: true, count: total } : refuse(`moved ${still_there.length} of ${total}`);
+        const moved = still_there.length === 0 ? 0 : await moved_count(still_there);
+        return moved === total ? { ok: true, count: total } : refuse(`moved ${moved} of ${total}`);
     }
 
     return { act };
