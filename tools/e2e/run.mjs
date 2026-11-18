@@ -1243,6 +1243,8 @@ async function run_window_hints(instance, { app, kind, shot }) {
   let state = await instance.ask("state");
   check(app, kind, "window hints: j typed while the labels show runs no command, and Escape ends them", state.listed.length === rows_before && selection_of(state) === selection_of(top), `listed ${state.listed.length} of ${rows_before}, selected ${selection_of(state)}`);
   await shot("window_hints_ended", "the labels are gone after a letter and Escape");
+  // The hold after f drops plain keys for 1.5 s, so wait it out or this check proves nothing.
+  await sleep(1800);
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
