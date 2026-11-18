@@ -110,3 +110,46 @@ export async function rows_fit_after_wait(fits: () => boolean, wait: () => Promi
     await wait();
     return fits();
 }
+
+/** The most rows the list draws. The ranked rows can be more, and the list shows a window of them. */
+export const LIST_ROWS = 10;
+
+/** Moves the window over the ranked rows the least that keeps the selected row inside it. A selected row of -1 keeps the window where it is. */
+export function window_top(top: number, selected: number, row_count: number): number {
+    const kept = selected < 0 ? top : selected < top ? selected : selected >= top + LIST_ROWS ? selected - LIST_ROWS + 1 : top;
+    return Math.max(0, Math.min(kept, row_count - LIST_ROWS));
+}
+
+/** The width of the name column, in characters: the widest visible name, cut at 28 so one long name cannot take the row. */
+export function name_width(names: readonly string[]): number {
+    return Math.min(28, Math.max(0, ...names.map((name) => name.length)));
+}
+
+/** The prompt the line draws for the `cmdline_prompt` setting. `caret` is `> ` in the secondary color, `colon` is `:` in the primary color, and any other text is drawn as it is in the caret look. */
+export function prompt_look(setting: string): { text: string; colon: boolean } {
+    if (setting === "colon") return { text: ":", colon: true };
+    return { text: setting === "caret" ? "> " : setting, colon: false };
+}
+
+/** What the note row says. A message (an error or a search count) wins. Otherwise a selected row gives its usage, then the usage of the typed command, and an empty list says so. */
+export function note_text(message: string | undefined, selected_usage: string | undefined, typed_usage: string | undefined, row_count: number, line: string): string {
+    if (message !== undefined) return message;
+    if (selected_usage !== undefined) return selected_usage;
+    if (typed_usage !== undefined) return typed_usage;
+    return row_count === 0 && line.trim() !== "" ? "no match" : "";
+}
+
+const WHEEL_NOTCH_ROWS = 3;
+const WHEEL_PAGE_ROWS = 10;
+const WHEEL_MODE_LINE = 1;
+const WHEEL_MODE_PAGE = 2;
+
+/** Turns a wheel event into whole rows, negative up. A mouse notch moves 3 rows. A trackpad sends many small pixel deltas, so `state` keeps the remainder until it adds up to a row. */
+export function wheel_rows(state: { remainder_px: number }, delta_y: number, delta_mode: number, row_height_px: number): number {
+    if (delta_mode === WHEEL_MODE_LINE && Number.isInteger(delta_y)) return Math.sign(delta_y) * WHEEL_NOTCH_ROWS * Math.ceil(Math.abs(delta_y) / WHEEL_NOTCH_ROWS);
+    const unit_px = delta_mode === WHEEL_MODE_PAGE ? row_height_px * WHEEL_PAGE_ROWS : delta_mode === WHEEL_MODE_LINE ? row_height_px : 1;
+    const total_px = state.remainder_px + delta_y * unit_px;
+    const rows = Math.trunc(total_px / row_height_px);
+    state.remainder_px = total_px - rows * row_height_px;
+    return rows;
+}

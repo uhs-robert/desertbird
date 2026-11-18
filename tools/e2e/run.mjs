@@ -1419,6 +1419,26 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await sleep(800);
   check(app, kind, "the app survived the command line", instance.exited() === null);
 
+  // A selected row puts its usage in the note row, and a missing value shows in the note in the error color.
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["-k", "Tab"]);
+  await instance.press(["-k", "Tab"]);
+  await sleep(700);
+  await shot("cmdline_selected_note", "the line after two Tabs: the second row is in the line and the note row above the input shows its usage");
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["step.unread"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(800);
+  await shot("cmdline_typed_error", "step.unread typed and run: the note row shows the error in the error color");
+  await instance.press(["-k", "Escape"]);
+  await sleep(600);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+
   // Enter takes the highlighted row: a fuzzy word picks a folder without Tab.
   await instance.ask("show_folder", 20000, { path: "/Views" });
   await sleep(1500);

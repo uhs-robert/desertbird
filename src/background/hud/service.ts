@@ -233,12 +233,12 @@ export function create_hud_service(deps: HudDeps): HudService {
     };
 }
 
-/** The overlay API with a window's toasts lifted above the command line box while the command line is mounted. Wraps the calls that open and close it, so the commands that use the overlay need no knowledge of the hud. */
-export function lifting_toasts(overlay: OverlayApi, hud: Pick<HudService, "set_lifted">): OverlayApi {
+/** The overlay API with a window's toasts lifted above the command line box when `lifts` is true, and set back down when `lifts` is false or the surface goes. Wraps the calls that open and close the surface, so the commands that use the overlay need no knowledge of the hud. The confirm prompt lifts, since it fills the whole box. The command line does not lift, since its panel is short and sits at the bottom. Its mounts still set the lift down, because a command line can replace a prompt. */
+export function lifting_toasts(overlay: OverlayApi, hud: Pick<HudService, "set_lifted">, lifts: boolean): OverlayApi {
     return {
         ...overlay,
         async mount(args) {
-            if (args.surface === "cmdline") hud.set_lifted(args.windowId, true);
+            if (args.surface === "cmdline") hud.set_lifted(args.windowId, lifts);
             try {
                 await overlay.mount(args);
             } catch (error) {

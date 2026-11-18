@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, read_history, rows_fit_after_wait, settle_latest, shown_highlight } from "../src/overlay/line_edit.ts";
+import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -121,4 +121,43 @@ test("a row key is dropped when the rows still do not fit the line after the wai
     assert.equal(await rows_fit_after_wait(() => fits, async () => { waited++; fits = true; }), true);
     assert.equal(await rows_fit_after_wait(() => fits, async () => { waited++; }), true);
     assert.equal(waited, 2);
+});
+
+test("the list window moves the least that keeps the selected row inside it", () => {
+    assert.equal(window_top(0, 3, 50), 0);
+    assert.equal(window_top(0, LIST_ROWS, 50), 1);
+    assert.equal(window_top(5, 2, 50), 2);
+    assert.equal(window_top(7, -1, 50), 7);
+    assert.equal(window_top(30, -1, 12), 2, "a shorter list pulls the window back");
+    assert.equal(window_top(4, 0, 3), 0);
+});
+
+test("the name column is as wide as the widest visible name, up to 28", () => {
+    assert.equal(name_width([]), 0);
+    assert.equal(name_width(["tag", "move"]), 4);
+    assert.equal(name_width(["x".repeat(40)]), 28);
+});
+
+test("the prompt is a caret, a colon or the custom text", () => {
+    assert.deepEqual(prompt_look("caret"), { text: "> ", colon: false });
+    assert.deepEqual(prompt_look("colon"), { text: ":", colon: true });
+    assert.deepEqual(prompt_look("$ "), { text: "$ ", colon: false });
+});
+
+test("the note shows a message, else the selected row's usage, else the typed command's, else no match", () => {
+    assert.equal(note_text("bad", "u", "t", 2, "x"), "bad");
+    assert.equal(note_text(undefined, "u", "t", 2, "x"), "u");
+    assert.equal(note_text(undefined, undefined, "t", 2, "x"), "t");
+    assert.equal(note_text(undefined, undefined, undefined, 0, "zzz"), "no match");
+    assert.equal(note_text(undefined, undefined, undefined, 0, " "), "");
+    assert.equal(note_text(undefined, undefined, undefined, 3, "z"), "");
+});
+
+test("a wheel notch moves 3 rows and small pixel deltas add up to a row", () => {
+    const state = { remainder_px: 0 };
+    assert.equal(wheel_rows(state, 1, 1, 20), 3);
+    assert.equal(wheel_rows(state, -3, 1, 20), -3);
+    assert.equal(wheel_rows(state, 12, 0, 20), 0);
+    assert.equal(wheel_rows(state, 12, 0, 20), 1);
+    assert.equal(state.remainder_px, 4);
 });

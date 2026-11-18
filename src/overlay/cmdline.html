@@ -2,13 +2,21 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!-- Must match the color-scheme the overlay gives the page, or the browser paints an opaque canvas. -->
+<meta name="color-scheme" content="light dark">
 <title>DesertBird command line</title>
 <link rel="stylesheet" href="cmdline.css">
 </head>
 <body>
-<ol id="rows" role="listbox"></ol>
-<div id="status"></div>
-<div id="line"><span id="prompt">:</span><input id="input" type="text" spellcheck="false" autocomplete="off" autofocus></div>
+<div class="desertfox-cmdline">
+  <div id="list" class="desertfox-cmdline-list" role="listbox" hidden></div>
+  <div id="note" class="desertfox-cmdline-note" hidden></div>
+  <div class="desertfox-cmdline-row">
+    <span id="prompt" class="desertfox-cmdline-prompt">&gt; </span>
+    <input id="input" class="desertfox-cmdline-input" type="text" spellcheck="false" autocomplete="off" autofocus>
+    <span id="status" class="desertfox-cmdline-status" hidden></span>
+  </div>
+</div>
 <script src="cmdline.js"></script>
 </body>
 </html>

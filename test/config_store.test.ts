@@ -193,3 +193,12 @@ test("data from a newer version reports its version and refuses writes", async (
     await assert.rejects(store.write_user_keymap({ normal: {} }), /newer DesertBird/);
     assert.deepEqual(stored, newer);
 });
+
+test("the prompt setting takes 1 to 8 characters and defaults to the caret", async () => {
+    const { api } = stub_storage({ [SETTINGS_KEY]: { cmdline_prompt: "colon" } });
+    assert.equal((await create_config_store(api, { report: () => {} }).read()).settings.cmdline_prompt, "colon");
+    for (const bad of ["", "too long!!", 5]) {
+        const { api: other } = stub_storage({ [SETTINGS_KEY]: { cmdline_prompt: bad } });
+        assert.equal((await create_config_store(other, { report: () => {} }).read()).settings.cmdline_prompt, "caret");
+    }
+});

@@ -359,17 +359,21 @@ test("the toasts lift while the command line is open in the window and drop when
     assert.equal((await state()).lifted, false);
 });
 
-test("mounting the command line through the lifting wrapper lifts the toasts, and a failed mount undoes it", async () => {
+test("a lifting mount lifts the toasts, a plain one sets them down, and a failed mount undoes it", async () => {
     const lifted: string[] = [];
     const base = { mount: async () => {}, unmount: async () => {}, setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } };
-    const wrapped = lifting_toasts(base, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) });
+    const wrapped = lifting_toasts(base, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) }, true);
     await wrapped.mount({ windowId: 1, surface: "cmdline" });
     await wrapped.mount({ windowId: 1, surface: "hud" });
     await wrapped.unmount({ windowId: 1, surface: "cmdline" });
     assert.deepEqual(lifted, ["1:true", "1:false"]);
-    const refusing = lifting_toasts({ ...base, mount: async () => Promise.reject(new Error("no")) }, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) });
+    const refusing = lifting_toasts({ ...base, mount: async () => Promise.reject(new Error("no")) }, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) }, true);
     await assert.rejects(refusing.mount({ windowId: 2, surface: "cmdline" }));
     assert.deepEqual(lifted.slice(2), ["2:true", "2:false"]);
+    // The command line mounts without the lift, so it also sets a lift down that a replaced prompt left.
+    const flat = lifting_toasts(base, { set_lifted: (window_id, on) => void lifted.push(`${window_id}:${on}`) }, false);
+    await flat.mount({ windowId: 3, surface: "cmdline" });
+    assert.deepEqual(lifted.slice(4), ["3:false"]);
 });
 
 test("keys from a window with no id show no panel", async () => {

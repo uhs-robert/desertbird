@@ -85,6 +85,13 @@ test("completion lists background commands by name and leaves out hidden and chr
     assert.ok(!names.includes("motion.down"));
 });
 
+test("a command row carries its usage for the note and no keys yet", async () => {
+    const row = (await complete("tag", 3, no_selection)).rows.find((entry) => entry.name === "tag");
+    assert.equal(row?.usage, usage_line(registry.get("msg.tag")!));
+    assert.equal(row?.keys, undefined);
+    assert.equal((await complete("tag ", 4, no_selection)).rows.every((entry) => entry.usage === undefined), true);
+});
+
 test("completion ranks a typed word and marks the matched letters", async () => {
     const answer = await complete("mo", 2, no_selection);
     assert.equal(answer.rows[0]?.name, "move");
@@ -171,6 +178,7 @@ function service_setup(options: { experiment?: boolean } = {}) {
     const router = create_router(registry, api);
     const service = create_cmdline_service({
         registry,
+        read_prompt: async () => "caret",
         sources,
         overlay: api.overlay,
         history: { record: async (line) => void recorded.push(line) },
@@ -229,7 +237,7 @@ test("hello returns the opening text, or open false when no session exists", asy
     const { service } = service_setup();
     assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: false });
     service.begin(3, { message_ids: [5], text: "move " });
-    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "move " });
+    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "move ", prompt: "caret" });
 });
 
 test("messages that are not command line messages, or are malformed, are left alone", () => {
@@ -261,7 +269,7 @@ test("run keeps the line open and returns the reason for text that is not a comm
     await settle();
     assert.deepEqual(ran, []);
     assert.deepEqual(calls.filter((call) => call.startsWith("overlay.unmount")), []);
-    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "" });
+    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "", prompt: "caret" });
 });
 
 test("run closes the overlay, then runs the command on the messages selected when the line opened", async () => {
@@ -299,7 +307,7 @@ test("a second window keeps its own session", async () => {
     service.begin(3, { message_ids: [], text: "a " });
     service.begin(4, { message_ids: [], text: "b " });
     await ask(service, { type: "cmdline.close", windowId: 3 });
-    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 4 }), { open: true, text: "b " });
+    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 4 }), { open: true, text: "b ", prompt: "caret" });
 });
 
 test("the default keys: : opens an empty line and the typed-value keys open it with the command started", () => {
@@ -342,7 +350,7 @@ test("a line that runs is recorded, and a failing history write does not stop th
 test("a failing history write still runs the command", async () => {
     const { api } = fake_api({ experiment: true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [] });
     const ran: KeysInvocation[] = [];
-    const service = create_cmdline_service({ registry, sources, overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, search_history: { record: async () => {} }, search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} }, run: async (invocation) => void ran.push(invocation) });
+    const service = create_cmdline_service({ registry, sources, read_prompt: async () => "caret", overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, search_history: { record: async () => {} }, search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} }, run: async (invocation) => void ran.push(invocation) });
     service.begin(3, { message_ids: [5], text: "" });
     const errors = console.error;
     console.error = () => undefined;

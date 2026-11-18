@@ -9,18 +9,12 @@ import { first_sentence } from "../../../vendor/desertfox/registry/summary.ts";
 import { flag_alternatives, usage_line } from "../../../vendor/desertfox/registry/usage.ts";
 import { rank } from "../../../vendor/desertfox/score.ts";
 import type { Candidate } from "../../../vendor/desertfox/score.ts";
+import type { CmdlineRow } from "../../shared/protocol.ts";
 import type { TabChoice } from "../handlers/tabs.ts";
 import type { FolderChoice, FolderQuery } from "./folder_rows.ts";
 
-/** One line of the list. `insert` replaces the word under the caret. `positions` are the letters of `name` the query matched. */
-export interface CompletionRow {
-    name: string;
-    insert: string;
-    description: string;
-    /** The flags and subject of a command, shown in the third column. Empty for other rows. */
-    args: string;
-    positions: number[];
-}
+/** One line of the list. `insert` replaces the word under the caret. `positions` are the letters of `name` the query matched. `args` is the flags and subject of a command, shown in the third column, and empty for other rows. */
+export type CompletionRow = CmdlineRow;
 
 export interface Completion {
     rows: CompletionRow[];
@@ -46,7 +40,7 @@ export const MAX_ROWS = 50;
 
 // What the cursor context and the usage line read of a command.
 type Command = Pick<CommandDef, "id" | "name" | "params">;
-type Row = Candidate & { insert: string; description: string; args: string };
+type Row = Candidate & { insert: string; description: string; args: string; usage?: string };
 
 const NOTHING: Completion = { rows: [], start: 0, end: 0 };
 
@@ -127,7 +121,7 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
             .filter((command) => command.runs_in === "background" && command.completion !== "hidden")
             .map((command): Row => {
                 const name = command.name ?? command.id;
-                return { name, insert: command.params?.length ? `${name} ` : name, description: first_sentence(command.intent), args: args_of(command), also_named: command.name ? [command.id] : [], keywords: [...(command.aliases ?? []), command.label] };
+                return { name, insert: command.params?.length ? `${name} ` : name, description: first_sentence(command.intent), args: args_of(command), usage: usage_line(command), also_named: command.name ? [command.id] : [], keywords: [...(command.aliases ?? []), command.label] };
             })
             .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 
@@ -140,7 +134,7 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match. For tabs only a number is whole: a title word always highlights, since the handler matches a title as a part and could pick another tab. A path two accounts hold is no whole value, since typed alone it names two folders.
         const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && !is_whole(context.word, rows, tab_numbers);
         return {
-            rows: ranked.map(({ name, insert, description, args, positions }) => ({ name, insert, description, args, positions })),
+            rows: ranked.map(({ name, insert, description, args, positions, usage }) => ({ name, insert, description, args, positions, ...(usage !== undefined && { usage }) })),
             start: context.start,
             end: context.end,
             ...(usage !== undefined && { usage }),
