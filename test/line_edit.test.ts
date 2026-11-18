@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "../src/overlay/line_edit.ts";
+import { LIST_ROWS, accepts_single_row, list_shown_after_answer, row_for_click, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -160,4 +160,23 @@ test("a wheel notch moves 3 rows and small pixel deltas add up to a row", () => 
     assert.equal(wheel_rows(state, 12, 0, 20), 0);
     assert.equal(wheel_rows(state, 12, 0, 20), 1);
     assert.equal(state.remainder_px, 4);
+});
+
+test("Enter with the list hidden runs the typed text, not a row of the hidden list", () => {
+    const answer = { for_text: "move inb", for_caret: 8, rows: [{ insert: "/Inbox " }], start: 5, end: 8, highlight_first: true };
+    assert.equal(enter_text("move inb", 8, answer, -1, false), "move /Inbox ");
+    assert.equal(enter_text("move inb", 8, answer, -1, false, false), "move inb");
+});
+
+test("an answer that was on its way when Escape hid the list does not show it again", () => {
+    assert.equal(list_shown_after_answer(0, 0, false), true, "no Escape since the request");
+    assert.equal(list_shown_after_answer(0, 1, false), false, "an Escape since the request");
+    assert.equal(list_shown_after_answer(0, 1, true), true);
+});
+
+test("a click picks the row it showed, and is dropped when the rows changed", () => {
+    const drawn = { rows: [1] };
+    assert.equal(row_for_click(drawn, drawn, 0, 1), 0);
+    assert.equal(row_for_click(drawn, { rows: [2] }, 0, 1), -1);
+    assert.equal(row_for_click(drawn, drawn, 3, 1), -1);
 });

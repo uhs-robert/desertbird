@@ -7,7 +7,7 @@ import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shar
 import { follow_theme } from "../shared/follow_theme.ts";
 import { CMDLINE_STYLE } from "../../vendor/desertfox/cmdline_style.ts";
 import { show_confirm } from "./confirm.ts";
-import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "./line_edit.ts";
+import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, list_shown_after_answer, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, row_for_click, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest | ConfirmAnswerRequest): Promise<unknown> };
@@ -36,6 +36,8 @@ let confirming = false;
 let completion: CmdlineCompletion = { rows: [], start: 0, end: 0 };
 // Escape closes the list and keeps the line. Typing, or a row key, shows it again.
 let list_shown = true;
+// How many Escapes hid the list. A completion request that started before one must not show the list again.
+let list_hides = 0;
 // What the note says in place of the usage: a parse error, a failed run or the count of a search. An edit of a command line clears it.
 let message: { text: string; is_error: boolean } | undefined;
 // The first ranked row the list draws, and what it drew last. The window follows the highlight only when the highlight moved or the ranking changed, so a wheel scroll is not undone by the next draw.
@@ -135,12 +137,13 @@ async function request_completion(): Promise<void> {
     const request = ++latest_request;
     const text = input.value;
     const caret = input.selectionStart ?? text.length;
+    const hides_at_request = list_hides;
     const answer = await send<CmdlineCompletion>({ type: "cmdline.complete", windowId: window_id, text, caret });
     if (request !== latest_request || closing) return;
     completion = answer;
     completion_for = { text, caret };
     highlighted = -1;
-    list_shown = true;
+    list_shown = list_shown_after_answer(hides_at_request, list_hides, list_shown);
     draw_rows();
 }
 
@@ -211,7 +214,7 @@ async function step_rows(step: 1 | -1): Promise<void> {
 
 function line_to_run(): string {
     const answer = { for_text: completion_for.text, for_caret: completion_for.caret, ...completion };
-    return enter_text(input.value, input.selectionStart ?? input.value.length, answer, highlighted, preview_base !== null);
+    return enter_text(input.value, input.selectionStart ?? input.value.length, answer, highlighted, preview_base !== null, list_shown);
 }
 
 async function run_line(): Promise<void> {
@@ -250,6 +253,7 @@ window.addEventListener(
             // The first Escape closes the list and keeps the line, as in DesertFox.
             if (list_shown && completion.rows.length > 0) {
                 list_shown = false;
+                list_hides++;
                 draw_rows();
                 // The host closes the overlay on an Escape the page does not answer. A new title is the answer.
                 document.title = `${PAGE_TITLE} ${++escapes_answered}`;
@@ -293,7 +297,8 @@ list_element.addEventListener("mousedown", (event) => event.preventDefault());
 list_element.addEventListener("click", (event) => {
     const index = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-index]")?.dataset["index"];
     if (index === undefined || confirming) return;
-    row_keys.add(() => pick_row(Number(index))).catch(report_failure);
+    const drawn = completion;
+    row_keys.add(() => pick_row(drawn, Number(index))).catch(report_failure);
 });
 // Not passive, so the mail window behind the list never scrolls while the pointer is over it.
 list_element.addEventListener(
@@ -307,9 +312,9 @@ list_element.addEventListener(
     { passive: false },
 );
 
-async function pick_row(index: number): Promise<void> {
+async function pick_row(drawn: CmdlineCompletion, index: number): Promise<void> {
+    if (!(await rows_for_line()) || closing || !list_shown || row_for_click(drawn, completion, index, completion.rows.length) < 0) return;
     walking_history = false;
-    if (!(await rows_for_line()) || closing || !list_shown || completion.rows[index] === undefined) return;
     preview_at(index);
     preview_base = null;
     refresh_completion().catch(report_failure);

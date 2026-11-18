@@ -76,8 +76,9 @@ export interface Answered {
 }
 
 /** The text Enter runs. Enter takes the row the user moved to, else the first row when the completion asks for that, in place of the typed word. An answer for older text or another caret is ignored, because its span no longer fits the line. A row a row key already put in the line is in the text. */
-export function enter_text(text: string, caret: number, answer: Answered, highlighted: number, previewed: boolean): string {
-    if (previewed || answer.for_text !== text || answer.for_caret !== caret) return text;
+export function enter_text(text: string, caret: number, answer: Answered, highlighted: number, previewed: boolean, list_shown = true): string {
+    // A hidden list offers no row, so the typed text runs, as in DesertFox.
+    if (!list_shown || previewed || answer.for_text !== text || answer.for_caret !== caret) return text;
     const row = answer.rows[shown_highlight(highlighted, answer.rows.length, answer.highlight_first)];
     return row === undefined ? text : apply_pick(text, { start: answer.start, end: answer.end, insert: row.insert }).text;
 }
@@ -152,4 +153,14 @@ export function wheel_rows(state: { remainder_px: number }, delta_y: number, del
     const rows = Math.trunc(total_px / row_height_px);
     state.remainder_px = total_px - rows * row_height_px;
     return rows;
+}
+
+/** Whether the list shows after a completion answer. An edit or row key that started the request after the last Escape shows it, and an Escape since the request keeps it hidden. `hides_since_request` counts the Escapes that hid the list. */
+export function list_shown_after_answer(hides_at_request: number, hides_now: number, shown_now: boolean): boolean {
+    return hides_at_request === hides_now || shown_now;
+}
+
+/** The row a click picks: the one it showed, and only while the rows on the page are still the ones that were drawn. Otherwise -1, and the click is dropped. */
+export function row_for_click<Rows>(drawn: Rows, current: Rows, index: number, row_count: number): number {
+    return drawn === current && index >= 0 && index < row_count ? index : -1;
 }
