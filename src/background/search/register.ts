@@ -3,9 +3,13 @@
 import { SEARCH_REGISTER_STORAGE_KEY } from "../../shared/protocol.ts";
 import type { SearchDirection } from "../../shared/protocol.ts";
 
+/** What the search looked through. A register stored before folder search existed has no kind and holds a thread search. */
+export type SearchKind = "threads" | "folders";
+
 export interface SearchRegister {
     text: string;
     direction: SearchDirection;
+    kind: SearchKind;
 }
 
 export interface SearchRegisterStorage {
@@ -21,7 +25,7 @@ export interface SearchRegisterStore {
 function valid_register(value: unknown): SearchRegister | undefined {
     const stored = value as Partial<SearchRegister> | null | undefined;
     if (typeof stored?.text !== "string" || stored.text === "") return undefined;
-    return stored.direction === "forward" || stored.direction === "backward" ? { text: stored.text, direction: stored.direction } : undefined;
+    return stored.direction === "forward" || stored.direction === "backward" ? { text: stored.text, direction: stored.direction, kind: stored.kind === "folders" ? "folders" : "threads" } : undefined;
 }
 
 export function create_search_register(storage: SearchRegisterStorage): SearchRegisterStore {

@@ -7,7 +7,7 @@ import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, HINT_STYLE_STORAGE_KEY, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
-import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, JsonValue } from "../shared/protocol.ts";
+import type { BodyFindReply, BodyFindRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyYankRequest, HintAction, JsonValue } from "../shared/protocol.ts";
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
@@ -35,7 +35,7 @@ export interface BodyStorage {
 
 /** The ways to reach the background page: send a request, and answer the ones it sends. */
 export interface BodyRuntime {
-    sendMessage(message: BodyInvokeRequest | BodyOpenLinkRequest | BodyPendingRequest): Promise<unknown>;
+    sendMessage(message: BodyInvokeRequest | BodyOpenLinkRequest | BodyPendingRequest | BodyYankRequest): Promise<unknown>;
     onMessage: { addListener(listener: (message: unknown) => Promise<BodyFindReply> | undefined): void };
 }
 
@@ -46,7 +46,7 @@ interface BodyContext {
     hints: HintSession;
 }
 
-type Action = (context: BodyContext, count: number) => void;
+type Action = (context: BodyContext, count: number, args: Record<string, unknown>) => void;
 
 // The fixed table of what a leaf of this document may run. An id that is not here does nothing.
 const ACTIONS: Record<string, Action> = {
@@ -58,7 +58,7 @@ const ACTIONS: Record<string, Action> = {
     "message.bottom": ({ window }) => window.scrollTo({ top: window.document.documentElement.scrollHeight, behavior: "instant" }),
     "message.find_next": ({ finder }) => finder.step(false),
     "message.find_prev": ({ finder }) => finder.step(true),
-    "hint.pick": ({ hints }) => void hints.begin(),
+    "hint.pick": ({ hints }, _count, args) => void hints.begin(args["action"] as HintAction | undefined),
 };
 
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
@@ -75,13 +75,13 @@ function message_tree_of(record: unknown): { version: number; root: unknown } | 
     return typeof tree?.version === "number" ? { version: tree.version, root: tree.root } : null;
 }
 
-/** Starts the keys of one message document. `open_pick` runs on a picked link or button. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
+/** Starts the keys of one message document. `open_pick` runs on a picked link or button. A yank sends the text to the background, which owns the clipboard. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
 export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error))): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
     // Read once per document: each message loads the script anew, so a theme change shows on the next message.
     let hint_colors = "background: #ffd33d !important;";
-    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, open_pick, () => hint_colors) };
+    const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints: create_hint_session(window, open_pick, () => hint_colors, (text) => void runtime.sendMessage({ type: "body.yank", text }).catch((error: unknown) => console.error("desertbird message keys:", error))) };
 
     // Tells the background the typed prefix for which-key. It sends only a change, so a plain key with no sequence sends nothing.
     let reported = "";
@@ -100,7 +100,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {
             const count = typed_count ?? step.invocation.count ?? 1;
-            if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count);
+            if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count, step.invocation.args ?? {});
             // The background checks the command and its args again. A refusal there is shown as a notification.
             else if (step.runs_in === "background") runtime.sendMessage({ type: "body.invoke", command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count }).catch((error: unknown) => console.error("desertbird message keys:", error));
         }

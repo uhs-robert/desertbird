@@ -167,7 +167,7 @@ export const EXPERIMENT_VERBS = {
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
     hints: { functions: ["sendEnter", "pick"], events: [] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
-    folderpane: { functions: ["fold"], events: [] },
+    folderpane: { functions: ["fold", "focused"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -229,9 +229,14 @@ export interface FolderpaneFoldArgs {
     extent: "row" | "all" | "parent";
 }
 
-/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. */
+export interface FolderpaneFocusedArgs {
+    windowId: number;
+}
+
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. */
 export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
+    focused(args: FolderpaneFocusedArgs): Promise<boolean>;
 }
 
 export type Pane = "folders" | "threads" | "message";
@@ -292,7 +297,12 @@ export interface HintLabelColors {
 export interface HintsPickArgs {
     windowId: number;
     colors: HintLabelColors;
+    /** What a typed label does. `choose` waits for `f`, `c` or `y` first. Absent means `activate`. */
+    action?: HintAction;
 }
+
+/** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */
+export type HintAction = "focus" | "activate" | "yank" | "choose";
 
 export interface HintsApi {
     sendEnter(args: HintsSendEnterArgs): Promise<void>;
@@ -302,6 +312,12 @@ export interface HintsApi {
 /** The body script asks for the Enter that opens the link its hint pick focused. The window comes from the sender, never from this message. */
 export interface BodyOpenLinkRequest {
     type: "body.open_link";
+}
+
+/** The body script asks the background to copy the address or text of the link its hint pick chose. */
+export interface BodyYankRequest {
+    type: "body.yank";
+    text: string;
 }
 
 /** Messages from the command line page to the background, sent with `runtime.sendMessage`. The page learns its `windowId` from the address the overlay loaded it with. */

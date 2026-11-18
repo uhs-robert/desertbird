@@ -23,8 +23,9 @@ function fake_window(name: string): { window: HintWindow; containers: FakeNode[]
 }
 
 function fake_host() {
-    const state = { key: null as null | ((event: PickKeyEvent) => void), disturb: null as null | (() => void), stopped: [] as string[] };
+    const state = { key: null as null | ((event: PickKeyEvent) => void), disturb: null as null | (() => void), stopped: [] as string[], copied: [] as string[] };
     const host: PickHost = {
+        copy: (text) => void state.copied.push(text),
         on_key: (listener) => ((state.key = listener), () => void state.stopped.push("keys")),
         on_disturb: (listener) => ((state.disturb = listener), () => void state.stopped.push("disturb")),
     };
@@ -36,8 +37,8 @@ function fake_host() {
     return { host, state, press };
 }
 
-function targets_in(window: HintWindow, count: number, acted: string[], prefix = "t"): PickTarget[] {
-    return Array.from({ length: count }, (_, index) => ({ window, element: { getBoundingClientRect: () => ({ top: index * 20, left: 5, width: 30, height: 10 }) } as never, act: () => void acted.push(`${prefix}${index}`) }));
+function targets_in(window: HintWindow, count: number, acted: string[], prefix = "t", text = (index: number) => `text${index}`): PickTarget[] {
+    return Array.from({ length: count }, (_, index) => ({ window, element: { getBoundingClientRect: () => ({ top: index * 20, left: 5, width: 30, height: 10 }) } as never, act: () => void acted.push(`${prefix}${index}`), focus: () => void acted.push(`focus ${prefix}${index}`), text: text(index) }));
 }
 
 afterEach(() => end_pick());
@@ -115,4 +116,70 @@ test("a second pick ends the first", () => {
     start_pick(fake_host().host, targets_in(second.window, 3, []), SCHEME);
     assert.equal(first.containers[0]!.removed, true);
     assert.equal(second.containers[0]!.removed, false);
+});
+
+test("each action runs its own step on the picked target: act, focus or copy the text", () => {
+    for (const [action, result] of [["activate", ["t1"]], ["focus", ["focus t1"]], ["yank", []]] as const) {
+        const { host, state, press } = fake_host();
+        const acted: string[] = [];
+        assert.equal(start_pick(host, targets_in(fake_window("only").window, 3, acted), SCHEME, action), 3);
+        press("s");
+        assert.deepEqual(acted, result, action);
+        assert.deepEqual(state.copied, action === "yank" ? ["text1"] : [], action);
+    }
+});
+
+test("a yank gives no label to a target with no text", () => {
+    const { host, state, press } = fake_host();
+    const { window, spans } = fake_window("only");
+    assert.equal(start_pick(host, targets_in(window, 3, [], "t", (index) => (index === 1 ? "" : `text${index}`)), SCHEME, "yank"), 2);
+    assert.equal(spans.length, 2);
+    press("s");
+    assert.deepEqual(state.copied, ["text2"]);
+});
+
+test("a yank with no text on screen starts nothing", () => {
+    const { host, state } = fake_host();
+    assert.equal(start_pick(host, targets_in(fake_window("only").window, 2, [], "t", () => ""), SCHEME, "yank"), 0);
+    assert.equal(state.key, null);
+});
+
+test("choose draws nothing until f, c or y, then labels for that action", () => {
+    for (const [key, result] of [["f", ["focus t0"]], ["c", ["t0"]], ["C", ["t0"]]] as const) {
+        const { host, press } = fake_host();
+        const { window, containers } = fake_window("only");
+        const acted: string[] = [];
+        assert.equal(start_pick(host, targets_in(window, 2, acted), SCHEME, "choose"), 2);
+        assert.equal(containers.length, 0);
+        assert.equal(press(key).prevented, true);
+        assert.equal(containers.length, 1);
+        press("a");
+        assert.deepEqual(acted, result, key);
+    }
+    const { host, state, press } = fake_host();
+    start_pick(host, targets_in(fake_window("only").window, 2, []), SCHEME, "choose");
+    press("y");
+    press("s");
+    assert.deepEqual(state.copied, ["text1"]);
+});
+
+test("a key that is no action, Escape and a chord end a choose with nothing drawn and nothing run", () => {
+    for (const [key, chord] of [["z", {}], ["Escape", {}], ["f", { ctrlKey: true }]] as const) {
+        const { host, state, press } = fake_host();
+        const { window, containers } = fake_window("only");
+        const acted: string[] = [];
+        start_pick(host, targets_in(window, 2, acted), SCHEME, "choose");
+        const seen = press(key, chord);
+        assert.equal(seen.prevented && seen.stopped, true, key);
+        assert.equal(containers.length, 0, key);
+        assert.deepEqual(state.stopped.sort(), ["disturb", "keys"], key);
+        assert.deepEqual(acted, []);
+    }
+});
+
+test("a choose of yank with no text ends quietly", () => {
+    const { host, state, press } = fake_host();
+    start_pick(host, targets_in(fake_window("only").window, 2, [], "t", () => ""), SCHEME, "choose");
+    press("y");
+    assert.deepEqual(state.stopped.sort(), ["disturb", "keys"]);
 });

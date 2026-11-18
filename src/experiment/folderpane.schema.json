@@ -19,6 +19,21 @@
             }
           }
         ]
+      },
+      {
+        "name": "focused",
+        "type": "function",
+        "async": true,
+        "description": "Answers whether the folder pane has the focus.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" }
+            }
+          }
+        ]
       }
     ]
   }

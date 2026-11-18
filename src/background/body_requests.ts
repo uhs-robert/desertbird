@@ -1,7 +1,7 @@
 // The requests of the body script, which runs in a message document. A key of that document whose command lives in the background (`/` opens the command line) arrives here.
 
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
-import type { BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, HintsApi, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyYankRequest, HintsApi, JsonValue, KeysInvocation } from "../shared/protocol.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 
@@ -17,6 +17,8 @@ export interface BodyRequestDeps {
     allowed: ReadonlySet<string>;
     /** The Experiment that sends the Enter of a hint pick. Absent when it failed to load, and the pick then leaves the Enter to the user. */
     hints?: Pick<HintsApi, "sendEnter"> | undefined;
+    /** Writes the text of a yank to the clipboard. Absent in a setup with no clipboard. */
+    write_text?: ((text: string) => Promise<void>) | undefined;
     /** The hud, told which keys a message document has typed of a sequence. Absent in a setup with no hud. */
     which_key?: { on_body_pending(window_id: number, keys: string[]): Promise<void> } | undefined;
     /** Runs one invocation through the router and its validator. It reports its own failures. */
@@ -65,10 +67,18 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         return {};
     }
 
+    // The text is of a link in a mail, which the user chose with a label. An empty one would clear the clipboard.
+    async function yank(request: BodyYankRequest): Promise<unknown> {
+        if (request.text.trim() !== "") await deps.write_text?.(request.text);
+        return {};
+    }
+
     return (message, sender) => {
         const pending = read_pending(message);
         if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys).then(() => ({}));
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
+        const yanked = message as Partial<BodyYankRequest> | null;
+        if (yanked?.type === "body.yank" && typeof yanked.text === "string") return yank({ type: "body.yank", text: yanked.text });
         const request = read_invoke(message);
         return request === undefined ? undefined : invoke(request, sender);
     };

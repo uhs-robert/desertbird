@@ -2,6 +2,7 @@
 
 import { hint_labels, labels_matching } from "../shared/hint_labels.ts";
 import { is_on_screen } from "../shared/hint_view.ts";
+import type { HintAction } from "../shared/protocol.ts";
 import type { HintElement, HintLabelNode, HintWindow } from "../shared/hint_view.ts";
 
 export type { HintDocument, HintElement, HintLabelNode, HintWindow } from "../shared/hint_view.ts";
@@ -19,13 +20,16 @@ const CONTAINER_STYLE = "all: initial !important; position: fixed !important; in
 const LABEL_STYLE = (top: number, left: number, colors: string): string =>
     `all: initial !important; position: fixed !important; top: ${top}px !important; left: ${left}px !important; z-index: 2147483647 !important; ${colors} font: bold 12px monospace !important; padding: 1px 3px !important; border: 1px solid !important;`;
 
+/** The key after `;`. Anything else ends the pick. */
+const ACTION_KEYS: Record<string, Exclude<HintAction, "choose">> = { f: "focus", c: "activate", y: "yank" };
+
 export type HintKey = { kind: "typed"; letter: string } | { kind: "cancel" };
 
 export interface HintSession {
     /** True between `begin` and the pick or the cancel. While it is, every key goes to `feed`. */
     active(): boolean;
-    /** Labels the clickable elements on screen. Returns how many it labelled, and stays inactive when none. */
-    begin(): number;
+    /** Labels the clickable elements on screen. Returns how many it labelled, and stays inactive when none. With `choose` it labels nothing yet: the next key is `f`, `c` or `y`, and any other key ends the pick. A `yank` labels only the elements with an address or text. */
+    begin(action?: HintAction): number;
     /** Removes the labels with no pick. The page moved or the focus left, so they no longer sit on their targets. */
     cancel(): void;
     /** One key while active. A label that is unique among those that start with what was typed focuses its element. */
@@ -33,40 +37,60 @@ export interface HintSession {
 }
 
 /** `open` runs on a picked link or button, after it has the focus. In a mail it asks for a trusted Enter, since a script click would skip Thunderbird's check for a link that lies about its address. */
-export function create_hint_session(window: HintWindow, open: (element: HintElement) => void, colors: () => string): HintSession {
+export function create_hint_session(window: HintWindow, open: (element: HintElement) => void, colors: () => string, copy: (text: string) => void): HintSession {
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";
+    let action: Exclude<HintAction, "choose"> | null = null;
+    let on_screen: HintElement[] = [];
+    let choosing = false;
 
     function end(): void {
         container?.remove();
         container = null;
         targets = [];
         typed = "";
+        choosing = false;
+    }
+
+    const yank_text = (element: HintElement): string => (element.href ?? element.textContent ?? "").trim();
+
+    function show(chosen: Exclude<HintAction, "choose">): number {
+        action = chosen;
+        const elements = chosen === "yank" ? on_screen.filter((element) => yank_text(element) !== "") : on_screen;
+        if (elements.length === 0) return 0;
+        const labels = hint_labels(elements.length);
+        container = window.document.createElement("div");
+        container.style.cssText = CONTAINER_STYLE;
+        const shadow = container.attachShadow({ mode: "closed" });
+        targets = elements.map((element, index) => {
+            const node = window.document.createElement("span");
+            const box = element.getBoundingClientRect();
+            node.textContent = labels[index]!.toUpperCase();
+            node.style.cssText = LABEL_STYLE(Math.max(box.top, 0), Math.max(box.left, 0), colors());
+            shadow.append(node);
+            return { label: labels[index]!, element, node };
+        });
+        window.document.documentElement.append(container);
+        return elements.length;
     }
 
     return {
-        active: () => container !== null,
-        begin() {
-            const elements = [...window.document.querySelectorAll(CLICKABLE)].filter((element) => is_on_screen(window, element));
-            if (elements.length === 0) return 0;
-            const labels = hint_labels(elements.length);
-            container = window.document.createElement("div");
-            container.style.cssText = CONTAINER_STYLE;
-            const shadow = container.attachShadow({ mode: "closed" });
-            targets = elements.map((element, index) => {
-                const node = window.document.createElement("span");
-                const box = element.getBoundingClientRect();
-                node.textContent = labels[index]!.toUpperCase();
-                node.style.cssText = LABEL_STYLE(Math.max(box.top, 0), Math.max(box.left, 0), colors());
-                shadow.append(node);
-                return { label: labels[index]!, element, node };
-            });
-            window.document.documentElement.append(container);
-            return elements.length;
+        active: () => container !== null || choosing,
+        begin(chosen = "activate") {
+            on_screen = [...window.document.querySelectorAll(CLICKABLE)].filter((element) => is_on_screen(window, element));
+            if (chosen !== "choose") return show(chosen);
+            choosing = on_screen.length > 0;
+            return on_screen.length;
         },
         cancel: end,
         feed(key) {
+            if (choosing) {
+                const chosen = key.kind === "typed" ? ACTION_KEYS[key.letter] : undefined;
+                choosing = false;
+                if (chosen !== undefined) show(chosen);
+                return;
+            }
             const candidates = key.kind === "typed" ? labels_matching(targets.map((target) => target.label), typed + key.letter) : [];
             if (key.kind === "cancel" || candidates.length === 0) {
                 return end();
@@ -75,8 +99,9 @@ export function create_hint_session(window: HintWindow, open: (element: HintElem
             const picked = targets.find((target) => target.label === typed);
             if (picked === undefined) return;
             end();
+            if (action === "yank") return copy(yank_text(picked.element));
             picked.element.focus();
-            if (picked.element.matches(OPENABLE)) open(picked.element);
+            if (action === "activate" && picked.element.matches(OPENABLE)) open(picked.element);
         },
     };
 }
