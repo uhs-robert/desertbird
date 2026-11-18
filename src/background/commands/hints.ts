@@ -9,6 +9,7 @@ export const hints: CommandGroup = {
         "hint.window": {
             bridge: false,
             runs_in: "background",
+            completion: "hidden",
             label: "Pick a target in the window",
             intent: "Label what is on screen, then act on the typed label.",
             needs: ["hints.pick"],
