@@ -38,9 +38,9 @@ const pick_control = (element: TargetElement): void => {
     else element.click();
 };
 
-// The name and the subject sit in their own elements of a row, so a yank copies those and not the unread count or the date.
+// The name and the subject sit in their own elements of a row (`.subject` in a card view row), so a yank copies those and not the unread count or the date.
 const FOLDER_NAME = ".name";
-const THREAD_SUBJECT = ".subject-line";
+const THREAD_SUBJECT = ".subject-line, .subject";
 
 /** A yank copies the address of a link, else the text. */
 const yank_text = (element: TargetElement | null): string => (element?.href ?? element?.textContent ?? "").trim();

@@ -71,7 +71,7 @@ function listen(target: ListenerTarget, type: string, listener: (event: never) =
     return () => target.removeEventListener(type, listener, true);
 }
 
-// The clipboard service of the parent. A write from the background after a round trip would need a user gesture that the key press no longer carries, so the pick writes it here, in the key event.
+// The clipboard service of the parent. The label is typed later, inside this Experiment, and the background cannot wait for that key. So the pick writes the text here when the label completes.
 const copy_to_clipboard = (text: string): void => Cc["@mozilla.org/widget/clipboardhelper;1"]!.getService(Ci["nsIClipboardHelper"]).copyString(text);
 
 function pick_host(main: PickMainWindow, documents: ListenerTarget[]): PickHost {

@@ -48,7 +48,7 @@ function fixture() {
         ...fake_window({
             [CONTROLS]: [{ name: "button pane" }, { name: "button row", inside_row: true }],
             "#folderTree li:not(.unselectable) > .container": [{ name: "container folder", parentElement: folder_row, textContent: " Inbox 3 ", parts: { ".name": { name: "name", textContent: " Inbox " } } }],
-            "#threadTree tbody tr": [{ name: "tr thread", index: 4, textContent: "9:41 Hello", parts: { ".subject-line": { name: "subject", textContent: " Hello there " } } }],
+            "#threadTree tbody tr": [{ name: "tr thread", index: 4, textContent: "9:41 Hello", parts: { ".subject-line, .subject": { name: "subject", textContent: " Hello there " } } }],
         }),
         folderTree: { rowCount: 3, selectedIndex: 0, getRowAtIndex: (index: number) => (index === 2 ? folder_row : {}), focus: () => log.push("folder focus") },
         threadTree: { selectedIndex: 0, table: { body: { focus: () => log.push("list focus") } } },
@@ -106,4 +106,15 @@ test("the focus action focuses a control and selects a row like the pick does", 
     by_name("container folder").focus();
     assert.equal(pane.folderTree.selectedIndex, 2);
     assert.deepEqual(log, ["list focus", "folder focus"]);
+});
+
+test("a thread row in card view yanks its subject from the card subject element", () => {
+    const { pane, main } = fixture();
+    const subject = { textContent: " Card subject " };
+    const row = { name: "tr card", index: 1, getBoundingClientRect: () => ({ top: 10, left: 10, width: 20, height: 10 }), contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null, querySelector: (selector: string) => (selector.split(", ").includes(".subject") ? subject : null) };
+    const document = pane.document as unknown as { querySelectorAll: (selector: string) => unknown[] };
+    const original = document.querySelectorAll;
+    document.querySelectorAll = (selector) => (selector === "#threadTree tbody tr" ? [row] : original(selector));
+    const card = collect_targets(main as never, pane as unknown as HintMailPane).find((target) => name_of(target) === "tr card");
+    assert.equal(card?.text, "Card subject");
 });
