@@ -199,3 +199,20 @@ test("the message keymap carries the mail keys of the message-capable groups wit
     }
     for (const keys of ["mR", "Ft", "Ff", ",,", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
 });
+
+// Every id here was audited for the bridge: it moves the view or the selection and does no harm doing so. A command newly marked `bridge: true` fails this test until it is reviewed and added. The bridge rules still refuse `repeat.last` and `hint.pick`, and every command that does not run in the background.
+test("the bridge: true set is the audited one", () => {
+    const audited = [
+        "motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle",
+        "filter.set", "search.threads", "sort.set", "pane.toggle",
+        "tab.next", "tab.prev", "tab.switch",
+        "message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message",
+        "folder.open", "folder.collapse", "mark.jump", "jump.back", "jump.forward",
+        "motion.left", "motion.right", "step.thread_root", "view.reposition", "view.half_page", "thread.fold_all",
+        "step.unread", "step.starred", "step.attachment",
+        "pane.focus", "pane.left", "pane.right",
+        "search.open", "search.next", "search.prev",
+    ];
+    const marked = registry.list().filter((command) => (command as { bridge?: boolean }).bridge === true).map((command) => command.id);
+    assert.deepEqual([...marked].sort(), [...audited].sort());
+});

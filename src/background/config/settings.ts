@@ -10,7 +10,7 @@ import { DEFAULT_THEME, OASIS_THEME_NAMES } from "../../shared/theme_choice.ts";
 export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean; notice_show_subject: boolean; mode_indicator_style: ModeLabelStyle; theme: string };
 
 
-export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "mode_indicator_style" | "notify_new_mail" | "notice_show_subject" | "theme";
+export type SettingName = "message_scroll_step_px" | "which_key_delay_ms" | "toast_ms" | "toast_error_ms" | "which_key_border" | "which_key_skip" | "layout_fallback" | "mode_indicator" | "mode_indicator_style" | "notify_new_mail" | "notice_show_subject" | "theme" | "bridge";
 
 export type SettingKind = { kind: "number"; min?: number } | { kind: "boolean" } | { kind: "list" } | { kind: "choice"; choices: readonly string[] };
 
@@ -27,6 +27,7 @@ export const SETTING_KINDS: Record<SettingName, SettingKind> = {
     notify_new_mail: { kind: "boolean" },
     notice_show_subject: { kind: "boolean" },
     theme: { kind: "choice", choices: OASIS_THEME_NAMES },
+    bridge: { kind: "boolean" },
 };
 
 export const SETTING_NAMES = Object.keys(SETTING_KINDS) as SettingName[];

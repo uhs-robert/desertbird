@@ -19,6 +19,10 @@ Pre-alpha. The design is in progress and there is no code yet. Read [`docs/desig
 
 Off by default. Thunderbird shows its own new-mail alert, so this one is opt-in. Turn it on with the `notify_new_mail` setting on the options page, or run `:notify.toggle`. While it is on, each new unread, non-junk Inbox message shows a desktop notification with the sender and the subject. More than three at once give one notification with a count. Clicking a notification opens the message in a tab. Notifications have no action buttons, because Thunderbird 153 does not support them. The subject and sender show on the lock screen and in the desktop's notification history. The add-on needs no new permission.
 
+## Bridge
+
+Off by default. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. Thunderbird shows it on install as "Exchange messages with programs other than Thunderbird". An add-on with an Experiment cannot ask for an optional permission, so the permission is always granted. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. It sends no mail, no folder names and no tags. Commands that send, delete or move mail, and commands that open a link, never run through the bridge.
+
 ## License
 
 MPL-2.0. See [`LICENSE`](LICENSE).

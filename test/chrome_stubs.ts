@@ -46,3 +46,63 @@ export function stub_platform(main_windows: unknown[] = []): PlatformStub {
     };
     return stub;
 }
+
+/** One port of a fake `runtime.connectNative`: it records what the add-on posts and lets a test speak as the host. */
+export interface FakeNativePort {
+    posted: object[];
+    disconnected: boolean;
+    postMessage(message: object): void;
+    disconnect(): void;
+    onMessage: { addListener(listener: (message: unknown) => void): void; removeListener(listener: (message: unknown) => void): void };
+    onDisconnect: { addListener(listener: (port: unknown) => void): void; removeListener(listener: (port: unknown) => void): void };
+    /** The host sends a frame. */
+    host_says(message: unknown): void;
+    /** The host process ends, as when it exits or is not installed. */
+    host_drops(): void;
+    listener_count(): number;
+}
+
+export interface FakeNativeMessaging {
+    ports: FakeNativePort[];
+    names: string[];
+    connectNative(application: string): FakeNativePort;
+    /** Makes the next connect throw, as a missing permission does. */
+    fail_next: boolean;
+}
+
+export function fake_native_messaging(): FakeNativeMessaging {
+    const fake: FakeNativeMessaging = {
+        ports: [],
+        names: [],
+        fail_next: false,
+        connectNative(application) {
+            if (fake.fail_next) {
+                fake.fail_next = false;
+                throw new Error("no native messaging");
+            }
+            const message_listeners = new Set<(message: unknown) => void>();
+            const disconnect_listeners = new Set<(port: unknown) => void>();
+            const port: FakeNativePort = {
+                posted: [],
+                disconnected: false,
+                postMessage(message) {
+                    if (port.disconnected) throw new Error("the port is closed");
+                    port.posted.push(message);
+                },
+                disconnect: () => void (port.disconnected = true),
+                onMessage: { addListener: (listener) => void message_listeners.add(listener), removeListener: (listener) => void message_listeners.delete(listener) },
+                onDisconnect: { addListener: (listener) => void disconnect_listeners.add(listener), removeListener: (listener) => void disconnect_listeners.delete(listener) },
+                host_says: (message) => [...message_listeners].forEach((listener) => listener(message)),
+                host_drops() {
+                    port.disconnected = true;
+                    [...disconnect_listeners].forEach((listener) => listener(port));
+                },
+                listener_count: () => message_listeners.size + disconnect_listeners.size,
+            };
+            fake.names.push(application);
+            fake.ports.push(port);
+            return port;
+        },
+    };
+    return fake;
+}
