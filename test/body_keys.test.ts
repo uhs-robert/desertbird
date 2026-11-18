@@ -4,6 +4,7 @@ import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
 import { compile_message_keymap, message_background_commands } from "../src/background/commands/index.ts";
+import { compile_effective_keymap } from "../src/background/config/keymap.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
 
 const VIEWPORT = 600;
@@ -418,6 +419,15 @@ test("a mail sequence typed in a message runs nothing, also under a prefix the m
     }
     for (const key of ["g", "t", "u"]) window.press(key);
     assert.deepEqual(sent, [invoked("msg.undo")], "g t completes, so u stays free");
+});
+
+// The background passes the mail tree with the user's keys, so a user's list sequence ends in a message too.
+test("a user's mail sequence typed in a message runs nothing", async () => {
+    const user = { wu: { id: "filter.set", args: { state: "unread" } } };
+    const root = JSON.parse(JSON.stringify(compile_message_keymap(user, compile_effective_keymap({ normal: user }).compiled.modes.normal).compiled.modes.normal)) as unknown;
+    const { window, sent } = await started({ [KEYMAP_STORAGE_KEY]: { message_tree: { version: COMPILED_KEYMAP_VERSION, root } } });
+    for (const key of ["w", "u"]) window.press(key);
+    assert.deepEqual(sent, []);
 });
 
 test("a half-typed d does not survive the window losing the focus", async () => {
