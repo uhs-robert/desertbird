@@ -28,11 +28,11 @@ const PARENT_MAX_BYTES = 25800;
 // The size guard of the folder pane bundle (`experiment/folderpane.js`), which Thunderbird loads on the first folder pane call and not at startup: its first measured size (4891 bytes) plus 20 percent made 5869, rounded up to 5900. AGENTS.md records the same number.
 const FOLDERPANE_MAX_BYTES = 5900;
 
-// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard rose to 15900. The injectable pick action for the own pages made it 15927, and the guard is 15927 rounded up to 15950. AGENTS.md records the same number.
-const CONTENT_MAX_BYTES = 15950;
+// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard rose to 15900. The injectable pick action for the own pages made it 15927, and the guard was 15927 rounded up to 15950. Drawing the labels in the theme tokens (a `var()` with a fallback for each color) made it 16028, so the guard is 16028 rounded up to 16100. AGENTS.md records the same number.
+const CONTENT_MAX_BYTES = 16100;
 
-// The `hints` API has a guard of its own, since it is a separate bundle and not chrome runtime code. Its first measured size was 3091 bytes, and the guard is that plus 20 percent (3709) rounded up to 3800. The check that the focus still sits on the picked link made it 3863, so the guard is 3800 plus 63 rounded up to 3900.
-const HINTS_MAX_BYTES = 3900;
+// The `hints` API has a guard of its own, since it is a separate bundle and not chrome runtime code. Its first measured size was 3091 bytes, and the guard is that plus 20 percent (3709) rounded up to 3800. The check that the focus still sits on the picked link made it 3863, so the guard was 3800 plus 63 rounded up to 3900. The `pick` verb for the mail window (targets, labels per chrome document, typed label, act) made it 11670, so the guard is 11670 rounded up to 11700.
+const HINTS_MAX_BYTES = 11700;
 
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.

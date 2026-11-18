@@ -4,7 +4,13 @@ import { focus_chain } from "./focus.ts";
 import type { FocusDocument } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
-import type { HintsSendEnterArgs } from "../shared/protocol.ts";
+import type { HintsPickArgs, HintsSendEnterArgs } from "../shared/protocol.ts";
+import { collect_targets } from "./hint_targets.ts";
+import type { HintMailPane } from "./hint_targets.ts";
+import { end_pick, start_pick } from "./hint_pick.ts";
+import type { PickHost, PickKeyEvent } from "./hint_pick.ts";
+import type { HintWindow } from "../shared/hint_view.ts";
+import { mail_pane_of } from "./view.ts";
 
 declare const Services: { wm: { getEnumerator(type: string | null): Iterable<EnterWindow> } };
 declare const Cc: Record<string, { createInstance(iface: unknown): TextInputProcessor }>;
@@ -48,6 +54,35 @@ function window_with_id(context: ExtensionContext, window_id: number): EnterWind
     return null;
 }
 
+interface ListenerTarget {
+    addEventListener(type: string, listener: (event: never) => void, capture: boolean): void;
+    removeEventListener(type: string, listener: (event: never) => void, capture: boolean): void;
+}
+
+interface PickMainWindow extends ListenerTarget {
+    /** The parent of the window in the event path. A capture listener there sees a key before every listener of the window, the key runtime's among them. */
+    windowRoot?: ListenerTarget;
+    document: { hasFocus(): boolean };
+    matchMedia(query: string): { matches: boolean };
+}
+
+function listen(target: ListenerTarget, type: string, listener: (event: never) => void): () => void {
+    target.addEventListener(type, listener, true);
+    return () => target.removeEventListener(type, listener, true);
+}
+
+function pick_host(main: PickMainWindow, documents: ListenerTarget[]): PickHost {
+    return {
+        on_key: (listener) => listen(main.windowRoot ?? main, "keydown", listener as (event: PickKeyEvent) => void),
+        on_disturb(listener) {
+            // The blur lands on the focused element when focus moves inside the window too, so only a window that lost the focus counts.
+            const on_blur = () => main.document.hasFocus() || listener();
+            const stops = [...documents.map((each) => listen(each, "scroll", listener)), ...documents.map((each) => listen(each, "pointerdown", listener)), listen(main, "blur", on_blur), listen(main, "TabSelect", listener)];
+            return () => stops.forEach((stop) => stop());
+        },
+    };
+}
+
 export function get_hints_api(context: ExtensionContext) {
     return {
         hints: {
@@ -57,8 +92,17 @@ export function get_hints_api(context: ExtensionContext) {
                 if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
+            pick: guard("hints.pick", ({ windowId, colors }: HintsPickArgs): number => {
+                const pane = mail_pane_of(context, windowId) as unknown as HintMailPane & { browsingContext: { topChromeWindow: PickMainWindow & HintWindow } };
+                const main = pane.browsingContext.topChromeWindow;
+                const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
+                const scheme = main.matchMedia("(prefers-color-scheme: light)").matches ? colors.light : colors.dark;
+                return start_pick(pick_host(main, [main, pane as unknown as ListenerTarget, ...(message ? [message] : [])]), collect_targets(main, pane), scheme);
+            }),
         },
     };
 }
 
-export function shutdown(): void {}
+export function shutdown(): void {
+    end_pick();
+}

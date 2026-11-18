@@ -4,7 +4,7 @@ import { DEFAULT_LIGHT_INTENSITY } from "../../../vendor/desertfox/config.ts";
 import { oasis_theme } from "../../../vendor/desertfox/theme/load.ts";
 import type { RoleColors } from "../../../vendor/desertfox/theme/roles.ts";
 import { luminance } from "../../../vendor/desertfox/theme/contrast.ts";
-import type { ModeLabelColors, ModeLabelScheme } from "../../shared/protocol.ts";
+import type { HintLabelColors, HintLabelScheme, ModeLabelColors, ModeLabelScheme } from "../../shared/protocol.ts";
 import { DEFAULT_THEME } from "../../shared/theme_choice.ts";
 import type { StoredTheme } from "../../shared/theme_css.ts";
 
@@ -35,4 +35,10 @@ function scheme_of(colors: RoleColors): ModeLabelScheme {
 /** The label sits on Thunderbird's status bar, not on the theme background, so each scheme takes the mode roles of the matching set. `test/theme.test.ts` checks them against the status bar of both Thunderbird schemes. */
 export function mode_label_colors(theme: StoredTheme): ModeLabelColors {
     return { dark: scheme_of(theme.dark), light: scheme_of(theme.light) };
+}
+
+/** The hint label sits on the window it labels, so the box takes the brand color and the letters the theme background of the matching set. */
+export function hint_label_colors(theme: StoredTheme): HintLabelColors {
+    const scheme = (colors: RoleColors): HintLabelScheme => ({ fill: colors.primary, text: colors.bg_core });
+    return { dark: scheme(theme.dark), light: scheme(theme.light) };
 }

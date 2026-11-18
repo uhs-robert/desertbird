@@ -161,6 +161,7 @@ async function run_default(instance) {
   if (process.env.E2E_ONLY === "cmdline") return run_cmdline(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "search") return run_search(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
+  if (process.env.E2E_ONLY === "hints") return run_window_hints(instance, { app, kind, shot });
   await run_mode_label(instance, { app, kind, shot });
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
@@ -1216,6 +1217,64 @@ async function run_search(instance, { app, kind, shot }) {
   await key_and_state(instance, ["a"], 1200);
 }
 
+// The labels sit in the order the targets sit on screen (window toolbars, folder rows, message rows, then buttons), so a fixed window shows the same labels each run. The ones below were read from the shots of each app.
+const WINDOW_HINT_LABELS = { betterbird: { thread_row_1: "sl", folder_reading: "sh", folder_inbox: "ss" }, thunderbird: { thread_row_1: "sl", folder_reading: "sh", folder_inbox: "ss" } };
+
+async function run_window_hints(instance, { app, kind, shot }) {
+  const labels = WINDOW_HINT_LABELS[app];
+  const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
+  await instance.press(["g"]);
+  const top = await key_and_state(instance, ["g"], 600);
+  const rows_before = top.listed.length;
+  await instance.press(["f"]);
+  await sleep(1000);
+  await shot("window_hints", "f in the thread list: labels over the toolbar, folder rows, message rows and buttons");
+  // Hint letters are home row keys that are also commands (a archives, d deletes). While the labels show they must reach the labels only.
+  await instance.press(["a"]);
+  await sleep(500);
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
+  let state = await instance.ask("state");
+  check(app, kind, "window hints: a typed while the labels show runs no command, and Escape ends them", state.listed.length === rows_before && selection_of(state) === selection_of(top), `listed ${state.listed.length} of ${rows_before}`);
+  await shot("window_hints_ended", "the labels are gone after a letter and Escape");
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 600);
+  // A key that no label continues with ends the labels, and swallows the key.
+  await instance.press(["f"]);
+  await sleep(800);
+  await instance.press(["z"]);
+  await sleep(500);
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "window hints: a key no label starts with ends them, then j moves", selection_of(state) !== selection_of(top), `selected ${selection_of(state)}`);
+  // A message row: one pick selects it and leaves the focus in the list.
+  await instance.press(["f"]);
+  await sleep(800);
+  await instance.press([labels.thread_row_1]);
+  await sleep(1200);
+  state = await instance.ask("state");
+  check(app, kind, "window hints: the label of a message row selects that thread", first_selected(state) === COLLAPSED_ROWS[1], `selected ${first_selected(state)}, expected ${COLLAPSED_ROWS[1]}`);
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "window hints: after a row pick the focus is in the list, so j moves on", first_selected(state) === COLLAPSED_ROWS[2], `selected ${first_selected(state)}, expected ${COLLAPSED_ROWS[2]}`);
+  // A folder row: one pick shows that folder, and j then moves in the folder pane.
+  await instance.press(["f"]);
+  await sleep(800);
+  await shot("window_hints_second", "f again after a row pick: the labels follow the new layout");
+  await instance.press([labels.folder_reading]);
+  await sleep(1800);
+  state = await instance.ask("state");
+  check(app, kind, "window hints: the label of a folder row shows that folder", state.mail_tab?.folder === "/Reading", `displayed folder ${state.mail_tab?.folder}`);
+  await shot("window_hints_folder", "the Reading folder shown after a folder hint, no labels left");
+  await instance.press(["f"]);
+  await sleep(800);
+  await instance.press([labels.folder_inbox]);
+  await sleep(1800);
+  state = await instance.ask("state");
+  check(app, kind, "window hints: the label of the Inbox row returns to the Inbox", state.mail_tab?.folder === "/Inbox", `displayed folder ${state.mail_tab?.folder}`);
+  check(app, kind, "the app survived the window hint checks", instance.exited() === null);
+}
+
 async function run_cmdline(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
   let state = await instance.ask("state");
@@ -1913,6 +1972,12 @@ async function run_message_scripts(instance) {
   await instance.press(["f"]);
   await sleep(800);
   await shot("hint_labels", "reading pane with the hint label on the link");
+  // The label wears the theme: the box is the brand color of the scheme the message shows, and the fixed yellow of the fallback is gone.
+  const { resolve_theme: message_theme } = await import("../../src/background/theme/palette.ts");
+  const { DEFAULT_THEME } = await import("../../src/shared/theme_choice.ts");
+  const message_colors = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_labels_raw`, "0,0 1280x720", "ppm"));
+  const default_theme = message_theme(DEFAULT_THEME);
+  check(app, kind, "hints: the message label is drawn in the theme color and not the fallback yellow", (message_colors.has(default_theme.dark.primary) || message_colors.has(default_theme.light.primary)) && !message_colors.has("#ffd33d"), `dark ${default_theme.dark.primary} ${message_colors.get(default_theme.dark.primary) ?? 0} px, light ${default_theme.light.primary} ${message_colors.get(default_theme.light.primary) ?? 0} px`);
   await instance.press(["a"]);
   await sleep(1500);
   hint_body = body_state(await instance.ask("state"));
@@ -2029,6 +2094,26 @@ async function run_mode_label_kind(instance) {
   const opened = await open_inbox(instance);
   check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
   await run_mode_label(instance, { app, kind, shot: async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; } });
+  if (kind === "mode_label_themed") await run_window_hint_colors(instance, { app, kind });
+}
+
+// The labels of the mail window wear the theme: the box is the primary color of the scheme Thunderbird shows, and the letters its background color.
+async function run_window_hint_colors(instance, { app, kind }) {
+  const { resolve_theme } = await import("../../src/background/theme/palette.ts");
+  const theme = resolve_theme(THEMED_LABEL);
+  const whole_window = "0,0 1280x720";
+  const bar = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_bar`, LABEL_STRIP, "ppm"));
+  const scheme = luminance_of([...bar].sort((a, b) => b[1] - a[1])[0][0]) < 0.2 ? "dark" : "light";
+  const other = scheme === "dark" ? "light" : "dark";
+  const before = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_before`, whole_window, "ppm"));
+  await instance.press(["f"]);
+  await sleep(1000);
+  const raw = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_labels`, whole_window, "ppm"));
+  await instance.shot(`${app}_${kind}_hint_labels_shot`);
+  const fill = theme[scheme].primary;
+  check(app, kind, `window hints: the label boxes fill with the ${THEMED_LABEL} ${scheme} primary color`, (raw.get(fill) ?? 0) > (before.get(fill) ?? 0) + 200 && !raw.has(theme[other].primary), `${fill} ${before.get(fill) ?? 0} then ${raw.get(fill) ?? 0} px, the ${other} one ${theme[other].primary} ${raw.get(theme[other].primary) ?? 0} px`);
+  await instance.press(["-k", "Escape"]);
+  await sleep(600);
 }
 
 async function run_assertions(instance) {

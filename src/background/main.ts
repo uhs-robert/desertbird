@@ -11,7 +11,11 @@ import { create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
+import { create_message_style } from "./theme/message_style.ts";
+import type { MessageStyleApi } from "./theme/message_style.ts";
+import { resolve_theme } from "./theme/palette.ts";
 import { publish_theme } from "./theme/publish.ts";
+import { themed_hints } from "./theme/themed_hints.ts";
 import { compile_effective_keymap, effective_keymap, mark_unrepeatable } from "./config/keymap.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
@@ -56,7 +60,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
+interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay">, MessageStyleApi {
     windows: BodyRequestApi["windows"] &
         RouterApi["windows"] & {
             getAll(query: { windowTypes: string[] }): Promise<{ id?: number }[]>;
@@ -209,7 +213,7 @@ const cmdline = create_cmdline_service({
     search,
     run: (invocation) => router.run(invocation),
 });
-const router = create_router(registry, { ...messenger, keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
+const router = create_router(registry, { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS } });
 
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), run: (invocation) => router.run(invocation), hints: messenger.hints });
 
@@ -251,9 +255,11 @@ messenger.storage.onChanged.addListener((changes, area) => {
     publish_current_theme();
 });
 
+const style_messages = create_message_style(messenger);
+
 // The pages read the theme from storage, so it is published at every start and again when the setting changes.
 function publish_current_theme(): void {
-    config_store.read().then(({ settings }) => publish_theme(messenger.storage.local, settings.theme)).catch(console.error);
+    config_store.read().then(({ settings }) => Promise.all([publish_theme(messenger.storage.local, settings.theme), style_messages(resolve_theme(settings.theme))])).catch(console.error);
 }
 publish_current_theme();
 

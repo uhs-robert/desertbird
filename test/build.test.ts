@@ -21,10 +21,12 @@ const PARENT_ALLOWED_INPUTS = [
     /^src\/chrome\/[a-z_]+\.ts$/,
     // The tree reader both sides share, and the handoff names. Neither reaches the registry.
     /^src\/shared\/(keymap_tree|protocol)\.ts$/,
+    // The hint labels and the on-screen check, which the body script and the hints bundle share.
+    /^src\/shared\/hint_(labels|view)\.ts$/,
 ];
 
 // The body script bundle may take the same matcher side and the shared files, plus its own folder and the typing check of the chrome runtime. It never takes the registry or the background.
-const CONTENT_ALLOWED_INPUTS = [...PARENT_ALLOWED_INPUTS, /^src\/content\/[a-z_]+\.ts$/, /^src\/shared\/hint_labels\.ts$/];
+const CONTENT_ALLOWED_INPUTS = [...PARENT_ALLOWED_INPUTS, /^src\/content\/[a-z_]+\.ts$/];
 
 const BANNED_IN_PARENT: [string, RegExp][] = [
     ["eval", /\beval\b/],

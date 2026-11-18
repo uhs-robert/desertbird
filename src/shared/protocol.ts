@@ -154,7 +154,7 @@ export interface OverlayClosed {
 export const EXPERIMENT_VERBS = {
     keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
-    hints: { functions: ["sendEnter"], events: [] },
+    hints: { functions: ["sendEnter", "pick"], events: [] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
     folderpane: { functions: ["fold"], events: [] },
 } as const;
@@ -262,8 +262,27 @@ export interface HintsSendEnterArgs {
     windowId: number;
 }
 
+/** The two colors of a hint label, each as `#rrggbb`: the box and the letters. */
+export interface HintLabelScheme {
+    fill: string;
+    text: string;
+}
+
+/** Both schemes cross, and the parent picks the one Thunderbird itself shows, as for the mode label. */
+export interface HintLabelColors {
+    dark: HintLabelScheme;
+    light: HintLabelScheme;
+}
+
+/** Labels the targets of the front mail tab of the window. The answer is how many it labelled, and with none no hint mode starts. The typed label, Escape and the end of the labels are the parent's own, so no further call is needed. */
+export interface HintsPickArgs {
+    windowId: number;
+    colors: HintLabelColors;
+}
+
 export interface HintsApi {
     sendEnter(args: HintsSendEnterArgs): Promise<void>;
+    pick(args: HintsPickArgs): Promise<number>;
 }
 
 /** The body script asks for the Enter that opens the link its hint pick focused. The window comes from the sender, never from this message. */

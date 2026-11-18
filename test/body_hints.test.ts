@@ -164,3 +164,18 @@ test("cancel removes the labels and a second begin starts fresh", () => {
     session.feed(typed("a"));
     assert.deepEqual(only.acted, ["focus"]);
 });
+
+test("the label wears the theme tokens, with the old yellow on black where no token reached the document", () => {
+    const styles: string[] = [];
+    const { window } = fake_window([fake_element("link")]);
+    const create = window.document.createElement;
+    window.document.createElement = (name) => {
+        const node = create(name);
+        node.attachShadow = () => ({ append: (...children) => void children.forEach((child) => styles.push(child.style.cssText)) });
+        return node;
+    };
+    create_hint_session(window, () => {}).begin();
+    assert.equal(styles.length, 1);
+    assert.match(styles[0]!, /background: var\(--desertfox-primary, #ffd33d\) !important/);
+    assert.match(styles[0]!, /color: var\(--desertfox-bg-core, #000\) !important/);
+});

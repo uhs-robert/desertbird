@@ -4,12 +4,13 @@ import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
-import type { HintsApi, KeysApi, KeysInvocation, OverlayApi } from "../shared/protocol.ts";
+import type { KeysApi, KeysInvocation, OverlayApi } from "../shared/protocol.ts";
 import type { CmdlineSessions } from "./cmdline/service.ts";
 import type { SearchSessions } from "./search/service.ts";
 import type { AttachmentsApi } from "./handlers/attachments.ts";
 import type { FolderApi } from "./handlers/folder_open.ts";
 import type { FollowupApi } from "./handlers/followup.ts";
+import type { ThemedHints } from "./handlers/hint_window.ts";
 import type { MessageApi } from "./handlers/message.ts";
 import type { QuickReplyApi } from "./handlers/quick_reply.ts";
 import type { UnsubscribeApi } from "./handlers/unsubscribe.ts";
@@ -26,7 +27,7 @@ export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & Fo
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
     overlay: OverlayApi | undefined;
-    hints?: HintsApi | undefined;
+    hints?: ThemedHints | undefined;
     cmdline: CmdlineSessions;
     search: SearchSessions;
 };
