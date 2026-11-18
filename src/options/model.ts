@@ -18,7 +18,8 @@ export type SettingParse = { value: Settings[SettingName] } | { error: string };
 export function parse_setting_text(name: SettingName, text: string): SettingParse {
     const spec = SETTING_KINDS[name];
     const trimmed = text.trim();
-    let value: unknown = trimmed;
+    // A line keeps its spaces: a prompt such as "$ " needs the one at its end.
+    let value: unknown = spec.kind === "line" ? text : trimmed;
     if (spec.kind === "number") value = trimmed === "" ? Number.NaN : Number(trimmed);
     else if (spec.kind === "boolean") value = trimmed === "true" ? true : trimmed === "false" ? false : trimmed;
     else if (spec.kind === "list") value = trimmed === "" ? [] : trimmed.split(",").map((item) => item.trim());
