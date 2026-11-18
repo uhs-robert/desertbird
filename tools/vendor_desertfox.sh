@@ -8,8 +8,9 @@
 # Stand-ins (files with a STUB header) are written by hand and never touched here.
 set -euo pipefail
 
-PIN_SHA=33a68a009791563e5ba57999e43b5c8d45c8ca6d
+PIN_SHA=b0e41305a64ee347f7c6fb2ded5c5c3af70a12e7
 UPSTREAM_DIR=src/shared
+# The three style files keep their upstream basenames out of the flat folder: `whichkey_style.ts` and `whichkey_layout.ts` come from `src/content/whichkey/`, `cmdline_style.ts` from `src/cmdline/style.ts`.
 # A file under `completion/` comes from `src/cmdline/completion/` upstream, and so does `history_cursor.ts` (`src/cmdline/`). `find_match.ts` comes from `src/content/caret/`. Every other file mirrors `src/shared/`.
 COPIED_FILES=(
   keys/token.ts keys/notation.ts keys/matcher.ts keys/compiler.ts
@@ -17,12 +18,13 @@ COPIED_FILES=(
   registry/define.ts registry/check_args.ts registry/check_shape.ts registry/params.ts registry/summary.ts
   registry/command_line.ts registry/usage.ts registry/print_command.ts registry/single_quote.ts
   completion/tokenize.ts history_cursor.ts find_match.ts
+  whichkey_style.ts whichkey_layout.ts cmdline_style.ts
   themes.ts theme_names.ts theme/roles.ts theme/tokens.ts theme/contrast.ts theme/derive.ts theme/theme_file.ts theme/load.ts
 )
 
 upstream_path_of() {
   local file=$1
-  if [[ $file == completion/* || $file == history_cursor.ts ]]; then echo "src/cmdline/$file"; elif [[ $file == find_match.ts ]]; then echo "src/content/caret/$file"; else echo "$UPSTREAM_DIR/$file"; fi
+  if [[ $file == completion/* || $file == history_cursor.ts ]]; then echo "src/cmdline/$file"; elif [[ $file == find_match.ts ]]; then echo "src/content/caret/$file"; elif [[ $file == whichkey_style.ts ]]; then echo src/content/whichkey/style.ts; elif [[ $file == whichkey_layout.ts ]]; then echo src/content/whichkey/layout.ts; elif [[ $file == cmdline_style.ts ]]; then echo src/cmdline/style.ts; else echo "$UPSTREAM_DIR/$file"; fi
 }
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

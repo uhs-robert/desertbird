@@ -4,7 +4,7 @@
 export type BindingTable = Readonly<Record<string, unknown>>;
 
 // `site_rules` is always empty in DesertBird, so a row needs only the field the compiler reads.
-export type SiteRuleRow = { site: string };
+export type SiteRuleRow = { site: string; keymap?: Readonly<Record<string, Readonly<Record<string, unknown>>>>; bind?: Readonly<Record<string, unknown>> };
 
 export type ModeIndicator = "always" | "not_normal" | "off";
 export type WhichKeyBorder = "square" | "round" | "chamfer";
@@ -40,4 +40,5 @@ export type Settings = PerSiteSettings & {
   site_rules: SiteRuleRow[];
   bridge: boolean;
   bridge_share_tabs: boolean;
+  item_navigator: boolean;
 };

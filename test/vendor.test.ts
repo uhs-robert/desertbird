@@ -7,6 +7,9 @@ import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { create_registry, DefineError, type CommandInput } from "../vendor/desertfox/registry/define.ts";
 import { create_matcher } from "../vendor/desertfox/keys/matcher.ts";
+import { STYLE } from "../vendor/desertfox/whichkey_style.ts";
+import { choose_columns, fit_title } from "../vendor/desertfox/whichkey_layout.ts";
+import { CMDLINE_STYLE } from "../vendor/desertfox/cmdline_style.ts";
 import { compile_keymap } from "../vendor/desertfox/keys/compiler.ts";
 
 const vendor_dir = join(import.meta.dirname, "..", "vendor", "desertfox");
@@ -82,4 +85,12 @@ test("compiled keys walk through the matcher", () => {
 test("the setting-value rule never fires", () => {
     const command = { id: "x.y", params: [{ name: "name", type: "string" as const }, { name: "value", type: "string" as const, value_of: "name" }] };
     assert.equal(check_args(command, { name: "anything", value: "1" }).ok, true);
+});
+
+test("the style modules are pure text and layout", () => {
+    assert.match(STYLE, /\.desertfox-whichkey/);
+    assert.match(CMDLINE_STYLE, /\.desertfox-cmdline/);
+    assert.equal(choose_columns(8, 800), 1);
+    assert.equal(choose_columns(45, 800), 2);
+    assert.equal(fit_title(["+Go"], () => false).text, "+Go");
 });
