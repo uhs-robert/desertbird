@@ -32,7 +32,7 @@ const FOLDERPANE_MAX_BYTES = 5900;
 const FOLDERPANE_CEILING_BYTES = 10240;
 
 // `content/message_display.js`, the body script that runs in every message document.
-const CONTENT_MAX_BYTES = 17650;
+const CONTENT_MAX_BYTES = 18162;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.

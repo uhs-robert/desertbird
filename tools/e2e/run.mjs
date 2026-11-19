@@ -1119,7 +1119,7 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["w"]);
   await sleep(1500);
   check(app, kind, "g w before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
-  // Backspace goes back one key. A prefix of two keys shows the panel of g's children, and Backspace leaves the panel of g, which differs from no panel. The next g then completes g g from the kept g, so the panel goes. A Backspace that only ended the sequence would leave no panel.
+  // Backspace goes back one key. After g p the panel shows the children of g p, and Backspace leaves the panel of g, which differs from no panel. The next g then completes g g from the kept g, so the panel goes. A Backspace that only ended the sequence would leave no panel.
   await instance.press(["g"]);
   await instance.press(["p"]);
   await sleep(1500);

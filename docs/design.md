@@ -177,7 +177,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | --- | --- | --- |
 | `experiment/keys.js`, `experiment/overlay.js` (each) | 27512 | 40960 |
 | `experiment/folderpane.js` | 5900 | 10240 |
-| `content/message_display.js` | 17650 | 24576 |
+| `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
@@ -227,6 +227,7 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 - Reporting the typed prefix to the background for which-key in a message made it 16562 (385 over main's 16177). The guard was that rounded up to 16600.
 - The `;` action step (a phase before the labels, the focus, activate and yank actions and the yank message to the background) made it 17601 (1039 over main). The guard rose to that rounded up to 17650.
 - Dropping the phase before the labels (`; f`, `; c` and `; y` became keys of the tree) made it 17128 (473 under the guard). The guard stays at 17650.
+- Backspace in an open which-key (the back step in `matcher_for_tree`, clause: decides what happens to a key) made it 17733 once merged with main (459 over main's 17274). The guard rose by one 512-byte step to 18162.
 
 ### Hints bundle
 
