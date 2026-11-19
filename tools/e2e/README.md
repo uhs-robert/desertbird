@@ -30,3 +30,9 @@ Betterbird is `/usr/bin/betterbird`. Override a binary with `--binary thunderbir
 | `reading_fixture.mjs` | The Reading folder: tall plain, HTML, remote content and sandboxed frame messages for the body script checks |
 | `harness.mjs` | `start_app`: starts the app in its own labwc session. `press` sends wtype arguments after a bare Shift, `shot` takes a grim screenshot, `ask` sends a command to the helper add-on and returns its answer, `read_state` reads the last thing the helper posted, `folder_message_ids` reads a folder's mbox |
 | `run.mjs` | The runner. `run_cmdline` drives `:`, Escape, a typed command and `m t`. Without `--xpi` it only proves the setup. The key assertions run after `--xpi` |
+
+## Timings
+
+Every `--xpi` run writes `$E2E_TIMINGS_FILE` (default `$E2E_DIR/timings.json`) after each profile kind: `total_ms`, `kinds` (wall time per app and kind, each app start with `first_poll_ms`, `first_answer_ms`, `mail_tab_ms` and `enabled_ms` from the launch, the `fixed_wait_ms` it waited anyway, and peak `app` and `labwc` memory in kB) and `sections` (wall time of each section of the `default` kind). Memory is the sum over the app's process group, so content processes count. `rss_kb` counts shared pages in every process, `pss_kb` splits them. `timings.mjs` holds the sampler.
+
+`node tools/e2e/measure_concurrent.mjs [thunderbird|betterbird] --xpi dist/desertbird.xpi` starts 1 and then 4 apps at once, each in its own session and fresh profile, and writes startup times and peak memory to `$E2E_CONCURRENT_FILE`. It sizes the worker count for a parallel run.
