@@ -94,9 +94,4 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`, and open a PR for each change.
-
-## CI
-
-- `.github/workflows/ci.yml` runs `npm run check` and `npm run build` on every pull request (fork PRs too) and on every push to `main`. It has a read-only token, no secrets and publishes nothing. `.claude/pre-merge` runs the same steps for `merge-prs`.
-- This departs from DesertFox, which has no pull request CI.
-- Follow-up: CI does not run `tools/vendor_desertfox.sh --verify`, because it needs a DesertFox checkout.
+- CI: `.github/workflows/ci.yml` and `.claude/pre-merge` run `npm run check` and `npm run build`.

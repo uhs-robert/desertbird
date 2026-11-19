@@ -1,6 +1,5 @@
 # Pre-merge check: lint, typecheck, unit tests and the build, for every pull request and every push to main.
 # Fork pull requests run it too, so the workflow holds no secret, a read-only token and publishes nothing.
-# The beta workflow in DesertFox has no such check. This one is a deliberate departure.
 name: ci
 
 on:
@@ -13,7 +12,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
