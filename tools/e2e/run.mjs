@@ -1342,6 +1342,23 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await shot("cmdline_typed", "the line after j and a were typed into it");
   await close_command_line(instance);
   await shot("cmdline_closed", "the window after Escape, with no command line");
+  // The widgets at the right end of the line: the folder and [n/m] at the normal width, none on a search line, none in a window under 30rem.
+  await instance.press([":"]);
+  await sleep(1500);
+  await shot("cmdline_widgets", "the line at the normal width: the folder name and [n/m] at its right end");
+  await close_command_line(instance);
+  await instance.press(["/"]);
+  await sleep(1500);
+  await shot("cmdline_widgets_search", "the search line: no widgets at its right end");
+  await close_command_line(instance);
+  const narrow = (await instance.ask("open_normal_window", 45000, { width: 400, height: 600 })).opened;
+  await sleep(4000);
+  await instance.press([":"]);
+  await sleep(1500);
+  await shot("cmdline_widgets_narrow", "the line in a window 400 px wide: the widgets are hidden");
+  await close_command_line(instance);
+  await instance.ask("close_normal_window", 10000, { id: narrow });
+  await sleep(2000);
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "after Escape a bound key runs again", selection_of(state) !== selected_before, `selected ${selected_before} then ${selection_of(state)}`);
   const row_after_j = selection_of(state);

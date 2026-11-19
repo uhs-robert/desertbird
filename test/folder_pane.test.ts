@@ -57,8 +57,8 @@ function folder_tree(shape: [string, unknown[]][]) {
     return { tree, wrapper, row: (name: string) => all.find((candidate) => candidate.name === name)!, select: (name: string) => void (selected = all.find((candidate) => candidate.name === name)!), selected: () => selected.name, open_state: () => real().map((row) => `${row.name}${row.collapsed ? "+" : ""}`).join(" ") };
 }
 
-function window_with(tree: unknown, folder_focused: boolean) {
-    const about_3pane = { folderTree: tree, browsingContext: { topChromeWindow: {} as unknown } };
+function window_with(tree: unknown, folder_focused: boolean, view?: { rowCount: number }) {
+    const about_3pane = { folderTree: tree, gDBView: view, browsingContext: { topChromeWindow: {} as unknown } };
     const document = {
         activeElement: { localName: "browser", contentDocument: { activeElement: folder_focused ? { id: "folderTree" } : { localName: "tbody" } } },
         getElementById: () => ({ currentTabInfo: { mode: { name: "mail3PaneTab" }, chromeBrowser: { contentWindow: about_3pane } } }),
@@ -72,7 +72,7 @@ function api_for(windows: Map<number, unknown>) {
     const platform = stub_platform([...windows.values()]);
     const ids = new Map([...windows].map(([id, window]) => [window, id]));
     const api = get_folderpane_api({ extension: { windowManager: { getWrapper: (window: unknown) => ({ id: ids.get(window)! }) }, messageManager: { convert: () => null } } } as never);
-    return { fold: api.folderpane.fold, focused: api.folderpane.focused, restore: platform.restore };
+    return { fold: api.folderpane.fold, focused: api.folderpane.focused, viewRowCount: api.folderpane.viewRowCount, restore: platform.restore };
 }
 
 const SHAPE: [string, unknown[]][] = [["Account", [["Inbox", [["Work", []], ["Home", []]]], ["Sent", []]]], ["Local", [["Trash", []]]]];
@@ -173,4 +173,15 @@ test("focused tells the folder pane from the other panes", async () => {
         assert.equal(await focused({ windowId: 1 }), folder_focused);
         restore();
     }
+});
+
+test("viewRowCount answers the rows the message list shows, and 0 while it has no view", async () => {
+    const fake = folder_tree(SHAPE);
+    const view = { rowCount: 12 };
+    const { viewRowCount, restore } = api_for(new Map([[1, window_with(fake.tree, false, view)], [2, window_with(fake.tree, false)]]));
+    assert.equal(await viewRowCount({ windowId: 1 }), 12);
+    view.rowCount = 3;
+    assert.equal(await viewRowCount({ windowId: 1 }), 3);
+    assert.equal(await viewRowCount({ windowId: 2 }), 0);
+    restore();
 });

@@ -8,9 +8,11 @@ import type { UserKeymap } from "../background/config/keymap.ts";
 import { SETTING_KINDS, setting_problem } from "../background/config/settings.ts";
 import type { SettingName, Settings } from "../background/config/settings.ts";
 
+const is_list_kind = (kind: string) => kind === "list" || kind === "choice_list";
+
 /** The form text of a setting value: a list reads as comma-separated text. */
 export function setting_to_text(name: SettingName, value: unknown): string {
-    return SETTING_KINDS[name].kind === "list" ? (value as string[]).join(", ") : String(value);
+    return is_list_kind(SETTING_KINDS[name].kind) ? (value as string[]).join(", ") : String(value);
 }
 
 export type SettingParse = { value: Settings[SettingName] } | { error: string };
@@ -22,7 +24,7 @@ export function parse_setting_text(name: SettingName, text: string): SettingPars
     let value: unknown = spec.kind === "line" ? text : trimmed;
     if (spec.kind === "number") value = trimmed === "" ? Number.NaN : Number(trimmed);
     else if (spec.kind === "boolean") value = trimmed === "true" ? true : trimmed === "false" ? false : trimmed;
-    else if (spec.kind === "list") value = trimmed === "" ? [] : trimmed.split(",").map((item) => item.trim());
+    else if (is_list_kind(spec.kind)) value = trimmed === "" ? [] : trimmed.split(",").map((item) => item.trim());
     const problem = setting_problem(name, value);
     return problem === undefined ? { value: value as Settings[SettingName] } : { error: problem };
 }

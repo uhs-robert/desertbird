@@ -43,6 +43,7 @@ All edits live in `local_edits.patch`. They widen the Firefox-only values of `co
 
 ### Checked, not edited
 
+- The setting kind `choice_list` in `src/background/config/settings.ts` (a list whose every item is one of `choices`) is the twin of the upstream kind `enum_list`, under a name DesertBird chose. The `statusbar_widgets` setting uses it, with the names `folder` and `position` where upstream has `url`, `scroll` and `tabs`.
 - `MODES` already holds `normal`, `insert`, `visual` and `cmdline`. Narrowing it breaks `bundles.ts` and `command.ts`, which name the other DesertFox modes, so the list stays as it is.
 
 ## Not copied

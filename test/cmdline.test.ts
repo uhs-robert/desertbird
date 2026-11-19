@@ -6,7 +6,7 @@ import { DEFAULT_KEYMAP, compile_message_keymap, registry } from "../src/backgro
 import { compile_effective_keymap } from "../src/background/config/keymap.ts";
 import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
 import { create_router } from "../src/background/router.ts";
-import type { CmdlineCompletion, CmdlineHello, CmdlineRunResult, KeysInvocation } from "../src/shared/protocol.ts";
+import type { CmdlineCompletion, CmdlineHello, CmdlineRunResult, CmdlineWidgets, KeysInvocation, StatusWidget } from "../src/shared/protocol.ts";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { parse_command_line, tokenize } from "../vendor/desertfox/registry/command_line.ts";
 import { print_command } from "../vendor/desertfox/registry/print_command.ts";
@@ -180,7 +180,7 @@ test("a long folder list ranks in full and keeps the best rows only", async () =
 
 // --- the service
 
-function service_setup(options: { experiment?: boolean } = {}) {
+function service_setup(options: { experiment?: boolean; read_widgets?: (window_id: number) => Promise<StatusWidget[]> } = {}) {
     const { api, calls } = fake_api({ experiment: options.experiment ?? true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [{ id: "f1", accountId: "a1", path: "/Archive" }] });
     const ran: KeysInvocation[] = [];
     const recorded: string[] = [];
@@ -188,6 +188,7 @@ function service_setup(options: { experiment?: boolean } = {}) {
     const service = create_cmdline_service({
         registry,
         read_prompt: async () => "caret",
+        read_widgets: options.read_widgets ?? (async () => []),
         sources,
         overlay: api.overlay,
         history: { record: async (line) => void recorded.push(line) },
@@ -247,6 +248,20 @@ test("hello returns the opening text, or open false when no session exists", asy
     assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: false });
     service.begin(3, { message_ids: [5], text: "move " });
     assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "move ", prompt: "caret" });
+});
+
+test("widgets answers apart from the hello, and a search line or a closed line has none", async () => {
+    const widgets = [{ kind: "folder" as const, text: "Inbox" }, { kind: "position" as const, text: "[2/9]" }];
+    const asked: number[] = [];
+    const { service } = service_setup({ read_widgets: async (window_id) => (asked.push(window_id), widgets) });
+    assert.deepEqual(await ask<CmdlineWidgets>(service, { type: "cmdline.widgets", windowId: 3 }), { widgets: [] });
+    service.begin(3, { message_ids: [], text: "" });
+    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "", prompt: "caret" });
+    assert.deepEqual(asked, []);
+    assert.deepEqual(await ask<CmdlineWidgets>(service, { type: "cmdline.widgets", windowId: 3 }), { widgets });
+    service.begin(4, { message_ids: [], text: "", search: "forward" });
+    assert.deepEqual(await ask<CmdlineWidgets>(service, { type: "cmdline.widgets", windowId: 4 }), { widgets: [] });
+    assert.deepEqual(asked, [3]);
 });
 
 test("messages that are not command line messages, or are malformed, are left alone", () => {
@@ -359,7 +374,7 @@ test("a line that runs is recorded, and a failing history write does not stop th
 test("a failing history write still runs the command", async () => {
     const { api } = fake_api({ experiment: true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [] });
     const ran: KeysInvocation[] = [];
-    const service = create_cmdline_service({ registry, sources, read_prompt: async () => "caret", overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, search_history: { record: async () => {} }, search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} }, run: async (invocation) => void ran.push(invocation) });
+    const service = create_cmdline_service({ registry, sources, read_prompt: async () => "caret", read_widgets: async () => [], overlay: api.overlay, history: { record: () => Promise.reject(new Error("disk full")) }, search_history: { record: async () => {} }, search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} }, run: async (invocation) => void ran.push(invocation) });
     service.begin(3, { message_ids: [5], text: "" });
     const errors = console.error;
     console.error = () => undefined;

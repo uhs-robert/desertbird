@@ -4,7 +4,7 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { check_args } from "../../../vendor/desertfox/registry/check_args.ts";
 import { parse_command_line } from "../../../vendor/desertfox/registry/command_line.ts";
 import type { Registry } from "../../../vendor/desertfox/registry/define.ts";
-import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, JsonValue, KeysInvocation, OverlayApi, SearchDirection } from "../../shared/protocol.ts";
+import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, CmdlineWidgets, JsonValue, KeysInvocation, OverlayApi, SearchDirection, StatusWidget } from "../../shared/protocol.ts";
 import type { SearchService } from "../search/service.ts";
 import { create_completer } from "./completion.ts";
 import type { CmdlineHistory } from "./history.ts";
@@ -30,6 +30,8 @@ export interface CmdlineDeps {
     sources: ValueSources;
     /** The `cmdline_prompt` setting, read each time a line opens. */
     read_prompt(): Promise<string>;
+    /** The status widgets for the window, read each time a line opens. */
+    read_widgets(window_id: number): Promise<StatusWidget[]>;
     /** Absent when the Experiment failed to load. */
     overlay: OverlayApi | undefined;
     /** Keeps the lines that were run. A failed write is logged and never stops the command. */
@@ -44,7 +46,7 @@ export interface CmdlineDeps {
 
 export interface CmdlineService extends CmdlineSessions {
     /** Answers a message of the command line page, or returns undefined for a message that is not one. */
-    handle(message: unknown): Promise<CmdlineHello | CmdlineCompletion | CmdlineRunResult | CmdlineSearchNote | Record<string, never>> | undefined;
+    handle(message: unknown): Promise<CmdlineHello | CmdlineCompletion | CmdlineRunResult | CmdlineSearchNote | CmdlineWidgets | Record<string, never>> | undefined;
 }
 
 const is_integer = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value);
@@ -56,6 +58,7 @@ function read_request(message: unknown): CmdlineRequest | undefined {
     if (!is_integer(window_id)) return undefined;
     switch (request["type"]) {
         case "cmdline.hello":
+        case "cmdline.widgets":
         case "cmdline.close":
             return { type: request["type"], windowId: window_id };
         case "cmdline.complete":
@@ -154,6 +157,9 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
             switch (request.type) {
                 case "cmdline.hello":
                     return session ? deps.read_prompt().then((prompt) => ({ open: true as const, text: session.text, prompt, ...(session.search && { search: session.search }) })) : Promise.resolve({ open: false as const });
+                // Apart from the hello, because the first read loads the folder pane script. The page has the focus by then, and a slow hello would leave the keys of a quick typist to the list.
+                case "cmdline.widgets":
+                    return session && !session.search ? deps.read_widgets(request.windowId).then((widgets) => ({ widgets })) : Promise.resolve({ widgets: [] });
                 case "cmdline.close":
                     return close(request.windowId).then(() => ({}));
                 case "cmdline.complete":
