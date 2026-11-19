@@ -203,6 +203,7 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
 }
 
 export function get_overlay_api(context: ExtensionContext & { extension: OverlayExtension }) {
+    // getAPI is lazy: this hook starts only because the background touches `messenger.overlay` at load.
     stop_page_focus ??= hook_page_focus();
     return {
         overlay: {

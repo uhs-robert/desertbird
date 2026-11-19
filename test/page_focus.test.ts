@@ -3,12 +3,12 @@ import { test } from "node:test";
 import { focus_remote_tab, hook_page_focus } from "../src/chrome/page_focus.ts";
 import { stub_platform } from "./chrome_stubs.ts";
 
-function window_with(active: { localName: string } | null, browser: { isRemoteBrowser: boolean } | null) {
+function window_with(active: { localName: string } | null, browser: { isRemoteBrowser: boolean } | null, mode = "contentTab") {
     const focused: string[] = [];
     const listeners = new Map<string, () => void>();
     const tab_browser = browser && { ...browser, focus: () => void focused.push("browser") };
     const window = {
-        document: { activeElement: active, getElementById: () => ({ currentTabInfo: { mode: { name: "contentTab" }, browser: tab_browser } }) },
+        document: { activeElement: active, getElementById: () => ({ currentTabInfo: { mode: { name: mode }, browser: tab_browser } }) },
         addEventListener: (type: string, listener: () => void) => void listeners.set(type, listener),
         removeEventListener: (type: string) => void listeners.delete(type),
         setTimeout: (run: () => void) => void run(),
@@ -31,6 +31,9 @@ test("an element the user focused keeps the focus, and a page that is not remote
     const local = window_with({ localName: "body" }, { isRemoteBrowser: false });
     focus_remote_tab(local.window);
     assert.deepEqual(local.focused, []);
+    const mail = window_with({ localName: "body" }, { isRemoteBrowser: true }, "mail3PaneTab");
+    focus_remote_tab(mail.window);
+    assert.deepEqual(mail.focused, [], "a mail or message tab is never touched");
     const none = window_with({ localName: "body" }, null);
     focus_remote_tab(none.window);
     assert.deepEqual(none.focused, []);

@@ -14,12 +14,12 @@ interface TimerWindow {
     setTimeout(run: () => void, ms: number): number;
 }
 
-/** Moves the focus into the front tab's browser when that browser is remote and the focus is on nothing or the tab strip. */
+/** Moves the focus into the front tab's browser when that browser is remote, the tab is a content tab and the focus is on nothing or the tab strip. */
 export function focus_remote_tab(window: MainWindow): void {
     const active = window.document.activeElement;
     if (active && !YIELDS_FOCUS.has(active.localName ?? "")) return;
-    const browser = tabmail_of(window)?.currentTabInfo?.browser;
-    if (browser?.isRemoteBrowser) browser.focus();
+    const tab = tabmail_of(window)?.currentTabInfo;
+    if (tab?.mode.name === "contentTab" && tab.browser?.isRemoteBrowser) tab.browser.focus();
 }
 
 /** Hooks every main window, now and later. The focus moves after a tick, once Thunderbird has finished its own focus work for the new tab. Returns the function that unhooks them all. */

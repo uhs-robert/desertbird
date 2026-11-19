@@ -1635,7 +1635,7 @@ async function run_own_pages(instance) {
     await sleep(1500);
   };
   await find_key_bindings();
-  await sleep(5000);
+  await sleep(7000);
   const strip_before_find = await hud_pixels(instance, `${app}_own_find_before`);
   await find_key_bindings();
   await shot("options_find", "options page after / and Key bindings: the heading is selected");
