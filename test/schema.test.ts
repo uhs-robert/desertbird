@@ -22,7 +22,7 @@ interface Namespace {
     events?: SchemaNode[];
 }
 
-const PARENTS = ["keys", "overlay", "hints", "folderpane"];
+const PARENTS = ["keys", "overlay", "hints", "pages", "folderpane"];
 const schema = PARENTS.flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
 const namespace_named = (name: string): Namespace => schema.find((entry) => entry.namespace === name)!;
 
@@ -42,8 +42,9 @@ test("the schema functions and events equal the parent exports", async () => {
     const keys_parent = await import("../src/chrome/parent_keys.ts");
     const overlay_parent = await import("../src/chrome/parent_overlay.ts");
     const hints_parent = await import("../src/chrome/parent_hints.ts");
+    const pages_parent = await import("../src/chrome/parent_pages.ts");
     const folderpane_parent = await import("../src/chrome/parent_folderpane.ts");
-    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context), ...folderpane_parent.get_folderpane_api(context) } as Record<string, Record<string, unknown>>;
+    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
@@ -55,6 +56,7 @@ test("the schema functions and events equal the parent exports", async () => {
     keys_parent.shutdown();
     overlay_parent.shutdown();
     hints_parent.shutdown();
+    pages_parent.shutdown();
     platform.restore();
 });
 
@@ -74,7 +76,7 @@ test("no function parameter is a free string", () => {
     }
 });
 
-test("only the tree is a loose object among the function parameters, and a comment says why", () => {
+test("only the trees are loose objects among the function parameters, and a comment says why", () => {
     const loose: string[] = [];
     for (const { path, node } of function_parameters()) {
         walk(node, path, (inner, inner_path) => {
@@ -84,7 +86,7 @@ test("only the tree is a loose object among the function parameters, and a comme
         });
     }
     // `root` is typed any inside the tree, so it sits under the same loose object.
-    assert.deepEqual(loose.sort(), ["keys.install.args.tree", "keys.install.args.tree.*", "keys.install.args.tree.root"]);
+    assert.deepEqual(loose.sort(), ["keys.install.args.tree", "keys.install.args.tree.*", "keys.install.args.tree.root", "pages.install.args.pageTree", "pages.install.args.pageTree.*", "pages.install.args.pageTree.root"]);
 });
 
 test("the schema has no verb that runs a script, evaluates or opens a URL", () => {

@@ -43,6 +43,10 @@ const HINTS_CEILING_BYTES = 20480;
 const COMPOSE_MAX_BYTES = 3500;
 const COMPOSE_CEILING_BYTES = 8192;
 
+// `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
+const PAGES_MAX_BYTES = 22800;
+const PAGES_CEILING_BYTES = 34816;
+
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
 for (const [, prefix, guard] of own_source.matchAll(/^const (\w+)_MAX_BYTES = (\d+);/gm)) {
@@ -66,6 +70,7 @@ const PARENTS = [
     { name: "keys", entry: "src/chrome/parent_keys.ts" },
     { name: "overlay", entry: "src/chrome/parent_overlay.ts" },
     { name: "hints", entry: "src/chrome/parent_hints.ts", max_bytes: HINTS_MAX_BYTES },
+    { name: "pages", entry: "src/chrome/parent_pages.ts", max_bytes: PAGES_MAX_BYTES },
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
 ].map((parent) => ({
     ...parent,

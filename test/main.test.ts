@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, MESSAGE_KEYMAP, UNREPEATABLE_IDS } from "../src/background/commands/index.ts";
+import { page_keymap } from "../src/background/commands/page_keymap.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import { fake_native_messaging } from "./chrome_stubs.ts";
 
@@ -9,13 +10,14 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-/** A stand-in for the `messenger` global the background entry reads: storage that fires `onChanged` on each write, and a recording `keys.install`. */
+/** A stand-in for the `messenger` global the background entry reads: storage that fires `onChanged` on each write, and a recording `keys.install` and `pages.install`. */
 function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}) {
     const native_messages: { application: string; message: object }[] = [];
     const compose_scripts: unknown[] = [];
     const after_send_listeners: ((tab: { id?: number }, send_info: { error?: string }) => void)[] = [];
     const change_listeners: ((changes: Record<string, StorageChange>, area: string) => void)[] = [];
     const installs: unknown[] = [];
+    const page_installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
     const native = fake_native_messaging();
     let report_read: () => void = () => {};
@@ -44,6 +46,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
         compose: { onAfterSend: { addListener: (listener: (tab: { id?: number }, send_info: { error?: string }) => void) => void after_send_listeners.push(listener) } },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
+        pages: { install: async (args: { pageTree: unknown }) => void page_installs.push(args.pageTree), onInvocation: { addListener: () => {} } },
         runtime: {
             onMessage: { addListener: () => {} },
             connectNative: (application: string) => native.connectNative(application),
@@ -63,7 +66,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, page_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -91,8 +94,8 @@ test("a stored keymap compiled from other default bindings is rebuilt", async ()
 });
 
 test("a storage change during a pending read wins: the tree read before the change is neither kept nor installed last", async () => {
-    const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: MESSAGE_KEYMAP, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
-    const record = (marker: string) => ({ record_version: 4, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
+    const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: MESSAGE_KEYMAP, page: page_keymap(), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
+    const record = (marker: string) => ({ record_version: 5, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
     const { installs, external_write, first_read } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
     await start_background();
     await first_read;
@@ -111,6 +114,24 @@ test("the first start stores the message keymap in the same record, and an insta
     assert.doesNotMatch(JSON.stringify(installs), /message\.scroll_down/);
 });
 
+test("the page tree is stored in the record and installed in the pages Experiment, and the mail install never carries it", async () => {
+    const { stored, installs, page_installs } = stub_messenger();
+    await start_background();
+    await settle();
+    const record = stored["desertbird_compiled_keymap"] as { page_tree: { root: unknown } };
+    assert.match(JSON.stringify(record.page_tree.root), /page\.scroll_down/);
+    assert.deepEqual(page_installs, [record.page_tree]);
+    assert.doesNotMatch(JSON.stringify(installs), /page\.scroll_down/);
+});
+
+test("a stored record of version 4, with no page tree, is rebuilt with one", async () => {
+    const empty = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
+    const { stored } = stub_messenger({ desertbird_compiled_keymap: { record_version: 4, source_hash: "an older default keymap", tree: empty, message_tree: empty } });
+    await start_background();
+    await settle();
+    assert.match(JSON.stringify((stored["desertbird_compiled_keymap"] as { page_tree?: { root: unknown } }).page_tree?.root), /page\.scroll_down/);
+});
+
 test("a stored record of version 2, with no message tree, is rebuilt with one", async () => {
     // A record an earlier add-on version wrote. Its tree is valid for the mail tab, so only the version and the missing `message_tree` can trigger the rebuild.
     const old_tree = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
@@ -118,7 +139,7 @@ test("a stored record of version 2, with no message tree, is rebuilt with one", 
     await start_background();
     await settle();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
-    assert.equal(record.record_version, 4);
+    assert.equal(record.record_version, 5);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
     assert.equal(installs.length, 1);
 });

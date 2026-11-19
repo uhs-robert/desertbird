@@ -26,6 +26,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     hints: { runs_in: "background", ids: ["hint.window"] },
     help: { runs_in: "background", ids: ["help.open", "options.open", "help.whichkey"] },
     search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
+    page: { runs_in: "chrome", ids: ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom"] },
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
 };
 

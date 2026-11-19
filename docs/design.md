@@ -159,6 +159,21 @@ DesertFox takes plain keys on web pages through a content script and has none on
 
 Departure, step 1: when a tab comes to the front, its browser is remote and the focus sits on the window body or the tab strip, the overlay Experiment (`src/chrome/page_focus.ts`) focuses that browser after a tick. The page's own script then runs `j` and `q` on the options and help pages with no click. Any other focused element stays. The code lives in the overlay bundle because the key runtime has no size to spare.
 
+## Keys in the other tabs
+
+DesertFox has one content script per web page. Thunderbird draws its tabs (calendar, tasks, settings, the address book, `about:` pages, search results, chat) in chrome documents and parent-process pages that no content script reaches. The `pages` Experiment (`experiment/pages.js`, `src/chrome/page_runtime.ts`) takes their keys. Departures from DesertFox, each with its reason:
+
+- The page keys run in a bundle of their own on the window root, where DesertFox has one `content.js`. The size guard of `keys.js` was full, and the admission rule keeps this code out of it. `hints.js` is the precedent for a bundle that listens on the window root. It sees a key before the key runtime and steps aside in the mail tab, so the two never take the same key.
+- A decision by focus (`src/chrome/readable_focus.ts`) where DesertFox has no decision. A tab is readable when its document is a chrome document or a parent-process document. It is out of reach when the focus chain ends in a browser whose document the walk cannot enter, or when nothing in the tab has the focus and the front tab's browser is remote. Only chords run there. A text field or an open menu passes every key.
+- The scroll target is the nearest scrollable ancestor of the focused element, else the scrolling element of its document. DesertFox adds a site selector and a scan for the largest box. The chrome documents are known, a scan of one is slow, and there are no site rules here.
+- No smooth scroll and no insert mode `i`. The page actor of a later step owns pages that draw their own editors.
+- The hold after a command that opens the overlay and the end report of the key list are copies of the mail runtime's, because the two bundles share no state.
+- A key the page keymap leaves unbound passes to Thunderbird. DesertFox cancels unbound keys in some modes.
+- The page keys are a constant and a compile function (`src/background/commands/page.ts`, `page_keymap.ts`), not a field of `CommandGroup`. The user's bindings carry over only for the commands of the page keys, and never `tab.close_mail`, so Ctrl+C and Ctrl+X still copy and cut.
+- `<C-j>` and `<C-k>` switch tabs in these tabs, and `g p a`, `g p t` and `g p c` open the add-ons, themes and config pages. Thunderbird's own Ctrl+J (Saved Files) is shadowed there.
+- `j` and `k` scroll a focused list that has its own selection (the address book's books and cards) and do not move its selection.
+- The key list (`g ?`) still shows the mail keys. A which-key panel of the page keys is a later step.
+
 ## Build order
 
 0. Measure on the target Thunderbird ESR and on Betterbird, and write `thunderbird-behavior.md`. Capture plain keys in `about:3pane` from the Experiment, and cancel Thunderbird's own single-key shortcuts (`a`, `j`, `f` and others) in normal mode. Take keys in the message pane through `messageDisplayScripts`. Mount an extension page overlay in the chrome window. Time the round trip from the chrome runtime to the background and back. Check that each standard row in the table exists on the target ESR. Find the native host manifest folders for Thunderbird and Betterbird, which are unverified. Check that Betterbird is at 153.2.0 or later for `filter.set` and `search.threads`. Check that `tabs.create` works from a compose window, for `help.open`. This phase needs no shared core.
@@ -179,6 +194,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
+| `experiment/pages.js` | 22800 | 34816 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
 The ceilings are provisional, about 1.5 times the guard of the day they were set (2026-11-18). A guard rises in steps of 512 bytes. The guards above predate that step and are not multiples of it, so the step applies to later raises only.
@@ -210,6 +226,10 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 - The wrapper keeps the last pending result and takes `keys` from it, as DesertFox does. It needs no list of its own.
 - It answers with the pending result of the shorter prefix (an empty one when no key is left) and adds no `back` result kind. Callers already cancel a pending key and report its prefix, so no caller changes, which saves the bytes that a `back` branch in each caller costs in `keys.js`.
 - Backspace with nothing pending is an ordinary key and goes to Thunderbird.
+
+### Pages bundle
+
+`experiment/pages.js` (the `pages` Experiment) holds the key runtime of every tab that is not the mail tab. Its first measured size was 18982 bytes. That plus 20 percent made 22779, rounded up to 22800. The bundle carries its own copy of the vendored matcher and key token code, which `keys.js` holds too, because Experiment scopes share no modules. The ceiling is 1.5 times the guard rounded up to 1024. The planning estimate of 4.5 to 7 KB assumed a minified build: the bundle is unminified like the others.
 
 ### Folder pane bundle
 

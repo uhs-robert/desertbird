@@ -1,0 +1,90 @@
+[
+  {
+    "namespace": "pages",
+    "description": "Key handling in the tabs of the main window that are not the mail tab: calendar, tasks, settings, the address book, about: pages, search results and chat. The chrome runtime matches keys locally, scrolls the page, and reports only the finished commands that run in the background.",
+    "functions": [
+      {
+        "name": "install",
+        "type": "function",
+        "async": true,
+        "description": "Installs the compiled page keymap, or replaces the one installed. The first call starts the key listeners and later calls add none.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "pageTree": {
+                "type": "object",
+                "description": "The one loose object of the API. It is the compiled page keymap as data: a version the parent checks, and the root branch whose leaves name command ids. The parent walks it with the key matcher and runs a leaf only when its id is in the fixed table of reading actions. A deep schema would copy the compiler's tree shape and break on each change to it.",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "root": {
+                    "type": "any"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "any"
+                }
+              },
+              "holdCommands": {
+                "type": "array",
+                "description": "Ids of the commands that open the overlay. After one fires, plain keys are dropped until the focus reaches a text field, the tab changes or 1.5 seconds pass.",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onInvocation",
+        "type": "function",
+        "description": "A key sequence finished on a command that runs in the background, in a tab that is not the mail tab, or the key list ended. The payload is output only, so it takes no argument check.",
+        "parameters": [
+          {
+            "name": "invocation",
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "A command id, or \"pending\" for a change of the half-typed sequence. That event carries `keys` and `windowId` only."
+              },
+              "keys": {
+                "type": "array",
+                "description": "The typed key tokens of a pending sequence, counts left out. Empty when the sequence ended.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "args": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "any"
+                }
+              },
+              "count": {
+                "type": "integer"
+              },
+              "windowId": {
+                "type": "integer"
+              },
+              "messageIds": {
+                "type": "array",
+                "description": "The MailExtension ids of the messages selected at the key press.",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -23,6 +23,7 @@ import { help } from "./help.ts";
 import { hints } from "./hints.ts";
 import { messages } from "./messages.ts";
 import { new_mail } from "./new_mail.ts";
+import { page } from "./page.ts";
 import { motion } from "./motion.ts";
 import { search } from "./search.ts";
 import { snooze } from "./snooze.ts";
@@ -36,7 +37,7 @@ import { unsubscribe } from "./unsubscribe.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints, page };
 
 export const registry = create_registry();
 

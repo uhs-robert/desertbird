@@ -3,8 +3,9 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
-import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
+import type { HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_keymap, message_background_commands, registry } from "./commands/index.ts";
+import { compile_page_keymap, page_keymap } from "./commands/page_keymap.ts";
 import { tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -61,7 +62,8 @@ const CREATE_FOLDER_TIMEOUT_MS = 10_000;
 const UNDO_RETRY_DELAYS_MS = [500, 1000, 1500];
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
-const KEYMAP_RECORD_VERSION = 4;
+// The record is derived from the user's keymap and the source hash, and an old record is rebuilt on read, so the bump moves no user data.
+const KEYMAP_RECORD_VERSION = 5;
 
 interface KeymapRecord {
     record_version: number;
@@ -70,6 +72,8 @@ interface KeymapRecord {
     tree: KeymapTree;
     /** The keys of the message document. The Experiment never sees it: the body script reads it from storage. */
     message_tree: KeymapTree;
+    /** The keys of the tabs that are not the mail tab. The `pages` Experiment installs it. */
+    page_tree: KeymapTree;
 }
 
 interface StorageChange {
@@ -112,6 +116,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     // The Experiment namespace is absent when it fails to load.
     keys?: KeysApi;
     overlay?: OverlayApi;
+    pages?: PagesApi;
     hints?: HintsApi;
 }
 
@@ -127,7 +132,7 @@ async function hash_of(value: unknown): Promise<string> {
 
 function is_current_record(value: unknown, source_hash: string): value is KeymapRecord {
     const record = value as Partial<KeymapRecord> | null | undefined;
-    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION;
+    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION;
 }
 
 function tree_of(result: CompileResult): KeymapTree {
@@ -140,7 +145,7 @@ function tree_of(result: CompileResult): KeymapTree {
 function compile_record(source_hash: string, config: Config): KeymapRecord {
     const mail = compile_effective_keymap(config.user_keymap, config.setting_overrides);
     // The message tree ends every mail sequence, the user's included, so it reads this mail tree. The source hash already covers the user's mail keys.
-    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_message_keymap(config.user_keymap.normal, mail.compiled.modes.normal)) };
+    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_message_keymap(config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_page_keymap(config.user_keymap.normal)) };
 }
 
 // Registered before the listener below, so the store has dropped its copy by the time an install reads it.
@@ -148,13 +153,13 @@ const config_store = create_config_store(messenger);
 
 // The memory copy only mirrors storage: it refills from storage and drops on `storage.onChanged`.
 let cached_record: KeymapRecord | undefined;
-// The tree last handed to the Experiment, as JSON. The add-on's own write fires `storage.onChanged` too, and that tree is already installed.
+// The trees last handed to the Experiments, as JSON. The add-on's own write fires `storage.onChanged` too, and that tree is already installed.
 let installed_tree_json: string | undefined;
 
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: message_keymap(config.user_keymap.normal), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: message_keymap(config.user_keymap.normal), page: page_keymap(config.user_keymap.normal), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);
@@ -165,10 +170,11 @@ async function load_record(): Promise<KeymapRecord> {
 async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
-    const { tree } = await load_record();
-    const tree_json = JSON.stringify(tree);
+    const { tree, page_tree } = await load_record();
+    const tree_json = JSON.stringify([tree, page_tree]);
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
+    await messenger.pages?.install({ pageTree: page_tree, holdCommands: HOLD_COMMANDS });
     installed_tree_json = tree_json;
     // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
     hud.close_which_key();
@@ -338,11 +344,14 @@ external_editor.resume().catch(console.error);
 // Top level, so each page start registers the listeners again.
 create_new_mail_notifier(messenger, async () => (await config_store.read()).settings.notify_new_mail).register();
 
-messenger.keys?.onInvocation.addListener((event) => {
+// The key runtime of the mail tab and the one of the other tabs report through the same event shape.
+const on_key_event = (event: KeysEvent) => {
     if ("mode" in event) hud.on_keys_event(event).then(() => bridge.mode_changed(), console.error);
     else if ("keys" in event) hud.on_keys_event(event).catch(console.error);
     else router.run(event).catch(console.error);
-});
+};
+messenger.keys?.onInvocation.addListener(on_key_event);
+messenger.pages?.onInvocation.addListener(on_key_event);
 
 // A half-typed sequence the key runtime cannot see end: a tab change, or the window losing the focus.
 messenger.tabs.onActivated.addListener(() => hud.close_which_key());
