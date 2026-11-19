@@ -64,7 +64,6 @@ export const messages: CommandGroup = {
         },
     },
     normal_keys: {
-        x: { id: "msg.archive" },
         a: { id: "msg.archive" },
         dd: { id: "msg.delete", label: "Delete" },
         mr: { id: "msg.read", args: { state: "read" }, label: "Mark read" },

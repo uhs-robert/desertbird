@@ -876,14 +876,14 @@ test("the default tree carries repeatable false on the leaves that snooze or und
     const { root } = default_tree(true);
     const step_of = (...keys: string[]) => keys.reduce((node, key) => node.children[key], root).steps[0];
     for (const keys of [["m", "z", "t"], ["u"]]) assert.equal(step_of(...keys).repeatable, false);
-    for (const keys of [["d", "d"], ["x"], ["m", "r"]]) assert.equal(step_of(...keys).repeatable, undefined);
+    for (const keys of [["d", "d"], ["a"], ["m", "r"]]) assert.equal(step_of(...keys).repeatable, undefined);
 });
 
-test("a dot after d d or x runs it again with its count, on the selection at the dot", () => {
+test("a dot after d d or a runs it again with its count, on the selection at the dot", () => {
     const { windows, emitted, runtime } = setup();
     runtime.install(default_tree(true));
     const window = windows[0]!;
-    for (const [keys, command] of [[["3", "d", "d"], "msg.delete"], [["2", "x"], "msg.archive"]] as const) {
+    for (const [keys, command] of [[["3", "d", "d"], "msg.delete"], [["2", "a"], "msg.archive"]] as const) {
         for (const key of keys) press(window, key);
         window.selected += 1;
         press(window, ".");

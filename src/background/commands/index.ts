@@ -62,7 +62,8 @@ export const GROUP_NAMES: Record<string, string> = {
     mz: "Snooze",
     mf: "Remind",
     F: "Filter",
-    ",": "Sort",
+    ",": "DesertBird",
+    s: "Sort",
     t: "Panes",
     z: "List view",
     y: "Copy",
@@ -123,8 +124,8 @@ export function compile_default_keymap(): CompileResult {
 // The groups whose mail keys also work while a message has the focus. They act on the displayed messages, which the body request reads from the sender tab. Every other group needs the thread list or the mail tab, so its keys stay out.
 const MESSAGE_MAIL_GROUPS = [messages, compose, clipboard, followup, snooze, tabs, cmdline, unsubscribe, attachments, quick_reply];
 
-// Keys of those groups that still need the list: `mR` reads the folder of the list, `Ft` and `Ff` filter it, `,,` sorts it and `;;` opens the line on `hint `, whose command labels the mail window. The close chords stay out because Ctrl+C and Ctrl+X must copy and cut in a message body.
-const LIST_ONLY_KEYS: ReadonlySet<string> = new Set(["mR", "Ft", "Ff", ",,", ";;", "<C-x>", "<C-c>"]);
+// Keys of those groups that still need the list: `mR` reads the folder of the list, `Ft` and `Ff` filter it, `ss` sorts it and `;;` opens the line on `hint `, whose command labels the mail window. The close chords stay out because Ctrl+C and Ctrl+X must copy and cut in a message body.
+const LIST_ONLY_KEYS: ReadonlySet<string> = new Set(["mR", "Ft", "Ff", "ss", ";;", "<C-x>", "<C-c>"]);
 
 const mail_keys_for_message = Object.fromEntries(MESSAGE_MAIL_GROUPS.flatMap((group) => Object.entries(group.normal_keys)).filter(([keys]) => !LIST_ONLY_KEYS.has(keys)));
 

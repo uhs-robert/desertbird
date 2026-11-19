@@ -40,7 +40,7 @@ test("every group of both trees has a name, and the panel title is the chain of 
 
 test("the root lists each group by its name", () => {
     const root = rows_of(mail_root, []);
-    const names = { g: "Go", m: "Message", F: "Filter", ",": "Sort", t: "Panes", z: "List view", y: "Copy", ";": "Hints", "]": "Next", "[": "Previous", M: "Set mark", "'": "Jump to mark", d: "Delete" };
+    const names = { g: "Go", m: "Message", F: "Filter", s: "Sort", ",": "DesertBird", t: "Panes", z: "List view", y: "Copy", ";": "Hints", "]": "Next", "[": "Previous", M: "Set mark", "'": "Jump to mark", d: "Delete" };
     for (const [key, name] of Object.entries(names)) assert.equal(root[key], name, key);
 });
 
@@ -66,7 +66,7 @@ test("the moved keys run their commands, and the old keys are free", () => {
     assert.deepEqual(command_at(mail_root, ["F", "a"]), { id: "filter.set", args: { state: "attachment" } });
     assert.deepEqual(command_at(mail_root, ["F", "r"]), { id: "filter.set", args: { state: "all" } });
     assert.equal(command_at(mail_root, ["a"])?.id, "msg.archive");
-    assert.equal(command_at(mail_root, ["x"])?.id, "msg.archive");
+    assert.equal(node_at(mail_root, ["x"]), undefined);
     for (const keys of [["g", "x"], ["g", "T"], ["g", "c"], ["g", "o"], ["F", "A"], ["<C-h>"]]) assert.equal(node_at(mail_root, keys), undefined, keys.join(" "));
     assert.equal(command_at(mail_root, ["g", "e"])?.args?.["pane"], "threads");
 });
@@ -82,9 +82,21 @@ test("the keys that act on the displayed message resolve in the message tree", (
 
 test("which-key in a message shows no row and no panel for a mail sequence that runs nothing there", () => {
     for (const keys of [["]"], ["F"], ["g", "p"], [";", ";"]]) assert.equal(which_key_panel(message_root, keys, settings_with({})), null, keys.join(" "));
-    for (const key of ["]", "F", ","]) assert.equal(rows_of(message_root, [])[key], undefined, key);
+    for (const key of ["]", "F", "s"]) assert.equal(rows_of(message_root, [])[key], undefined, key);
     assert.equal(rows_of(message_root, ["g"])["p"], undefined);
     assert.deepEqual(rows_of(message_root, [";"]), { f: "Focus link", c: "Click link", y: "Copy link" });
+});
+
+test("the leader opens help, the options page and the key list in the mail tree and keeps them in a message", () => {
+    for (const root of [mail_root, message_root]) {
+        assert.equal(command_at(root, [",", "h"])?.id, "help.open");
+        assert.equal(command_at(root, [",", "s"])?.id, "options.open");
+        assert.equal(node_at(root, [",", ","]), undefined);
+    }
+    assert.equal(command_at(mail_root, [",", "?"])?.id, "help.whichkey");
+    assert.equal(command_at(message_root, [",", "?"])?.id, "help.open");
+    assert.equal(command_at(mail_root, ["s", "j"])?.id, "sort.set");
+    assert.equal(node_at(mail_root, [",", "d"]), undefined);
 });
 
 test("; ; opens the command line on hint in the mail tree only, and its first word is a known command that parses", () => {

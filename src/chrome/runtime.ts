@@ -90,7 +90,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         deps.emit({ command: "mode", mode: on ? "visual" : "normal", windowId: deps.window_id_of(told) });
     };
 
-    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command that removes or moves rows ends it too, so `x` or `d` acts on the range once. One that leaves the rows (`m r`, `m s`) keeps it.
+    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command that removes or moves rows ends it too, so `a` or `d` acts on the range once. One that leaves the rows (`m r`, `m s`) keeps it.
     let visual_anchor = -1;
     // Where the mode last put the current row, and the view and message keys at both ends of the range then. A key that finds anything else means the list changed under the mode (a click, new mail, a row inserted or removed inside the range, a sort or folder change), so the mode ends and the old anchor never reaches into the new list.
     let visual_end = -1;

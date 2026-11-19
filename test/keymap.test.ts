@@ -31,7 +31,7 @@ test("each default key reaches its command with the side that runs it", () => {
         [["g", "g"], "motion.top", "chrome"],
         [["G"], "motion.bottom", "chrome"],
         [["."], "repeat.last", "chrome"],
-        [["x"], "msg.archive", "background"],
+        [["a"], "msg.archive", "background"],
         [["d", "d"], "msg.delete", "background"],
         [["r"], "msg.reply", "background"],
         [["R"], "msg.reply", "background"],
@@ -73,9 +73,9 @@ test("a lone g is pending, and a reset forgets it", () => {
     assert.equal(matcher.feed("normal", "g").kind_, "match");
 });
 
-// The matcher gives a key that breaks a half-typed sequence one more try as a first key. So d then x never reaches msg.delete, and x then runs as the archive key.
-test("d then x drops the stray d and reads x as a first key", () => {
-    const { step } = matched_step("d", "x");
+// The matcher gives a key that breaks a half-typed sequence one more try as a first key. So d then a never reaches msg.delete, and a then runs as the archive key.
+test("d then a drops the stray d and reads a as a first key", () => {
+    const { step } = matched_step("d", "a");
     assert.equal(step?.invocation.id, "msg.archive");
 });
 

@@ -19,6 +19,15 @@ export async function open_help(scope: HandlerScope<HelpApi>): Promise<void> {
     else await scope.api.tabs.create({ url, ...(scope.window_id >= 0 && { windowId: scope.window_id }) });
 }
 
+export interface OptionsApi {
+    runtime: { openOptionsPage(): Promise<void> };
+}
+
+/** Opens the options page the manifest names. */
+export async function open_options(scope: HandlerScope<OptionsApi>): Promise<void> {
+    await scope.api.runtime.openOptionsPage();
+}
+
 export interface WhichKeyApi {
     which_key?: { show_root(window_id: number): Promise<void> };
 }
