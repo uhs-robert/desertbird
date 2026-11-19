@@ -169,7 +169,7 @@ async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there
 }
 
 // Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_GIVE_UP_MS` past its due time. The notice names the subject only when `notice_show_subject` is on, since the notice can reach the desktop.
-export async function wake_snoozed(api: WakeApi, item: SnoozeItem, timing: WakeTiming = { now_ms: Date.now(), started_ms: 0 }): Promise<void> {
+export async function wake_snoozed(api: WakeApi, item: SnoozeItem, timing: WakeTiming): Promise<void> {
     const snoozed_folder_still_there = (await folder_by_id(api, item.folder_id)) !== undefined;
     // The Inbox of the origin account, or the folder the message came from when the account has no Inbox (Local Folders can lack one).
     const [inbox] = await api.folders.query({ accountId: item.origin_account_id, specialUse: ["inbox"] });

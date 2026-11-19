@@ -4,7 +4,7 @@ import { registry } from "../src/background/commands/index.ts";
 import type { MailFolder } from "../src/background/handlers/displayed_folder.ts";
 import type { MessageHeader } from "../src/background/handlers/message.ts";
 import { snooze_messages, wake_snoozed } from "../src/background/handlers/snooze.ts";
-import type { SnoozeApi, WakeApi } from "../src/background/handlers/snooze.ts";
+import type { SnoozeApi, WakeApi, WakeTiming } from "../src/background/handlers/snooze.ts";
 import { CATCH_UP_ALARM, create_scheduler } from "../src/background/scheduler.ts";
 import { create_snooze_store } from "../src/background/snooze_store.ts";
 import { create_router } from "../src/background/router.ts";
@@ -118,6 +118,8 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
 
 const snooze = (box: ReturnType<typeof mailbox>, ids: number[], until = "tomorrow") => snooze_messages({ api: box.api, window_id: 1, message_ids: ids, count: 1 }, { until });
 const tomorrow_8 = new Date(2026, 10, 19, 8).getTime();
+// Each wake takes its clock from the test, never from Date.now(), so a test does not change result with the day it runs.
+const at = (now_ms: number): WakeTiming => ({ now_ms, started_ms: 0 });
 
 test("a snooze creates the Snoozed folder in the message's account, moves the message and stores the header id and the account", async () => {
     const box = mailbox();
@@ -188,7 +190,7 @@ test("a wake returns the message to the origin account's Inbox as unread, notifi
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
     box.notices.length = 0;
-    await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item));
+    await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.equal(box.messages[0]?.read, false);
     assert.deepEqual(await box.store.list(), []);
@@ -199,7 +201,7 @@ test("a wake from the Local Folders fallback returns the message to the origin a
     const box = mailbox({ cannot_create_in: ["imap"] });
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item));
+    await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
@@ -256,7 +258,7 @@ test("a gone Snoozed folder leaves a copy in another account and a Starred-like 
     box.add("<a@x>", "other-misc");
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "other-inbox", "other-misc"]);
 });
 
@@ -268,12 +270,12 @@ test("a message that shows up in the Snoozed folder after a missed tick still re
     const original_error = console.error;
     console.error = () => {};
     try {
-        await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item));
+        await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item, at(tomorrow_8)));
     } finally {
         console.error = original_error;
     }
     box.messages.push(held!);
-    await box.store.wake_due(tomorrow_8 + MINUTE, (item) => wake_snoozed(box.api, item));
+    await box.store.wake_due(tomorrow_8 + MINUTE, (item) => wake_snoozed(box.api, item, at(tomorrow_8 + MINUTE)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -284,7 +286,7 @@ test("the wake notice names the subject only when the setting is on", async () =
     await snooze(box, [message.id]);
     const [item] = await box.store.list();
     box.notices.length = 0;
-    await wake_snoozed({ ...box.api, show_subject: async () => true }, item!);
+    await wake_snoozed({ ...box.api, show_subject: async () => true }, item!, at(tomorrow_8));
     assert.deepEqual(box.notices, ["Snoozed message returned: Subject of <a@x>"]);
 });
 
@@ -296,7 +298,7 @@ test("every copy that shares a Message-ID returns on one wake", async () => {
     await snooze(box, [second.id]);
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed", "imap-Snoozed"]);
     assert.equal((await box.store.list()).length, 1);
-    await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item));
+    await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(box.api, item, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox", "imap-inbox"]);
     assert.deepEqual(box.messages.map((message) => message.read), [false, false]);
 });
@@ -308,7 +310,7 @@ test("a Snoozed folder that was deleted or renamed does not stall the wake: the 
     box.messages[0]!.folder_id = "imap-other";
     const renamed = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(renamed);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -322,7 +324,7 @@ test("a gone Snoozed folder with several copies moves only the waiting one, not 
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
     box.messages[0]!.folder_id = "imap-other";
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-archive", "imap-inbox", "imap-sent"]);
 });
 
@@ -334,7 +336,7 @@ test("a gone Snoozed folder in Local Folders still finds the message there", asy
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
     box.messages[0]!.folder_id = "local-root";
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
@@ -355,13 +357,13 @@ test("a failed move keeps the item, the next tick retries, and the message retur
     let failures = 1;
     const flaky: WakeApi = { ...box.api, messages: { ...box.api.messages, move: async (ids, folder_id) => (failures-- > 0 ? Promise.reject(new Error("offline")) : box.api.messages.move(ids, folder_id)) } };
     try {
-        await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(flaky, item));
+        await box.store.wake_due(tomorrow_8, (item) => wake_snoozed(flaky, item, at(tomorrow_8)));
     } finally {
         console.error = original_error;
     }
     assert.equal((await box.store.list()).length, 1);
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
-    await box.store.wake_due(tomorrow_8 + MINUTE, (item) => wake_snoozed(flaky, item));
+    await box.store.wake_due(tomorrow_8 + MINUTE, (item) => wake_snoozed(flaky, item, at(tomorrow_8 + MINUTE)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -371,10 +373,10 @@ test("a repeat of a wake that already moved the message only marks it unread and
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
     const [item] = await box.store.list();
-    await wake_snoozed(box.api, item!);
+    await wake_snoozed(box.api, item!, at(tomorrow_8));
     box.messages[0]!.read = true;
     box.log.length = 0;
-    await wake_snoozed(box.api, item!);
+    await wake_snoozed(box.api, item!, at(tomorrow_8));
     assert.deepEqual(box.log, []);
     assert.equal(box.messages[0]?.read, false);
 });
@@ -383,7 +385,7 @@ test("an account with no Inbox gets the message back in the folder it came from"
     const box = mailbox({ no_inbox_in: ["imap"] });
     const message = box.add("<a@x>", "imap-sent");
     await snooze(box, [message.id]);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-sent"]);
     assert.equal(box.messages[0]?.read, false);
     assert.deepEqual(await box.store.list(), []);
@@ -395,7 +397,7 @@ test("an account with no Inbox and no origin folder drops the item with a notifi
     await snooze(box, [message.id]);
     const [item] = await box.store.list();
     box.notices.length = 0;
-    await wake_snoozed(box.api, { ...item!, origin_folder_id: "removed-folder" });
+    await wake_snoozed(box.api, { ...item!, origin_folder_id: "removed-folder" }, at(tomorrow_8));
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
     assert.match(box.notices[0]!, /no Inbox and its folder is gone/);
 });
@@ -454,7 +456,7 @@ test("a Snoozed folder under INBOX is found again, and the wake reads the stored
     await snooze(box, [two.id]);
     assert.equal(box.log.filter((line) => line.startsWith("create")).length, 1);
     assert.deepEqual((await box.store.list()).map((found) => found.folder_id), ["imap-Snoozed", "imap-Snoozed"]);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual([box.where("<a@x>"), box.where("<b@x>")], [["imap-inbox"], ["imap-inbox"]]);
 });
 
@@ -462,7 +464,7 @@ test("the wake reads past an empty first page to find the waiting message", asyn
     const box = mailbox({ empty_first_page: true });
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -472,7 +474,7 @@ test("a copy in another folder is never taken, even when pages hold one match ea
     box.add("<a@x>", "imap-sent");
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "imap-sent"]);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -482,7 +484,7 @@ test("a copy of the message in the origin Inbox and one in another account do no
     const message = box.add("<a@x>");
     box.add("<a@x>", "local-inbox");
     await snooze(box, [message.id]);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "local-inbox"]);
 });
 
@@ -493,13 +495,13 @@ test("an Inbox lookup that fails keeps the item, and the next tick wakes the mes
     const original_error = console.error;
     console.error = () => {};
     try {
-        await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found));
+        await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     } finally {
         console.error = original_error;
     }
     assert.equal((await box.store.list()).length, 1);
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
-    await box.store.wake_due(tomorrow_8 + MINUTE, (found) => wake_snoozed(box.api, found));
+    await box.store.wake_due(tomorrow_8 + MINUTE, (found) => wake_snoozed(box.api, found, at(tomorrow_8 + MINUTE)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
 });
@@ -508,8 +510,9 @@ test("an Inbox lookup that fails keeps the item, and the next tick wakes the mes
 function boot(box: ReturnType<typeof mailbox>, clock: { now: number }) {
     const alarms = fake_alarms();
     const scheduler = create_scheduler({ alarms: alarms.api }, () => clock.now);
+    const started_ms = clock.now;
     const store = create_snooze_store({ storage: box.storage.api });
-    scheduler.on_due((now_ms) => store.wake_due(now_ms, (item) => wake_snoozed(box.api, item)));
+    scheduler.on_due((now_ms) => store.wake_due(now_ms, (item) => wake_snoozed(box.api, item, { now_ms, started_ms })));
     return { alarms, scheduler };
 }
 
