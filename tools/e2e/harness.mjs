@@ -64,7 +64,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   };
   // The helper add-on answers "state" before DesertBird has its keys live, so the ready signal has two steps under the one ceiling `startup_ms`.
   // First it asks for "state" with seq 0 (ask() counts from 1) until one reply shows DesertBird enabled and a mail tab.
-  // Then a key probe proves the keys are live: `t m` flips the message pane and the helper sees it. That is the one effect of a key the helper can read without a test hook in src/.
+  // Then a key probe proves the keys are live: `w m` flips the message pane and the helper sees it. That is the one effect of a key the helper can read without a test hook in src/.
   // Without the helper add-on there is nothing to ask, so that start keeps the fixed wait.
   const wait_startup = async () => {
     if (!xpi_path) {
@@ -113,7 +113,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     let changed_at = 0;
     let pressed_at = 0;
     for (;;) {
-      check_alive(keys_live_ms === null ? "the key probe `t m` never flipped the message pane, so the keys are not live" : "the key probe could not flip the message pane back");
+      check_alive(keys_live_ms === null ? "the key probe `w m` never flipped the message pane, so the keys are not live" : "the key probe could not flip the message pane back");
       const now = Date.now();
       const quiet = now - Math.max(changed_at, pressed_at) >= QUIET_MS;
       if (value === pane_start && keys_live_ms !== null && quiet) break;

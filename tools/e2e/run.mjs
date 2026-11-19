@@ -235,7 +235,7 @@ async function run_default(instance) {
   for (const key of ["s", "m", "x", "1"]) await instance.press([key]);
   await sleep(1200);
   const after = await instance.ask("state");
-  check(app, kind, "s, m w and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
+  check(app, kind, "s, m x and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
 
   // With the thread list's context menu open (Shift+F10), keys belong to the menu: j moves nothing and k is the menu's access key for Mark.
   const before_menu = first_selected(await instance.ask("state"));
@@ -1130,7 +1130,7 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["g"]);
   await sleep(1200);
   check(app, kind, "g then g with the panel up closes it", (await pixels_of("hud_after_complete")) === bare);
-  // A key that leads nowhere cancels the sequence before the delay: no panel ever shows. The key is w, which nothing binds, alone or after g (g s opens the Sent folder). A prefix key such as z would start a new sequence and show its own panel.
+  // A key that leads nowhere cancels the sequence before the delay: no panel ever shows. The key is x, which nothing binds, alone or after g (g s opens the Sent folder). A prefix key such as z would start a new sequence and show its own panel.
   await instance.press(["g"]);
   await instance.press(["x"]);
   await sleep(1500);
