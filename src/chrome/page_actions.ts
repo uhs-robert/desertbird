@@ -1,6 +1,7 @@
 // The reading actions of a page tab: a fixed table keyed by command id, so no string from the keymap ever names code. The message ids map to the same functions, for the message tab with focus outside the body.
 
 import type { FocusNode } from "./focus.ts";
+import { NOT_IN_THE_TAB } from "./readable_focus.ts";
 
 export interface ScrollNode {
     scrollHeight: number;
@@ -10,6 +11,7 @@ export interface ScrollNode {
     /** The shadow host, when the node is the top of a shadow tree. */
     getRootNode?(): { host?: ScrollNode | null };
     ownerDocument?: ScrollDocument | null;
+    checkVisibility?(): boolean;
     scrollBy(options: { top: number; behavior: "instant" }): void;
     scrollTo(options: { top: number; behavior: "instant" }): void;
 }
@@ -31,19 +33,27 @@ const scrolls = (node: ScrollNode): boolean => node.scrollHeight > node.clientHe
 
 const area_of = (node: ScrollNode): number => node.clientHeight * (node.clientWidth ?? 1);
 
-/** The scrollable element with the largest box in the document, or null. Only a document whose root does not scroll is searched, so a page of the usual kind costs no scan. */
-function largest_scrollable(document: ScrollDocument): ScrollNode | null {
+/** The scrollable element with the largest box under `scope`, or null. A node that is not visible stays out: a tab panel that is not in front keeps its layout. */
+function largest_scrollable(scope: Pick<ScrollDocument, "querySelectorAll">): ScrollNode | null {
     let largest: ScrollNode | null = null;
-    for (const node of document.querySelectorAll?.("*") ?? []) if (scrolls(node) && (largest === null || area_of(node) > area_of(largest))) largest = node;
+    for (const node of scope.querySelectorAll?.("*") ?? []) if (node.checkVisibility?.() !== false && scrolls(node) && (largest === null || area_of(node) > area_of(largest))) largest = node;
     return largest;
 }
 
-/** The element a scroll key moves: the nearest scrollable ancestor of the focused element, else the scrolling element of its document, else, when that does not scroll, the largest scrollable element of the document. That last step is for pages such as the settings tab, which scroll inside a pane that the focused sidebar button is not part of. A site selector has no place here: the documents are known. */
-export function scroll_target(focused: FocusNode | null | undefined, fallback_document: ScrollDocument): ScrollNode | null {
+/** The element a scroll key moves: the nearest scrollable ancestor of the focused element, else the scrolling element of its document, else, when that does not scroll, the largest scrollable element under `scope` (the document when none is given). That last step is for pages such as the settings tab, which scroll inside a pane that the focused sidebar button is not part of. The window document holds every tab, so a caller that scrolls it passes the panel of the front tab as `scope`. A site selector has no place here: the documents are known. */
+export function scroll_target(focused: FocusNode | null | undefined, fallback_document: ScrollDocument, scope?: Pick<ScrollDocument, "querySelectorAll">): ScrollNode | null {
     for (let node = focused as ScrollNode | null | undefined; node; node = parent_of(node)) if (scrolls(node)) return node;
     const document = (focused as ScrollNode | undefined)?.ownerDocument ?? fallback_document;
     const root = document.scrollingElement ?? null;
-    return root && root.scrollHeight > root.clientHeight ? root : (largest_scrollable(document) ?? root);
+    return root && root.scrollHeight > root.clientHeight ? root : (largest_scrollable(scope ?? document) ?? root);
+}
+
+/** What a scroll key acts on, from the focus chain of the window. Focus on the window body or the tab strip is no focus inside the tab: the key then acts on the document of the tab's own browser, so a page nobody clicked into still scrolls. */
+export function scroll_focus(chain: FocusNode[], tab_document: ScrollDocument | null | undefined, window_document: ScrollDocument): { focused: FocusNode | undefined; document: ScrollDocument } {
+    const end = chain.at(-1);
+    const outside_the_tab = end === undefined || NOT_IN_THE_TAB.has(end.localName ?? "");
+    const inner_document = chain.findLast((node) => node.contentDocument)?.contentDocument as ScrollDocument | null | undefined;
+    return { focused: outside_the_tab ? undefined : end, document: inner_document ?? (outside_the_tab ? tab_document : null) ?? window_document };
 }
 
 type ScrollAction = (target: ScrollNode, count: number) => void;

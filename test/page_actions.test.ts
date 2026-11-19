@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { run_scroll, scroll_target } from "../src/chrome/page_actions.ts";
+import { run_scroll, scroll_focus, scroll_target } from "../src/chrome/page_actions.ts";
 import type { ScrollNode } from "../src/chrome/page_actions.ts";
 
 interface Fake extends ScrollNode {
@@ -58,6 +58,38 @@ test("when the root does not scroll the target is the largest scrollable element
     sidebar_button.ownerDocument = { ...doc, defaultView: { getComputedStyle: () => ({ overflowY: "visible" }) } };
     assert.equal(scroll_target(sidebar_button as never, doc), pane);
     assert.equal(scroll_target(undefined, doc), pane);
+});
+
+test("the search skips a node that is not visible and stays under the scope it is given", () => {
+    const hidden_pane = node({ scroll_height: 3000, client_height: 600, overflow: "auto" });
+    hidden_pane.checkVisibility = () => false;
+    const other_panel_pane = node({ scroll_height: 2000, client_height: 500, overflow: "auto" });
+    const front_pane = node({ scroll_height: 900, client_height: 200, overflow: "auto" });
+    const window_document = { scrollingElement: node(), querySelectorAll: () => [hidden_pane, other_panel_pane, front_pane] };
+    assert.equal(scroll_target(undefined, window_document), other_panel_pane, "the hidden pane is skipped");
+    assert.equal(scroll_target(undefined, window_document, { querySelectorAll: () => [front_pane] }), front_pane, "the scope keeps the other panel out");
+});
+
+test("focus on the window body or the tab strip is no focus in the tab, so the tab's own document is scrolled", () => {
+    const tab_document = { scrollingElement: node() };
+    const window_document = { scrollingElement: node() };
+    for (const localName of ["body", "tab", "tabs"]) {
+        const result = scroll_focus([{ localName }], tab_document, window_document);
+        assert.equal(result.focused, undefined, localName);
+        assert.equal(result.document, tab_document, localName);
+    }
+    assert.equal(scroll_focus([], tab_document, window_document).document, tab_document);
+    assert.equal(scroll_focus([], null, window_document).document, window_document);
+});
+
+test("a focused element inside the tab stays the focus, and the document it holds is the one scrolled", () => {
+    const inner = { scrollingElement: node() };
+    const button = { localName: "button" };
+    const browser = { localName: "browser", contentDocument: inner };
+    assert.equal(scroll_focus([browser, button], { scrollingElement: node() }, { scrollingElement: node() }).focused, button);
+    assert.equal(scroll_focus([browser, button], { scrollingElement: node() }, { scrollingElement: node() }).document, inner);
+    const window_document = { scrollingElement: node() };
+    assert.equal(scroll_focus([button], { scrollingElement: node() }, window_document).document, window_document, "a chrome tab: the focus is in the window document");
 });
 
 test("a root that scrolls wins over the search, and with nothing scrollable the root is the answer", () => {

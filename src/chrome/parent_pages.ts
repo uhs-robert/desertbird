@@ -1,8 +1,7 @@
 // The parent script of the `pages` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `pages`: `getAPI(context)` returns `get_pages_api(context)` and `onShutdown` calls `shutdown()`.
 
 import { focus_chain } from "./focus.ts";
-import type { FocusNode } from "./focus.ts";
-import { run_scroll, scroll_target } from "./page_actions.ts";
+import { run_scroll, scroll_focus, scroll_target } from "./page_actions.ts";
 import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
 import type { PageRuntime } from "./page_runtime.ts";
@@ -25,6 +24,8 @@ interface FrontTabInfo {
     mode: { name: string };
     browser?: { isRemoteBrowser?: boolean; contentDocument?: { scrollingElement?: ScrollNode | null } | null } | null;
     chromeBrowser?: { contentDocument?: { scrollingElement?: ScrollNode | null } | null; contentWindow?: { gMessage?: unknown; document?: { getElementById(id: string): { contentDocument?: { scrollingElement?: ScrollNode | null } | null } | null } } | null } | null;
+    /** The element that holds the tab's own part of the window document. */
+    panel?: Pick<ScrollDocument, "querySelectorAll"> | null;
     /** The header of the message a message tab shows. */
     message?: unknown;
 }
@@ -60,10 +61,10 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             const tab = front_tab_of(window);
             // The focus sits in the header of the message tab, so the body is scrolled, whatever the header holds.
             if (tab?.mode.name === MESSAGE_TAB_MODE) return run_scroll(id, scroll_target(undefined, (tab.chromeBrowser?.contentWindow?.document?.getElementById("messagepane")?.contentDocument ?? {}) as ScrollDocument), count);
-            const chain = focus_chain(window.document);
-            // The document the focus is in. With no focus inside the tab, the document of the tab's own browser: a page that has not been clicked into still scrolls.
-            const document = chain.findLast((node) => node.contentDocument)?.contentDocument ?? (chain.length ? null : (tab?.browser ?? tab?.chromeBrowser)?.contentDocument) ?? window.document;
-            return run_scroll(id, scroll_target(chain.at(-1) as FocusNode | undefined, document as ScrollDocument), count);
+            const { focused, document } = scroll_focus(focus_chain(window.document), (tab?.browser ?? tab?.chromeBrowser)?.contentDocument as ScrollDocument | null | undefined, window.document as unknown as ScrollDocument);
+            // The window document holds every tab, so a search for the largest scrollable element stays in the panel of the front tab.
+            const target_document = (focused as ScrollNode | undefined)?.ownerDocument ?? document;
+            return run_scroll(id, scroll_target(focused, document, target_document === (window.document as unknown) ? (tab?.panel ?? undefined) : undefined), count);
         },
         on_tab_select(window, listener) {
             // On the window and not on the tab strip, as the key runtime does: the strip does not exist yet when the window is hooked at startup.

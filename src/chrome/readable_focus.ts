@@ -23,7 +23,7 @@ export interface FrontTab {
 }
 
 // With the focus on nothing or on the tab strip, no element of the tab has it.
-const NOT_IN_THE_TAB = new Set(["body", "tab", "tabs"]);
+export const NOT_IN_THE_TAB = new Set(["body", "tab", "tabs"]);
 
 function page_is_remote(document: FocusDocument, tab: FrontTab): boolean {
     const end = focus_chain(document).at(-1);

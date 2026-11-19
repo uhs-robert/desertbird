@@ -82,7 +82,7 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
   await read_tab({ name: "calendar", open: () => instance.click(...SPACES.calendar), scrolls: false });
   await read_tab({ name: "tasks", open: () => instance.click(...SPACES.tasks), scrolls: false });
   // The settings search field has the focus on open, so a click on the Privacy & Security category, a long pane, takes it away, and a click on the empty area beside the pane puts the focus in its document. The pane scrolls inside an element that is not an ancestor of the focused element, so j records a NOTE and no check: the scroll target rule of the plan does not reach it.
-  await read_tab({ name: "settings", open: () => instance.click(...SPACES.settings), field_autofocused: true, leave_field: async () => { await instance.click(160, 321); await sleep(500); await instance.click(1220, 450); }, scrolls: false });
+  await read_tab({ name: "settings", open: () => instance.click(...SPACES.settings), field_autofocused: true, leave_field: async () => { await instance.click(160, 321); await sleep(500); await instance.click(1220, 450); } });
   await read_tab({ name: "about:addons", open: async () => { await instance.press(["g"]); await instance.press(["p"]); await instance.press(["a"]); }, scrolls: false });
   // The page puts the focus back into its search field on any key or click, so only the typing check runs there.
   await read_tab({ name: "about:config", open: async () => { await instance.press(["g"]); await instance.press(["p"]); await instance.press(["c"]); }, field_autofocused: true });
