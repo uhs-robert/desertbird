@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { create_matcher } from "../vendor/desertfox/keys/matcher.ts";
 import type { MatchResult } from "../vendor/desertfox/keys/matcher.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap } from "../src/background/commands/index.ts";
+import { matcher_for_tree } from "../src/shared/keymap_tree.ts";
+import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 
 const { compiled, warnings } = compile_default_keymap();
 
@@ -140,4 +142,19 @@ test("mark_steps tags the steps of the commands that keep the selection, and not
     assert.deepEqual(flags(root.children.s), [true]);
     assert.deepEqual(flags(root.children.x), [undefined]);
     assert.deepEqual(flags(root.children.d), [undefined]);
+});
+
+test("matcher_for_tree: Backspace drops the last key of a sequence, and counts and registers stay", () => {
+    const leaf = { kind: "leaf" as const, steps: [] };
+    const root = { kind: "branch" as const, children: { g: { kind: "branch" as const, children: { u: { kind: "branch" as const, children: { l: leaf } } } }, d: leaf } };
+    const matcher = matcher_for_tree({ version: COMPILED_KEYMAP_VERSION, root });
+    const typed = (token: string) => {
+        const result = matcher.feed("normal", token);
+        return result.kind_ === "pending" ? result.typed_ : result.kind_;
+    };
+    assert.deepEqual([typed("g"), typed("u"), typed("<Backspace>")], [["g"], ["g", "u"], ["g"]]);
+    assert.deepEqual([typed("u"), typed("l")], [["g", "u"], "match"]);
+    assert.deepEqual([typed("2"), typed("g"), typed("<Backspace>"), typed("<Backspace>")], [[], ["g"], [], []]);
+    assert.equal(typed("d"), "match", "a count dropped by Backspace does not leak");
+    assert.equal(typed("<Backspace>"), "no_match", "no sequence, so Backspace is an ordinary key");
 });

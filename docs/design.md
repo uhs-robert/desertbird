@@ -175,7 +175,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 
 | Bundle | Guard | Ceiling |
 | --- | --- | --- |
-| `experiment/keys.js`, `experiment/overlay.js` (each) | 27000 | 40960 |
+| `experiment/keys.js`, `experiment/overlay.js` (each) | 27512 | 40960 |
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `content/message_display.js` | 17650 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
@@ -200,6 +200,16 @@ The first measured size of `keys.js` as its own bundle was 15003 bytes. That plu
 - Skipping a leaf with args and holding plain keys after the command line opens made it 26040 (1025 over main). The guard was that measured size rounded up to 26100.
 - The key list command (`help.whichkey`, with the report that ends its panel on the next key) made it 26238 (198 over main). The guard was that measured size rounded up to 26300.
 - Running the conversation command through the controller of the page that shows the message (a message tab or window as well as the mail tab) made it 26992 (722 over main's 26270). The guard is that measured size rounded up to 27000.
+- Backspace in an open which-key (the back step in `matcher_for_tree`, clause: decides what happens to a key) made it 27441 (449 over main's 26992). The guard rose by one 512-byte step to 27512. The body bundles grew by 449 and stay under their guard.
+
+### Backspace in an open which-key
+
+Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flow.ts`: reset, type the kept keys again, report the shorter prefix, cancel the key). Departures:
+
+- DesertFox does it in its key flow. DesertBird has three key flows (chrome runtime, message body script, own pages), so the step is in `matcher_for_tree` (`src/shared/keymap_tree.ts`), a wrapper around the pinned matcher. The vendored matcher is not edited.
+- The wrapper keeps the last pending result and takes `keys` from it, as DesertFox does. It needs no list of its own.
+- It answers with the pending result of the shorter prefix (an empty one when no key is left) and adds no `back` result kind. Callers already cancel a pending key and report its prefix, so no caller changes, which saves the bytes that a `back` branch in each caller costs in `keys.js`.
+- Backspace with nothing pending is an ordinary key and goes to Thunderbird.
 
 ### Folder pane bundle
 

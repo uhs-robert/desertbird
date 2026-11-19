@@ -1205,3 +1205,26 @@ test("visual mode that another window ends is reported to the window that starte
     assert.deepEqual(modes, ["visual", "normal"]);
     assert.deepEqual(mode_windows, [7, 7], "the end goes to the window that heard the start");
 });
+
+test("Backspace in a half-typed sequence goes back one key, cancelled, and shows the shorter prefix", () => {
+    const { windows, pending, emitted, runtime } = setup();
+    runtime.install(page_tree());
+    const window = windows[0]!;
+    press(window, "g");
+    const before = pending.length;
+    assert.equal(press(window, "Backspace").cancelled, true);
+    assert.deepEqual(pending.slice(before).map((event) => event.keys), [[]]);
+    press(window, "g");
+    assert.equal(window.selected, 0, "the first g was dropped, so one g is not `g g`");
+    press(window, "g");
+    assert.equal(window.selected, 0, "g g from a clean start still runs");
+    assert.equal(emitted.length, 0);
+});
+
+test("Backspace with no sequence goes to Thunderbird", () => {
+    const { windows, pending, runtime } = setup();
+    runtime.install(page_tree());
+    const window = windows[0]!;
+    assert.equal(press(window, "Backspace").cancelled, false);
+    assert.deepEqual(pending.map((event) => event.keys).filter((keys) => keys.length > 0), []);
+});
