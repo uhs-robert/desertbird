@@ -136,6 +136,21 @@ async function hud_pixels(instance, name, region = "0,640 1260x80") {
   return createHash("sha256").update(readFileSync(await instance.shot_region(name, region))).digest("hex");
 }
 
+// Reads the state every half second until the selection is the same in three reads in a row. Views starts empty, so an empty selection counts as settled, but only after a quiet window long enough for a late selection to show. Logs a line when it gives up.
+async function settled_state(instance, selection_of) {
+  let state = await instance.ask("state");
+  let equal_reads = 1;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await sleep(500);
+    const next = await instance.ask("state");
+    equal_reads = selection_of(next) === selection_of(state) ? equal_reads + 1 : 1;
+    state = next;
+    if (equal_reads >= 3) return state;
+  }
+  console.log(`settled_state: the selection kept changing for 6 s, reading it as "${selection_of(state)}"`);
+  return state;
+}
+
 // Escape three times leave no command line open, whatever the list held: the first hides the list, the second closes the line, the third goes to the mail list, where it does nothing.
 async function close_command_line(instance) {
   for (let count = 0; count < 3; count++) {
@@ -1338,6 +1353,14 @@ async function run_window_hints(instance, { app, kind, shot }) {
 async function run_cmdline(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
   let state = await instance.ask("state");
+  // The full run arrives in Views. Run alone it would start in the Inbox, where Betterbird has the last row selected and Down cannot move, so the group shows Views itself.
+  if (state.mail_tab?.folder !== "/Views") {
+    const prepared = await instance.ask("prepare_views", 30000);
+    await sleep(2000);
+    const shown = (await instance.ask("state")).mail_tab?.folder;
+    check(app, kind, "the helper shows the Views folder before the command line checks", prepared.prepared === true && shown === "/Views", prepared.error ?? `folder ${shown}`);
+  }
+  state = await settled_state(instance, selection_of);
   let selected_before = selection_of(state);
   let folders_before = JSON.stringify(state.folders);
   // j and a typed with no pause after the colon: the key runtime holds plain keys until the overlay has the focus, so neither reaches the list.
