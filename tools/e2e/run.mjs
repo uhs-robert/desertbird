@@ -1601,6 +1601,18 @@ async function run_own_pages(instance) {
     await sleep(2500);
     check(app, kind, `the ${page} page opens in a tab`, (await tab_count()) === before + 1, `reply ${JSON.stringify(reply)}`);
   };
+  // A page nobody clicked yet: its first keys must work, so j scrolls it and q closes it.
+  for (const page of ["options", "help"]) {
+    await open_page(page);
+    const page_region = "0,150 1260x480";
+    const page_before = await hud_pixels(instance, `${app}_${page}_unclicked_before`, page_region);
+    for (let count = 0; count < 5; count++) await instance.press(["j"]);
+    await sleep(500);
+    check(app, kind, `j scrolls the ${page} page with no click first`, (await hud_pixels(instance, `${app}_${page}_unclicked_after`, page_region)) !== page_before);
+    const closed = await key_and_state(instance, ["q"], 2000);
+    check(app, kind, `q closes the ${page} page with no click first`, main_window_tabs(closed).length === before, `tabs ${main_window_tabs(closed).length}, expected ${before}`);
+    if (main_window_tabs(closed).length !== before) await instance.ask("remove_tab", 20000, { index: before });
+  }
   for (const page of ["options", "help"]) {
     await open_page(page);
     // A click on empty page area puts the focus in the page document, as a user's first click does.
@@ -1613,13 +1625,19 @@ async function run_own_pages(instance) {
   await open_page("options");
   await instance.click(1150, 450);
   await sleep(500);
+  // The page scrolls to the match and draws under the strip, so a first find moves it and the compared find starts from the scrolled page, after any toast of the first has gone.
+  const find_key_bindings = async () => {
+    await instance.press(["/"]);
+    await sleep(1500);
+    await instance.press(["Key bindings"]);
+    await sleep(400);
+    await instance.press(["-k", "Return"]);
+    await sleep(1500);
+  };
+  await find_key_bindings();
+  await sleep(7000);
   const strip_before_find = await hud_pixels(instance, `${app}_own_find_before`);
-  await instance.press(["/"]);
-  await sleep(1500);
-  await instance.press(["Key bindings"]);
-  await sleep(400);
-  await instance.press(["-k", "Return"]);
-  await sleep(1500);
+  await find_key_bindings();
   await shot("options_find", "options page after / and Key bindings: the heading is selected");
   check(app, kind, "/ finds text on the options page with no refusal toast", (await hud_pixels(instance, `${app}_own_find_after`)) === strip_before_find);
   await instance.ask("remove_tab", 20000, { index: before });
