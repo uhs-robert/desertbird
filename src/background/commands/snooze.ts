@@ -2,11 +2,11 @@ import { snooze_messages } from "../handlers/snooze.ts";
 import type { SnoozeApi } from "../handlers/snooze.ts";
 import type { NotificationsApi } from "../notify.ts";
 import { SNOOZE_PRESETS } from "../snooze_presets.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 export const snooze: CommandGroup = {
-    commands: {
+    commands: needing("message", {
         "msg.snooze": {
             bridge: false,
             repeatable: false,
@@ -24,7 +24,7 @@ export const snooze: CommandGroup = {
             ],
             run: scoped<SnoozeApi & NotificationsApi>(snooze_messages),
         },
-    },
+    }),
     normal_keys: {
         mzl: { id: "msg.snooze", args: { until: "later_today" }, label: "Later today" },
         mzt: { id: "msg.snooze", args: { until: "tomorrow" }, label: "Tomorrow" },

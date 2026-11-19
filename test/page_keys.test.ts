@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyWindow } from "../src/content/body_keys.ts";
-import { MESSAGE_KEYMAP, compile_message_keymap } from "../src/background/commands/index.ts";
+import { default_keymap_of, compile_tab_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { KEYMAP_STORAGE_KEY } from "../src/shared/protocol.ts";
 
 // The own pages run the message key script as it is, so these tests drive it the way an options or help tab does.
@@ -19,7 +19,7 @@ async function page_started() {
         scrollTo() {},
     } as unknown as BodyWindow;
     const sent: unknown[] = [];
-    const root = JSON.parse(JSON.stringify(compile_message_keymap().compiled.modes.normal)) as unknown;
+    const root = JSON.parse(JSON.stringify(compile_tab_keymap("message").compiled.modes.normal)) as unknown;
     const stored = { [KEYMAP_STORAGE_KEY]: { message_tree: { version: COMPILED_KEYMAP_VERSION, root } } };
     await start_body_script(window, { get: async () => stored, onChanged: { addListener() {} } }, { sendMessage: async (message) => void sent.push(message), onMessage: { addListener() {} } });
     const press = (key: string, local_name: string) => {
@@ -53,5 +53,5 @@ test("both own pages load the page key script before their own script", () => {
 });
 
 test("the message keys bind g? to the help page", () => {
-    assert.deepEqual(MESSAGE_KEYMAP.normal?.["g?"], { id: "help.open", label: "Open help" });
+    assert.deepEqual(default_keymap_of("message").normal?.["g?"], { id: "help.open", label: "Open help" });
 });

@@ -1,6 +1,6 @@
 import { search_threads, set_filter, set_sort, toggle_pane } from "../handlers/view.ts";
 import type { ViewApi } from "../handlers/view.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 const UNTAGGED_STATES = ["unread", "all", "starred", "toggle_starred", "attachment"];
@@ -10,7 +10,7 @@ const sort_key = (by: string, order: string, label: string) => ({ id: "sort.set"
 
 // All four change only what the list shows, never mail, so `bridge` is true.
 export const view: CommandGroup = {
-    commands: {
+    commands: needing("list", {
         "filter.set": {
             bridge: true,
             runs_in: "background",
@@ -95,7 +95,7 @@ export const view: CommandGroup = {
             params: [{ name: "pane", type: "enum", values: ["message", "folder"], short: { message: "m", folder: "f" }, description: { message: "Toggle the message pane.", folder: "Toggle the folder pane." } }],
             run: scoped<ViewApi>(toggle_pane),
         },
-    },
+    }),
     normal_keys: {
         Fu: { id: "filter.set", args: { state: "unread" }, label: "Unread" },
         Fr: { id: "filter.set", args: { state: "all" }, label: "Reset" },

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_KEYMAP, MESSAGE_KEYMAP, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
+import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 import { effective_keymap } from "../src/background/config/keymap.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
@@ -92,7 +93,7 @@ test("help.open shows the tab that already holds the page", async () => {
 });
 
 test("the keys of a message document list under the reading commands, marked as in a message", () => {
-    const scroll = help_groups(registry, DEFAULT_KEYMAP, MESSAGE_KEYMAP).flatMap((group) => group.entries).find((entry) => entry.id === "message.scroll_down");
+    const scroll = help_groups(registry, DEFAULT_KEYMAP, default_keymap_of("message")).flatMap((group) => group.entries).find((entry) => entry.id === "message.scroll_down");
     assert.ok(scroll !== undefined && scroll.keys.length > 0);
     assert.ok(scroll.keys.every((key) => key.where === "message"));
     assert.deepEqual(help_groups(registry, DEFAULT_KEYMAP).flatMap((group) => group.entries).find((entry) => entry.id === "message.scroll_down")?.keys, []);

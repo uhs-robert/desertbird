@@ -1,11 +1,11 @@
 import { fold_all, half_page, move_left, move_right, reposition, step_thread_root } from "../handlers/thread_view.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // All five move the selection or the fold state of the list and never touch mail, so `bridge` is true. Each reads the rows through the chrome verbs in `needs`.
 export const thread: CommandGroup = {
-    commands: {
+    commands: needing("list", {
         "motion.left": { bridge: true, runs_in: "background", label: "Close thread or go to its root", intent: "Close the open thread, or go from a reply to its root.", needs: ["keys.viewRows", "keys.viewThread"], run: scoped<ThreadViewApi>(move_left) },
         "motion.right": { bridge: true, runs_in: "background", label: "Open thread or go to its first reply", intent: "Open the closed thread, or go to its first reply.", needs: ["keys.viewRows", "keys.viewThread"], run: scoped<ThreadViewApi>(move_right) },
         "step.thread_root": {
@@ -45,7 +45,7 @@ export const thread: CommandGroup = {
             params: [{ name: "open", type: "bool", short: "R", description: "Open every thread instead of closing every one." }],
             run: scoped<ThreadViewApi>(fold_all),
         },
-    },
+    }),
     normal_keys: {
         h: { id: "motion.left", label: "Collapse thread or go to root" },
         l: { id: "motion.right", label: "Expand thread or go to reply" },

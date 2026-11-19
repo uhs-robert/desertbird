@@ -1,11 +1,11 @@
 import { open_cmdline } from "../handlers/cmdline.ts";
 import type { CmdlineApi } from "../handlers/cmdline.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // `:` opens an empty line. The other keys open it with the start of a command typed in, for the commands that take a value the key cannot give. The text goes through the same parser as typed text.
 export const cmdline: CommandGroup = {
-    commands: {
+    commands: needing("tab", {
         "cmdline.open": {
             bridge: false,
             // A `.` that reopened the line would only startle. The line has its own history.
@@ -19,7 +19,7 @@ export const cmdline: CommandGroup = {
             params: [{ name: "text", type: "string", main: true, rest: true, optional: true, description: "Start the line with this text." }],
             run: scoped<CmdlineApi>(open_cmdline),
         },
-    },
+    }),
     normal_keys: {
         ":": { id: "cmdline.open", label: "Command line" },
         mt: { id: "cmdline.open", args: { text: "tag " }, label: "Tag" },

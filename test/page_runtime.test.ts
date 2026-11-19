@@ -4,8 +4,7 @@ import { create_page_runtime } from "../src/chrome/page_runtime.ts";
 import type { PageDeps } from "../src/chrome/page_runtime.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "../src/chrome/runtime.ts";
 import type { Situation } from "../src/chrome/readable_focus.ts";
-import { compile_message_keymap } from "../src/background/commands/index.ts";
-import { compile_page_keymap, page_message_tree } from "../src/background/commands/page_keymap.ts";
+import { compile_tab_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import type { KeysEvent, KeysInvocation } from "../src/shared/protocol.ts";
 
@@ -39,8 +38,8 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
     return result;
 }
 
-const tree_of = (result: ReturnType<typeof compile_page_keymap>) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(result.compiled.modes.normal)) as unknown });
-const tree = (user?: Parameters<typeof compile_page_keymap>[0]) => ({ page: tree_of(compile_page_keymap(user)), message: page_message_tree(tree_of(compile_message_keymap(user)) as never) });
+const tree_of = (result: ReturnType<typeof compile_tab_keymap>) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(result.compiled.modes.normal)) as unknown });
+const tree = (user?: Parameters<typeof compile_tab_keymap>[1]) => ({ page: tree_of(compile_tab_keymap("page", user)), message: page_message_tree(tree_of(compile_tab_keymap("message", user)) as never) });
 
 function setup(window_count = 1) {
     const windows = Array.from({ length: window_count }, () => new FakeWindow());

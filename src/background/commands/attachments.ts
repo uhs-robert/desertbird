@@ -1,10 +1,10 @@
 import { save_attachments } from "../handlers/attachments.ts";
 import type { AttachmentsApi } from "../handlers/attachments.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 export const attachments: CommandGroup = {
-    commands: {
+    commands: needing("message", {
         "msg.save_attachments": {
             bridge: false,
             runs_in: "background",
@@ -22,6 +22,6 @@ export const attachments: CommandGroup = {
             ],
             run: scoped<AttachmentsApi>((scope, args) => save_attachments(scope, args)),
         },
-    },
+    }),
     normal_keys: { ga: { id: "msg.save_attachments", label: "Save attachments" } },
 };

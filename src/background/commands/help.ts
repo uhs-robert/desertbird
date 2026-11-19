@@ -1,15 +1,15 @@
 import { open_help, open_options, show_root_keys } from "../handlers/help.ts";
 import type { HelpApi, OptionsApi, WhichKeyApi } from "../handlers/help.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 export const help: CommandGroup = {
-    commands: {
+    commands: needing("tab", {
         "help.open": { bridge: false, runs_in: "background", label: "Help", intent: "Open the help page: every command with its keys and usage.", run: scoped<HelpApi>(open_help) },
         "options.open": { bridge: false, runs_in: "background", name: "options", label: "Options", intent: "Open the DesertBird options page.", run: scoped<OptionsApi>(open_options) },
         // Hidden from completion: typed on the line it leaves a panel that no key ends, since only the key press arms the report.
         "help.whichkey": { bridge: false, runs_in: "background", completion: "hidden", label: "Key list", intent: "Show the top-level keys in a panel in the window.", run: scoped<WhichKeyApi>(show_root_keys) },
-    },
+    }),
     normal_keys: {
         "g?": { id: "help.whichkey", label: "Show keys" },
         ",h": { id: "help.open", label: "Help" },

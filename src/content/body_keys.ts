@@ -62,6 +62,8 @@ const ACTIONS: Record<string, Action> = {
     "hint.pick": ({ hints }, _count, args) => void hints.begin(args["action"] as HintAction | undefined),
 };
 
+type TreeField = "message_tree" | "own_tree";
+
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
 /** The scroll step in the stored settings, or the default when it is absent or below 1. */
@@ -70,14 +72,14 @@ function scroll_step_of(settings: unknown): number {
     return typeof step === "number" && Number.isFinite(step) && step >= 1 ? step : MESSAGE_SCROLL_STEP_PX;
 }
 
-/** The keymap record in storage, read for the tree of this document. A record that is absent or of another shape gives null. */
-function message_tree_of(record: unknown): { version: number; root: unknown } | null {
-    const tree = (record as { message_tree?: { version?: unknown; root?: unknown } } | null | undefined)?.message_tree;
+/** The keymap record in storage, read for the tree of this document: a message document reads `message_tree` and an own page `own_tree`. A record that is absent or of another shape gives null. */
+function tree_of_record(record: unknown, tree_field: TreeField): { version: number; root: unknown } | null {
+    const tree = (record as Record<string, { version?: unknown; root?: unknown } | undefined> | null | undefined)?.[tree_field];
     return typeof tree?.version === "number" ? { version: tree.version, root: tree.root } : null;
 }
 
 /** Starts the keys of one message document. `open_pick` runs on a picked link or button. A yank sends the text to the background, which owns the clipboard. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
-export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error))): Promise<void> {
+export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error)), tree_field: TreeField = "message_tree"): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
     // Read once per document: each message loads the script anew, so a theme change shows on the next message.
@@ -134,7 +136,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     }
 
     function install(record: unknown): void {
-        const tree = message_tree_of(record);
+        const tree = tree_of_record(record, tree_field);
         try {
             matcher = tree && matcher_for_tree(tree);
         } catch (error) {

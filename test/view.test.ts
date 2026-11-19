@@ -276,10 +276,10 @@ test("tab_kind: the mail tab is 0 and every other tab 1", () => {
 });
 
 test("the close chords of the mail tab are in the mail keymap and not in the message keymap", async () => {
-    const { MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
+    const { default_keymap_of } = await import("../src/background/commands/tab_keymaps.ts");
     for (const key of ["<C-x>", "<C-c>", "Ff", "ss", ";;"]) {
         assert.ok(DEFAULT_KEYMAP.normal?.[key], key);
-        assert.equal(MESSAGE_KEYMAP.normal?.[key], undefined, key);
+        assert.equal(default_keymap_of("message").normal?.[key], undefined, key);
     }
 });
 

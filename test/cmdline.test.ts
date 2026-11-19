@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_completer } from "../src/background/cmdline/completion.ts";
 import { create_cmdline_service } from "../src/background/cmdline/service.ts";
-import { DEFAULT_KEYMAP, compile_message_keymap, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
+import { compile_tab_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { compile_effective_keymap } from "../src/background/config/keymap.ts";
 import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
 import { create_router } from "../src/background/router.ts";
@@ -78,7 +79,7 @@ test("the usage line comes from the params", () => {
 });
 
 const choice = (path: string, account_name = "Work", account_id = "a1") => ({ path, account_name, account_id });
-const default_key_trees = async () => ({ mail: compile_effective_keymap({}).compiled.modes.normal as TreeBranch, message: compile_message_keymap().compiled.modes.normal as TreeBranch });
+const default_key_trees = async () => ({ mail: compile_effective_keymap({}).compiled.modes.normal as TreeBranch, message: compile_tab_keymap("message").compiled.modes.normal as TreeBranch });
 const sources = { key_trees: default_key_trees, folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"], tabs: async () => [] };
 const no_selection = { window_id: 3, message_ids: [] };
 const complete = create_completer(registry, sources);

@@ -2,11 +2,11 @@ import { cancel_followups, remind_messages } from "../handlers/followup.ts";
 import type { FollowupApi } from "../handlers/followup.ts";
 import { FOLLOWUP_PRESETS } from "../followup_presets.ts";
 import type { NotificationsApi } from "../notify.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 export const followup: CommandGroup = {
-    commands: {
+    commands: needing("message", {
         "msg.remind": {
             bridge: false,
             repeatable: false,
@@ -32,7 +32,7 @@ export const followup: CommandGroup = {
             intent: "Drop the pending reminder and the Follow up tag.",
             run: scoped<FollowupApi & NotificationsApi>(cancel_followups),
         },
-    },
+    }),
     normal_keys: {
         mfd: { id: "msg.remind", args: { after: "one_day" }, label: "In 1 day" },
         mft: { id: "msg.remind", args: { after: "three_days" }, label: "In 3 days" },
