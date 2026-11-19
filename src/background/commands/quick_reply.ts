@@ -14,7 +14,7 @@ export const quick_reply: CommandGroup = {
             runs_in: "background",
             label: "Reply with quick reply",
             intent: "Open a reply with the text of a quick reply slot. Never sends.",
-            params: [{ name: "slot", type: "int", min: 1, max: QUICK_REPLY_SLOT_COUNT, description: "Name the quick reply slot, 1 to 9." }],
+            params: [{ name: "slot", type: "int", short: "s", min: 1, max: QUICK_REPLY_SLOT_COUNT, description: "Name the quick reply slot, 1 to 9." }],
             run: scoped<QuickReplyApi>(reply_with),
         },
     },

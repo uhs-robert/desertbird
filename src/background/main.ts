@@ -1,6 +1,7 @@
 // Background entry. Compiles the default keymap once, keeps it in storage and hands it to the Experiment on every start.
 
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
+import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, OverlayApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_keymap, message_background_commands, registry } from "./commands/index.ts";
@@ -234,6 +235,14 @@ const search = create_search_service({
     say: (window_id, text, is_error) => (is_error ? notify_refusal : notify_result)({ ...messenger, toasts: hud }, text, window_id),
 });
 
+// The completer works out the key labels once per object it gets here. The record is the same object until a storage change drops it, so the labels follow the keymap.
+let key_trees_of: { record: KeymapRecord; trees: KeyTrees } | undefined;
+async function read_key_trees(): Promise<KeyTrees> {
+    const record = await load_record();
+    if (key_trees_of?.record !== record) key_trees_of = { record, trees: { mail: record.tree.root as TreeBranch, message: record.message_tree.root as TreeBranch } };
+    return key_trees_of.trees;
+}
+
 // The service and the router refer to each other: the line runs its command through the router, and the open key stores a session in the service.
 const cmdline = create_cmdline_service({
     registry,
@@ -241,6 +250,7 @@ const cmdline = create_cmdline_service({
         folders: create_folder_source(messenger),
         tags: async () => (await messenger.messages.tags.list()).map((entry) => entry.tag),
         tabs: (window_id) => tab_choices(messenger, window_id),
+        key_trees: read_key_trees,
     },
     overlay: command_line_overlay,
     read_prompt: async () => (await config_store.read()).settings.cmdline_prompt,

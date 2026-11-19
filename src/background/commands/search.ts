@@ -16,7 +16,7 @@ export const search: CommandGroup = {
             // The key opens the line, so the list of typed commands has no use for it.
             completion: "hidden",
             needs: ["overlay.mount", "keys.viewRows"],
-            params: [{ name: "direction", type: "enum", values: ["forward", "backward"], description: { forward: "Select the first match on Enter.", backward: "Select the last match on Enter, and make n go up." } }],
+            params: [{ name: "direction", type: "enum", values: ["forward", "backward"], short: { forward: "f", backward: "b" }, description: { forward: "Select the first match on Enter.", backward: "Select the last match on Enter, and make n go up." } }],
             run: scoped<SearchOpenApi>(open_search),
         },
         "search.next": {

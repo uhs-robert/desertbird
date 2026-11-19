@@ -20,7 +20,7 @@ export const reading: CommandGroup = {
             label: "Pick a link",
             intent: "Label the links on screen, then open, focus or copy one.",
             count: "ignore",
-            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank"], default: "activate", description: { focus: "Focus the link.", yank: "Copy the address of the link, else its text." } }],
+            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank"], default: "activate", short: { focus: "f", yank: "y" }, description: { focus: "Focus the link.", yank: "Copy the address of the link, else its text." } }],
         },
         "search.message": {
             bridge: true,

@@ -18,6 +18,7 @@ export const clipboard: CommandGroup = {
                     type: "enum",
                     values: ["content", "subject", "sender", "address", "message_id"],
                     default: "content",
+                    short: { subject: "s", sender: "f", address: "a", message_id: "i" },
                     description: { subject: "Copy the subject.", sender: "Copy the sender with name and address.", address: "Copy the sender address only.", message_id: "Copy the Message-ID header value." },
                 },
             ],

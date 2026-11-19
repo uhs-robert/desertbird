@@ -18,6 +18,7 @@ export const followup: CommandGroup = {
                     name: "after",
                     type: "enum",
                     values: [...FOLLOWUP_PRESETS],
+                    short: { one_day: "d", three_days: "t", one_week: "w" },
                     description: { one_day: "Remind after one day.", three_days: "Remind after three days.", one_week: "Remind after one week." },
                 },
             ],

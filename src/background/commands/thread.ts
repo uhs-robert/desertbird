@@ -15,7 +15,7 @@ export const thread: CommandGroup = {
             intent: "Select the root of the next or previous thread.",
             count: "repeat",
             needs: ["keys.viewRows"],
-            params: [{ name: "direction", type: "enum", values: ["next", "previous"], description: { next: "Go to the root of the next thread.", previous: "Go to the root of this thread or the one before." } }],
+            params: [{ name: "direction", type: "enum", values: ["next", "previous"], short: { next: "n", previous: "p" }, description: { next: "Go to the root of the next thread.", previous: "Go to the root of this thread or the one before." } }],
             run: scoped<ThreadViewApi>(step_thread_root),
         },
         "view.reposition": {
@@ -24,7 +24,7 @@ export const thread: CommandGroup = {
             label: "Scroll the current row to a place",
             intent: "Scroll the list so the current row sits at a chosen place.",
             needs: ["keys.viewRows", "keys.viewScroll"],
-            params: [{ name: "position", type: "enum", values: ["center", "top", "bottom"], description: { center: "Put the row in the middle.", top: "Put the row at the top.", bottom: "Put the row at the bottom." } }],
+            params: [{ name: "position", type: "enum", values: ["center", "top", "bottom"], short: { center: "z", top: "t", bottom: "b" }, description: { center: "Put the row in the middle.", top: "Put the row at the top.", bottom: "Put the row at the bottom." } }],
             run: scoped<ThreadViewApi>(reposition),
         },
         "view.half_page": {
@@ -33,7 +33,7 @@ export const thread: CommandGroup = {
             label: "Move half a page",
             intent: "Select the row half a page down or up in the thread list.",
             needs: ["keys.viewRows"],
-            params: [{ name: "direction", type: "enum", values: ["next", "previous"], description: { next: "Go half a page down.", previous: "Go half a page up." } }],
+            params: [{ name: "direction", type: "enum", values: ["next", "previous"], short: { next: "n", previous: "p" }, description: { next: "Go half a page down.", previous: "Go half a page up." } }],
             run: scoped<ThreadViewApi>(half_page),
         },
         "thread.fold_all": {
@@ -42,7 +42,7 @@ export const thread: CommandGroup = {
             label: "Open or close every thread or folder",
             intent: "Open every thread in the list, or close them all. In the folder pane it opens or closes every folder.",
             needs: ["keys.viewAllThreads"],
-            params: [{ name: "open", type: "bool", description: "Open every thread instead of closing every one." }],
+            params: [{ name: "open", type: "bool", short: "R", description: "Open every thread instead of closing every one." }],
             run: scoped<ThreadViewApi>(fold_all),
         },
     },

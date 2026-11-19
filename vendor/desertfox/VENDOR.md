@@ -6,7 +6,7 @@ This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox
 - Commit: `b0e41305a64ee347f7c6fb2ded5c5c3af70a12e7`, a commit on DesertFox `main` after `v1.0.0` (use the commit, since a tag can move)
 - License: MPL-2.0, the same as DesertBird (see `LICENSE` at the repository root). The copied files keep their text unchanged apart from the edits listed below.
 
-The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin), except `completion/tokenize.ts` and `history_cursor.ts`, which come from `src/cmdline/`, and `find_match.ts`, which comes from `src/content/caret/`. The three style modules keep their sheets as pure text and have distinct names here, since two upstream files are called `style.ts`: `whichkey_style.ts` and `whichkey_layout.ts` come from `src/content/whichkey/` (`style.ts`, `layout.ts`), and `cmdline_style.ts` comes from `src/cmdline/style.ts`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
+The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin), except `completion/tokenize.ts`, `completion/keys.ts` and `history_cursor.ts`, which come from `src/cmdline/`, and `find_match.ts`, which comes from `src/content/caret/`. The three style modules keep their sheets as pure text and have distinct names here, since two upstream files are called `style.ts`: `whichkey_style.ts` and `whichkey_layout.ts` come from `src/content/whichkey/` (`style.ts`, `layout.ts`), and `cmdline_style.ts` comes from `src/cmdline/style.ts`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
 
 ## Commands
 
@@ -33,6 +33,10 @@ All edits live in `local_edits.patch`. They widen the Firefox-only values of `co
 
 - The three imports of `../../shared/...` read `../...`, because the file sits beside the shared files here and in a `cmdline/completion/` folder upstream.
 
+### `completion/keys.ts`
+
+- The five imports of `../../shared/...` read `../...`, for the same reason as `completion/tokenize.ts`. It builds the keys column of the command line.
+
 ### `find_match.ts`
 
 - The two imports (`RuntimeRefusal` from `command.ts`, `FindScanAnswer` from `messages.ts`) are gone, with the page-side scan they served: `Slicing`, `ScanRegex`, `describe_timeout` and `collect_matches`. DesertBird scans no page text here. What stays is the pure part: `compile_query` (smart case, the costly pattern check, the literal fallback), `nearest_match`, `step_match`, `opposite` and `describe_match`.
@@ -55,6 +59,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `bundles.ts` | copy | `3ff270a378b283a0c6a619ca1f0e6a1d8ecc3d67926c14c28ceec69d97063059` | `3ff270a378b283a0c6a619ca1f0e6a1d8ecc3d67926c14c28ceec69d97063059` |
 | `cmdline_style.ts` | copy | `c9cadd4ff16f2bf8a4e558617025b2e3e3fb48be40525e611275ad8e1e007d36` | `c9cadd4ff16f2bf8a4e558617025b2e3e3fb48be40525e611275ad8e1e007d36` |
 | `command.ts` | edited | `413d108780e94db8094856820a36ebc0a00105c3aa00b530a5348b66ef90eca3` | `e44c1fc11de62c27b31044b2a36bf9be8e38eb2ca5ef78376bf21d535529c641` |
+| `completion/keys.ts` | edited | `27f261518e06be50406f7519b2310dbb8aefec28a1271d8abc54ec3ed9b21600` | `5844a5c177682bacb0966aa17064e7211739d3ff7ba0e6ef1207afde1021b4ff` |
 | `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `782044001ffb548804beac17fbae8f01eafa4c800181b555729418a27cb7f41e` |
 | `default_settings.ts` | stub | `-` | `eca9d79725e87c58fba673060fcd28eff23b601e840b5da0bbb84aab1fb3ec9f` |

@@ -4,7 +4,7 @@ import { scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // Each only moves the selection, so `bridge` is true. They read the rows through `keys.viewRows`, which gives the list in the order shown.
-const direction = { name: "direction", type: "enum", values: ["next", "previous"], description: { next: "Go to the next one.", previous: "Go to the previous one." } } as const;
+const direction = { name: "direction", type: "enum", values: ["next", "previous"], short: { next: "n", previous: "p" }, description: { next: "Go to the next one.", previous: "Go to the previous one." } } as const;
 
 export const step: CommandGroup = {
     commands: {
@@ -15,7 +15,7 @@ export const step: CommandGroup = {
             intent: "Select the next or previous unread message. In all_folders scope, with none left in this folder, open the next folder that has unread mail.",
             count: "repeat",
             needs: ["keys.viewRows"],
-            params: [direction, { name: "scope", type: "enum", values: ["folder", "all_folders"], default: "folder", description: { all_folders: "Go on to another folder when this one has no more." } }],
+            params: [direction, { name: "scope", type: "enum", values: ["folder", "all_folders"], default: "folder", short: { all_folders: "U" }, description: { all_folders: "Go on to another folder when this one has no more." } }],
             run: scoped<StepApi>(step_unread),
         },
         "step.starred": { bridge: true, runs_in: "background", label: "Step to a starred message", intent: "Select the next or previous starred message.", count: "repeat", needs: ["keys.viewRows"], params: [direction], run: scoped<StepApi>(step_starred) },

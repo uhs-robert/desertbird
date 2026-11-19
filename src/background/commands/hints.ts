@@ -15,7 +15,7 @@ export const hints: CommandGroup = {
             intent: "Label what is on screen, then act on the typed label.",
             needs: ["hints.pick"],
             count: "ignore",
-            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank"], default: "activate", description: { focus: "Focus the target.", yank: "Copy the address of the target, else its text." } }],
+            params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank"], default: "activate", short: { focus: "f", yank: "y" }, description: { focus: "Focus the target.", yank: "Copy the address of the target, else its text." } }],
             run: scoped<HintWindowApi>(pick_in_window),
         },
     },

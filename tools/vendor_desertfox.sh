@@ -17,7 +17,7 @@ COPIED_FILES=(
   register_names.ts prefix_tree.ts command.ts invocation.ts keymap.ts bundles.ts score.ts
   registry/define.ts registry/check_args.ts registry/check_shape.ts registry/params.ts registry/summary.ts
   registry/command_line.ts registry/usage.ts registry/print_command.ts registry/single_quote.ts
-  completion/tokenize.ts history_cursor.ts find_match.ts
+  completion/tokenize.ts completion/keys.ts history_cursor.ts find_match.ts
   whichkey_style.ts whichkey_layout.ts cmdline_style.ts
   themes.ts theme_names.ts theme/roles.ts theme/tokens.ts theme/contrast.ts theme/derive.ts theme/theme_file.ts theme/load.ts
 )

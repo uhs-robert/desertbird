@@ -18,6 +18,7 @@ export const snooze: CommandGroup = {
                     name: "until",
                     type: "enum",
                     values: [...SNOOZE_PRESETS],
+                    short: { later_today: "l", tomorrow: "t", weekend: "w", monday: "m" },
                     description: { later_today: "Return later today.", tomorrow: "Return tomorrow at 08:00.", weekend: "Return on Saturday at 08:00.", monday: "Return on Monday at 08:00." },
                 },
             ],

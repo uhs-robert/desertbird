@@ -1350,6 +1350,15 @@ async function run_cmdline(instance, { app, kind, shot }) {
   state = await instance.ask("state");
   check(app, kind, "after Escape the list has focus: Thunderbird's own Down moves the selection", selection_of(state) !== row_after_j && selection_of(state) !== "", `selected ${row_after_j} then ${selection_of(state)}`);
 
+  // The keys column: archive, delete and reply are listed by msg. words, and sort by its own name.
+  for (const word of ["msg.ar", "msg.del", "msg.rep", "sort"]) {
+    await instance.press([":"]);
+    await sleep(1200);
+    await instance.press([word]);
+    await sleep(600);
+    await shot(`cmdline_keys_${word.replace(".", "_")}`, `the list for "${word}" with the keys column filled`);
+    await close_command_line(instance);
+  }
   await instance.press([":"]);
   await sleep(1200);
   await instance.press(["sort --date --ascending"]);
