@@ -1,3 +1,4 @@
+import { ignore_refusal } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { while_loading } from "./loading.ts";
@@ -73,12 +74,13 @@ let filters_loaded: Promise<void> = Promise.resolve();
 export function keep_filters(storage: FilterStorage | undefined): void {
     filter_storage = storage;
     if (storage === undefined) return;
-    filters_loaded = storage.get(APPLIED_FILTERS_STORAGE_KEY).then((stored) => {
+    filters_loaded = ignore_refusal(storage.get(APPLIED_FILTERS_STORAGE_KEY)).then((stored) => {
+        if (stored === undefined) return;
         const saved = stored[APPLIED_FILTERS_STORAGE_KEY];
         if (typeof saved !== "object" || saved === null) return;
         // A filter set since the page started is newer than the stored one.
         for (const [tab_id, filter] of Object.entries(saved)) if (!applied_filters.has(Number(tab_id))) applied_filters.set(Number(tab_id), filter as QuickFilter);
-    }, () => undefined);
+    });
 }
 
 export const filters_ready = (): Promise<void> => filters_loaded;

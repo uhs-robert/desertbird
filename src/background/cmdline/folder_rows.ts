@@ -1,3 +1,4 @@
+import { ignore_refusal, refused_as } from "../../shared/swallow.ts";
 import type { AccountsApi } from "../handlers/account_choice.ts";
 import type { MailFolder } from "../handlers/displayed_folder.ts";
 import { read_folder_state } from "../handlers/folder_state.ts";
@@ -27,7 +28,7 @@ const by_path = (left: FolderChoice, right: FolderChoice) => (left.path < right.
 
 // Only the first message names the account. A selection across accounts refuses on Enter anyway, so the list need not read every message of a long selection per keystroke.
 async function shown_account(api: FolderSourceApi, window_id: number): Promise<string | undefined> {
-    return (await api.mailTabs.query({ windowId: window_id, active: true }).catch(() => []))[0]?.displayedFolder?.accountId;
+    return (await refused_as(api.mailTabs.query({ windowId: window_id, active: true }), []))[0]?.displayedFolder?.accountId;
 }
 
 // Among folders with one path, the shown account's comes first, so a path typed in full opens where the user is.
@@ -44,7 +45,7 @@ function shown_account_first(choices: FolderChoice[], shown: string | undefined)
 
 async function selection_account(api: FolderSourceApi, message_ids: number[]): Promise<string | undefined> {
     if (message_ids[0] === undefined) return undefined;
-    return (await api.messages.get(message_ids[0]).catch(() => undefined))?.folder?.accountId;
+    return (await ignore_refusal(api.messages.get(message_ids[0])))?.folder?.accountId;
 }
 
 /**

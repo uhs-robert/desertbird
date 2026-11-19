@@ -1,5 +1,6 @@
 // DesertBird's own undo stack, kept in `storage.local`. Thunderbird records no undo step for a change made through the API, so `u` reverses these entries instead. One stack serves every window. A message changes its numeric id when it moves, so an item names it by its Message-ID header and the folder it sits in.
 
+import { keep_chain } from "../shared/swallow.ts";
 import { create_record_store } from "./record_store.ts";
 import type { RecordStorageApi } from "./record_store.ts";
 
@@ -116,7 +117,7 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
     let undoing: Promise<unknown> = Promise.resolve();
     const hold = <R>(work: () => Promise<R>): Promise<R> => {
         const result = held.then(work);
-        held = result.catch(() => {});
+        held = keep_chain(result);
         return result;
     };
 
@@ -135,7 +136,7 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
             }),
         undo_newest(wait, undo) {
             const result = undoing.then(() => undo_one(wait, undo));
-            undoing = result.catch(() => {});
+            undoing = keep_chain(result);
             return result;
         },
     };

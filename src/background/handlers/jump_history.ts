@@ -1,3 +1,4 @@
+import { ignore_refusal } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { active_mail_tab, find_folder, show_folder } from "./folder_open.ts";
@@ -33,11 +34,8 @@ export function start_jump_history(api: FolderApi): void {
         if (own_jump?.tab_id === tab.id && is_same_folder(own_jump.ref, folder)) return;
         record_displayed_folder(api, folder).catch(console.error);
     });
-    api.mailTabs
-        .query({ active: true })
-        .then(([tab]) => (is_recordable(tab?.displayedFolder) ? record_displayed_folder(api, tab.displayedFolder) : undefined))
-        // The window can have no mail tab yet or still be loading its first folder. The first event then records it.
-        .catch(() => undefined);
+    // The window can have no mail tab yet or still be loading its first folder. The first event then records it.
+    void ignore_refusal(api.mailTabs.query({ active: true }).then(([tab]) => (is_recordable(tab?.displayedFolder) ? record_displayed_folder(api, tab.displayedFolder) : undefined)));
 }
 
 /** Moves `count` entries along the history, over entries whose folder is gone, and as far as the history reaches. */
