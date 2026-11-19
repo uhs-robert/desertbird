@@ -11,6 +11,8 @@ const PARENT_MAX_BYTES = Number(/PARENT_MAX_BYTES = (\d+);/.exec(readFileSync(jo
 const HINTS_MAX_BYTES = Number(/HINTS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const FOLDERPANE_MAX_BYTES = Number(/FOLDERPANE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const CONTENT_MAX_BYTES = Number(/CONTENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const PAGES_MAX_BYTES = Number(/PAGES_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const PAGE_KEYS_MAX_BYTES = Number(/PAGE_KEYS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const COMPOSE_MAX_BYTES = Number(/COMPOSE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
@@ -45,7 +47,7 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-const PARENT_NAMES = ["keys", "overlay", "hints", "folderpane"];
+const PARENT_NAMES = ["keys", "overlay", "hints", "pages", "folderpane"];
 const sources: Record<string, string> = {};
 const inputs: Record<string, string[]> = {};
 
@@ -65,7 +67,7 @@ const guard_prefixes = () => [...build_source().matchAll(/^const (\w+)_MAX_BYTES
 const number_of = (name: string) => Number(new RegExp(`^const ${name} = (\\d+);`, "m").exec(build_source())?.[1]);
 
 test("each size guard has a ceiling and is within it", () => {
-    assert.ok(guard_prefixes().length >= 5);
+    assert.ok(guard_prefixes().length >= 7);
     for (const prefix of guard_prefixes()) {
         const guard = number_of(`${prefix}_MAX_BYTES`);
         const ceiling = number_of(`${prefix}_CEILING_BYTES`);
@@ -97,7 +99,7 @@ test("each parent bundle stays within the size guard", () => {
     assert.ok(PARENT_MAX_BYTES > 0);
     for (const name of PARENT_NAMES) {
         const size = readFileSync(join(out_dir, `experiment/${name}.js`)).length;
-        const max_bytes = { folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
+        const max_bytes = { folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
         assert.ok(size <= max_bytes, `${name}.js is ${size} bytes, over ${max_bytes}`);
     }
 });
@@ -131,6 +133,16 @@ test("the body script bundle stays within its size guard", () => {
     assert.ok(size <= CONTENT_MAX_BYTES, `message_display.js is ${size} bytes, over ${CONTENT_MAX_BYTES}`);
 });
 
+test("the pages bundle holds no code of the mail tab's key runtime, the hints or the folder pane", () => {
+    assert.deepEqual(inputs["pages"]!.filter((input) => /^src\/chrome\/(runtime|motions|hint_[a-z]+|app_verbs|parent_(keys|hints|folderpane|overlay))\.ts$/.test(input)), []);
+});
+
+test("the own page script stays within its size guard", () => {
+    assert.ok(PAGE_KEYS_MAX_BYTES > 0 && PAGE_KEYS_MAX_BYTES < 100000);
+    const size = readFileSync(join(out_dir, "content/page_keys.js")).length;
+    assert.ok(size <= PAGE_KEYS_MAX_BYTES, `page_keys.js is ${size} bytes, over ${PAGE_KEYS_MAX_BYTES}`);
+});
+
 test("the compose script bundle takes only its own files and the shared protocol (which names the matcher file for a type, shaken out of the bundle), and stays within its guard", () => {
     const bundle_inputs = Object.keys((JSON.parse(readFileSync(join(out_dir, "meta/compose_keys.json"), "utf8")) as { inputs: object }).inputs);
     assert.ok(bundle_inputs.length > 0);
@@ -156,7 +168,7 @@ test("the manifest injects the body script into message documents and the xpi ho
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/hints.schema.json", "experiment/hints.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/hints.schema.json", "experiment/hints.js", "experiment/pages.schema.json", "experiment/pages.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
 });
 

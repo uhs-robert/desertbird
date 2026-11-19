@@ -44,6 +44,14 @@
                 "script": "experiment/overlay.js"
             }
         },
+        "pages": {
+            "schema": "experiment/pages.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["pages"]],
+                "script": "experiment/pages.js"
+            }
+        },
         "hints": {
             "schema": "experiment/hints.schema.json",
             "parent": {

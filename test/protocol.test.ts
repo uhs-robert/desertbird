@@ -5,9 +5,10 @@ import { BODY_SCRIPT_LIVE_ATTRIBUTE, EXPERIMENT_VERBS, KEYMAP_STORAGE_KEY, type 
 test("the Experiment exposes the fixed verb table", () => {
     assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"]);
     assert.deepEqual(EXPERIMENT_VERBS.overlay.functions, ["mount", "unmount", "setModeLabel"]);
-    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay", "hints", "folderpane"]);
+    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay", "hints", "pages", "folderpane"]);
     assert.deepEqual(EXPERIMENT_VERBS.hints.functions, ["sendEnter", "pick"]);
     assert.deepEqual(EXPERIMENT_VERBS.folderpane.functions, ["fold", "focused", "viewRowCount"]);
+    assert.deepEqual(EXPERIMENT_VERBS.pages, { functions: ["install"], events: ["onInvocation"] });
 });
 
 test("an invocation payload is plain data", () => {

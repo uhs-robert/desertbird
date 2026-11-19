@@ -166,6 +166,7 @@ export const EXPERIMENT_VERBS = {
     keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
     hints: { functions: ["sendEnter", "pick"], events: [] },
+    pages: { functions: ["install"], events: ["onInvocation"] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
     folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
 } as const;
@@ -181,6 +182,21 @@ export interface KeysApi {
     paneFocus(args: KeysPaneFocusArgs): Promise<boolean>;
     appCommand(args: KeysAppCommandArgs): Promise<boolean>;
     appOpenPage(args: KeysAppOpenPageArgs): Promise<void>;
+}
+
+/** Installs the page keymap: the keys of the tabs that are not the mail tab. */
+export interface PagesInstallArgs {
+    pageTree: KeymapTree;
+    /** The keys of a message tab with the focus outside the body. The body script takes the keys while the body has the focus. */
+    messageTree: KeymapTree;
+    /** Ids of the commands that open the overlay. The runtime holds plain keys after one fires, until the focus moves. */
+    holdCommands: string[];
+}
+
+/** Call and event shapes as the background sees them on `browser.pages`. Its events carry the same payloads as `keys.onInvocation`. */
+export interface PagesApi {
+    install(args: PagesInstallArgs): Promise<void>;
+    onInvocation: KeysApi["onInvocation"];
 }
 
 /** One visible row of the thread list. `depth` 0 is a thread root. `collapsed` is true for a thread whose replies are hidden. `flags` is the `nsMsgMessageFlags` word of the row's own message, so a collapsed thread shows its root's. The background reads the bits it needs. `id` is null when the extension cannot name the message. */

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
+import { run_pages } from "./pages_checks.mjs";
 
 const e2e_dir = resolve(process.env.E2E_DIR ?? "/tmp/desertbird-e2e");
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
@@ -1622,6 +1623,13 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
 const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
 
+// One screenshot with its report line. The shot rule: the worker reads every one.
+async function page_shot(instance, name, line) {
+  const path = await instance.shot(`${instance.app}_${name}`);
+  report.shots.push({ app: instance.app, kind: instance.kind, path, name, line });
+  return path;
+}
+
 // The own_pages kind installs a copy of the xpi that opens its options or help page when the helper add-on sends the page name.
 const OPEN_OWN_PAGES_SCRIPT = `messenger.runtime.onMessageExternal.addListener((page) => (page === "help" ? messenger.tabs.create({ url: messenger.runtime.getURL("help/help.html") }) : messenger.runtime.openOptionsPage()).then(() => true));\n`;
 
@@ -2478,6 +2486,7 @@ async function run_assertions(instance) {
   else if (instance.kind === "mail_account") await run_mail_account(instance);
   else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
   else if (instance.kind === "own_pages") await run_own_pages(instance);
+  else if (instance.kind === "pages") await run_pages(instance, { check, note, shot: (name, line) => page_shot(instance, name, line), key_and_state, hud_pixels, open_inbox, close_command_line, key_list_region: KEY_LIST_REGION });
   else if (instance.kind === "compose_editor") await run_compose_editor(instance);
   else if (instance.kind in COMPOSE_EDITOR_HTML_KINDS) await run_compose_editor_html(instance);
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
@@ -2487,7 +2496,7 @@ async function run_assertions(instance) {
 let all_ok = true;
 for (const app of apps) {
   if (!binaries[app] || !existsSync(binaries[app])) throw new Error(`no binary for ${app} at ${binaries[app]}`);
-  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,compose_editor,compose_editor_html,compose_editor_html_top").split(",");
+  const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,pages,compose_editor,compose_editor_html,compose_editor_html_top").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
     const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind.startsWith("compose_editor") ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];

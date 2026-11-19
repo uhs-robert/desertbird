@@ -22,9 +22,9 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
     process.exit(1);
 }
 
-// Minified size guards. The build fails above a guard. A guard never rises past its ceiling, and every guard needs a ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
+// Size guards, in bytes of the bundle as written (the build does not minify). The build fails above a guard. A guard never rises past its ceiling, and every guard needs a ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
 // Each parent bundle that has no guard of its own (`experiment/keys.js`, `experiment/overlay.js`).
-const PARENT_MAX_BYTES = 27512;
+const PARENT_MAX_BYTES = 26700;
 const PARENT_CEILING_BYTES = 40960;
 
 // `experiment/folderpane.js`, loaded on the first folder pane call.
@@ -42,6 +42,14 @@ const HINTS_CEILING_BYTES = 20480;
 // `content/compose_keys.js`, registered into every compose body.
 const COMPOSE_MAX_BYTES = 3500;
 const COMPOSE_CEILING_BYTES = 8192;
+
+// `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
+const PAGES_MAX_BYTES = 22800;
+const PAGES_CEILING_BYTES = 34816;
+
+// `content/page_keys.js`, the message key script that runs on the own pages (options, help).
+const PAGE_KEYS_MAX_BYTES = 21400;
+const PAGE_KEYS_CEILING_BYTES = 32768;
 
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
@@ -66,6 +74,7 @@ const PARENTS = [
     { name: "keys", entry: "src/chrome/parent_keys.ts" },
     { name: "overlay", entry: "src/chrome/parent_overlay.ts" },
     { name: "hints", entry: "src/chrome/parent_hints.ts", max_bytes: HINTS_MAX_BYTES },
+    { name: "pages", entry: "src/chrome/parent_pages.ts", max_bytes: PAGES_MAX_BYTES },
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
 ].map((parent) => ({
     ...parent,
@@ -155,6 +164,11 @@ for (const [name, bytes] of parent_sizes) {
 
 if (message_display_bytes > CONTENT_MAX_BYTES) {
     console.error(`build: content/message_display.js is ${message_display_bytes} bytes, over the ${CONTENT_MAX_BYTES} byte message script budget`);
+    process.exit(1);
+}
+
+if (page_keys_bytes > PAGE_KEYS_MAX_BYTES) {
+    console.error(`build: content/page_keys.js is ${page_keys_bytes} bytes, over the ${PAGE_KEYS_MAX_BYTES} byte own page script budget`);
     process.exit(1);
 }
 
