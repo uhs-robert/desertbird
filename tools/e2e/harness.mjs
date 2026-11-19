@@ -106,20 +106,28 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     const pane_start = await pane_visible();
     if (pane_start === null) throw fail("the helper did not report the message pane");
     // A key pressed before the window has painted and taken focus is dropped, so the probe is pressed again until the pane flips.
-    // Each try waits long enough for a slow key to land, and the restore below presses until the pane is back, so a late key cannot leave it flipped.
-    const settle_pane = async (want, tries_ms) => {
-      for (const until = Date.now() + tries_ms; Date.now() < until; await sleep(100)) if ((await pane_visible()) === want) return true;
-      return false;
-    };
-    do {
-      check_alive("the key probe `t m` never flipped the message pane, so the keys are not live");
-      await press_probe();
-    } while (!(await settle_pane(!pane_start, 1500)));
-    const keys_live_ms = elapsed();
-    while ((await pane_visible()) !== pane_start) {
-      check_alive("the key probe could not flip the message pane back");
-      await press_probe();
-      await settle_pane(pane_start, 1500);
+    // A slow key can land after a later press, so the pane is only trusted once it has held one value for QUIET_MS with no press in between. Each press flips it, so a press goes out only while the pane is flipped and quiet, and the start ends when it is back and quiet.
+    const QUIET_MS = 1500;
+    let keys_live_ms = null;
+    let value = pane_start;
+    let changed_at = 0;
+    let pressed_at = 0;
+    for (;;) {
+      check_alive(keys_live_ms === null ? "the key probe `t m` never flipped the message pane, so the keys are not live" : "the key probe could not flip the message pane back");
+      const now = Date.now();
+      const quiet = now - Math.max(changed_at, pressed_at) >= QUIET_MS;
+      if (value === pane_start && keys_live_ms !== null && quiet) break;
+      if (quiet && (keys_live_ms === null || value !== pane_start)) {
+        await press_probe();
+        pressed_at = Date.now();
+      }
+      const seen = await pane_visible();
+      if (seen !== null && seen !== value) {
+        value = seen;
+        changed_at = Date.now();
+        keys_live_ms ??= elapsed();
+      }
+      await sleep(100);
     }
     startups.push({ ceiling_ms: startup_ms, first_poll_ms, first_answer_ms, mail_tab_ms, enabled_ms, keys_live_ms });
     console.log(`startup: helper polled at ${first_poll_ms} ms, first answer at ${first_answer_ms} ms, mail tab at ${mail_tab_ms} ms, DesertBird enabled with a mail tab at ${enabled_ms} ms, keys live at ${keys_live_ms} ms, ceiling ${startup_ms} ms`);
@@ -152,6 +160,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     sampler?.stop();
     sink?.close();
     session.stop();
+    // session.stop() sends the kill from an unref'd timer that dies with node, so a hung app outlives the run unless the timer gets its time, as stop() gives it.
+    await sleep(3500);
     throw error;
   }
 

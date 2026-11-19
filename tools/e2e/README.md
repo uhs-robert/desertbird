@@ -33,9 +33,7 @@ Betterbird is `/usr/bin/betterbird`. Override a binary with `--binary thunderbir
 
 ## Startup
 
-`start_app` and `restart` return when the app is ready, not after a fixed wait. Ready is two steps. First the helper add-on answers `state` with DesertBird enabled and a mail tab. Then a key probe: Escape, `t`, `m` flips the message pane, the helper sees the flip, and the probe presses again until it is back as it was. The probe is pressed until a press lands, because a key before the first paint and focus is dropped. `restart` waits for the old process to exit and clears the old reply file before it asks, so a stale answer never counts. If the ceiling `E2E_STARTUP_MS` passes first, the start fails with the stage it was in and the log path. A start with no helper add-on (the setup proof without `--xpi`) has nothing to ask and keeps the fixed wait.
-
-Departures from the DesertFox key test (`wait_takes_keys` in `test/key/harness.mjs`), which probes with an unbound key (`F4`) that the page reports to a server. DesertBird takes no test hook in `src/`, so no page reports a key. The probe is a bound key whose effect the helper reads, and it restores that effect. The DesertFox `PROBE_KEY` has no effect to restore. DesertFox also keeps no pane state to flip, so the Escape before the probe and the restore loop have no counterpart there.
+`start_app` and `restart` return when the app is ready, not after a fixed wait. Ready is two steps. First the helper add-on answers `state` with DesertBird enabled and a mail tab. Then a key probe: Escape, `t`, `m` flips the message pane and the helper sees the flip. The probe is pressed until a press lands, because a key before the first paint and focus is dropped. It then presses until the pane is back as it was and has held that value for 1.5 s. `restart` waits for the old process to exit and clears the old reply file before it asks, so a stale answer never counts. If the ceiling `E2E_STARTUP_MS` passes first, the start fails with the stage it was in and the log path. A start with no helper add-on (the setup proof without `--xpi`) has nothing to ask and keeps the fixed wait.
 
 ## Timings
 
