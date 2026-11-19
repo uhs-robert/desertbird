@@ -20,7 +20,7 @@ export interface BodyRequestDeps {
     /** Writes the text of a yank to the clipboard. Absent in a setup with no clipboard. */
     write_text?: ((text: string) => Promise<void>) | undefined;
     /** The hud, told which keys a message document has typed of a sequence. Absent in a setup with no hud. */
-    which_key?: { on_body_pending(window_id: number, keys: string[]): Promise<void> } | undefined;
+    which_key?: { on_body_pending(window_id: number, keys: string[], source: "message" | "own"): Promise<void> } | undefined;
     /** Runs one invocation through the router and its validator. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
@@ -38,8 +38,8 @@ function read_invoke(message: unknown): BodyInvokeRequest | undefined {
 function read_pending(message: unknown): BodyPendingRequest | undefined {
     const request = message as Partial<Record<string, unknown>> | null;
     if (typeof request !== "object" || request === null || request["type"] !== "body.pending") return undefined;
-    const { keys } = request;
-    return Array.isArray(keys) && keys.every((key) => typeof key === "string") ? { type: "body.pending", keys: keys as string[] } : undefined;
+    const { keys, tree } = request;
+    return Array.isArray(keys) && keys.every((key) => typeof key === "string") ? { type: "body.pending", keys: keys as string[], ...(tree === "own" ? { tree } : {}) } : undefined;
 }
 
 type Sender = { tab?: { id?: number; windowId?: number } };
@@ -75,7 +75,7 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
 
     return (message, sender) => {
         const pending = read_pending(message);
-        if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys).then(() => ({}));
+        if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys, pending.tree ?? "message").then(() => ({}));
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
         const yanked = message as Partial<BodyYankRequest> | null;
         if (yanked?.type === "body.yank" && typeof yanked.text === "string") return yank({ type: "body.yank", text: yanked.text });

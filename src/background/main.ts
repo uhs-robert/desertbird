@@ -214,10 +214,11 @@ messenger.notifications.onClicked.addListener((id) => {
 
 // The hud shows the which-key panel and the toasts, and keeps the mode label of the status bar. Its state is a few seconds of interface state per window and lives in memory only, like the command line session.
 const NO_WINDOW = -1;
+const TREE_OF_SOURCE = { main: "tree", message: "message_tree", own: "own_tree" } as const;
 const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
-    read_root: async (source) => (await load_record())[source === "main" ? "tree" : "message_tree"].root as TreeBranch,
+    read_root: async (source) => (await load_record())[TREE_OF_SOURCE[source]].root as TreeBranch,
     send_changed: (windowId) => void best_effort(messenger.runtime.sendMessage({ type: "hud.changed", windowId })),
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });

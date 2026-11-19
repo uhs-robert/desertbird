@@ -1,4 +1,4 @@
-// The keys of every tab but the mail tab, cut from the one keymap. Each command says what it needs (`needs`, see `TAB_NEEDS`), each tab kind says what it offers, and a tab gets the keys of the commands it can serve. A key left out reaches Thunderbird, and which-key lists only keys that work.
+// The keys of every tab but the mail tab, cut from the one keymap. Each command says what it needs (`needs`, see `TAB_NEEDS`), each tab kind says what it offers, and a tab gets the keys of the commands it can serve. A key left out reaches Thunderbird.
 
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";

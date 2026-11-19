@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, registry } from "../src/background/commands/index.ts";
-import { TAB_NEEDS } from "../src/background/commands/define.ts";
+import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
 import { compile_tab_keymap, default_keymap_of, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 
 const root_of = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("page", user).compiled.modes.normal as TreeBranch;
@@ -124,4 +124,14 @@ test("the message tree for a message tab keeps the message keys and drops the ke
     assert.equal(leaf_at(kept, "j")?.id, "message.scroll_down");
     assert.equal(leaf_at(kept, "d", "d")?.id, "msg.delete");
     assert.deepEqual(leaf_at(full.root as TreeBranch, "j"), leaf_at(kept, "j"));
+});
+
+test("a group need joins the capability needs of a command and does not replace them", () => {
+    const grouped = needing("message", { a: { bridge: false, runs_in: "background", label: "A", intent: "A.", needs: ["hints.pick"], run: async () => {} }, b: { bridge: false, runs_in: "background", label: "B", intent: "B.", needs: ["tab", "keys.paneFocus"], run: async () => {} } });
+    assert.deepEqual(grouped["a"]?.needs, ["message", "hints.pick"]);
+    assert.deepEqual(grouped["b"]?.needs, ["tab", "keys.paneFocus"], "a command with a tab need of its own keeps its needs as written");
+    assert.ok(registry.get("hint.window")?.needs?.includes("hints.pick"));
+    assert.ok(registry.get("folder.collapse")?.needs?.includes("keys.paneFocus"));
+    assert.deepEqual(tab_needs_of(registry.get("folder.collapse")!), ["list"], "a capability need is no tab need");
+    assert.ok(registry.get("msg.reply")?.needs?.includes("message"));
 });

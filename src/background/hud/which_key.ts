@@ -8,7 +8,7 @@ import type { WhichKeyPanel } from "../../shared/protocol.ts";
 
 const is_branch = (node: TreeNode | undefined): node is TreeBranch => node?.kind === "branch";
 
-/** A leaf that runs nothing, or a branch that leads only to such leaves. The message tree holds them so that a mail sequence ends there and runs nothing (see `compile_message_keymap`). They have no row, so a prefix that holds only them has no panel. */
+/** A leaf that runs nothing, or a branch that leads only to such leaves. The message tree holds them so that a mail sequence ends there and runs nothing (see `complete_mail_sequences` in `commands/tab_keymaps.ts`). They have no row, so a prefix that holds only them has no panel. */
 export const runs_nothing = (node: TreeNode): boolean => (is_branch(node) ? Object.values(node.children).every(runs_nothing) : node.steps.length === 0);
 
 const shown_children = (branch: TreeBranch): [string, TreeNode][] => Object.entries(branch.children).filter(([, child]) => !runs_nothing(child));

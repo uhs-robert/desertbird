@@ -153,12 +153,13 @@ class StubWindow implements BodyWindow {
 function stub_runtime() {
     const sent: unknown[] = [];
     const reports: string[][] = [];
+    const trees: unknown[] = [];
     let listener: ((message: unknown) => Promise<{ found: boolean }> | undefined) | undefined;
     const runtime: BodyRuntime = {
-        sendMessage: async (message) => void (message.type === "body.pending" ? reports.push(message.keys) : sent.push(message)),
+        sendMessage: async (message) => void (message.type === "body.pending" ? (reports.push(message.keys), trees.push(message.tree)) : sent.push(message)),
         onMessage: { addListener: (added) => void (listener = added) },
     };
-    return { runtime, sent, reports, receive: (message: unknown) => listener?.(message) };
+    return { runtime, sent, reports, trees, receive: (message: unknown) => listener?.(message) };
 }
 
 function stub_storage(stored: Record<string, unknown>) {
@@ -675,4 +676,16 @@ test("Backspace with no sequence is not cancelled", async () => {
     const { window, reports } = await started();
     assert.equal(window.press("Backspace").cancelled, false);
     assert.deepEqual(reports, []);
+});
+
+test("an own page names its tree in the pending report and a message document does not", async () => {
+    const own_record = { own_tree: record().message_tree };
+    for (const [tree_field, stored, expected] of [["own_tree", own_record, "own"], ["message_tree", record(), undefined]] as const) {
+        const window = new StubWindow();
+        const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: stored });
+        const { runtime, trees } = stub_runtime();
+        await start_body_script(window, storage, runtime, (element) => element.click(), tree_field);
+        window.press("g");
+        assert.deepEqual(trees, [expected]);
+    }
 });

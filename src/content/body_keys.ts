@@ -92,7 +92,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         const joined = keys.join(" ");
         if (joined === reported) return;
         reported = joined;
-        void best_effort(runtime.sendMessage({ type: "body.pending", keys }));
+        void best_effort(runtime.sendMessage({ type: "body.pending", keys, ...(tree_field === "own_tree" ? { tree: "own" } : {}) }));
     }
 
     function reset_sequence(): void {
