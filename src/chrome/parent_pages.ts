@@ -3,7 +3,7 @@
 import { focus_chain } from "./focus.ts";
 import type { FocusNode } from "./focus.ts";
 import { run_scroll, scroll_target } from "./page_actions.ts";
-import type { ScrollNode } from "./page_actions.ts";
+import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
 import type { PageRuntime } from "./page_runtime.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
@@ -59,11 +59,11 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
         scroll(window, id, count) {
             const tab = front_tab_of(window);
             // The focus sits in the header of the message tab, so the body is scrolled, whatever the header holds.
-            if (tab?.mode.name === MESSAGE_TAB_MODE) return run_scroll(id, scroll_target(undefined, (tab.chromeBrowser?.contentWindow?.document?.getElementById("messagepane")?.contentDocument ?? {}) as { scrollingElement?: ScrollNode | null }), count);
+            if (tab?.mode.name === MESSAGE_TAB_MODE) return run_scroll(id, scroll_target(undefined, (tab.chromeBrowser?.contentWindow?.document?.getElementById("messagepane")?.contentDocument ?? {}) as ScrollDocument), count);
             const chain = focus_chain(window.document);
             // The document the focus is in. With no focus inside the tab, the document of the tab's own browser: a page that has not been clicked into still scrolls.
             const document = chain.findLast((node) => node.contentDocument)?.contentDocument ?? (chain.length ? null : (tab?.browser ?? tab?.chromeBrowser)?.contentDocument) ?? window.document;
-            return run_scroll(id, scroll_target(chain.at(-1) as FocusNode | undefined, document as { scrollingElement?: ScrollNode | null }), count);
+            return run_scroll(id, scroll_target(chain.at(-1) as FocusNode | undefined, document as ScrollDocument), count);
         },
         on_tab_select(window, listener) {
             // On the window and not on the tab strip, as the key runtime does: the strip does not exist yet when the window is hooked at startup.

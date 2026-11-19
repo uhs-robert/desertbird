@@ -48,6 +48,26 @@ test("with nothing focused the target is the scrolling element of the fallback d
     assert.equal(scroll_target(null, {}), null);
 });
 
+test("when the root does not scroll the target is the largest scrollable element of the document", () => {
+    const small = node({ scroll_height: 900, client_height: 100, overflow: "auto" });
+    const pane = node({ scroll_height: 2000, client_height: 500, overflow: "auto" });
+    const hidden = node({ scroll_height: 5000, client_height: 900, overflow: "hidden" });
+    const root = node();
+    const doc = { scrollingElement: root, querySelectorAll: () => [small, hidden, pane] };
+    const sidebar_button = node();
+    sidebar_button.ownerDocument = { ...doc, defaultView: { getComputedStyle: () => ({ overflowY: "visible" }) } };
+    assert.equal(scroll_target(sidebar_button as never, doc), pane);
+    assert.equal(scroll_target(undefined, doc), pane);
+});
+
+test("a root that scrolls wins over the search, and with nothing scrollable the root is the answer", () => {
+    const pane = node({ scroll_height: 2000, client_height: 500, overflow: "auto" });
+    const long_root = node({ scroll_height: 3000, client_height: 700 });
+    assert.equal(scroll_target(undefined, { scrollingElement: long_root, querySelectorAll: () => [pane] }), long_root);
+    const flat_root = node();
+    assert.equal(scroll_target(undefined, { scrollingElement: flat_root, querySelectorAll: () => [node()] }), flat_root);
+});
+
 test("each page action scrolls the target by its own amount, with a count", () => {
     const target = node({ scroll_height: 1000, client_height: 400 });
     run_scroll("page.scroll_down", target, 3);
