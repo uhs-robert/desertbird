@@ -1,6 +1,6 @@
 # Phase 0 measurements
 
-Throwaway code that produced the numbers in [`docs/thunderbird-behavior.md`](../../docs/thunderbird-behavior.md). It never ships. Run each app from the repo root:
+Throwaway code that produced the numbers in [`docs/thunderbird-behavior.md`](../../docs/thunderbird-behavior.md). It never ships. Run each app from the repo root. Run `npm run build` and read the bundle sizes before you raise a size guard in `tools/build.mjs`, and re-measure with this probe before a raise that passes a ceiling:
 
 ```bash
 tools/measure/fetch_thunderbird.sh          # once: the pinned Thunderbird ESR, checksum checked

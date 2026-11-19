@@ -59,6 +59,20 @@ before(() => {
 
 after(() => rmSync(out_dir, { recursive: true, force: true }));
 
+const build_source = () => readFileSync(join(root, "tools/build.mjs"), "utf8");
+const guard_prefixes = () => [...build_source().matchAll(/^const (\w+)_MAX_BYTES = \d+;/gm)].map((match) => match[1]!);
+const number_of = (name: string) => Number(new RegExp(`^const ${name} = (\\d+);`, "m").exec(build_source())?.[1]);
+
+test("each size guard has a ceiling and is within it", () => {
+    assert.ok(guard_prefixes().length >= 5);
+    for (const prefix of guard_prefixes()) {
+        const guard = number_of(`${prefix}_MAX_BYTES`);
+        const ceiling = number_of(`${prefix}_CEILING_BYTES`);
+        assert.ok(ceiling > 0, `${prefix}_MAX_BYTES has no ${prefix}_CEILING_BYTES`);
+        assert.ok(guard <= ceiling, `${prefix} guard ${guard} is over its ceiling ${ceiling}`);
+    }
+});
+
 test("each parent bundle takes only allowlisted inputs", () => {
     for (const name of PARENT_NAMES) {
         assert.ok(inputs[name]!.length > 0);
@@ -95,12 +109,12 @@ test("each manifest entry names its own script and schema", () => {
     }
 });
 
-test("AGENTS.md records the size guards", () => {
+test("AGENTS.md records each size guard with its ceiling", () => {
     const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
-    assert.ok(agents.includes(`${PARENT_MAX_BYTES} bytes`));
-    assert.ok(agents.includes(`${FOLDERPANE_MAX_BYTES} bytes`));
-    assert.ok(agents.includes(`${HINTS_MAX_BYTES} bytes`));
-    assert.ok(agents.includes(`${COMPOSE_MAX_BYTES} bytes`));
+    for (const prefix of guard_prefixes()) {
+        const line = `guard ${number_of(`${prefix}_MAX_BYTES`)}, ceiling ${number_of(`${prefix}_CEILING_BYTES`)} (\`${prefix}_MAX_BYTES\`)`;
+        assert.ok(agents.includes(line), `AGENTS.md lacks ${prefix}: ${line}`);
+    }
 });
 
 test("the body script bundle takes only the matcher side, the shared files and its own folder", () => {
