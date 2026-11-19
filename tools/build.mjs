@@ -22,9 +22,7 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
     process.exit(1);
 }
 
-// Minified size guards. The build fails above a guard. A guard may rise only in steps of RAISE_STEP_BYTES and never past its ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
-const RAISE_STEP_BYTES = 512;
-
+// Minified size guards. The build fails above a guard. A guard never rises past its ceiling, and every guard needs a ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
 // Each parent bundle that has no guard of its own (`experiment/keys.js`, `experiment/overlay.js`).
 const PARENT_MAX_BYTES = 27000;
 const PARENT_CEILING_BYTES = 40960;
@@ -45,16 +43,16 @@ const HINTS_CEILING_BYTES = 20480;
 const COMPOSE_MAX_BYTES = 3500;
 const COMPOSE_CEILING_BYTES = 8192;
 
-const GUARDS_AND_CEILINGS = [
-    ["experiment/keys.js and experiment/overlay.js", PARENT_MAX_BYTES, PARENT_CEILING_BYTES],
-    ["experiment/folderpane.js", FOLDERPANE_MAX_BYTES, FOLDERPANE_CEILING_BYTES],
-    ["content/message_display.js", CONTENT_MAX_BYTES, CONTENT_CEILING_BYTES],
-    ["experiment/hints.js", HINTS_MAX_BYTES, HINTS_CEILING_BYTES],
-    ["content/compose_keys.js", COMPOSE_MAX_BYTES, COMPOSE_CEILING_BYTES],
-];
-for (const [file, guard, ceiling] of GUARDS_AND_CEILINGS) {
-    if (guard > ceiling) {
-        console.error(`build: the ${file} guard of ${guard} bytes is over its ${ceiling} byte ceiling`);
+// Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
+const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+for (const [, prefix, guard] of own_source.matchAll(/^const (\w+)_MAX_BYTES = (\d+);/gm)) {
+    const ceiling = own_source.match(new RegExp(`^const ${prefix}_CEILING_BYTES = (\\d+);`, "m"))?.[1];
+    if (!ceiling) {
+        console.error(`build: ${prefix}_MAX_BYTES has no ${prefix}_CEILING_BYTES`);
+        process.exit(1);
+    }
+    if (Number(guard) > Number(ceiling)) {
+        console.error(`build: ${prefix}_MAX_BYTES of ${guard} bytes is over its ${ceiling} byte ceiling`);
         process.exit(1);
     }
 }
