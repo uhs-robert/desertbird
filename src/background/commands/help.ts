@@ -6,7 +6,7 @@ import type { CommandGroup } from "./define.ts";
 export const help: CommandGroup = {
     commands: {
         "help.open": { bridge: false, runs_in: "background", label: "Help", intent: "Open the help page: every command with its keys and usage.", run: scoped<HelpApi>(open_help) },
-        "options.open": { bridge: false, runs_in: "background", label: "Options", intent: "Open the DesertBird options page.", run: scoped<OptionsApi>(open_options) },
+        "options.open": { bridge: false, runs_in: "background", name: "options", label: "Options", intent: "Open the DesertBird options page.", run: scoped<OptionsApi>(open_options) },
         // Hidden from completion: typed on the line it leaves a panel that no key ends, since only the key press arms the report.
         "help.whichkey": { bridge: false, runs_in: "background", completion: "hidden", label: "Key list", intent: "Show the top-level keys in a panel in the window.", run: scoped<WhichKeyApi>(show_root_keys) },
     },

@@ -1267,11 +1267,15 @@ async function run_window_hints(instance, { app, kind, shot }) {
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], 600);
-  // The whole gesture in one burst: a label key could pick a row, and neither x may reach the runtime (x is unbound now, so only the list staying whole is proved), before the labels take the keys or after they end.
-  await instance.press(["fxx"]);
+  // The whole gesture in one burst. The last leaf is a motion, so a leaked `.` repeats it and moves the row. `.` is bound and no hint label, so the labels take it or the hold drops it.
+  state = await key_and_state(instance, ["j"], 800);
+  const burst_selected = selection_of(state);
+  await instance.press(["f.."]);
   await sleep(2000);
   state = await instance.ask("state");
-  check(app, kind, "window hints: f x x in one burst archives nothing", state.listed.length === rows_before, `listed ${state.listed.length} of ${rows_before}`);
+  check(app, kind, "window hints: f . . in one burst moves no row and changes no mail", state.listed.length === rows_before && selection_of(state) === burst_selected, `listed ${state.listed.length} of ${rows_before}, selected ${burst_selected} then ${selection_of(state)}`);
+  // The labels of the checks below are fixed per app for the selection the section started with.
+  await key_and_state(instance, ["k"], 800);
   // A key that no label continues with ends the labels, and swallows the key.
   await instance.press(["f"]);
   await sleep(800);
