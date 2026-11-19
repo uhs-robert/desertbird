@@ -48,8 +48,8 @@ const PAGES_MAX_BYTES = 22800;
 const PAGES_CEILING_BYTES = 34816;
 
 // `content/page_keys.js`, the message key script that runs on the own pages (options, help).
-const PAGE_KEYS_MAX_BYTES = 20600;
-const PAGE_KEYS_CEILING_BYTES = 31744;
+const PAGE_KEYS_MAX_BYTES = 21400;
+const PAGE_KEYS_CEILING_BYTES = 32768;
 
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");

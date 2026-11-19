@@ -51,7 +51,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
   - `content/message_display.js`: guard 18162, ceiling 24576 (`CONTENT_MAX_BYTES`).
   - `experiment/hints.js`: guard 13050, ceiling 20480 (`HINTS_MAX_BYTES`).
   - `experiment/pages.js`: guard 22800, ceiling 34816 (`PAGES_MAX_BYTES`).
-  - `content/page_keys.js`: guard 20600, ceiling 31744 (`PAGE_KEYS_MAX_BYTES`).
+  - `content/page_keys.js`: guard 21400, ceiling 32768 (`PAGE_KEYS_MAX_BYTES`).
   - `experiment/folderpane.js`: guard 5900, ceiling 10240 (`FOLDERPANE_MAX_BYTES`).
   - `content/compose_keys.js`: guard 3500, ceiling 8192 (`COMPOSE_MAX_BYTES`).
 - Raise a guard only as the last step: the new code passes the admission rule (the commit names the clause), code that fails the rule has moved out first, the step is 512 bytes, and the commit names the feature. Passing a ceiling needs the maintainer's decision and a fresh run of `tools/measure/`. Departures from DesertFox, which has one ceiling on `content.js` only: DesertBird has several bundles, so each has its own ceiling (provisional, about 1.5 times the guard of the day). The current guards are not multiples of 512, so the step applies to later raises only.

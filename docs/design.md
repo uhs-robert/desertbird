@@ -196,7 +196,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
 | `experiment/pages.js` | 22800 | 34816 |
-| `content/page_keys.js` | 20600 | 31744 |
+| `content/page_keys.js` | 21400 | 32768 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
 The ceilings are provisional, about 1.5 times the guard of the day they were set (2026-11-18). A guard rises in steps of 512 bytes. The guards above predate that step and are not multiples of it, so the step applies to later raises only.
@@ -236,7 +236,7 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 
 ### Own page script bundle
 
-`content/page_keys.js` runs the message key script on the own pages (options, help). It had no guard. Its first guarded size was 17149 unminified bytes. That plus 20 percent made 20579, rounded up to 20600. The ceiling is 1.5 times the guard rounded up to 1024.
+`content/page_keys.js` runs the message key script on the own pages (options, help). It had no guard. Its first guarded size was 17754 unminified bytes, measured on the rebased branch (PR 94 had grown the shared matcher). That plus 20 percent made 21305, rounded up to 21400. The ceiling is 1.5 times the guard rounded up to 1024.
 
 ### Folder pane bundle
 

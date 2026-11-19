@@ -6,7 +6,6 @@ import { MAIL_TAB_MODE } from "./view.ts";
 
 export const MESSAGE_TAB_MODE = "mailMessageTab";
 
-
 /**
  * What a key meets in the front tab:
  * - `pass`: the mail tab or an open menu. The key is not this bundle's.
