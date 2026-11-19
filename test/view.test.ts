@@ -268,12 +268,11 @@ test("scroll_row brings the row into existence, aligns it to the chosen edge and
     }
 });
 
-test("tab_kind: the mail tab is 0, the tabs with a readable document 1, every other tab 2", () => {
+test("tab_kind: the mail tab is 0 and every other tab 1", () => {
     const kind_of = (name: string | null) => tab_kind({ currentTabInfo: name === null ? null : { mode: { name } } });
     assert.equal(kind_of(null), 0);
     assert.equal(kind_of("mail3PaneTab"), 0);
-    for (const name of ["calendar", "addressBookTab", "preferencesTab"]) assert.equal(kind_of(name), 1, name);
-    for (const name of ["contentTab", "mailMessageTab", "tasks", "chat", "calendarEvent"]) assert.equal(kind_of(name), 2, name);
+    for (const name of ["calendar", "addressBookTab", "preferencesTab", "contentTab", "mailMessageTab", "tasks", "chat", "calendarEvent"]) assert.equal(kind_of(name), 1, name);
 });
 
 test("the close chords of the mail tab are in the mail keymap and not in the message keymap", async () => {

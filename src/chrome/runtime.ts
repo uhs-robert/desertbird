@@ -33,8 +33,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     open_windows(): Window[];
     /** The thread list of the window's front tab, or null when that tab is not the mail tab. Keys then pass through. */
     list_port_of(window: Window): ListPort | null;
-    /** The front tab: 0 the mail tab, 1 another tab with a readable document, 2 a tab whose document is out of reach. */
-    tab_kind_of(window: Window): 0 | 1 | 2;
+    /** The front tab: 0 the mail tab, 1 any other. The keys of another tab belong to the `pages` bundle. */
+    tab_kind_of(window: Window): 0 | 1;
     /** The folder tree while the folder pane has the focus, or null. The motions then move the folder selection instead of the thread list. */
     folder_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for someone else: a text field, or a message body that runs the body script. The event target is not enough: see `focus.ts`. */
@@ -62,7 +62,6 @@ export interface Runtime {
 const HOLD_MS = 1500;
 
 const KEY_LIST = "help.whichkey";
-const PAGE_COMMANDS = ["tab.close", "cmdline.open", KEY_LIST];
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
     const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
@@ -145,20 +144,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
                 return;
             }
         }
-        const kind = deps.tab_kind_of(window);
-        if (kind) {
-            pend(window, []);
-            // A remote page hides its text fields, so only a chord is safe there.
-            if (kind > 1 ? is_plain_printable(token) : deps.is_typing_target(window, event) || deps.menu_is_open(window)) return matcher.reset();
-            const result = matcher.feed(NORMAL_MODE, token);
-            const { id, args } = result.kind_ === "match" ? result.leaf.steps[0]!.invocation : { id: "", args: undefined };
-            if (!PAGE_COMMANDS.includes(id) || args) return;
-            if (hold_commands.has(id)) hold_until = deps.now() + HOLD_MS;
-            if (id === KEY_LIST) was = 1;
-            event.preventDefault();
-            event.stopPropagation();
-            return deps.emit({ command: id, args: {}, count: 1, windowId: deps.window_id_of(window), messageIds: [] });
-        }
+        if (deps.tab_kind_of(window)) return matcher.reset();
         const port = list_port_for(window, event);
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {

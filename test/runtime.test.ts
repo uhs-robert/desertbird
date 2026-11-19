@@ -16,8 +16,6 @@ class FakeWindow implements KeyTarget {
     blur_listeners = new Set<() => void>();
     adds = 0;
     in_mail_tab = true;
-    /** The tab kind outside the mail tab: 1 readable, 2 remote. */
-    tab_kind: 1 | 2 = 2;
     in_reading_pane = false;
     /** The folder tree rows and selection while the folder pane has the focus, or null. */
     folder: { rows: number; selected: number } | null = null;
@@ -138,7 +136,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         },
         unregister_window_listener: () => void unregisters++,
         open_windows: () => windows,
-        tab_kind_of: (window) => (window.in_mail_tab ? 0 : (window.tab_kind ?? 2)),
+        tab_kind_of: (window) => (window.in_mail_tab ? 0 : 1),
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
         folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
         is_typing_target: (window, event) => (event.target as { localName: string }).localName === "input" || window.body_script_live,
@@ -252,89 +250,18 @@ const page_tree = () => ({
     },
 });
 
-test("a close chord of the mail tab passes in a page tab, so Ctrl+C still copies there", () => {
+test("outside the mail tab the key runtime runs nothing, a bound key and a close chord included, and drops a half-typed sequence", () => {
     const { windows, emitted, runtime } = setup();
-    runtime.install(page_tree());
+    runtime.install(tree());
     const window = windows[0]!;
-    for (const tab_kind of [1, 2] as const) {
-        window.in_mail_tab = false;
-        window.tab_kind = tab_kind;
-        assert.equal(press(window, "c", { ctrlKey: true }).cancelled, false, `kind ${tab_kind}`);
-    }
-    assert.deepEqual(emitted, []);
-});
-
-test("a readable tab runs q, : and g? and passes every other key", () => {
-    const { windows, emitted, runtime } = setup();
-    runtime.install(page_tree());
-    const window = windows[0]!;
+    press(window, "g");
     window.in_mail_tab = false;
-    window.tab_kind = 1;
-    assert.equal(press(window, "q").cancelled, true);
-    assert.equal(press(window, ":").cancelled, true);
-    press(window, "g");
-    assert.equal(press(window, "?").cancelled, true);
-    assert.deepEqual(
-        emitted.map((event) => [event.command, event.messageIds]),
-        [["tab.close", []], ["cmdline.open", []], ["help.whichkey", []]],
-    );
-    for (const key of ["x", "j", "z", "o"]) assert.equal(press(window, key).cancelled, false, key);
-    press(window, "g");
-    assert.equal(press(window, "g").cancelled, false);
-    assert.equal(emitted.length, 3);
+    for (const key of ["q", ":", "x", "j"]) assert.equal(press(window, key).cancelled, false, key);
+    assert.equal(press(window, "c", { ctrlKey: true }).cancelled, false);
+    window.in_mail_tab = true;
+    assert.equal(press(window, "g").cancelled, true, "the g typed before the tab change no longer counts");
     assert.equal(window.selected, 0);
-});
-
-test("the key list panel ends on the next key, in a page tab and in the mail tab", () => {
-    for (const tab_kind of [1, 0] as const) {
-        const { windows, pending, runtime } = setup();
-        runtime.install(page_tree());
-        const window = windows[0]!;
-        if (tab_kind) {
-            window.tab_kind = tab_kind;
-            window.in_mail_tab = false;
-        }
-        press(window, "g");
-        press(window, "?");
-        const before = pending.length;
-        press(window, "j");
-        press(window, "j");
-        assert.deepEqual(pending.slice(before).map((event) => event.keys), [[]], `kind ${tab_kind}`);
-    }
-});
-
-test("a readable tab holds plain keys after : so a fast :q does not close the tab", () => {
-    const { windows, emitted, runtime } = setup();
-    runtime.install(page_tree(), ["cmdline.open"]);
-    const window = windows[0]!;
-    window.in_mail_tab = false;
-    window.tab_kind = 1;
-    assert.equal(press(window, ":").cancelled, true);
-    assert.equal(press(window, "q").cancelled, true);
-    assert.deepEqual(emitted.map((event) => event.command), ["cmdline.open"]);
-});
-
-test("a readable tab leaves q to a text field or an open menu", () => {
-    const { windows, emitted, runtime } = setup();
-    runtime.install(page_tree());
-    const window = windows[0]!;
-    window.in_mail_tab = false;
-    window.tab_kind = 1;
-    assert.equal(press(window, "q", { target: { localName: "input" } }).cancelled, false);
-    window.menu_open = true;
-    assert.equal(press(window, "q").cancelled, false);
-    assert.equal(emitted.length, 0);
-});
-
-test("a remote tab runs a bound chord and passes plain keys, even q", () => {
-    const { windows, emitted, runtime } = setup();
-    runtime.install(page_tree());
-    const window = windows[0]!;
-    window.in_mail_tab = false;
-    for (const key of ["q", ":", "x"]) assert.equal(press(window, key).cancelled, false, key);
-    assert.equal(emitted.length, 0);
-    assert.equal(press(window, "q", { altKey: true }).cancelled, true);
-    assert.deepEqual(emitted.map((event) => event.command), ["tab.close"]);
+    assert.deepEqual(emitted, []);
 });
 
 test("Escape ends a half-typed sequence", () => {
