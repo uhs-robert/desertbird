@@ -35,7 +35,12 @@ export function start_jump_history(api: FolderApi): void {
         record_displayed_folder(api, folder).catch(console.error);
     });
     // The window can have no mail tab yet or still be loading its first folder. The first event then records it.
-    void ignore_refusal(api.mailTabs.query({ active: true }).then(([tab]) => (is_recordable(tab?.displayedFolder) ? record_displayed_folder(api, tab.displayedFolder) : undefined)));
+    ignore_refusal(api.mailTabs.query({ active: true }))
+        .then((tabs) => {
+            const folder = tabs?.[0]?.displayedFolder;
+            return is_recordable(folder) ? record_displayed_folder(api, folder) : undefined;
+        })
+        .catch(console.error);
 }
 
 /** Moves `count` entries along the history, over entries whose folder is gone, and as far as the history reaches. */
