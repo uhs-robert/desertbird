@@ -22,7 +22,7 @@ export const view: CommandGroup = {
                     name: "state",
                     type: "enum",
                     values: ["unread", "all", "starred", "toggle_starred", "tag", "attachment"],
-                    short: { unread: "u", all: "r", starred: "s", toggle_starred: "S", tag: "t", attachment: "a" },
+                    short: { unread: "u", all: "r", starred: "S", toggle_starred: "s", tag: "t", attachment: "a" },
                     description: { unread: "Show the unread messages.", all: "Clear the filter and show every message.", starred: "Show the starred messages.", toggle_starred: "Toggle the starred filter.", tag: "Show the messages with one tag.", attachment: "Show the messages with an attachment." },
                 },
                 // A tag needs its key and the other states take none. The default list is what makes the tag required, because a param with `when` cannot be.

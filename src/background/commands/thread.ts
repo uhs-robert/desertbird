@@ -24,7 +24,7 @@ export const thread: CommandGroup = {
             label: "Scroll the current row to a place",
             intent: "Scroll the list so the current row sits at a chosen place.",
             needs: ["keys.viewRows", "keys.viewScroll"],
-            params: [{ name: "position", type: "enum", values: ["center", "top", "bottom"], short: { center: "c", top: "t", bottom: "b" }, description: { center: "Put the row in the middle.", top: "Put the row at the top.", bottom: "Put the row at the bottom." } }],
+            params: [{ name: "position", type: "enum", values: ["center", "top", "bottom"], short: { center: "z", top: "t", bottom: "b" }, description: { center: "Put the row in the middle.", top: "Put the row at the top.", bottom: "Put the row at the bottom." } }],
             run: scoped<ThreadViewApi>(reposition),
         },
         "view.half_page": {
@@ -42,7 +42,7 @@ export const thread: CommandGroup = {
             label: "Open or close every thread or folder",
             intent: "Open every thread in the list, or close them all. In the folder pane it opens or closes every folder.",
             needs: ["keys.viewAllThreads"],
-            params: [{ name: "open", type: "bool", short: "o", description: "Open every thread instead of closing every one." }],
+            params: [{ name: "open", type: "bool", short: "R", description: "Open every thread instead of closing every one." }],
             run: scoped<ThreadViewApi>(fold_all),
         },
     },

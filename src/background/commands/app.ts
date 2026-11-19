@@ -53,7 +53,7 @@ export const app: CommandGroup = {
             label: "Focus a pane",
             intent: "Move the focus to a pane. A hidden pane, or a message pane that shows no single message, is refused.",
             needs: ["keys.paneFocus"],
-            params: [{ name: "pane", type: "enum", values: ["folders", "threads", "message"], short: { folders: "f", threads: "t", message: "m" }, description: { folders: "Focus the folder pane.", threads: "Focus the thread list.", message: "Focus the message pane." } }],
+            params: [{ name: "pane", type: "enum", values: ["folders", "threads", "message"], short: { folders: "f", threads: "e", message: "m" }, description: { folders: "Focus the folder pane.", threads: "Focus the thread list.", message: "Focus the message pane." } }],
             run: scoped<AppApi>(focus_pane),
         },
         "pane.left": {

@@ -442,6 +442,8 @@ test("the key labels follow the trees the source hands over", async () => {
     let current = trees;
     const follows = create_completer(registry, { ...sources, key_trees: async () => current });
     assert.ok((await follows("", 0, no_selection)).rows.some((row) => row.keys !== undefined));
-    current = { mail: { kind: "branch", children: {} } as unknown as TreeBranch, message: trees.message };
-    assert.equal((await follows("", 0, no_selection)).rows.find((row) => row.name === "archive")?.keys, undefined);
+    const empty = { kind: "branch", children: {} } as unknown as TreeBranch;
+    assert.equal((await follows("", 0, no_selection)).rows.find((row) => row.name === "msg.archive")?.keys, "a");
+    current = { mail: empty, message: empty };
+    assert.equal((await follows("", 0, no_selection)).rows.find((row) => row.name === "msg.archive")?.keys, undefined);
 });

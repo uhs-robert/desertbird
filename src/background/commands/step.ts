@@ -15,7 +15,7 @@ export const step: CommandGroup = {
             intent: "Select the next or previous unread message. In all_folders scope, with none left in this folder, open the next folder that has unread mail.",
             count: "repeat",
             needs: ["keys.viewRows"],
-            params: [direction, { name: "scope", type: "enum", values: ["folder", "all_folders"], default: "folder", short: { all_folders: "a" }, description: { all_folders: "Go on to another folder when this one has no more." } }],
+            params: [direction, { name: "scope", type: "enum", values: ["folder", "all_folders"], default: "folder", short: { all_folders: "U" }, description: { all_folders: "Go on to another folder when this one has no more." } }],
             run: scoped<StepApi>(step_unread),
         },
         "step.starred": { bridge: true, runs_in: "background", label: "Step to a starred message", intent: "Select the next or previous starred message.", count: "repeat", needs: ["keys.viewRows"], params: [direction], run: scoped<StepApi>(step_starred) },
