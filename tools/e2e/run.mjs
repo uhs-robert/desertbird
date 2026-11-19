@@ -1119,17 +1119,16 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["w"]);
   await sleep(1500);
   check(app, kind, "g w before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
-  // Backspace goes back one key: after g the panel shows, and Backspace leaves no prefix, so the panel closes. The next g then starts a sequence again.
+  // Backspace goes back one key. A prefix of two keys shows the panel of g's children, and Backspace leaves the panel of g, which differs from no panel. The next g then completes g g from the kept g, so the panel goes. A Backspace that only ended the sequence would leave no panel.
   await instance.press(["g"]);
+  await instance.press(["p"]);
   await sleep(1500);
   await instance.press(["-k", "BackSpace"]);
-  await sleep(1200);
-  check(app, kind, "Backspace after g closes the panel", (await pixels_of("hud_after_backspace")) === bare);
-  await instance.press(["g"]);
   await sleep(1500);
-  check(app, kind, "g after Backspace shows the panel again", (await pixels_of("hud_backspace_again")) !== bare);
-  await instance.press(["-k", "Escape"]);
+  check(app, kind, "Backspace after g p leaves the panel of g", (await pixels_of("hud_after_backspace")) !== bare);
+  await instance.press(["g"]);
   await sleep(1200);
+  check(app, kind, "g after that Backspace completes g g and closes the panel", (await pixels_of("hud_backspace_complete")) === bare);
   // C-j with only the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
   await instance.press(CTRL("j"));
   await sleep(1000);

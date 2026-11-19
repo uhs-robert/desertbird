@@ -155,6 +155,7 @@ test("matcher_for_tree: Backspace drops the last key of a sequence, and counts a
     assert.deepEqual([typed("g"), typed("u"), typed("<Backspace>")], [["g"], ["g", "u"], ["g"]]);
     assert.deepEqual([typed("u"), typed("l")], [["g", "u"], "match"]);
     assert.deepEqual([typed("2"), typed("g"), typed("<Backspace>"), typed("<Backspace>")], [[], ["g"], [], []]);
+    assert.equal(typed("<Backspace>"), "no_match", "once Backspace has emptied the sequence, the next one is an ordinary key");
     assert.equal(typed("d"), "match", "a count dropped by Backspace does not leak");
     assert.equal(typed("<Backspace>"), "no_match", "no sequence, so Backspace is an ordinary key");
 });

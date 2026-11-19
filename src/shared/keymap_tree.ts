@@ -28,9 +28,10 @@ export function matcher_for_tree(tree: { version: number; root: unknown }) {
         if (last?.kind_ !== "pending" || token !== "<Backspace>") return (last = inner.feed(mode, token));
         const kept = last.keys.slice(0, -1);
         inner.reset();
-        last = { kind_: "pending", typed_: [], keys: [] } as unknown as MatchResult;
+        last = undefined;
         for (const key of kept) last = inner.feed(mode, key);
-        return last;
+        // Nothing kept: the answer is not remembered, so the next Backspace is an ordinary key.
+        return last ?? ({ kind_: "pending", typed_: [], keys: [] } as unknown as MatchResult);
     };
     return { feed, reset: () => ((last = undefined), inner.reset()) };
 }
