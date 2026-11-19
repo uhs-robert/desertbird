@@ -94,3 +94,4 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`, and open a PR for each change.
+- CI: `.github/workflows/ci.yml` and `.claude/pre-merge` run `npm run check` and `npm run build`.
