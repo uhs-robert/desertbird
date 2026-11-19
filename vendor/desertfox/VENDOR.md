@@ -21,7 +21,7 @@ All edits live in `local_edits.patch`. They widen the Firefox-only values of `co
 ### `command.ts`
 
 - `RunsIn` is `"background" | "chrome" | "message" | "compose"` instead of `"background" | "content"`. `ContentCommandDef.runs_in` follows as `Exclude<RunsIn, "background">`, so its shape is unchanged.
-- `Need` is `string`: an Experiment verb that must be loaded (`view.rows`), or an optional permission name. The Firefox value `"content"` has no meaning here.
+- `Need` is `string`: an Experiment verb that must be loaded (`view.rows`), or an optional permission name. The Firefox value `"content"` has no meaning here. DesertBird also writes four tab values in it (`list`, `message`, `body`, `tab`, see `src/background/commands/define.ts`), which the router skips because they name no Experiment verb.
 - `DynamicValues.from` gains `"tags"` (`"folders"` is already in the list).
 
 ### `registry/define.ts`

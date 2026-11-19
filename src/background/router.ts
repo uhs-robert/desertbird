@@ -36,7 +36,7 @@ export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & Fo
 
 const is_experiment_namespace = (name: string): name is keyof typeof EXPERIMENT_VERBS => Object.hasOwn(EXPERIMENT_VERBS, name);
 
-/** A need that names an Experiment verb (`keys.install`) must be loaded. Any other need is an optional permission, which this router does not check. */
+/** A need that names an Experiment verb (`keys.install`) must be loaded. A tab need (`list`, `message`, `body`, `tab`) and an optional permission are not checked here. */
 function missing_experiment_verb(api: RouterApi, needs: readonly string[]): string | undefined {
     return needs.find((need) => {
         const [namespace = "", verb = ""] = need.split(".");

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, MESSAGE_KEYMAP, UNREPEATABLE_IDS } from "../src/background/commands/index.ts";
-import { page_keymap } from "../src/background/commands/page_keymap.ts";
+import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS } from "../src/background/commands/index.ts";
+import { keymap_of } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import { fake_native_messaging } from "./chrome_stubs.ts";
 
@@ -95,8 +95,8 @@ test("a stored keymap compiled from other default bindings is rebuilt", async ()
 });
 
 test("a storage change during a pending read wins: the tree read before the change is neither kept nor installed last", async () => {
-    const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: MESSAGE_KEYMAP, page: page_keymap(), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
-    const record = (marker: string) => ({ record_version: 5, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
+    const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: keymap_of("message", {}), page: keymap_of("page", {}), own: keymap_of("own", {}), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
+    const record = (marker: string) => ({ record_version: 6, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, own_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
     const { installs, external_write, first_read } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
     await start_background();
     await first_read;
@@ -150,7 +150,7 @@ test("a stored record of version 2, with no message tree, is rebuilt with one", 
     await start_background();
     await settle();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
-    assert.equal(record.record_version, 5);
+    assert.equal(record.record_version, 6);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
     assert.equal(installs.length, 1);
 });

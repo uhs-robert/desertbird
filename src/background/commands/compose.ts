@@ -1,10 +1,10 @@
 import { edit_external, forward, new_message, reply } from "../handlers/compose.ts";
 import type { EditExternalApi } from "../handlers/compose.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 export const compose: CommandGroup = {
-    commands: {
+    commands: needing("message", {
         "msg.reply": {
             bridge: false,
             runs_in: "background",
@@ -14,7 +14,7 @@ export const compose: CommandGroup = {
             run: scoped(reply),
         },
         "msg.forward": { bridge: false, runs_in: "background", label: "Forward", intent: "Forward the selected message.", run: scoped(forward) },
-        "msg.new": { bridge: false, runs_in: "background", label: "New message", intent: "Write a new message.", run: scoped(new_message) },
+        "msg.new": { bridge: false, runs_in: "background", needs: ["tab"], label: "New message", intent: "Write a new message.", run: scoped(new_message) },
         // Ctrl+E in the compose body runs it through the compose script. It has no key in the mail window, which has no message being written.
         "compose.edit_external": {
             bridge: false,
@@ -24,7 +24,7 @@ export const compose: CommandGroup = {
             intent: "Edit the message in the external editor.",
             run: scoped<EditExternalApi>(edit_external),
         },
-    },
+    }),
     normal_keys: {
         r: { id: "msg.reply", args: { to: "sender" } },
         R: { id: "msg.reply", args: { to: "all" } },

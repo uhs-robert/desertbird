@@ -1,11 +1,11 @@
 import { toggle_new_mail_notify } from "../new_mail_notify.ts";
 import type { CommandGroup } from "./define.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { ConfigStorage } from "../config/store.ts";
 import type { NotificationsApi } from "../notify.ts";
 
 export const new_mail: CommandGroup = {
-    commands: {
+    commands: needing("tab", {
         "notify.toggle": {
             bridge: false,
             runs_in: "background",
@@ -14,6 +14,6 @@ export const new_mail: CommandGroup = {
             repeatable: false,
             run: scoped<ConfigStorage & NotificationsApi>((scope) => toggle_new_mail_notify(scope)),
         },
-    },
+    }),
     normal_keys: {},
 };

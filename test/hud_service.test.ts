@@ -7,6 +7,8 @@ import type { Settings } from "../src/background/config/settings.ts";
 import type { HudState, KeysEvent, KeysMode } from "../src/shared/protocol.ts";
 import { fake_timers, sample_root, settings_with, settle } from "./hud_fakes.ts";
 
+const own_root = (): TreeBranch => ({ kind: "branch", children: { g: { kind: "branch", children: { y: { kind: "leaf", label: "Only on a page", steps: [{ invocation: { id: "page.top" }, runs_in: "message", count_rule: "repeat" }] } } } } });
+
 const message_root = (): TreeBranch => ({ kind: "branch", children: { g: { kind: "branch", children: { x: { kind: "leaf", label: "Only in a message", steps: [{ invocation: { id: "message.top" }, runs_in: "message", count_rule: "repeat" }] } } } } });
 
 function setup(overrides: Partial<Settings> = {}) {
@@ -23,12 +25,12 @@ function setup(overrides: Partial<Settings> = {}) {
             onClosed: { addListener: () => {}, removeListener: () => {} },
         },
         read_settings: async () => settings,
-        read_root: async (source) => (source === "main" ? sample_root() : message_root()),
+        read_root: async (source) => (source === "main" ? sample_root() : source === "own" ? own_root() : message_root()),
         send_changed: (window_id) => void log.push(`changed ${window_id}`),
         timers,
     });
     const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id });
-    const body_pending = (keys: string[], window_id = 1): Promise<void> => hud.on_body_pending(window_id, keys);
+    const body_pending = (keys: string[], window_id = 1, source: "message" | "own" = "message"): Promise<void> => hud.on_body_pending(window_id, keys, source);
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
     const set_mode = (mode: KeysMode["mode"], window_id = 1): Promise<void> => hud.on_keys_event({ command: "mode", mode, windowId: window_id });
     return { hud, body_pending, log, labels, label_colors, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
@@ -433,6 +435,15 @@ test("with a panel up, a report from the other source redraws at once with its o
     await body_pending(["g"]);
     await settle();
     assert.deepEqual(await labels(), ["Only in a message"]);
+});
+
+test("a prefix typed on an own page lists the page keys and not the message keys", async () => {
+    const { hud, timers, body_pending, state } = setup();
+    await hud.track(1);
+    await body_pending(["g"], 1, "own");
+    timers.advance(300);
+    await settle();
+    assert.deepEqual((await state()).which_key?.rows.map((row) => row.label), ["Only on a page"]);
 });
 
 test("a report from a window the hud does not track mounts nothing", async () => {

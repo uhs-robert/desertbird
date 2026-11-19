@@ -1,11 +1,11 @@
 import { find_in_message } from "../handlers/message_find.ts";
 import type { MessageFindApi } from "../handlers/message_find.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // Most of these commands run in the body script of the message document (`runs_in: "message"`), so they carry no handler here. `search.message` runs here and sends its pattern to the body script. Their keys live in their own keymap, `message_keys`, because `j` and `k` mean the thread list in the mail tab and scrolling in a message.
 export const reading: CommandGroup = {
-    commands: {
+    commands: needing("body", {
         "message.scroll_down": { runs_in: "message", bridge: true, label: "Scroll down", intent: "Scroll the message down by a line.", count: "repeat" },
         "message.scroll_up": { runs_in: "message", bridge: true, label: "Scroll up", intent: "Scroll the message up by a line.", count: "repeat" },
         "message.half_page_down": { runs_in: "message", bridge: true, label: "Scroll half a page down", intent: "Scroll the message down by half a page.", count: "repeat" },
@@ -31,7 +31,7 @@ export const reading: CommandGroup = {
             params: [{ name: "pattern", type: "string", description: "Find this text, case sensitive if it has a capital.", main: true, rest: true, pattern: "\\S" }],
             run: scoped<MessageFindApi>(find_in_message),
         },
-    },
+    }),
     normal_keys: {},
     message_keys: {
         j: { id: "message.scroll_down" },

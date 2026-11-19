@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
-import { DEFAULT_KEYMAP, MESSAGE_KEYMAP, UNREPEATABLE_IDS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, UNREPEATABLE_IDS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
+import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
 
@@ -55,7 +56,7 @@ test("each command calls only the chrome verb its needs lists", async () => {
 });
 
 test("msg.undo needs no chrome verb: it reads DesertBird's own log, not Thunderbird's undo", () => {
-    assert.equal(registry.get("msg.undo")?.needs, undefined);
+    assert.deepEqual(registry.get("msg.undo")?.needs, ["message"]);
 });
 
 test("a command Thunderbird has disabled is refused with a message", async () => {
@@ -65,7 +66,7 @@ test("a command Thunderbird has disabled is refused with a message", async () =>
 });
 
 test("the pane chords bind in the message document too, so focus can leave the message by them", () => {
-    const message = MESSAGE_KEYMAP.normal ?? {};
+    const message = default_keymap_of("message").normal ?? {};
     for (const [keys, pane, label] of [["H", "folders", "Focus folder pane"], ["<A-h>", "threads", "Focus thread list"], ["L", "threads", "Focus thread list"], ["<A-l>", "message", "Focus message pane"]] as const) assert.deepEqual(message[keys], { id: "pane.focus", args: { pane }, label }, keys);
 });
 

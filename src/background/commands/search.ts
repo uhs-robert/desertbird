@@ -1,11 +1,11 @@
 import { open_search, search_next, search_prev } from "../handlers/search.ts";
 import type { SearchOpenApi } from "../handlers/search.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // `/` and `?` open the command line as a search line. In the thread list a search is the Quick Filter, so the keys change only what the list shows and `bridge` is true. The commands that search a message (`search.message`) and filter by text on the command line (`search.threads`) stay in their own groups.
 export const search: CommandGroup = {
-    commands: {
+    commands: needing("list", {
         "search.open": {
             bridge: true,
             // A `.` that reopened the line would only startle. The line has its own history.
@@ -37,7 +37,7 @@ export const search: CommandGroup = {
             needs: ["keys.viewRows"],
             run: scoped<{ search: SearchOpenApi["search"] }>(search_prev),
         },
-    },
+    }),
     normal_keys: {
         "/": { id: "search.open", args: { direction: "forward" }, label: "Search list" },
         "?": { id: "search.open", args: { direction: "backward" }, label: "Search list backward" },

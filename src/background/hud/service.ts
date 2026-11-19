@@ -8,7 +8,7 @@ import { create_toasts } from "./toasts.ts";
 import type { Timers, Toasts } from "./toasts.ts";
 import { may_open_by_itself, which_key_panel } from "./which_key.ts";
 
-export type WhichKeySource = "main" | "message";
+export type WhichKeySource = "main" | "message" | "own";
 
 export interface HudDeps {
     /** Absent when the Experiment failed to load. Nothing shows then, and `toast` reports that it showed nothing. */
@@ -27,8 +27,8 @@ export interface HudService {
     handle(message: unknown): Promise<HudState> | undefined;
     /** Feeds the `pending` and `mode` events of the key runtime. Other events are ignored. */
     on_keys_event(event: KeysEvent): Promise<void>;
-    /** Feeds the typed prefix of a message document in the window. The panel lists the message keys. A window the hud does not track as a main window is ignored, so the panel shows in the mail tab and message tabs and not in a standalone message window. The newest report of either source wins. */
-    on_body_pending(window_id: number, keys: string[]): Promise<void>;
+    /** Feeds the typed prefix of a message document in the window. The panel lists the message keys, or the page keys when `source` is `own` (an options or help page). A window the hud does not track as a main window is ignored, so the panel shows in the mail tab and message tabs and not in a standalone message window. The newest report of either source wins. */
+    on_body_pending(window_id: number, keys: string[], source: "message" | "own"): Promise<void>;
     /** Shows a toast in the window. Resolves to false when no toast can show (no window id, no Experiment, a zero time, or the page could not mount), so the caller falls back to a system notification. */
     toast(window_id: number, text: string, is_error: boolean): Promise<boolean>;
     /** The command line opened or closed in the window. Its box covers the bottom of the window, so the toasts move above it. */
@@ -180,7 +180,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             await on_pending(event.windowId, event.keys, "main");
         },
         // Only a tracked main window has a hud page to mount. A standalone message window is not one, so its reports are dropped.
-        on_body_pending: async (window_id, keys) => (windows.has(window_id) ? on_pending(window_id, keys, "message") : undefined),
+        on_body_pending: async (window_id, keys, source) => (windows.has(window_id) ? on_pending(window_id, keys, source) : undefined),
         async toast(window_id, text, is_error) {
             if (deps.overlay === undefined || window_id < 0) return false;
             const settings = await deps.read_settings();

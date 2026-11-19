@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
-import { compile_message_keymap, message_background_commands } from "../src/background/commands/index.ts";
+import { compile_tab_keymap, message_background_commands } from "../src/background/commands/tab_keymaps.ts";
 import { compile_effective_keymap } from "../src/background/config/keymap.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
 
@@ -153,12 +153,13 @@ class StubWindow implements BodyWindow {
 function stub_runtime() {
     const sent: unknown[] = [];
     const reports: string[][] = [];
+    const trees: unknown[] = [];
     let listener: ((message: unknown) => Promise<{ found: boolean }> | undefined) | undefined;
     const runtime: BodyRuntime = {
-        sendMessage: async (message) => void (message.type === "body.pending" ? reports.push(message.keys) : sent.push(message)),
+        sendMessage: async (message) => void (message.type === "body.pending" ? (reports.push(message.keys), trees.push(message.tree)) : sent.push(message)),
         onMessage: { addListener: (added) => void (listener = added) },
     };
-    return { runtime, sent, reports, receive: (message: unknown) => listener?.(message) };
+    return { runtime, sent, reports, trees, receive: (message: unknown) => listener?.(message) };
 }
 
 function stub_storage(stored: Record<string, unknown>) {
@@ -172,7 +173,7 @@ function stub_storage(stored: Record<string, unknown>) {
 
 /** The record the background stores, with the message tree compiled from the real default keys. */
 function record() {
-    const root = JSON.parse(JSON.stringify(compile_message_keymap().compiled.modes.normal)) as unknown;
+    const root = JSON.parse(JSON.stringify(compile_tab_keymap("message").compiled.modes.normal)) as unknown;
     return { message_tree: { version: COMPILED_KEYMAP_VERSION, root } };
 }
 
@@ -294,7 +295,7 @@ test("the message keys are not in the mail tab keymap, and the other way round",
     const { compile_default_keymap } = await import("../src/background/commands/index.ts");
     const ids = (root: unknown) => JSON.stringify(root);
     assert.ok(!ids(compile_default_keymap().compiled.modes.normal).includes("message.scroll"));
-    assert.ok(!ids(compile_message_keymap().compiled.modes.normal).includes("motion."));
+    assert.ok(!ids(compile_tab_keymap("message").compiled.modes.normal).includes("motion."));
 });
 
 test("the scroll step follows the stored setting, and a value that is not a positive number gives the default", async () => {
@@ -412,19 +413,21 @@ test("a mail sequence typed in a message runs nothing, also under a prefix the m
     const { window, sent } = await started();
     window.elements = [Object.assign(new StubElement(), { href: "https://example.org/x" })];
     // `y ] a`: a stray `y` must not stop `] a` from being a list sequence.
-    for (const keys of [["g", "p", "a"], [";", ";", "y"], ["]", "a"], ["F", "a"], ["s", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
+    for (const keys of [[";", ";", "y"], ["]", "a"], ["F", "a"], ["s", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
         for (const key of keys) window.press(key);
         assert.deepEqual(sent.splice(0), [], keys.join(" "));
         assert.deepEqual(window.appended, [], `${keys.join(" ")} shows no labels`);
     }
     for (const key of ["g", "t", "u"]) window.press(key);
-    assert.deepEqual(sent, [invoked("msg.undo")], "g t completes, so u stays free");
+    assert.deepEqual(sent.splice(0), [invoked("msg.undo")], "g t completes, so u stays free");
+    for (const key of ["g", "p", "a"]) window.press(key);
+    assert.deepEqual(sent, [{ type: "body.invoke", command: "app.open_page", args: { page: "addons" }, count: 1 }], "g p a opens a tab, which any tab can do");
 });
 
 // The background passes the mail tree with the user's keys, so a user's list sequence ends in a message too.
 test("a user's mail sequence typed in a message runs nothing", async () => {
     const user = { wu: { id: "filter.set", args: { state: "unread" } } };
-    const root = JSON.parse(JSON.stringify(compile_message_keymap(user, compile_effective_keymap({ normal: user }).compiled.modes.normal).compiled.modes.normal)) as unknown;
+    const root = JSON.parse(JSON.stringify(compile_tab_keymap("message", user, compile_effective_keymap({ normal: user }).compiled.modes.normal).compiled.modes.normal)) as unknown;
     const { window, sent } = await started({ [KEYMAP_STORAGE_KEY]: { message_tree: { version: COMPILED_KEYMAP_VERSION, root } } });
     for (const key of ["w", "u"]) window.press(key);
     assert.deepEqual(sent, []);
@@ -577,7 +580,7 @@ test("the scroll step setting rejects 0 and anything below 1, and the body scrip
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`, `by ${MESSAGE_SCROLL_STEP_PX}`]);
 });
 
-const message_tree_json = (user: Parameters<typeof compile_message_keymap>[0]) => JSON.stringify(compile_message_keymap(user).compiled.modes.normal);
+const message_tree_json = (user: Parameters<typeof compile_tab_keymap>[1]) => JSON.stringify(compile_tab_keymap("message", user).compiled.modes.normal);
 
 test("a user key for a message command works in a message, and a user key for any other command stays out", () => {
     const tree = message_tree_json({ X: { id: "msg.archive" }, Y: { id: "motion.down" }, Z: { id: "repeat.last" } });
@@ -596,7 +599,7 @@ test("a user key on a message default key takes its place", () => {
 });
 
 test("a user key that extends a message key compiles, and only drops that key", () => {
-    const result = compile_message_keymap({ gfz: { id: "msg.archive" } });
+    const result = compile_tab_keymap("message", { gfz: { id: "msg.archive" } });
     assert.deepEqual(result.warnings, ['normal: dropped default keys that your keys extend: "gf" by gfz']);
     assert.match(JSON.stringify(result.compiled.modes.normal), /"z"/);
 });
@@ -673,4 +676,16 @@ test("Backspace with no sequence is not cancelled", async () => {
     const { window, reports } = await started();
     assert.equal(window.press("Backspace").cancelled, false);
     assert.deepEqual(reports, []);
+});
+
+test("an own page names its tree in the pending report and a message document does not", async () => {
+    const own_record = { own_tree: record().message_tree };
+    for (const [tree_field, stored, expected] of [["own_tree", own_record, "own"], ["message_tree", record(), undefined]] as const) {
+        const window = new StubWindow();
+        const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: stored });
+        const { runtime, trees } = stub_runtime();
+        await start_body_script(window, storage, runtime, (element) => element.click(), tree_field);
+        window.press("g");
+        assert.deepEqual(trees, [expected]);
+    }
 });

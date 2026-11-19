@@ -2,7 +2,7 @@ import { focus_pane, focus_pane_beside, open_conversation, open_page } from "../
 import { undo } from "../handlers/undo.ts";
 import type { UndoApi } from "../handlers/undo.ts";
 import type { AppApi } from "../handlers/app.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // `msg.undo` reverses DesertBird's own changes from its undo log, never Thunderbird's: Thunderbird records no step for an API change, and mixing the two stacks would undo in the wrong order. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
@@ -20,7 +20,7 @@ const MESSAGE_ACTIONS = {
 };
 
 export const app: CommandGroup = {
-    commands: {
+    commands: needing("message", {
         "msg.undo": {
             bridge: false,
             repeatable: false,
@@ -43,7 +43,7 @@ export const app: CommandGroup = {
             runs_in: "background",
             label: "Open a Thunderbird page",
             intent: "Open the add-ons, themes or config page in a tab.",
-            needs: ["keys.appOpenPage"],
+            needs: ["tab", "keys.appOpenPage"],
             params: [{ name: "page", type: "enum", values: ["addons", "themes", "config"], short: { addons: "a", themes: "t", config: "c" }, description: { addons: "Open the add-ons manager.", themes: "Open the themes page.", config: "Open the configuration editor." } }],
             run: scoped<AppApi>(open_page),
         },
@@ -72,7 +72,7 @@ export const app: CommandGroup = {
             needs: ["keys.paneFocus"],
             run: scoped<AppApi>(focus_pane_beside("right")),
         },
-    },
+    }),
     normal_keys: {
         ...MESSAGE_ACTIONS,
         gpa: { id: "app.open_page", args: { page: "addons" }, label: "Add-ons" },
@@ -85,10 +85,6 @@ export const app: CommandGroup = {
     },
     // The body script takes every key while the message pane has the focus, so the way out of it is bound there too.
     message_keys: {
-        ...MESSAGE_ACTIONS,
         H: { id: "pane.focus", args: { pane: "folders" }, label: "Focus folder pane" },
-        gf: { id: "pane.focus", args: { pane: "folders" }, label: "Folder pane" },
-        ge: { id: "pane.focus", args: { pane: "threads" }, label: "Thread list" },
-        ...PANE_CHORDS,
     },
 };

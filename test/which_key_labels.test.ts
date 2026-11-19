@@ -3,14 +3,15 @@ import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { runs_nothing, which_key_panel } from "../src/background/hud/which_key.ts";
 import { parse_command_line } from "../vendor/desertfox/registry/command_line.ts";
-import { GROUP_NAMES, compile_default_keymap, compile_message_keymap, registry } from "../src/background/commands/index.ts";
+import { GROUP_NAMES, compile_default_keymap, registry } from "../src/background/commands/index.ts";
+import { compile_tab_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { settings_with } from "./hud_fakes.ts";
 
 // `M` and `'` are capture branches: they take the label of their leaf.
 const CAPTURE_NAMES: Record<string, string> = { M: "Set mark", "'": "Jump to mark" };
 
 const mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch;
-const message_root = compile_message_keymap().compiled.modes.normal as TreeBranch;
+const message_root = compile_tab_keymap("message").compiled.modes.normal as TreeBranch;
 
 const node_at = (root: TreeBranch, keys: readonly string[]): TreeNode | undefined => {
     let node: TreeNode | undefined = root;
@@ -81,9 +82,9 @@ test("the keys that act on the displayed message resolve in the message tree", (
 });
 
 test("which-key in a message shows no row and no panel for a mail sequence that runs nothing there", () => {
-    for (const keys of [["]"], ["F"], ["g", "p"], [";", ";"]]) assert.equal(which_key_panel(message_root, keys, settings_with({})), null, keys.join(" "));
+    for (const keys of [["]"], ["F"], [";", ";"]]) assert.equal(which_key_panel(message_root, keys, settings_with({})), null, keys.join(" "));
     for (const key of ["]", "F", "s"]) assert.equal(rows_of(message_root, [])[key], undefined, key);
-    assert.equal(rows_of(message_root, ["g"])["p"], undefined);
+    assert.deepEqual(rows_of(message_root, ["g", "p"]), { a: "Add-ons", c: "Config", t: "Themes" });
     assert.deepEqual(rows_of(message_root, [";"]), { f: "Focus link", c: "Click link", y: "Copy link" });
 });
 

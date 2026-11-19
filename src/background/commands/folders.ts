@@ -5,9 +5,8 @@ import { collapse_folder } from "../handlers/folder_collapse.ts";
 import type { CollapseApi } from "../handlers/folder_collapse.ts";
 import { jump_back, jump_forward } from "../handlers/jump_history.ts";
 import { ACCOUNT_PARAM } from "./account_param.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
-import type { CommandDefinition } from "./define.ts";
 
 const SPECIAL = ["inbox", "trash", "drafts", "sent", "archive", "junk"];
 
@@ -16,7 +15,7 @@ const SLOT_PARAM = { name: "slot", type: "key", description: "Name the one-key s
 
 // `o` opens the command line on `open `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
 export const folders: CommandGroup = {
-    commands: {
+    commands: needing("list", {
         "folder.open": {
             name: "open",
             bridge: true,
@@ -58,7 +57,7 @@ export const folders: CommandGroup = {
         "mark.jump": { bridge: true, runs_in: "background", label: "Jump to a mark", intent: "Show the folder a slot remembers.", params: [SLOT_PARAM], run: scoped<FolderApi>(jump_to_mark) },
         "jump.back": { bridge: true, runs_in: "background", label: "Back in folder history", intent: "Show the folder shown before this one. A count goes that many folders back.", count: "repeat", run: scoped<FolderApi>(jump_back) },
         "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back.", count: "repeat", run: scoped<FolderApi>(jump_forward) },
-    } satisfies Record<string, CommandDefinition>,
+    }),
     normal_keys: {
         H: { id: "folder.collapse", label: "Collapse folder or go to folders" },
         gi: { id: "folder.open", args: { special: "inbox" }, label: "Inbox" },

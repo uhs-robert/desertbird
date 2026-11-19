@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { registry, message_background_commands } from "../src/background/commands/index.ts";
+import { registry } from "../src/background/commands/index.ts";
+import { message_background_commands } from "../src/background/commands/tab_keymaps.ts";
 import { create_body_requests } from "../src/background/body_requests.ts";
 import type { BodyRequestApi } from "../src/background/body_requests.ts";
 import { create_router } from "../src/background/router.ts";
@@ -88,8 +89,8 @@ const open_line = { type: "body.invoke", command: "cmdline.open", args: { text: 
 
 test("only the commands a message key binds are allowed", () => {
     const allowed = message_background_commands();
-    for (const id of ["cmdline.open", "pane.focus", "msg.archive", "msg.delete", "msg.reply", "msg.yank", "tab.close", "tab.next", "tab.prev"]) assert.ok(allowed.has(id), id);
-    for (const id of ["motion.down", "folder.read_all", "thread.expand", "app.open_page", "step.unread"]) assert.equal(allowed.has(id), false, id);
+    for (const id of ["cmdline.open", "pane.focus", "msg.archive", "msg.delete", "msg.reply", "msg.yank", "tab.close", "tab.next", "tab.prev", "app.open_page"]) assert.ok(allowed.has(id), id);
+    for (const id of ["motion.down", "folder.read_all", "thread.expand", "sort.set", "step.unread"]) assert.equal(allowed.has(id), false, id);
 });
 
 test("body.invoke runs the command on the window and the messages of the sender, not on ones the message names", async () => {

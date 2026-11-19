@@ -48,10 +48,11 @@ export interface BodyInvokeRequest {
     count: number;
 }
 
-/** The keys typed so far in a half-typed sequence in a message document, counts left out. No keys means no sequence is pending. The background takes the window from the sender and shows the which-key panel of the message keys for it. */
+/** The keys typed so far in a half-typed sequence in a message document, counts left out. No keys means no sequence is pending. The background takes the window from the sender. `tree` names the keys the panel lists: a message document leaves it out and gets the message keys, an own page sends `own` and gets the page keys. */
 export interface BodyPendingRequest {
     type: "body.pending";
     keys: string[];
+    tree?: "own";
 }
 
 /** Ctrl+E in a compose body. The background takes the window from the sender and runs `compose.edit_external` there. */

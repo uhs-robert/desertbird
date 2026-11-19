@@ -1,12 +1,12 @@
 import { open_message, yank } from "../handlers/clipboard.ts";
 import type { ClipboardApi } from "../handlers/clipboard.ts";
-import { scoped } from "./define.ts";
+import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 const yank_key = (field: string, label: string) => ({ id: "msg.yank", args: { field }, label });
 
 export const clipboard: CommandGroup = {
-    commands: {
+    commands: needing("message", {
         "msg.yank": {
             bridge: false,
             runs_in: "background",
@@ -25,7 +25,7 @@ export const clipboard: CommandGroup = {
             run: scoped<ClipboardApi>((scope, args) => yank(scope, args)),
         },
         "msg.open": { bridge: false, runs_in: "background", label: "Open", intent: "Open the selected message in a tab.", run: scoped<ClipboardApi>(open_message) },
-    },
+    }),
     normal_keys: {
         yy: yank_key("content", "Message"),
         ys: yank_key("subject", "Subject"),
