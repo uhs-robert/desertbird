@@ -1,5 +1,6 @@
-import { keep_chain } from "../shared/swallow.ts";
 // A versioned record in `storage.local` with a memory copy that mirrors it. Used by the snooze store and meant for the follow-up reminders.
+
+import { keep_chain } from "../shared/swallow.ts";
 
 export interface RecordStorageApi {
     storage: {

@@ -1,5 +1,6 @@
-import { keep_chain } from "../shared/swallow.ts";
 // The pure parts of the command line page: how a pick changes the text and how the highlight moves. The page file only reads events and draws.
+
+import { keep_chain } from "../shared/swallow.ts";
 
 export interface Pick {
     /** The span of the text the pick replaces. */

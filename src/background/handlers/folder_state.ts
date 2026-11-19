@@ -1,5 +1,6 @@
-import { keep_chain } from "../../shared/swallow.ts";
 // The one stored record of the folder commands: marks and the jump history. Reads and writes go through a queue, so two jumps in a row (a held <C-o>) and the display events that follow them never overwrite each other.
+
+import { keep_chain } from "../../shared/swallow.ts";
 
 export interface FolderRef {
     account_id: string;
