@@ -49,6 +49,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Keep no state only in memory. Store it. A copy of stored state can sit in memory when it refills from storage and drops on `storage.onChanged`. One exception: the command line session (the opening text and the selected message ids) lives in memory only, for the few seconds one overlay is open. Another: the last `.` run in the chrome runtime, which dies with the window. A third: the hud state of each window (the which-key keys, the toasts and the visual mode flag of the label), for the seconds it shows. A fourth: the labels and typed letters of a hint pick in the mail window, for the seconds it shows. A fifth: the bridge writes in flight, that is the one pending confirm prompt (its token, window and display list, never a message body) and the queue of `drafts.ts` that saves one draft at a time, each for 30 seconds at most.
 - Write a migration for every change to stored data: extension storage, config files and exports. An installed copy keeps working after an update.
 - Keep every static argument rule in the param schema, checked by the one validator. A command handler reports runtime failures only, never a bad argument value.
+- Before you build any tool, test runner or workflow, start from its counterpart in the DesertFox repository. Record each departure from it, with its reason, in `docs/design.md` or the PR.
 
 ## Public repo rules
 
