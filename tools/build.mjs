@@ -22,20 +22,42 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
     process.exit(1);
 }
 
-// The chrome runtime size guard, applied to each parent bundle: the first measured size of `keys.js` as its own bundle (15003 bytes) plus 20 percent. The reading-pane handoff added 372 bytes, so the guard was 18004 plus 372 rounded up to 18400. The thread verbs of the view API took it from 18358 on main to 20501 bytes, so it was 18400 plus 2143 rounded up to 20600. Visual mode and the row flags took the build from 20501 on main to 21451 (950 bytes). The guard for a stale range (the end row and view the mode last set, and the collapse after a command) made it 21785. The message keys at both ends of the range made it 21996 (1495 bytes over main), so it was 20600 plus 1495 rounded up to 22100. The which-key report of the typed prefix added 305 bytes, so it was 22100 plus 305 rounded up to 22500. The folder row, pane focus, command and page verbs made it 24085 (1784 bytes over main's 22301), so it was 22500 plus 1784 rounded up to 24300. The report of visual mode to the mode label made it 24374 (289 bytes over main), so it was 24300 plus 289 rounded up to 24600. Pane focus by chord and left or right, and the motions in the folder pane, made it 25492 (1118 bytes over main's 24374), so it was 24600 plus 1118 rounded up to 25800. Keys for the calendar, address book and settings tabs and a close chord on web page tabs made it 25936 (921 bytes over main's 25015), so it was that measured size rounded up to 26000. Skipping a leaf with args and holding plain keys after the command line opens made it 26040 (1025 bytes over main), so it was that measured size rounded up to 26100. The key list command (`help.whichkey`, with the report that ends its panel on the next key) made it 26238 (198 bytes over main), so it was that measured size rounded up to 26300. Running the conversation command through the controller of the page that shows the message (a message tab or window as well as the mail tab) made it 26992 (722 bytes over main's 26270), so it is that measured size rounded up to 27000. AGENTS.md records the same number.
+// Minified size guards. The build fails above a guard. A guard may rise only in steps of RAISE_STEP_BYTES and never past its ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
+const RAISE_STEP_BYTES = 512;
+
+// Each parent bundle that has no guard of its own (`experiment/keys.js`, `experiment/overlay.js`).
 const PARENT_MAX_BYTES = 27000;
+const PARENT_CEILING_BYTES = 40960;
 
-// The size guard of the folder pane bundle (`experiment/folderpane.js`), which Thunderbird loads on the first folder pane call and not at startup: its first measured size (4891 bytes) plus 20 percent made 5869, rounded up to 5900. AGENTS.md records the same number.
+// `experiment/folderpane.js`, loaded on the first folder pane call.
 const FOLDERPANE_MAX_BYTES = 5900;
+const FOLDERPANE_CEILING_BYTES = 10240;
 
-// The size guard of the body script bundle, which runs in every message document: its first measured size (8861 bytes) plus 20 percent made 10633. Find in the message and hint labels added 5574 bytes (8984 to 14558), so the guard was 14558 rounded up to 14600. The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321 more (15879), and the guard rose to 15900. The injectable pick action for the own pages made it 15927, and the guard was 15927 rounded up to 15950. Drawing the labels in the theme made it 16028. Reading the published label colors as literal declarations, so a mail cannot recolor them, made it 16177, and the guard was 16177 rounded up to 16200. Reporting the typed prefix to the background for which-key in a message made it 16562, which is 385 over main's 16177, and the guard was 16562 rounded up to 16600. The `;` action step (a phase before the labels, the focus, activate and yank actions and the yank message to the background) made it 17601 (1039 bytes over main), so the guard is that measured size rounded up to 17650. Dropping the phase before the labels (`; f`, `; c` and `; y` became keys of the tree) made it 17128, and the guard stays at 17650. AGENTS.md records the same numbers.
+// `content/message_display.js`, the body script that runs in every message document.
 const CONTENT_MAX_BYTES = 17650;
+const CONTENT_CEILING_BYTES = 24576;
 
-// The `hints` API has a guard of its own, since it is a separate bundle and not chrome runtime code. Its first measured size was 3091 bytes, and the guard is that plus 20 percent (3709) rounded up to 3800. The check that the focus still sits on the picked link made it 3863, so the guard was 3800 plus 63 rounded up to 3900. The `pick` verb for the mail window (targets, labels per chrome document, typed label, act) made it 11670, so the guard was 11670 rounded up to 11700. The `;` action step (the action phase, a focus and a text per target, and the clipboard write in the parent) made it 12994 (1324 bytes over main), so the guard was that measured size rounded up to 13000. The card view subject lookup made it 13004 (4 bytes over that), so the guard is 13004 rounded up to 13050. Dropping the action phase made it 12507, and the guard stays at 13050.
+// `experiment/hints.js`, its own bundle and not chrome runtime code.
 const HINTS_MAX_BYTES = 13050;
+const HINTS_CEILING_BYTES = 20480;
 
-// The size guard of the compose script bundle (`content/compose_keys.js`), which runs in every compose body: its first measured size (717 bytes) plus 20 percent made 861, rounded up to 900. The modes (insert and normal, Ctrl+O, Escape and `e`) and the label drawn by the script made it 2516 (1799 bytes over main). Hiding the label while the body has no focus made it 2571, which is 1854 over main, so the guard was that measured size rounded up to 2600. Reading the `external_editor` setting from storage and following its changes, so the modes and the label stay off while it is off, made it 3492, which is 921 over that, and the guard is 3492 rounded up to 3500. AGENTS.md records the same number.
+// `content/compose_keys.js`, registered into every compose body.
 const COMPOSE_MAX_BYTES = 3500;
+const COMPOSE_CEILING_BYTES = 8192;
+
+const GUARDS_AND_CEILINGS = [
+    ["experiment/keys.js and experiment/overlay.js", PARENT_MAX_BYTES, PARENT_CEILING_BYTES],
+    ["experiment/folderpane.js", FOLDERPANE_MAX_BYTES, FOLDERPANE_CEILING_BYTES],
+    ["content/message_display.js", CONTENT_MAX_BYTES, CONTENT_CEILING_BYTES],
+    ["experiment/hints.js", HINTS_MAX_BYTES, HINTS_CEILING_BYTES],
+    ["content/compose_keys.js", COMPOSE_MAX_BYTES, COMPOSE_CEILING_BYTES],
+];
+for (const [file, guard, ceiling] of GUARDS_AND_CEILINGS) {
+    if (guard > ceiling) {
+        console.error(`build: the ${file} guard of ${guard} bytes is over its ${ceiling} byte ceiling`);
+        process.exit(1);
+    }
+}
 
 // The release files of `turndown` and `marked` and their licenses. Each folder's VENDOR.md holds the pin.
 const VENDORED_LIBRARY_FILES = ["vendor/turndown/turndown.js", "vendor/turndown/LICENSE", "vendor/marked/marked.umd.js", "vendor/marked/LICENSE"];

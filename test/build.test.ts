@@ -13,6 +13,8 @@ const FOLDERPANE_MAX_BYTES = Number(/FOLDERPANE_MAX_BYTES = (\d+);/.exec(readFil
 const CONTENT_MAX_BYTES = Number(/CONTENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const COMPOSE_MAX_BYTES = Number(/COMPOSE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
+const RAISE_STEP_BYTES = Number(/RAISE_STEP_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
 const PARENT_ALLOWED_INPUTS = [
     /^vendor\/desertfox\/keys\/matcher\.ts$/,
@@ -59,6 +61,18 @@ before(() => {
 
 after(() => rmSync(out_dir, { recursive: true, force: true }));
 
+test("each size guard is within its ceiling and the raise step is 512", () => {
+    const build_source = readFileSync(join(root, "tools/build.mjs"), "utf8");
+    const number_of = (name: string) => Number(new RegExp(`${name} = (\\d+);`).exec(build_source)?.[1]);
+    for (const prefix of ["PARENT", "FOLDERPANE", "CONTENT", "HINTS", "COMPOSE"]) {
+        const guard = number_of(`${prefix}_MAX_BYTES`);
+        const ceiling = number_of(`${prefix}_CEILING_BYTES`);
+        assert.ok(guard > 0 && ceiling > 0, `${prefix} has no guard or no ceiling`);
+        assert.ok(guard <= ceiling, `${prefix} guard ${guard} is over its ceiling ${ceiling}`);
+    }
+    assert.equal(RAISE_STEP_BYTES, 512);
+});
+
 test("each parent bundle takes only allowlisted inputs", () => {
     for (const name of PARENT_NAMES) {
         assert.ok(inputs[name]!.length > 0);
@@ -95,12 +109,14 @@ test("each manifest entry names its own script and schema", () => {
     }
 });
 
-test("AGENTS.md records the size guards", () => {
+test("AGENTS.md records each size guard with its ceiling", () => {
     const agents = readFileSync(join(root, "AGENTS.md"), "utf8");
-    assert.ok(agents.includes(`${PARENT_MAX_BYTES} bytes`));
-    assert.ok(agents.includes(`${FOLDERPANE_MAX_BYTES} bytes`));
-    assert.ok(agents.includes(`${HINTS_MAX_BYTES} bytes`));
-    assert.ok(agents.includes(`${COMPOSE_MAX_BYTES} bytes`));
+    const build_source = readFileSync(join(root, "tools/build.mjs"), "utf8");
+    for (const prefix of ["PARENT", "FOLDERPANE", "CONTENT", "HINTS", "COMPOSE"]) {
+        const guard = /(\d+);/.exec(new RegExp(`${prefix}_MAX_BYTES = (\\d+);`).exec(build_source)?.[0] ?? "")?.[1];
+        const ceiling = new RegExp(`${prefix}_CEILING_BYTES = (\\d+);`).exec(build_source)?.[1];
+        assert.ok(agents.includes(`guard ${guard}, ceiling ${ceiling} (\`${prefix}_MAX_BYTES\`)`), `AGENTS.md lacks ${prefix}: guard ${guard}, ceiling ${ceiling}`);
+    }
 });
 
 test("the body script bundle takes only the matcher side, the shared files and its own folder", () => {

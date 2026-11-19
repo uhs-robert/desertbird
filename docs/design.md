@@ -162,6 +162,73 @@ The e2e timing capture (`tools/e2e/timings.mjs`) is a new small file, not a copy
 5. Migration notes for users who load key files through an autoconfig file.
 6. Listing on addons.thunderbird.net, with the Experiment code open to a by-hand review.
 
+## Bundle size guards
+
+The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard has a ceiling that the build and `test/build.test.ts` also enforce. The rules are in `AGENTS.md`. This section keeps the history of each guard. Sizes are minified bytes.
+
+| Bundle | Guard | Ceiling |
+| --- | --- | --- |
+| `experiment/keys.js`, `experiment/overlay.js` (each) | 27000 | 40960 |
+| `experiment/folderpane.js` | 5900 | 10240 |
+| `content/message_display.js` | 17650 | 24576 |
+| `experiment/hints.js` | 13050 | 20480 |
+| `content/compose_keys.js` | 3500 | 8192 |
+
+The ceilings are provisional, about 1.5 times the guard of the day they were set (2026-11-18). A guard rises in steps of 512 bytes. The guards above predate that step and are not multiples of it, so the step applies to later raises only.
+
+### Chrome runtime (each parent bundle)
+
+The first measured size of `keys.js` as its own bundle was 15003 bytes. That plus 20 percent made 18004. Later raises:
+
+- The reading-pane handoff to the body script added 372 bytes. The guard rose to 18004 plus 372 rounded up to 18400.
+- The thread verbs of the view API took the build from 18358 on main to 20501. The guard rose to 18400 plus 2143 rounded up to 20600.
+- Visual mode and the row flags took it from 20501 on main to 21451 (950 bytes). The guard rose to 20600 plus 950 rounded up to 21600.
+- Ending visual mode when the list changes under it, and collapsing the range after a command (a stale range: the end row and view the mode last set), made it 21785. The guard was 20600 plus 1284 rounded up to 21900.
+- Checking the message keys at both ends of the range made it 21996 (1495 bytes over main). The guard was 20600 plus 1495 rounded up to 22100.
+- The report of the typed prefix for which-key added 305 bytes. The guard was 22100 plus 305 rounded up to 22500.
+- The folder row, pane focus, command and page verbs made it 24085 (1784 over main's 22301). The guard was 22500 plus 1784 rounded up to 24300.
+- The report of visual mode to the mode label made it 24374 (289 over main). The guard was 24300 plus 289 rounded up to 24600.
+- Pane focus by chord and left or right, and the motions in the folder pane, made it 25492 (1118 over main's 24374). The guard was 24600 plus 1118 rounded up to 25800.
+- Keys for the calendar, address book and settings tabs and a close chord on web page tabs made it 25936 (921 over main's 25015). The guard was that measured size rounded up to 26000.
+- Skipping a leaf with args and holding plain keys after the command line opens made it 26040 (1025 over main). The guard was that measured size rounded up to 26100.
+- The key list command (`help.whichkey`, with the report that ends its panel on the next key) made it 26238 (198 over main). The guard was that measured size rounded up to 26300.
+- Running the conversation command through the controller of the page that shows the message (a message tab or window as well as the mail tab) made it 26992 (722 over main's 26270). The guard is that measured size rounded up to 27000.
+
+### Folder pane bundle
+
+`experiment/folderpane.js` is the Experiment API `folderpane`. It holds the verbs that read or change the folder tree. Thunderbird loads an Experiment script on the first call to its API, so these verbs cost the startup script nothing. Its first measured size was 4891 bytes. That plus 20 percent made 5869, rounded up to 5900. It has had no raise.
+
+### Body script bundle
+
+`content/message_display.js` is injected into every message document. Its first measured size was 8861 bytes. That plus 20 percent made 10633. Later raises:
+
+- Find in the message and hint labels took it from 8984 to 14558 (5574 bytes). The guard was 14558 rounded up to 14600.
+- The hint fixes (a visibility check, a shadow root for the labels, ending the labels on scroll and blur, and a focus pick with Enter left to Thunderbird) added 1321, making 15879. The guard rose to 15900.
+- The injectable pick action, so the own pages can click a picked element by script, made it 15927. The guard was that rounded up to 15950.
+- Drawing the labels in the theme made it 16028.
+- Reading the published label colors as literal declarations, so a mail cannot recolor them, made it 16177. The guard was that rounded up to 16200.
+- Reporting the typed prefix to the background for which-key in a message made it 16562 (385 over main's 16177). The guard was that rounded up to 16600.
+- The `;` action step (a phase before the labels, the focus, activate and yank actions and the yank message to the background) made it 17601 (1039 over main). The guard rose to that rounded up to 17650.
+- Dropping the phase before the labels (`; f`, `; c` and `; y` became keys of the tree) made it 17128 (473 under the guard). The guard stays at 17650.
+
+### Hints bundle
+
+`experiment/hints.js` (the `hints` Experiment) is its own bundle, not chrome runtime code. It holds `sendEnter` and `pick` and nothing from the key runtime. The keys of a pick stay out of `experiment/keys.js` on purpose: the bundle takes them on the window root, ahead of the key runtime, so the runtime needed no change. Its first measured size was 3091 bytes. That plus 20 percent made 3709, rounded up to 3800. Later raises:
+
+- The check that the focus still sits on the picked link made it 3863. The guard was 3800 plus 63 rounded up to 3900.
+- The `pick` verb for the mail window (targets, labels in each chrome document, the typed label and the act) made it 11670. The guard was that rounded up to 11700.
+- The `;` action step (the action phase, a focus and a text per target, and the clipboard write in the parent) made it 12994 (1324 over main's 11670). The guard was that rounded up to 13000.
+- The card view subject lookup made it 13004 (4 over that). The guard rose to 13004 rounded up to 13050.
+- Dropping the action phase made it 12507 (497 under the guard). The guard stays at 13050.
+
+### Compose script bundle
+
+`content/compose_keys.js` is registered with `composeScripts.register` into every compose body. It takes Ctrl+E, Ctrl+O and `e` after Ctrl+O or Escape, and nothing else. Escape itself passes to Thunderbird. Its first measured size was 717 bytes. That plus 20 percent made 861, rounded up to 900. Later raises:
+
+- The modes (insert and normal, Ctrl+O, Escape and `e`) and the label drawn by the script made it 2516 (1799 over main).
+- Hiding the label while the body has no focus made it 2571 (1854 over main). The guard was that rounded up to 2600.
+- Reading the `external_editor` setting from storage and following its changes, so the modes and the label stay off while it is off, made it 3492 (921 over that). The guard is that rounded up to 3500.
+
 ## Risks
 
 - An Experiment breaks when Thunderbird internals change between ESR releases. The fixed verb table keeps the breakage in one small file, and the key tests catch it.
