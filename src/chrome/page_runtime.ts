@@ -35,6 +35,7 @@ export interface PageRuntime {
 const HOLD_MS = 1500;
 
 const KEY_LIST = "help.whichkey";
+const CLOSE_TAB = "tab.close";
 
 export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime {
     const hooked = new Map<Window, { target: KeyTarget; handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
@@ -85,8 +86,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         }
         if (result.kind_ === "match") {
             const steps = result.leaf.steps;
-            // In a remote page only a bound command of the background runs, and one that takes no argument: the page's own chords stay its own.
-            if (situation === "remote" && steps.some((step) => step.runs_in !== "background" || step.invocation.args)) return;
+            // In a remote page only the close chord runs. The chrome cannot see a text field there, so any other chord (Ctrl+K in a web form) stays the page's own.
+            if (situation === "remote" && steps.some((step) => step.runs_in !== "background" || step.invocation.args || step.invocation.id !== CLOSE_TAB)) return;
             for (const step of steps) {
                 const count = result.count ?? step.invocation.count;
                 if (step.runs_in !== "background") deps.scroll(window, step.invocation.id, count);

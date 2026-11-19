@@ -154,18 +154,18 @@ test("a key in a text field, in the mail tab or with a menu open passes and drop
     }
 });
 
-test("a remote page runs a bound chord of a background command and passes plain keys and chords of the page", () => {
+test("a remote page runs only the close chord and passes every other key, Ctrl+J and Ctrl+K among them", () => {
     const { windows, runtime, invocations, scrolls } = setup();
     runtime.install(tree());
     const window = windows[0]!;
     window.situation = "remote";
     for (const key of ["q", ":", "j", "g"]) assert.equal(press(window, key).cancelled, false, key);
-    assert.equal(press(window, "d", { ctrlKey: true }).cancelled, false, "Ctrl+D stays the page's own");
+    for (const key of ["d", "j", "k"]) assert.equal(press(window, key, { ctrlKey: true }).cancelled, false, `Ctrl+${key} stays the page's own`);
     assert.equal(press(window, "q", { altKey: true }).cancelled, true);
-    assert.equal(press(window, "k", { ctrlKey: true }).cancelled, true);
-    assert.deepEqual(invocations().map((event) => event.command), ["tab.close", "tab.prev"]);
+    assert.deepEqual(invocations().map((event) => event.command), ["tab.close"]);
     assert.equal(scrolls.length, 0);
 });
+
 
 test("g ? shows the key list and the next key reports its end once", () => {
     const { windows, runtime, invocations, pending } = setup();
