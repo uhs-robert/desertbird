@@ -149,7 +149,7 @@ The Experiment mounted the same extension page four ways, in a red box. The page
 - The look, the position and the return of focus were judged only from the screenshots.
 - Chosen for the product: the `browser` element in the main window document, pinned to the bottom edge (not an iframe, not a panel). Built and run in both apps with the end-to-end run. Two details the probe did not show: the message manager of the `browser` does not exist while `XULFrameLoaderCreated` is dispatched, so the load must run a microtask later; and the frame script and the load follow the order of the probe. The remote page is capped at 800 px wide. After the overlay is removed, a focus call on the thread list body returns the focus, and Thunderbird's own Down key then moves the selection in both apps.
 - The hud (which-key panel, toasts) is a second remote `browser` of the same kind, left unfocused and transparent. Measured on both apps with the end-to-end run: a browser told a maximum size (`maxWidth`, `maxHeight` in `Extension:InitBrowser`) resizes to the size of its content, so a page of absolutely placed pieces ended `0x0` and drew nothing; with no maximum the browser keeps its box. The attribute `transparent="true"` on the `browser` lets the window show through the page, and `pointer-events: none` on the box lets clicks reach the list under it. The page follows `prefers-color-scheme` under the built-in light and dark themes of both apps.
-- A key typed right after `:` with no pause (one `wtype` call) reached the list on Thunderbird 153.7 before the overlay had the focus, and an `x` in it archived a message. The same keys on Betterbird went to the overlay. The mount is a round trip from the key runtime to the background and back.
+- A key typed right after `:` with no pause (one `wtype` call) reached the list on Thunderbird 153.7 before the overlay had the focus, and an `a` in it archived a message. The same keys on Betterbird went to the overlay. The mount is a round trip from the key runtime to the background and back.
 
 ### Time from a key to the background page
 
@@ -377,7 +377,7 @@ Facts measured while the end-to-end tab checks ran on Thunderbird 153.7 ESR and 
 Facts measured while the end-to-end sort key checks ran on Thunderbird 153.7 ESR and Betterbird. Both apps gave the same result.
 
 - `mailTabs.update(tabId, {sortType: "received", sortOrder: "ascending"})` and the same with `"priority"` returned without an error. A following `mailTabs.query` reported the new `sortType`. `sort.set` takes both as `by` values.
-- `, d`, `, s`, `, f` and `, o` set the sort and the row order of the Views folder (6 messages) as the keys name it. `getListedMessages` returned the rows in the order of the view. `, o` flipped the order of the column the list had.
+- `s d`, `s j`, `s f` and `s o` set the sort and the row order of the Views folder (6 messages) as the keys name it. `getListedMessages` returned the rows in the order of the view. `s o` flipped the order of the column the list had.
 ## Snooze
 
 `msg.snooze` is built on standard MailExtension APIs. What was checked and what is left for a hand check:

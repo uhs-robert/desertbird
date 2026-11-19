@@ -23,6 +23,14 @@ test("a user binding adds a key", () => {
     assert.equal(command_for(compiled, "j"), "motion.down");
 });
 
+test("a user binding on plain s wins over the s X sort defaults: each is skipped with a warning and the keymap installs", () => {
+    const { compiled, warnings } = compile_effective_keymap({ normal: { s: { id: "msg.archive" } } });
+    assert.equal(command_for(compiled, "s"), "msg.archive");
+    assert.ok(warnings.some((warning) => warning.includes('skipped "sd"')), warnings.join("; "));
+    assert.equal(command_for(compiled, "j"), "motion.down");
+    assert.equal(command_for(compiled, ",", "h"), "help.open");
+});
+
 test("a user binding on a default key replaces it", () => {
     const { compiled } = compile_effective_keymap({ normal: { x: { id: "msg.delete" } } });
     assert.equal(command_for(compiled, "x"), "msg.delete");

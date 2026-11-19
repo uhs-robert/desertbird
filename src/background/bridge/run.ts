@@ -19,7 +19,7 @@ const NEVER_GROUPS: readonly string[] = ["config", "settings", "native", "permis
 // `search.message` succeeds only when its text is in the shown message, so its answer would leak the body one probe at a time. `search.threads` narrows the list to subjects and senders that match, and a step after it answers whether any did.
 const NEVER_IDS: readonly string[] = ["search.message", "search.threads", "repeat.last", "mark.set", "msg.undo", "msg.delete", "msg.move", "msg.archive", "msg.junk", "msg.snooze", "msg.reply", "msg.forward", "msg.new", "msg.reply_with"];
 // Commands that open an address taken from mail or typed by the caller.
-const OPENS_URL_IDS: readonly string[] = ["hint.pick", "msg.open", "msg.unsubscribe", "app.open_page", "help.open"];
+const OPENS_URL_IDS: readonly string[] = ["hint.pick", "msg.open", "msg.unsubscribe", "app.open_page", "help.open", "options.open"];
 
 const NEVER_GROUP_IDS: ReadonlySet<string> = new Set(NEVER_GROUPS.flatMap((name) => Object.keys(GROUPS[name]?.commands ?? {})));
 

@@ -238,8 +238,8 @@ async function run_default(instance) {
   const filtered = await key_and_state(instance, ["Single 1"], 1500);
   check(app, kind, "typing in the quick filter passes through", filtered.listed.length > 0 && filtered.listed.length < start.listed.length, `listed ${filtered.listed.length} of ${start.listed.length} after typing "Single 1"`);
   await shot("quick_filter", "quick filter holds the typed text and the list is narrowed");
-  const bound = await key_and_state(instance, ["x"], 1500);
-  check(app, kind, "x typed into the quick filter archives nothing", same(bound.folders["/Inbox"], before.folders["/Inbox"]) && bound.listed.length === 0, `listed ${bound.listed.length}, Inbox ${bound.folders["/Inbox"]?.length}`);
+  const bound = await key_and_state(instance, ["a"], 1500);
+  check(app, kind, "a typed into the quick filter archives nothing", same(bound.folders["/Inbox"], before.folders["/Inbox"]) && bound.listed.length === 0, `listed ${bound.listed.length}, Inbox ${bound.folders["/Inbox"]?.length}`);
   // Escape clears the filter text, and Escape in an empty filter returns focus to the thread list (measured on both apps).
   await instance.press(["-k", "Escape"]);
   await sleep(1000);
@@ -262,7 +262,7 @@ async function run_default(instance) {
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "after the restart, g g reaches the top and one j moves exactly one row", top_after_restart === rows[0] && first_selected(state) === rows[1], `top ${top_after_restart}, after j ${first_selected(state)}, expected ${rows[1]}`);
 
-  // x and d d at two places: the middle of the list and the last row. The note says which row Thunderbird leaves selected.
+  // a and d d at two places: the middle of the list and the last row. The note says which row Thunderbird leaves selected.
   const gone = new Set();
   const live_rows = () => rows.filter((id) => !gone.has(id));
   const row_of = (id) => (id === null || id === undefined ? "none" : live_rows().indexOf(id));
@@ -273,20 +273,20 @@ async function run_default(instance) {
     return key_and_state(instance, ["j"]);
   };
   for (const where of ["middle", "last"]) {
-    for (const command of ["x", "dd"]) {
+    for (const command of ["a", "dd"]) {
       state = where === "middle" ? await go_to_row(12) : await key_and_state(instance, ["G"]);
       const target = first_selected(state);
       const target_row = row_of(target);
       const rows_total = live_rows().length;
-      if (command === "x") state = await key_and_state(instance, ["x"], 2500);
+      if (command === "a") state = await key_and_state(instance, ["a"], 2500);
       else {
         await instance.press(["d"]);
         await sleep(150);
         state = await key_and_state(instance, ["d"], 2500);
       }
       const homes = Object.entries(state.folders).filter(([, ids]) => ids.includes(target)).map(([path]) => path);
-      const done = command === "x" ? homes.length === 1 && /Archive/i.test(homes[0]) : same(homes, ["/Trash"]);
-      check(app, kind, `${command === "x" ? "x archives" : "d d trashes"} the ${where} row's message`, done, `${target} is in ${JSON.stringify(homes)}`);
+      const done = command === "a" ? homes.length === 1 && /Archive/i.test(homes[0]) : same(homes, ["/Trash"]);
+      check(app, kind, `${command === "a" ? "a archives" : "d d trashes"} the ${where} row's message`, done, `${target} is in ${JSON.stringify(homes)}`);
       if (done) gone.add(target);
       const after = state.selected.map((m) => m.header_id);
       // DesertBird does not reselect. Thunderbird keeps a row selected: the next message, or the previous one at the end of the list.
@@ -295,26 +295,26 @@ async function run_default(instance) {
       await shot(`after_${command}_${where}`, `list after ${command} on the ${where} row, see the selection note`);
       if (!done) {
         // The key failed, so measure what Thunderbird itself leaves selected after an API call on the same message.
-        await instance.ask(command === "x" ? "api_archive" : "api_delete");
+        await instance.ask(command === "a" ? "api_archive" : "api_delete");
         await sleep(2500);
         state = await instance.ask("state");
         gone.add(target);
-        note(app, kind, `selection after an API ${command === "x" ? "archive" : "delete"} on the ${where} row, no key`, `now selected ${JSON.stringify(state.selected.map((m) => m.header_id))} at row ${row_of(state.selected[0]?.header_id)}`);
+        note(app, kind, `selection after an API ${command === "a" ? "archive" : "delete"} on the ${where} row, no key`, `now selected ${JSON.stringify(state.selected.map((m) => m.header_id))} at row ${row_of(state.selected[0]?.header_id)}`);
       }
     }
   }
-  check(app, kind, "x and d d ran four times without a refusal", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
+  check(app, kind, "a and d d ran four times without a refusal", gone.size === 4 && !instance.app_log().includes("unexpected error"), "a refused key leaves the message in place");
 
-  // x and j in one wtype call reach the app back to back. j moves the selection before the background acts, and x must still archive the row it was pressed on.
+  // a and j in one wtype call reach the app back to back. j moves the selection before the background acts, and a must still archive the row it was pressed on.
   state = await go_to_row(12);
   const race_target = first_selected(state);
   const race_next = live_rows()[row_of(race_target) + 1];
-  state = await key_and_state(instance, ["xj"], 2500);
+  state = await key_and_state(instance, ["aj"], 2500);
   const homes_of = (id) => Object.entries(state.folders).filter(([, ids]) => ids.includes(id)).map(([path]) => path);
   const race_archived = homes_of(race_target).length === 1 && /Archive/i.test(homes_of(race_target)[0]);
-  check(app, kind, "x then j at once archives the row x was pressed on and leaves the next one", race_archived && same(homes_of(race_next), ["/Inbox"]), `${race_target} is in ${JSON.stringify(homes_of(race_target))}, ${race_next} is in ${JSON.stringify(homes_of(race_next))}`);
+  check(app, kind, "a then j at once archives the row a was pressed on and leaves the next one", race_archived && same(homes_of(race_next), ["/Inbox"]), `${race_target} is in ${JSON.stringify(homes_of(race_target))}, ${race_next} is in ${JSON.stringify(homes_of(race_next))}`);
   if (race_archived) gone.add(race_target);
-  await shot("after_x_then_j", "list after x and j typed back to back");
+  await shot("after_a_then_j", "list after a and j typed back to back");
 
   const probe = await instance.ask("probe_plain_text");
   check(app, kind, "messengerUtilities.convertToPlainText decodes entities, drops the title and separates cells", probe.converted === "It's \u00e9\nA\tB", JSON.stringify(probe));
@@ -647,7 +647,7 @@ async function run_steps(instance, { app, kind, shot }) {
   await shot("step_unread_all_folders", "the folder ] U opened, with an unread message selected");
 }
 
-// Visual mode in the Inbox with every thread open, so each row is one message. The commands run on the real list: m s flags the range and x archives it.
+// Visual mode in the Inbox with every thread open, so each row is one message. The commands run on the real list: m s flags the range and a archives it.
 async function run_visual(instance, { app, kind, shot }) {
   await instance.ask("show_folder", 20000, { path: "/Inbox" });
   await sleep(2000);
@@ -688,18 +688,18 @@ async function run_visual(instance, { app, kind, shot }) {
   state = await keys(["Escape"]);
   state = await keys(["j"]);
   check(app, kind, "Escape ends visual mode, so j selects one row", state.selected.length === 1, `selected ${state.selected.length}`);
-  // x archives the range once. `.` then archives once more, the one row selected at the dot, since u can undo it.
+  // a archives the range once. `.` then archives once more, the one row selected at the dot, since u can undo it.
   await keys(["g", "g"]);
   await keys(["v"]);
   await keys(["j"]);
   const archive_range = ids((await keys(["j"])).selected);
-  state = await keys(["x"], 3000);
+  state = await keys(["a"], 3000);
   const in_inbox = archive_range.filter((id) => state.folders["/Inbox"]?.includes(id));
-  check(app, kind, "x in visual mode archives the whole range", archive_range.length === 3 && in_inbox.length === 0, `range ${archive_range.join(" ")}, still in the Inbox ${in_inbox.join(" ")}`);
+  check(app, kind, "a in visual mode archives the whole range", archive_range.length === 3 && in_inbox.length === 0, `range ${archive_range.join(" ")}, still in the Inbox ${in_inbox.join(" ")}`);
   const after_x = state.folders["/Inbox"]?.length;
   state = await keys(["."], 3000);
-  check(app, kind, ". after x in visual mode archives the one selected row", state.folders["/Inbox"]?.length === after_x - 1, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
-  await shot("visual_after_x", "Inbox after x archived the range");
+  check(app, kind, ". after a in visual mode archives the one selected row", state.folders["/Inbox"]?.length === after_x - 1, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
+  await shot("visual_after_a", "Inbox after a archived the range");
   check(app, kind, "the app survived visual mode", instance.exited() === null);
 }
 
@@ -845,18 +845,18 @@ async function run_panes(instance, { app, kind, shot }) {
   check(app, kind, "A-l with the message pane hidden leaves the focus in the thread list", message_pane_hidden && first_selected(state) !== list_row, `hidden ${message_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
   await keys(["t", "m"], 1500);
 
-  // A chord typed into a text field passes through to it: H types into the quick filter. After each chord an x typed next must still reach the field: no subject holds "Hx", so the list empties. Had the focus left for the list, x would archive instead.
+  // A chord typed into a text field passes through to it: H types into the quick filter. After each chord an a typed next must still reach the field: no subject holds "Ha", so the list empties. Had the focus left for the list, a would archive instead.
   const listed_before = (await keys(["g", "g"])).listed.length;
   await instance.press(CTRL_SHIFT("k"));
   await sleep(800);
   state = await press_state(["H"], 1500);
   check(app, kind, "H in the quick filter types into it: the list narrows and the folder stays", state.listed.length < listed_before && folder_of(state) === "/Inbox", `listed ${listed_before} then ${state.listed.length}, folder ${folder_of(state)}`);
-  state = await press_state(["x"], 1500);
-  check(app, kind, "after H the quick filter keeps the focus: x types into it", state.listed.length === 0, `listed ${state.listed.length}`);
+  state = await press_state(["a"], 1500);
+  check(app, kind, "after H the quick filter keeps the focus: a types into it", state.listed.length === 0, `listed ${state.listed.length}`);
   await press_state(["-k", "BackSpace"], 1500);
   await press_state(ALT("l"), 1500);
-  state = await press_state(["x"], 1500);
-  check(app, kind, "after A-l the quick filter keeps the focus: x types into it", state.listed.length === 0 && folder_of(state) === "/Inbox", `listed ${state.listed.length}, folder ${folder_of(state)}`);
+  state = await press_state(["a"], 1500);
+  check(app, kind, "after A-l the quick filter keeps the focus: a types into it", state.listed.length === 0 && folder_of(state) === "/Inbox", `listed ${state.listed.length}, folder ${folder_of(state)}`);
   await shot("panes_quick_filter_H", "H typed into the quick filter");
   await instance.press(["-k", "Escape"]);
   await sleep(800);
@@ -882,13 +882,21 @@ async function run_panes(instance, { app, kind, shot }) {
     await sleep(1500);
     await keys(["g", "e"]);
   }
+  // The leader: , h opens the help page and , s the options page, each in a tab of the window.
+  for (const [key, page, fragment] of [["h", "help", "help/help.html"], ["s", "options", "options"]]) {
+    state = await keys([",", key], 3000);
+    check(app, kind, `, ${key} opens the ${page} page in a tab`, tabs_of(state).some((address) => address.startsWith("moz-extension:") && address.includes(fragment)), `tabs ${tabs_of(state).join(" ")}`);
+    await instance.ask("reset_tabs");
+    await sleep(1500);
+    await keys(["g", "e"]);
+  }
   state = await keys(["g", "C"], 2500);
   note(app, kind, "g C", `tabs after: ${tabs_of(state).length}; the conversation command is ${tabs_of(state).length > 1 ? "enabled and opened a tab" : "disabled, so it opened nothing"}`);
   await instance.ask("reset_tabs");
   await sleep(1500);
   await keys(["g", "e"]);
 
-  // u and :undo run DesertBird's own undo log. d d, x and the API delete record a step there. A delete by the native Delete key is Thunderbird's, so u leaves it alone.
+  // u and :undo run DesertBird's own undo log. d d, a and the API delete record a step there. A delete by the native Delete key is Thunderbird's, so u leaves it alone.
   const undo_typed = async () => {
     await instance.press([":"]);
     await sleep(1200);
@@ -910,26 +918,19 @@ async function run_panes(instance, { app, kind, shot }) {
   await keys(["g", "e"]);
   await keys(["g", "g"]);
   victim = first_selected(await keys(["j"]));
-  state = await keys(["x"], 3000);
+  state = await keys(["a"], 3000);
   const archived = !in_folder(state, victim, "/Inbox");
   state = await keys(["u"], 4000);
-  check(app, kind, "u after x moves the message back from Archives to the Inbox", archived && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after x ${archived}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
-  await keys(["g", "e"]);
-  await keys(["g", "g"]);
-  victim = first_selected(await keys(["j"]));
-  state = await keys(["a"], 3000);
-  const archived_by_a = !in_folder(state, victim, "/Inbox");
-  state = await keys(["u"], 4000);
-  check(app, kind, "a archives like x, and u brings the message back", archived_by_a && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after a ${archived_by_a}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
+  check(app, kind, "u after a moves the message back from Archives to the Inbox", archived && in_folder(state, victim, "/Inbox"), `${victim} out of the Inbox after a ${archived}, in the Inbox after u ${in_folder(state, victim, "/Inbox")}`);
   // A count reaches the rows below the current one. The fixture threads open collapsed, so z R opens them first: a count refuses to reach into a closed thread.
   await keys(["z", "R"]);
   await keys(["g", "g"]);
   state = await keys(["j"]);
   const counted = state.listed.slice(state.listed.indexOf(first_selected(state)), state.listed.indexOf(first_selected(state)) + 2);
-  state = await keys(["2", "x"], 3000);
+  state = await keys(["2", "a"], 3000);
   const counted_archived = counted.filter((id) => !in_folder(state, id, "/Inbox"));
   state = await keys(["u"], 4000);
-  check(app, kind, "2 x archives the current row and the one below, and one u brings both back", counted.length === 2 && counted_archived.length === 2 && counted.every((id) => in_folder(state, id, "/Inbox")), `rows ${counted.join(" ")}, archived ${counted_archived.join(" ")}, back ${counted.filter((id) => in_folder(state, id, "/Inbox")).join(" ")}`);
+  check(app, kind, "2 a archives the current row and the one below, and one u brings both back", counted.length === 2 && counted_archived.length === 2 && counted.every((id) => in_folder(state, id, "/Inbox")), `rows ${counted.join(" ")}, archived ${counted_archived.join(" ")}, back ${counted.filter((id) => in_folder(state, id, "/Inbox")).join(" ")}`);
   await keys(["g", "e"]);
   await keys(["g", "g"]);
   victim = first_selected(await keys(["j"]));
@@ -1265,12 +1266,12 @@ async function run_window_hints(instance, { app, kind, shot }) {
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
-  await key_and_state(instance, ["g"], 600);
-  // The whole gesture in one burst: x archives, and neither x may reach the runtime, before the labels take the keys or after they end.
-  await instance.press(["fxx"]);
+  const burst_before = selection_of(await key_and_state(instance, ["g"], 600));
+  // The whole gesture in one burst. `c` is bound (msg.new opens a compose window) and is no hint label. The first `c` ends the labels and is swallowed, and the hold after `f` must drop the second, so no compose window may open.
+  await instance.press(["fcc"]);
   await sleep(2000);
   state = await instance.ask("state");
-  check(app, kind, "window hints: f x x in one burst archives nothing", state.listed.length === rows_before, `listed ${state.listed.length} of ${rows_before}`);
+  check(app, kind, "window hints: f c c in one burst opens no compose window and changes no mail", !state.windows.some((window) => window.type === "messageCompose") && state.listed.length === rows_before && selection_of(state) === burst_before, `compose windows ${state.windows.filter((window) => window.type === "messageCompose").length}, listed ${state.listed.length} of ${rows_before}`);
   // A key that no label continues with ends the labels, and swallows the key.
   await instance.press(["f"]);
   await sleep(800);
@@ -1324,17 +1325,17 @@ async function run_cmdline(instance, { app, kind, shot }) {
   let state = await instance.ask("state");
   let selected_before = selection_of(state);
   let folders_before = JSON.stringify(state.folders);
-  // j and x typed with no pause after the colon: the key runtime holds plain keys until the overlay has the focus, so neither reaches the list.
-  await instance.press([":", "j", "x"]);
+  // j and a typed with no pause after the colon: the key runtime holds plain keys until the overlay has the focus, so neither reaches the list.
+  await instance.press([":", "j", "a"]);
   await sleep(1500);
   await shot("cmdline_open", "the command line over the bottom of the window, with the completion list above its input");
   state = await instance.ask("state");
-  check(app, kind, ": then j x typed with no pause runs neither a motion nor archive", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}, mail changed: ${JSON.stringify(state.folders) !== folders_before}`);
-  await instance.press(["j", "x"]);
+  check(app, kind, ": then j a typed with no pause runs neither a motion nor archive", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}, mail changed: ${JSON.stringify(state.folders) !== folders_before}`);
+  await instance.press(["j", "a"]);
   await sleep(500);
   state = await instance.ask("state");
-  check(app, kind, "j and x typed into the open command line run nothing", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}`);
-  await shot("cmdline_typed", "the line after j and x were typed into it");
+  check(app, kind, "j and a typed into the open command line run nothing", selection_of(state) === selected_before && JSON.stringify(state.folders) === folders_before, `selected ${selected_before} then ${selection_of(state)}`);
+  await shot("cmdline_typed", "the line after j and a were typed into it");
   await close_command_line(instance);
   await shot("cmdline_closed", "the window after Escape, with no command line");
   state = await key_and_state(instance, ["j"], 800);
@@ -1542,15 +1543,15 @@ async function run_view_settings(instance, check_in) {
   };
   for (const [name, keys, sort_type, sort_order] of [
     ["date", ["d"], "date", "descending"],
-    ["subject", ["s"], "subject", "ascending"],
+    ["subject", ["j"], "subject", "ascending"],
     ["current column, order toggled", ["o"], "subject", "descending"],
     ["author", ["f"], "author", "ascending"],
     ["current column, order toggled", ["o"], "author", "descending"],
   ]) {
-    await instance.press([","]);
+    await instance.press(["s"]);
     state = await key_and_state(instance, keys, 1200);
-    check(app, kind, `, ${keys[0]} (${name}) sets ${sort_type} ${sort_order}`, state.mail_tab?.sort_type === sort_type && state.mail_tab?.sort_order === sort_order, `sortType ${state.mail_tab?.sort_type}, sortOrder ${state.mail_tab?.sort_order}`);
-    check(app, kind, `, ${keys[0]} (${name}) orders the rows`, same(state.listed, views_rows(sort_type, sort_order)), state.listed.join(" "));
+    check(app, kind, `s ${keys[0]} (${name}) sets ${sort_type} ${sort_order}`, state.mail_tab?.sort_type === sort_type && state.mail_tab?.sort_order === sort_order, `sortType ${state.mail_tab?.sort_type}, sortOrder ${state.mail_tab?.sort_order}`);
+    check(app, kind, `s ${keys[0]} (${name}) orders the rows`, same(state.listed, views_rows(sort_type, sort_order)), state.listed.join(" "));
   }
   // Measurement for the sort.set `by` enum: does mailTabs.update accept these two column names?
   for (const sort_type of ["received", "priority"]) {

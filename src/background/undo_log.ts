@@ -68,7 +68,7 @@ export interface UndoLog {
     /** Runs `change` with the log held, then stores the last entry it passed to `keep`, even when it throws: a change that failed part way keeps what it did. The mail call goes inside, so a `u` pressed during it waits for the entry. */
     record(change: (keep: (entry: NewUndoEntry) => void) => Promise<void>): Promise<void>;
     /**
-     * Runs after any undo before it. Takes the newest entry, runs `wait` on it without the log, then `undo` with the log held, and stores the outcome. The wait can last seconds, and an `x` pressed meanwhile must not wait with it.
+     * Runs after any undo before it. Takes the newest entry, runs `wait` on it without the log, then `undo` with the log held, and stores the outcome. The wait can last seconds, and an `a` pressed meanwhile must not wait with it.
      * Answers undefined when no entry is left to take, else the entry and the outcome.
      */
     undo_newest(wait: (entry: UndoEntry) => Promise<void>, undo: (entry: UndoEntry) => Promise<UndoOutcome>): Promise<{ entry: UndoEntry; outcome: UndoOutcome } | undefined>;

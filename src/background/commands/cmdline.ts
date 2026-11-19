@@ -27,7 +27,7 @@ export const cmdline: CommandGroup = {
         mm: { id: "cmdline.open", args: { text: "move " }, label: "Move to" },
         mc: { id: "cmdline.open", args: { text: "copy " }, label: "Copy to" },
         Ff: { id: "cmdline.open", args: { text: "filter " }, label: "By text" },
-        ",,": { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" },
+        ss: { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" },
         Ft: { id: "cmdline.open", args: { text: "filter --tag --tag=" }, label: "By tag" },
         T: { id: "cmdline.open", args: { text: "tab " }, label: "Switch tab" },
         ";;": { id: "cmdline.open", args: { text: "hint " }, label: "Hint command line" },

@@ -27,7 +27,7 @@ function set_state(scope: StateScope, field: StateField, value: boolean | "toggl
     });
 }
 
-// Only read state takes a count. The rows come from `counted_messages`, as for `x` and `dd`, so a toggle follows the first of them.
+// Only read state takes a count. The rows come from `counted_messages`, as for `a` and `dd`, so a toggle follows the first of them.
 export const set_read = (scope: HandlerScope<TrashApi>, args: CheckedArgs): Promise<void> => set_state(scope, "read", args["state"] === "toggle" ? "toggle" : args["state"] === "read", () => counted_messages(scope));
 export const toggle_flag = (scope: StateScope): Promise<void> => set_state(scope, "flagged", "toggle");
 export const toggle_junk = (scope: StateScope): Promise<void> => set_state(scope, "junk", "toggle");

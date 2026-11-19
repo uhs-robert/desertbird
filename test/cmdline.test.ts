@@ -13,6 +13,12 @@ import { fake_api } from "./fake_api.ts";
 
 const parse = (text: string) => parse_command_line(registry, text);
 
+test("options.open parses by its short name and by its id", () => {
+    const opens = { kind: "invocation", invocation: { id: "options.open" } };
+    assert.deepEqual(parse("options"), opens);
+    assert.deepEqual(parse("options.open"), opens);
+});
+
 test("typed-value commands parse by their command line name", () => {
     assert.deepEqual(parse("tag Work stuff"), { kind: "invocation", invocation: { id: "msg.tag", args: { tag: "Work stuff" } } });
     assert.deepEqual(parse("msg.tag work"), { kind: "invocation", invocation: { id: "msg.tag", args: { tag: "work" } } });

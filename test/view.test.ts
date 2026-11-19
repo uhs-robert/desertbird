@@ -110,7 +110,7 @@ test("toggle_starred sets the starred filter and clears it when it already shows
 test("F f and , , open the filter and sort pickers, F s toggles starred, F a is the attachment filter, F r resets it, and C-x C-c close the tab", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
     assert.deepEqual(normal["Ff"], { id: "cmdline.open", args: { text: "filter " }, label: "By text" });
-    assert.deepEqual(normal[",,"], { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" });
+    assert.deepEqual(normal["ss"], { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" });
     assert.deepEqual(normal["Fs"], { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" });
     assert.deepEqual(normal["Fa"], { id: "filter.set", args: { state: "attachment" }, label: "Attachments" });
     assert.deepEqual(normal["Fr"], { id: "filter.set", args: { state: "all" }, label: "Reset" });
@@ -130,16 +130,16 @@ test("the view commands are bridge safe and only the fixed states, panes and sor
 test("the sort keys name a column and the default order of that column", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
     const planned: Record<string, [string, string]> = {
-        ",d": ["date", "descending"],
-        ",s": ["subject", "ascending"],
-        ",f": ["author", "ascending"],
-        ",z": ["size", "ascending"],
-        ",t": ["tags", "ascending"],
-        ",a": ["attachments", "ascending"],
-        ",u": ["unread", "ascending"],
-        ",o": ["current", "toggle"],
-        ",r": ["received", "descending"],
-        ",p": ["priority", "ascending"],
+        sd: ["date", "descending"],
+        sj: ["subject", "ascending"],
+        sf: ["author", "ascending"],
+        sz: ["size", "ascending"],
+        st: ["tags", "ascending"],
+        sa: ["attachments", "ascending"],
+        su: ["unread", "ascending"],
+        so: ["current", "toggle"],
+        sr: ["received", "descending"],
+        sp: ["priority", "ascending"],
     };
     for (const [keys, [by, order]] of Object.entries(planned)) assert.deepEqual({ ...(normal[keys] as object), label: undefined }, { id: "sort.set", args: { by, order }, label: undefined }, keys);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
@@ -278,7 +278,7 @@ test("tab_kind: the mail tab is 0, the tabs with a readable document 1, every ot
 
 test("the close chords of the mail tab are in the mail keymap and not in the message keymap", async () => {
     const { MESSAGE_KEYMAP } = await import("../src/background/commands/index.ts");
-    for (const key of ["<C-x>", "<C-c>", "Ff", ",,", ";;"]) {
+    for (const key of ["<C-x>", "<C-c>", "Ff", "ss", ";;"]) {
         assert.ok(DEFAULT_KEYMAP.normal?.[key], key);
         assert.equal(MESSAGE_KEYMAP.normal?.[key], undefined, key);
     }

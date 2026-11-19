@@ -370,7 +370,7 @@ const invoked = (command: string, args: Record<string, unknown> = {}) => ({ type
 test("the mail keys send their command to the background, are cancelled and scroll nothing", async () => {
     const cases: [string[], unknown][] = [
         [["r"], invoked("msg.reply", { to: "sender" })],
-        [["x"], invoked("msg.archive")],
+        [["a"], invoked("msg.archive")],
         [["d", "d"], invoked("msg.delete")],
         [["y", "y"], invoked("msg.yank", { field: "content" })],
         [["q"], invoked("tab.close")],
@@ -396,7 +396,7 @@ test("keys that need the thread list send nothing from a message", async () => {
 // The message tree lacks these prefixes, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
 test("a list prefix swallows its next key in a message, so u and a after it run nothing", async () => {
     const { window, sent } = await started();
-    for (const prefix of ["]", "[", "F", ",", "z", "t", "M", "'"]) for (const key of ["u", "a"]) {
+    for (const prefix of ["]", "[", "F", "s", "z", "t", "M", "'"]) for (const key of ["u", "a"]) {
         const before = sent.length;
         window.press(prefix);
         window.press(key);
@@ -412,7 +412,7 @@ test("a mail sequence typed in a message runs nothing, also under a prefix the m
     const { window, sent } = await started();
     window.elements = [Object.assign(new StubElement(), { href: "https://example.org/x" })];
     // `y ] a`: a stray `y` must not stop `] a` from being a list sequence.
-    for (const keys of [["g", "p", "a"], [";", ";", "y"], ["]", "a"], ["F", "a"], [",", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
+    for (const keys of [["g", "p", "a"], [";", ";", "y"], ["]", "a"], ["F", "a"], ["s", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
         for (const key of keys) window.press(key);
         assert.deepEqual(sent.splice(0), [], keys.join(" "));
         assert.deepEqual(window.appended, [], `${keys.join(" ")} shows no labels`);

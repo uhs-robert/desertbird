@@ -24,7 +24,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "view.half_page", "thread.fold_all"] },
     step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment"] },
     hints: { runs_in: "background", ids: ["hint.window"] },
-    help: { runs_in: "background", ids: ["help.open", "help.whichkey"] },
+    help: { runs_in: "background", ids: ["help.open", "options.open", "help.whichkey"] },
     search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
 };
@@ -113,7 +113,7 @@ const PHASE_1_COMMANDS = [
     { id: "motion.top", keys: "gg", args: undefined, runs_in: "chrome", bridge: true },
     { id: "motion.bottom", keys: "G", args: undefined, runs_in: "chrome", bridge: true },
     { id: "repeat.last", keys: ".", args: undefined, runs_in: "chrome", bridge: true },
-    { id: "msg.archive", keys: "x", args: undefined, runs_in: "background", bridge: false },
+    { id: "msg.archive", keys: "a", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.delete", keys: "dd", args: undefined, runs_in: "background", bridge: false },
     { id: "msg.reply", keys: "r", args: { to: "sender" }, runs_in: "background", bridge: false },
     { id: "msg.yank", keys: "yy", args: { field: "content" }, runs_in: "background", bridge: false },
@@ -152,8 +152,8 @@ test("the view keys run the planned commands with the planned args", () => {
         Fr: { id: "filter.set", args: { state: "all" }, label: "Reset" },
         Fs: { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" },
         Fa: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
-        ",d": { id: "sort.set", args: { by: "date", order: "descending" }, label: "Date" },
-        ",o": { id: "sort.set", args: { by: "current", order: "toggle" }, label: "Toggle direction" },
+        sd: { id: "sort.set", args: { by: "date", order: "descending" }, label: "Date" },
+        so: { id: "sort.set", args: { by: "current", order: "toggle" }, label: "Toggle direction" },
         tm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
         tf: { id: "pane.toggle", args: { pane: "folder" }, label: "Folder pane" },
     };
@@ -191,14 +191,14 @@ test("the reading keys bind in the message keymap only, so j and k keep scrollin
 
 test("the message keymap carries the mail keys of the message-capable groups with the ids of the mail tab, and none that need the list", () => {
     const message = MESSAGE_KEYMAP.normal ?? {};
-    for (const keys of ["x", "dd", "r", "R", "gF", "c", "yy", "ys", "<C-l>", "mr", "ms", "mj", "mfd", "mzt", ":", "mt", "<C-j>", "<C-k>", "q"]) assert.deepEqual(message[keys], DEFAULT_KEYMAP.normal?.[keys], keys);
+    for (const keys of ["a", "dd", "r", "R", "gF", "c", "yy", "ys", "<C-l>", "mr", "ms", "mj", "mfd", "mzt", ":", "mt", "<C-j>", "<C-k>", "q"]) assert.deepEqual(message[keys], DEFAULT_KEYMAP.normal?.[keys], keys);
     const excluded = /^(motion|step|view|folder|jump|mark)\.|^thread\.(?!open_conversation)|^(repeat\.last|visual\.toggle|app\.open_page|filter\.set)$/;
     for (const [keys, binding] of Object.entries(message)) {
         const id = binding && !Array.isArray(binding) ? binding.id : "";
         assert.equal(excluded.test(id), false, keys);
         assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? ""), keys);
     }
-    for (const keys of ["mR", "Ft", "Ff", ",,", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
+    for (const keys of ["mR", "Ft", "Ff", "ss", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
 });
 
 // Every id here was audited for the bridge: it moves the view or the selection and does no harm doing so. A command newly marked `bridge: true` fails this test until it is reviewed and added. The bridge rules still refuse `repeat.last` and `hint.pick`, and every command that does not run in the background.
