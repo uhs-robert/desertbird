@@ -1,6 +1,6 @@
 // The mode label at the start of a main window's status bar. It holds no Thunderbird global: the parent hands in `ModeLabelDeps`, so node tests drive every path with fakes.
 
-import { MODE_INDICATORS, MODE_LABEL_STYLES, MODE_NAMES } from "../shared/protocol.ts";
+import { MODE_INDICATORS, MODE_LABEL_STYLES } from "../shared/protocol.ts";
 import type { ModeIndicator, ModeLabelScheme, ModeLabelStyle, ModeName, OverlaySetModeLabelArgs } from "../shared/protocol.ts";
 
 export interface LabelElement {

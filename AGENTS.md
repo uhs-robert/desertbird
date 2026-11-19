@@ -28,6 +28,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Theme: the `theme` setting, role colors for pages, mode label colors | [`src/background/theme/README.md`](src/background/theme/README.md) |
 | Help page generated from the registry | [`src/help/README.md`](src/help/README.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
+| Shared code: protocol, `swallow.ts` helpers for dropped promise errors | [`src/shared/README.md`](src/shared/README.md) |
 | Pinned DesertFox copy: pin, stand-ins, local edits | [`vendor/desertfox/VENDOR.md`](vendor/desertfox/VENDOR.md) |
 | Pinned `marked` and `turndown` release files for HTML compose | [`vendor/marked/VENDOR.md`](vendor/marked/VENDOR.md), [`vendor/turndown/VENDOR.md`](vendor/turndown/VENDOR.md) |
 | Measured Thunderbird and Betterbird behavior the design rests on | [`docs/thunderbird-behavior.md`](docs/thunderbird-behavior.md) |
@@ -78,7 +79,7 @@ Treat this repository as public.
 Run `npm ci` once. Add each new command here in the commit that adds it.
 
 - `npm run check`: lint, typecheck and test. Run it before every commit.
-- `npm run lint`: typescript-eslint with `no-floating-promises` and `no-misused-promises` on `src/` and `tools/`.
+- `npm run lint`: typescript-eslint on `src/`: `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`, strict `no-unused-vars` (`_` prefix spares a name), `no-eval` and a ban on a silent `.catch`/`.then` handler (use a helper from `src/shared/swallow.ts`). Copied from DesertFox with three departures: `vendor/` is ignored in place of `web-ext-artifacts/`, the warn prefix is `desertbird:`, and the `tools/**/*.ts` glob stays but matches no file, because the tools here are `.mjs`.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.

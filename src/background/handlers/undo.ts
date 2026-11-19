@@ -7,6 +7,7 @@ import type { SpecialFolderApi } from "./special_folder.ts";
 import { notify_refusal, notify_result } from "../notify.ts";
 import type { NotificationsApi } from "../notify.ts";
 import type { MoveAction, MovedItem, StateField, StateItem, TagItem, UndoEntry, UndoLog, UndoOutcome } from "../undo_log.ts";
+import { ignore_refusal } from "../../shared/swallow.ts";
 
 /** What recording a change and undoing it need. */
 export interface UndoApi extends NotificationsApi, SpecialFolderApi {
@@ -63,7 +64,7 @@ export async function record_moved(scope: UndoScope, action: MoveAction, prepare
         const items: MovedItem[] = [];
         for (const message of messages) {
             // The mail has moved by now, so a failed lookup here costs this message its undo, not the change.
-            const destination = is_traced(message) ? await destination_of(message).catch(() => undefined) : undefined;
+            const destination = is_traced(message) ? await ignore_refusal(destination_of(message)) : undefined;
             if (destination === undefined || !is_traced(message)) untraced++;
             else items.push({ header_message_id: message.headerMessageId, from_folder_id: message.folder.id, ...destination, date_ms: message.date.getTime(), ...(message.size !== undefined && { size: message.size }) });
         }

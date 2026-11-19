@@ -3,6 +3,7 @@
 // The add-on writes no file. The host owns the scratch file and removes it only on the collect that ends the job. So a job whose compose window is gone is orphaned, not dropped: its loop keeps collecting until the editor ends, then discards the text.
 // A dropped job (the setting turned off, failed collects) leaves its file until a later `editor_start` sweeps job files a day old.
 
+import { ignore_refusal, keep_chain } from "../shared/swallow.ts";
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import type { ComposeEditRequest } from "../shared/protocol.ts";
 import type { ComposeMarkdown } from "./compose_markdown.ts";
@@ -121,7 +122,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
     let turn: Promise<unknown> = Promise.resolve();
     const in_turn = <R>(step: () => Promise<R>): Promise<R> => {
         const result = turn.then(step);
-        turn = result.catch(() => {});
+        turn = keep_chain(result);
         return result;
     };
     // The loops of this background's life. A loop outlives a turn, so the set stops `resume` from starting a second one.
@@ -157,7 +158,7 @@ export function create_external_editor(deps: ExternalEditorDeps) {
         });
 
     async function apply(held: ComposeEditJob, text: string): Promise<void> {
-        const details = await deps.compose.getComposeDetails(held.tab_id).catch(() => undefined);
+        const details = await ignore_refusal(deps.compose.getComposeDetails(held.tab_id));
         if (details === undefined) return deps.say(held.window_id, GONE_AT_END_TEXT, true);
         const is_html = held.markdown !== undefined;
         if (details.isPlainText === is_html) return deps.say(held.window_id, is_html ? TURNED_PLAIN_TEXT : TURNED_HTML_TEXT, true);

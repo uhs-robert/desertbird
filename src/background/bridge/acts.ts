@@ -1,5 +1,6 @@
 // The `act` frame of the bridge: a program outside Thunderbird asks to archive, trash or move messages, and a person answers y or n in the Thunderbird window first. Nothing moves without a yes. The moves run through the same handlers as the keys, so `msg.undo` reverses them. Every refusal is a fixed text, and the reply carries only a count.
 
+import { ignore_refusal, refused_as, warn_and_go } from "../../shared/swallow.ts";
 import type { ConfirmAction } from "../../shared/protocol.ts";
 import type { ConfirmRequest, ConfirmResult } from "./confirm.ts";
 import { archive } from "../handlers/message.ts";
@@ -82,11 +83,11 @@ const allows = (settings: ActSettings, act: CheckedAct): boolean => settings.bri
 export function create_bridge_acts(deps: BridgeActsDeps) {
     const { api } = deps;
 
-    const header_of = (id: number): Promise<ActHeader | undefined> => api.messages.get(id).then((header) => header ?? undefined, () => undefined);
+    const header_of = (id: number): Promise<ActHeader | undefined> => ignore_refusal(api.messages.get(id)).then((header) => header ?? undefined);
 
     // A folder the `folders` read never lists (an account root, a saved search, a unified folder) is no target either.
     async function target_folder(folder_id: string): Promise<ActFolder | undefined> {
-        const folder = await api.folders.get(folder_id).catch(() => undefined);
+        const folder = await ignore_refusal(api.folders.get(folder_id));
         return folder === undefined || folder.isRoot === true || folder.isVirtual === true || folder.isUnified === true ? undefined : folder;
     }
 
@@ -95,7 +96,7 @@ export function create_bridge_acts(deps: BridgeActsDeps) {
         const trash_of = new Map<string, string>();
         for (const account_id of new Set(headers.map((header) => header.folder?.accountId))) {
             if (account_id === undefined) return undefined;
-            const [trash] = await api.folders.query({ accountId: account_id, specialUse: ["trash"] }).catch(() => []);
+            const [trash] = await refused_as(api.folders.query({ accountId: account_id, specialUse: ["trash"] }), []);
             if (trash === undefined) return undefined;
             trash_of.set(account_id, trash.id);
         }
@@ -122,7 +123,7 @@ export function create_bridge_acts(deps: BridgeActsDeps) {
     // Two accounts can each hold an Archive, so the prompt names the account too.
     async function folder_with_account(folder: ActFolder): Promise<string> {
         const name = folder.name ?? folder.path ?? "";
-        const account = (await api.accounts.list().catch(() => [])).find((entry) => entry.id === folder.accountId);
+        const account = (await refused_as(api.accounts.list(), [])).find((entry) => entry.id === folder.accountId);
         return account?.name === undefined ? name : `${name} (${account.name})`;
     }
 
@@ -166,8 +167,8 @@ export function create_bridge_acts(deps: BridgeActsDeps) {
         const still_there = (await Promise.all(found.map((header) => header_of(header.id)))).filter((header, index): header is ActHeader => header !== undefined && header.folder?.id === found[index]!.folder?.id);
         const total = checked.ids.length;
         if (still_there.length > 0) {
-            const scope: HandlerScope<ActsApi> = { api, window_id: (await deps.target_window().catch(() => undefined)) ?? -1, message_ids: still_there.map((header) => header.id), count: 1 };
-            await run_move(checked, scope, still_there, trash_of, folder?.id).catch(() => {});
+            const scope: HandlerScope<ActsApi> = { api, window_id: (await ignore_refusal(deps.target_window())) ?? -1, message_ids: still_there.map((header) => header.id), count: 1 };
+            await run_move(checked, scope, still_there, trash_of, folder?.id).catch(warn_and_go("act move after confirm"));
         }
         const moved = still_there.length === 0 ? 0 : await moved_count(still_there);
         return moved === total ? { ok: true, count: total } : refuse(`moved ${moved} of ${total}`);

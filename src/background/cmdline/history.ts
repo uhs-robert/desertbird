@@ -1,5 +1,6 @@
 // The command line history in storage.local: the background writes it when a line runs, and the page only reads it.
 
+import { keep_chain } from "../../shared/swallow.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY } from "../../shared/protocol.ts";
 
 export const HISTORY_LIMIT = 100;
@@ -31,7 +32,7 @@ export function create_cmdline_history(storage: HistoryStorage, key: string = CM
                 const entries = Array.isArray(stored) ? stored.filter((entry): entry is string => typeof entry === "string") : [];
                 await storage.set({ [key]: record_entry(entries, line) });
             });
-            last_write = written.catch(() => undefined);
+            last_write = keep_chain(written);
             return written;
         },
     };

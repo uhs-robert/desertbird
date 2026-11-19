@@ -1,3 +1,4 @@
+import { refused_as } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { ViewRow } from "../../shared/protocol.ts";
@@ -65,7 +66,7 @@ async function folder_with_unread(scope: StepScope, forward: boolean): Promise<M
     const after = all.slice(here + 1);
     const around = forward ? [...after, ...before] : [...before.reverse(), ...after.reverse()];
     // The unread counts only pick the folder, because a query over every folder takes seconds. Thunderbird throws for a folder it has not opened yet, which counts as none.
-    const counts = await Promise.all(around.map((folder) => scope.api.folders.getFolderInfo(folder.id).then((info) => info.unreadMessageCount ?? 0, () => 0)));
+    const counts = await Promise.all(around.map((folder) => refused_as(scope.api.folders.getFolderInfo(folder.id).then((info) => info.unreadMessageCount ?? 0), 0)));
     return around.find((_, index) => counts[index]! > 0);
 }
 

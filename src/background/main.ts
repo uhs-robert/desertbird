@@ -52,6 +52,7 @@ import type { DraftsApi } from "./bridge/drafts.ts";
 import { create_compose_markdown } from "./compose_markdown.ts";
 import type { MarkdownGlobals } from "./compose_markdown.ts";
 import { EDITOR_HOST_NAME, create_compose_requests, create_editor_client, create_external_editor } from "./external_editor.ts";
+import { best_effort, ignore_refusal, refused_as } from "../shared/swallow.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
 const CREATE_FOLDER_TIMEOUT_MS = 10_000;
@@ -209,7 +210,7 @@ const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
     read_root: async (source) => (await load_record())[source === "main" ? "tree" : "message_tree"].root as TreeBranch,
-    send_changed: (windowId) => void messenger.runtime.sendMessage({ type: "hud.changed", windowId }).catch(() => {}),
+    send_changed: (windowId) => void best_effort(messenger.runtime.sendMessage({ type: "hud.changed", windowId })),
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });
 
@@ -273,11 +274,11 @@ const external_editor = create_external_editor({
     // The manifest loads the vendored `turndown` and `marked` before this bundle, and they leave their globals here.
     markdown: create_compose_markdown(globalThis as unknown as MarkdownGlobals),
     async compose_tab_in(window_id) {
-        if ((await messenger.windows.get(window_id).catch(() => undefined))?.type !== COMPOSE_WINDOW_TYPE) return undefined;
+        if ((await ignore_refusal(messenger.windows.get(window_id)))?.type !== COMPOSE_WINDOW_TYPE) return undefined;
         // A compose window holds exactly one tab.
         return (await messenger.tabs.query({ windowId: window_id }))[0]?.id;
     },
-    tab_exists: (tab_id) => messenger.tabs.get(tab_id).then(() => true, () => false),
+    tab_exists: (tab_id) => refused_as(messenger.tabs.get(tab_id).then(() => true), false),
     is_enabled: async () => (await config_store.read()).settings.external_editor,
     say: (window_id, text, is_error) => (is_error ? notify_refusal : notify_result)({ ...messenger, toasts: hud }, text, window_id),
     now: () => Date.now(),
@@ -290,7 +291,7 @@ const router = create_router(registry, handler_api);
 
 // The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.
 const last_focused_main_window = async (): Promise<number | undefined> => {
-    const window = await messenger.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => undefined);
+    const window = await ignore_refusal(messenger.windows.getLastFocused({ windowTypes: ["normal"] }));
     return window?.id !== undefined && window.type === "normal" ? window.id : undefined;
 };
 const bridge_run = create_bridge_run({ target_window: last_focused_main_window, route: (invocation) => router.route(invocation) });

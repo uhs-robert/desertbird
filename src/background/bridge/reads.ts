@@ -1,5 +1,6 @@
 // The four read frames of the bridge: `folders`, `messages`, `message` and `attachments`. Each is off until its share setting and `bridge` are on, checked in storage at request time. Every string a sender controls is cleaned here, and a body leaves only as marked, untrusted text.
 
+import { refused_as } from "../../shared/swallow.ts";
 import { plain_body } from "../handlers/clipboard.ts";
 import type { MessagePart } from "../handlers/clipboard.ts";
 import { safe_filename } from "../safe_filename.ts";
@@ -164,7 +165,7 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
         const listed = (await api.folders.query({})).filter((folder) => !folder.isRoot && !folder.isVirtual && !folder.isUnified);
         const rows = await Promise.all(
             listed.slice(0, MAX_FOLDERS).map(async (folder) => {
-                const info = await api.folders.getFolderInfo(folder.id).catch(() => ({ unreadMessageCount: 0, totalMessageCount: 0 }));
+                const info = await refused_as(api.folders.getFolderInfo(folder.id), { unreadMessageCount: 0, totalMessageCount: 0 });
                 return { id: folder.id, name: clean_line(folder.name ?? folder.path), path: clean_line(folder.path), account: accounts.get(folder.accountId) ?? "", unread: info.unreadMessageCount ?? 0, total: info.totalMessageCount ?? 0 };
             }),
         );

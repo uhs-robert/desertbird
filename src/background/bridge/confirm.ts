@@ -1,5 +1,6 @@
 // The y or n prompt a bridge write waits on. It borrows the command line surface of the last focused main window, because only that surface takes the keyboard and gives the focus back. The page learns from `cmdline.hello` that it shows a prompt, so nothing the page hears later can turn a command line into a prompt.
 
+import { ignore_refusal } from "../../shared/swallow.ts";
 import { CONFIRM_KEY_GRACE_MS } from "../../shared/protocol.ts";
 import type { ConfirmAction, ConfirmAnswerRequest, ConfirmAnswerResult, ConfirmPrompt, OverlayApi } from "../../shared/protocol.ts";
 import type { Timers } from "../hud/toasts.ts";
@@ -125,7 +126,7 @@ export function create_confirm_service(deps: ConfirmDeps): ConfirmService {
             const entry: Pending = { token, window_id: undefined, prompt: prompt_of(token, request), mounted_at_ms: undefined, timer: undefined, resolve };
             pending = entry;
             entry.timer = deps.timers.set(() => finish(entry, "timeout", true), CONFIRM_TIMEOUT_MS);
-            const window_id = await deps.target_window().catch(() => undefined);
+            const window_id = await ignore_refusal(deps.target_window());
             if (pending !== entry) return result;
             if (window_id === undefined) {
                 finish(entry, "no", false);

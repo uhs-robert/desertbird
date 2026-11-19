@@ -1,5 +1,7 @@
 // The one stored record of the folder commands: marks and the jump history. Reads and writes go through a queue, so two jumps in a row (a held <C-o>) and the display events that follow them never overwrite each other.
 
+import { keep_chain } from "../../shared/swallow.ts";
+
 export interface FolderRef {
     account_id: string;
     path: string;
@@ -71,7 +73,7 @@ export function modify_folder_state<T>(api: FolderStateApi, task: (state: Folder
         return result;
     });
     // A failed task ends only its own caller's promise.
-    queues.set(area, run.catch(() => undefined));
+    queues.set(area, keep_chain(run));
     return run;
 }
 

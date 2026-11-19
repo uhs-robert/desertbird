@@ -1,6 +1,6 @@
 // Key handling in the main mail window. It holds no Thunderbird global: the parent hands in a `RuntimeDeps`, so node tests drive every path with fakes.
 
-import type { JsonValue, KeysEvent, KeysInvocation } from "../shared/protocol.ts";
+import type { JsonValue, KeysEvent } from "../shared/protocol.ts";
 import type { TreeLeaf } from "../../vendor/desertfox/prefix_tree.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";

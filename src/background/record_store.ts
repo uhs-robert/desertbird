@@ -1,5 +1,7 @@
 // A versioned record in `storage.local` with a memory copy that mirrors it. Used by the snooze store and meant for the follow-up reminders.
 
+import { keep_chain } from "../shared/swallow.ts";
+
 export interface RecordStorageApi {
     storage: {
         local: { get(key: string): Promise<Record<string, unknown>>; set(items: Record<string, unknown>): Promise<void> };
@@ -33,7 +35,7 @@ export function create_record_store<T>(api: RecordStorageApi, config: RecordStor
     // A failed step must not block the steps behind it.
     const run = <R>(step: () => Promise<R>): Promise<R> => {
         const result = queue.then(step);
-        queue = result.catch(() => {});
+        queue = keep_chain(result);
         return result;
     };
 

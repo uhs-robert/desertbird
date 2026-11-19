@@ -12,6 +12,7 @@ import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
 import type { HintElement, HintSession, HintWindow } from "./body_hints.ts";
+import { best_effort } from "../shared/swallow.ts";
 
 export interface BodyKeyEvent extends KeyEventLike {
     target: unknown;
@@ -89,7 +90,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         const joined = keys.join(" ");
         if (joined === reported) return;
         reported = joined;
-        runtime.sendMessage({ type: "body.pending", keys }).catch(() => {});
+        void best_effort(runtime.sendMessage({ type: "body.pending", keys }));
     }
 
     function reset_sequence(): void {

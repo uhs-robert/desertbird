@@ -1,5 +1,7 @@
 // The pure parts of the command line page: how a pick changes the text and how the highlight moves. The page file only reads events and draws.
 
+import { keep_chain } from "../shared/swallow.ts";
+
 export interface Pick {
     /** The span of the text the pick replaces. */
     start: number;
@@ -88,7 +90,7 @@ export async function settle_latest(latest: () => Promise<unknown>): Promise<voi
     let waited: Promise<unknown>;
     do {
         waited = latest();
-        await waited.catch(() => undefined);
+        await keep_chain(waited);
     } while (waited !== latest());
 }
 
@@ -98,7 +100,7 @@ export function create_key_queue(): { add(run: () => Promise<void>): Promise<voi
     return {
         add(run) {
             const ran = tail.then(run);
-            tail = ran.catch(() => undefined);
+            tail = keep_chain(ran);
             return ran;
         },
         done: () => tail,

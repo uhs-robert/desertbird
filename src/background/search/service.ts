@@ -1,6 +1,7 @@
 // The search of `/` and `?` in the background. In the thread list a search is the Quick Filter: it narrows the rows while the user types, `Enter` keeps the filter and selects a row, `Escape` puts the earlier filter back. `n` and `N` step the rows the filter leaves.
 // The matching is Thunderbird's own (a case-insensitive text in the subject and the sender). The vendored `find_match.ts` supplies the stepping and the wording.
 
+import { ignore_refusal, keep_chain } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
 import type { CmdlineSearchNote, KeysApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
@@ -67,7 +68,7 @@ const with_text = (base: QuickFilter, text: string): QuickFilter => {
 
 function in_order<T>(search: LiveSearch, change: () => Promise<T>): Promise<T> {
     const run = search.changes.then(change);
-    search.changes = run.then(() => undefined, () => undefined);
+    search.changes = keep_chain(run);
     return run;
 }
 
@@ -102,7 +103,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     // The restore goes to the tab the search began in, even when another tab is in front now. That tab still shows the filter the search left.
     async function owns_tab(search: LiveSearch): Promise<boolean> {
-        const tab = await deps.api.mailTabs.get(search.tab_id).catch(() => undefined);
+        const tab = await ignore_refusal(deps.api.mailTabs.get(search.tab_id));
         return tab?.displayedFolder?.id === search.folder_id;
     }
 

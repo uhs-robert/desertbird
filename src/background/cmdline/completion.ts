@@ -90,7 +90,7 @@ function folder_rows(choices: FolderChoice[], has_flag: boolean): Row[] {
     const holders = new Map<string, number>();
     for (const { path } of choices) holders.set(path, (holders.get(path) ?? 0) + 1);
     const name_holders = new Map<string, number>();
-    for (const { account_id, account_name } of new Map(choices.map((choice) => [choice.account_id, choice])).values()) name_holders.set(account_name.toLowerCase(), (name_holders.get(account_name.toLowerCase()) ?? 0) + 1);
+    for (const { account_name } of new Map(choices.map((choice) => [choice.account_id, choice])).values()) name_holders.set(account_name.toLowerCase(), (name_holders.get(account_name.toLowerCase()) ?? 0) + 1);
     return choices.map(({ path, account_id, account_name }) => {
         const is_shared = !has_flag && (holders.get(path) ?? 0) > 1;
         const clashes = (name_holders.get(account_name.toLowerCase()) ?? 0) > 1;
