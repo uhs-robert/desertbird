@@ -3,6 +3,7 @@
 
 import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
 import { capture_focus, in_text_field } from "./focus.ts";
+import { hook_page_focus } from "./page_focus.ts";
 import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
 import { create_overlay_host, on_escape_key } from "./overlay.ts";
@@ -43,6 +44,7 @@ const SURFACES: Record<OverlaySurface, SurfaceSpec> = {
 const closed_listeners = new Set<(closed: OverlayClosed) => void>();
 let host: OverlayHost | null = null;
 let mode_label: ModeLabel | null = null;
+let stop_page_focus: (() => void) | null = null;
 
 interface OverlayElement {
     id: string;
@@ -201,6 +203,7 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
 }
 
 export function get_overlay_api(context: ExtensionContext & { extension: OverlayExtension }) {
+    stop_page_focus ??= hook_page_focus();
     return {
         overlay: {
             mount: guard("overlay.mount", (args: OverlayMountArgs): void => ensure_host(context).mount(args)),
@@ -226,5 +229,7 @@ export function shutdown(): void {
     // A label sits in the window and not in the host's table, so the sweep runs even when no label call ever came.
     (mode_label ?? create_mode_label<MainWindow>({ window_with_id: () => null, ...mode_label_window_deps })).shutdown();
     mode_label = null;
+    stop_page_focus?.();
+    stop_page_focus = null;
     closed_listeners.clear();
 }

@@ -54,6 +54,8 @@ export interface ThreadVerbPane extends About3PaneLike {
 export interface TabInfoLike {
     mode: { name: string };
     chromeBrowser?: { contentWindow: About3PaneLike | null } | null;
+    /** The browser of a content tab. `isRemoteBrowser` is true when its page runs in another process. */
+    browser?: { isRemoteBrowser?: boolean; focus(): void } | null;
 }
 
 export interface TabmailLike {
