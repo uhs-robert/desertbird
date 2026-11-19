@@ -5,6 +5,7 @@ import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts"
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
+import { ignore_refusal } from "../shared/swallow.ts";
 import { CMDLINE_STYLE } from "../../vendor/desertfox/cmdline_style.ts";
 import { show_confirm } from "./confirm.ts";
 import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, list_shown_after_answer, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, row_for_click, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "./line_edit.ts";
@@ -380,7 +381,7 @@ async function start(): Promise<void> {
     await load_history();
     if (!search_direction) await refresh_completion();
     // Last: the first read loads the folder pane script, which must not delay the focus or the completion rows.
-    if (!search_direction) send<CmdlineWidgets>({ type: "cmdline.widgets", windowId: window_id }).then(({ widgets }) => show_widgets(widgets), () => {});
+    if (!search_direction) void ignore_refusal(send<CmdlineWidgets>({ type: "cmdline.widgets", windowId: window_id })).then((reply) => reply === undefined ? undefined : show_widgets(reply.widgets));
 }
 
 start().catch(report_failure);
