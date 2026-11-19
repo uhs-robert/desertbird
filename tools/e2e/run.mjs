@@ -8,9 +8,13 @@ import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
+import { create_timings } from "./timings.mjs";
 
 const e2e_dir = resolve(process.env.E2E_DIR ?? "/tmp/desertbird-e2e");
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
+const timings = create_timings(resolve(process.env.E2E_TIMINGS_FILE ?? join(e2e_dir, "timings.json")));
+// Charges the wall time of one default-kind section to the timings file.
+const timed = (instance, name, action) => timings.section(instance.app, instance.kind ?? "default", name, action);
 const binaries = {
   thunderbird: join(measure_dir, "thunderbird-153.7.0esr", "thunderbird", "thunderbird"),
   betterbird: "/usr/bin/betterbird",
@@ -174,8 +178,8 @@ async function run_default(instance) {
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "hints") return run_window_hints(instance, { app, kind, shot });
   // Right after the Inbox opens, while the window still has the layout the fixed labels were read from.
-  await run_window_hints(instance, { app, kind, shot });
-  await run_mode_label(instance, { app, kind, shot });
+  await timed(instance, "window_hints", () => run_window_hints(instance, { app, kind, shot }));
+  await timed(instance, "mode_label", () => run_mode_label(instance, { app, kind, shot }));
 
   // gg to the top. If the list has no selection yet, this also proves the first key after the Tab focus change works.
   let state;
@@ -205,7 +209,7 @@ async function run_default(instance) {
   await key_and_state(instance, ["g"]);
   state = await (await instance.press(["5"]), key_and_state(instance, ["j"]));
   check(app, kind, "5j moves five rows", first_selected(state) === rows[5], `selected ${first_selected(state)}, expected ${rows[5]}`);
-  await run_threads(instance, { app, kind, shot });
+  await timed(instance, "threads", () => run_threads(instance, { app, kind, shot }));
   await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, "no message is junk after the motions", Object.values(state.flags).every((flags) => !flags.junk));
@@ -405,7 +409,7 @@ async function run_default(instance) {
   await sleep(500);
   state = await key_and_state(instance, ["j"]);
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
-  await run_tabs(instance, { check, note, shot, key_and_state });
+  await timed(instance, "tabs", () => run_tabs(instance, { check, note, shot, key_and_state }));
 
   // <C-l> on a collapsed thread root (several messages) refuses and opens no tab. On one message it opens a tab.
   const tab_count = (current) => current.windows.filter((window) => window.type === "normal").flatMap((window) => window.tabs).length;
@@ -527,16 +531,16 @@ async function run_default(instance) {
   await sleep(1500);
   state = await instance.ask("state");
   check(app, kind, "the app survived the compose keys", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
-  await run_search(instance, { app, kind, shot });
-  await run_view_settings(instance, { app, kind });
+  await timed(instance, "search", () => run_search(instance, { app, kind, shot }));
+  await timed(instance, "view_settings", () => run_view_settings(instance, { app, kind }));
   await shot("after_view_settings", "Views folder after the view setting keys");
-  await run_cmdline(instance, { app, kind, shot });
-  await run_folders(instance);
-  await run_hud(instance, { app, kind, shot });
-  await run_followup(instance);
-  await run_steps(instance, { app, kind, shot });
-  await run_visual(instance, { app, kind, shot });
-  await run_panes(instance, { app, kind, shot });
+  await timed(instance, "cmdline", () => run_cmdline(instance, { app, kind, shot }));
+  await timed(instance, "folders", () => run_folders(instance));
+  await timed(instance, "hud", () => run_hud(instance, { app, kind, shot }));
+  await timed(instance, "followup", () => run_followup(instance));
+  await timed(instance, "steps", () => run_steps(instance, { app, kind, shot }));
+  await timed(instance, "visual", () => run_visual(instance, { app, kind, shot }));
+  await timed(instance, "panes", () => run_panes(instance, { app, kind, shot }));
 }
 
 // The stored follow-up record bytes of each add-on, read from the profile. The add-on's `storage.local` is an IndexedDB file there, and the helper add-on cannot read another add-on's storage. The database and its log are copied first, so the read sees the committed state and leaves the file alone. IndexedDB encodes the key with each character one code higher, and the value is compressed, which keeps long runs of an id as copies. So the check looks for the first 20 characters of the id.
@@ -2434,6 +2438,7 @@ for (const app of apps) {
     const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind.startsWith("compose_editor") ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];
     if (kind.startsWith("compose_editor")) install_editor_host(work_dir, kind);
     const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path && kind === "own_pages" ? seed_storage(xpi_path, work_dir, {}, OPEN_OWN_PAGES_SCRIPT) : xpi_path;
+    const kind_began = Date.now();
     const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
     try {
       if (xpi_path) await run_assertions({ ...instance, kind });
@@ -2445,6 +2450,8 @@ for (const app of apps) {
       }
     } finally {
       await instance.stop();
+      timings.add_kind({ app, kind, wall_ms: Date.now() - kind_began, startups: instance.startups, peak_memory_kb: instance.memory() });
+      timings.write();
     }
   }
 }

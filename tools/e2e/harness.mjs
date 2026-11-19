@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { start_session } from "../measure/session.mjs";
 import { build_profile, install_xpi } from "./profile.mjs";
+import { start_memory_sampler } from "./timings.mjs";
 
 const helper_dir = join(dirname(fileURLToPath(import.meta.url)), "helper");
 
@@ -37,16 +38,50 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   let pending = null;
   let seq = 0;
   let app_child = null;
+  let started_at = 0;
+  let first_poll_ms = null;
+  let first_answer_ms = null;
+  let enabled_ms = null;
+  const startups = [];
   const start_child_app = () => {
     app_exit = null;
+    started_at = Date.now();
+    first_poll_ms = null;
+    first_answer_ms = null;
+    enabled_ms = null;
     app_child = session.spawn_app([app_binary, "-profile", profile_dir, "-no-remote"], "app.log");
     app_child.on("exit", (code, signal) => { app_exit = { code, signal }; });
   };
+  // Waits the full fixed startup. Meanwhile it asks for "state" with seq 0 (ask() counts from 1) until the reply shows DesertBird enabled
+  // and a mail tab, and times the first reply and those two, so the real startup time is measured while the wait stays as it was.
+  const wait_startup = async () => {
+    const state_file = join(out_dir, "state_state.json");
+    // A reply file left by the run before a restart could carry seq 0 too.
+    rmSync(state_file, { force: true });
+    const ask_state = () => { pending = { name: "state", seq: 0, args: null }; };
+    ask_state();
+    let mail_tab_ms = null;
+    for (let waited = 0; waited < startup_ms; waited += 100) {
+      const reply = enabled_ms === null && existsSync(state_file) ? JSON.parse(readFileSync(state_file, "utf8")) : null;
+      if (reply?.seq === 0) {
+        first_answer_ms ??= Date.now() - started_at;
+        if (reply.mail_tab) mail_tab_ms ??= Date.now() - started_at;
+        // Both conditions from the same reply, so a mail tab that closed again does not pair with an older enabled flag.
+        if (reply.desertbird_enabled === true && reply.mail_tab) enabled_ms = Date.now() - started_at;
+        else { rmSync(state_file, { force: true }); ask_state(); }
+      }
+      await sleep(100);
+    }
+    startups.push({ fixed_wait_ms: startup_ms, first_poll_ms, first_answer_ms, mail_tab_ms, enabled_ms });
+    console.log(`startup: helper polled at ${first_poll_ms} ms, first answer at ${first_answer_ms} ms, mail tab at ${mail_tab_ms} ms, DesertBird enabled with a mail tab at ${enabled_ms} ms, fixed wait ${startup_ms} ms`);
+  };
+  let sampler = null;
   try {
     // The sink takes JSON the helper add-on posts to http://127.0.0.1:<sink_port>/<name>. read_state(name) returns the last one.
     // The helper also polls GET /poll for the next command, which ask() queues.
     sink = http.createServer((request, response) => {
       if (request.method === "GET") {
+        first_poll_ms ??= Date.now() - started_at;
         response.end(JSON.stringify(pending ?? { name: null, seq: -1 }));
         pending = null;
         return;
@@ -62,8 +97,10 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     // The app finds add-ons in the profile only at startup, so the helper goes in before the app starts.
     if (xpi_path) install_helper(work_dir, profile_dir, sink.address().port);
     start_child_app();
-    await sleep(startup_ms);
+    sampler = start_memory_sampler(() => ({ app: app_child.pid, labwc: session.groups[0] }));
+    await wait_startup();
   } catch (error) {
+    sampler?.stop();
     sink?.close();
     session.stop();
     throw error;
@@ -85,6 +122,9 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       }
       throw new Error(`the helper add-on did not answer ${name}`);
     },
+    // Startup times of every start of this app (one more per restart) and the peak memory seen so far, in kB.
+    startups,
+    memory: () => sampler.peaks,
     exited: () => app_exit,
     // Process id of the running app, so a check can prove a restart replaced the process.
     app_pid: () => app_child.pid,
@@ -97,7 +137,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       if (app_exit === null) throw new Error("the old app did not exit after SIGKILL");
       await sleep(2000);
       start_child_app();
-      await sleep(startup_ms);
+      await wait_startup();
     },
     // The app log. The headless session has no notification service, so libnotify logs one warning on the first notification the app tries to show.
     app_log: () => (existsSync(join(work_dir, "app.log")) ? readFileSync(join(work_dir, "app.log"), "utf8") : ""),
@@ -121,6 +161,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     // Message-ID of every message in a Local Folders mbox, so a test sees where x and d d moved mail.
     folder_message_ids: (folder) => { const path = join(folder_dir, folder); return existsSync(path) ? [...readFileSync(path, "utf8").matchAll(/^Message-ID: <(.+?)>$/gm)].map((match) => match[1]) : []; },
     stop: async () => {
+      sampler.stop();
       sink.close();
       session.stop();
       await sleep(3500);
