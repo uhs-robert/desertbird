@@ -149,6 +149,8 @@ These parts carry over with few changes:
 
 New work: the Thunderbird commands, the chrome runtime and verbs, a `thunderbird-behavior.md` of measured facts, and the HTML compose round trip.
 
+The e2e timing capture (`tools/e2e/timings.mjs`) is a new small file, not a copy of the DesertFox one. That one is built around cases, categories and wrapped debugger calls, which the e2e has none of, and its piece timer does not nest a kind piece around section pieces. It writes the same report shape (`pieces`, `cases`, `categories`), so the later weights and merge code read it as it is. The memory sampler and the startup stamps have no DesertFox counterpart.
+
 ## Build order
 
 0. Measure on the target Thunderbird ESR and on Betterbird, and write `thunderbird-behavior.md`. Capture plain keys in `about:3pane` from the Experiment, and cancel Thunderbird's own single-key shortcuts (`a`, `j`, `f` and others) in normal mode. Take keys in the message pane through `messageDisplayScripts`. Mount an extension page overlay in the chrome window. Time the round trip from the chrome runtime to the background and back. Check that each standard row in the table exists on the target ESR. Find the native host manifest folders for Thunderbird and Betterbird, which are unverified. Check that Betterbird is at 153.2.0 or later for `filter.set` and `search.threads`. Check that `tabs.create` works from a compose window, for `help.open`. This phase needs no shared core.

@@ -66,7 +66,8 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       if (reply?.seq === 0) {
         first_answer_ms ??= Date.now() - started_at;
         if (reply.mail_tab) mail_tab_ms ??= Date.now() - started_at;
-        if (reply.desertbird_enabled === true && mail_tab_ms !== null) enabled_ms = Date.now() - started_at;
+        // Both conditions from the same reply, so a mail tab that closed again does not pair with an older enabled flag.
+        if (reply.desertbird_enabled === true && reply.mail_tab) enabled_ms = Date.now() - started_at;
         else { rmSync(state_file, { force: true }); ask_state(); }
       }
       await sleep(100);

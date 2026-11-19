@@ -42,10 +42,12 @@ export function start_memory_sampler(groups, interval_ms = 1000) {
   return { peaks, stop: () => { clearInterval(timer); sample(); } };
 }
 
+// The report has the shape of the DesertFox key-test report (pieces, cases, categories, outside_cases), so its weights and merge code read it.
+// A piece is "<app>/<kind>" or "<app>/<kind>/<section>". A kind piece holds its section pieces inside its wall time. startups and peak_memory_kb are extra fields of the kind piece.
 export function create_timings(file) {
   const started_at = Date.now();
-  const kinds = [];
-  const sections = [];
+  const pieces = [];
+  const report = () => ({ total_ms: Date.now() - started_at, cases_ms: 0, outside_cases_ms: 0, categories: {}, outside_cases: {}, pieces, tab_samples: [], lost_key_suspects: [], cases: [] });
   return {
     // Runs `action` and charges its wall time to a section of one (app, kind).
     async section(app, kind, name, action) {
@@ -53,14 +55,15 @@ export function create_timings(file) {
       try {
         return await action();
       } finally {
-        sections.push({ app, kind, section: name, wall_ms: Date.now() - begun });
+        pieces.push({ name: `${app}/${kind}/${name}`, wall_ms: Date.now() - begun });
       }
     },
-    // One entry per app start that ran a kind: its wall time from before start_app to after stop, plus what the instance measured.
-    add_kind(entry) { kinds.push(entry); },
+    // One piece per app start that ran a kind: its wall time from before start_app to after stop, plus what the instance measured.
+    add_kind({ app, kind, wall_ms, startups, peak_memory_kb }) { pieces.push({ name: `${app}/${kind}`, wall_ms, startups, peak_memory_kb }); },
+    report,
     write() {
       mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, `${JSON.stringify({ total_ms: Date.now() - started_at, kinds, sections }, null, 2)}\n`);
+      writeFileSync(file, `${JSON.stringify(report(), null, 2)}\n`);
     },
   };
 }
