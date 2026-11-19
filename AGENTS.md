@@ -79,7 +79,7 @@ Treat this repository as public.
 Run `npm ci` once. Add each new command here in the commit that adds it.
 
 - `npm run check`: lint, typecheck and test. Run it before every commit.
-- `npm run lint`: typescript-eslint on `src/` and `tools/`: `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`, strict `no-unused-vars` (`_` prefix spares a name), `no-eval` and a ban on a silent `.catch`/`.then` handler (use a helper from `src/shared/swallow.ts`). Copied from DesertFox with two departures: `vendor/` is ignored in place of `web-ext-artifacts/`, and the warn prefix is `desertbird:`.
+- `npm run lint`: typescript-eslint on `src/`: `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`, strict `no-unused-vars` (`_` prefix spares a name), `no-eval` and a ban on a silent `.catch`/`.then` handler (use a helper from `src/shared/swallow.ts`). Copied from DesertFox with three departures: `vendor/` is ignored in place of `web-ext-artifacts/`, the warn prefix is `desertbird:`, and the `tools/**/*.ts` glob stays but matches no file, because the tools here are `.mjs`.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
 - `npm test`: `node --test` on `test/**/*.test.ts`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
