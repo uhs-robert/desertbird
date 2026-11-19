@@ -43,6 +43,16 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   let first_answer_ms = null;
   let enabled_ms = null;
   const startups = [];
+  const helper_ask = async (name, timeout_ms = 20000, args = null) => {
+    const wanted = ++seq;
+    pending = { name, seq: wanted, args };
+    for (let waited = 0; waited < timeout_ms; waited += 100) {
+      const reply = existsSync(join(out_dir, "state_state.json")) ? JSON.parse(readFileSync(join(out_dir, "state_state.json"), "utf8")) : null;
+      if (reply?.seq === wanted) return reply;
+      await sleep(100);
+    }
+    throw new Error(`the helper add-on did not answer ${name}`);
+  };
   const start_child_app = () => {
     app_exit = null;
     started_at = Date.now();
@@ -52,28 +62,67 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     app_child = session.spawn_app([app_binary, "-profile", profile_dir, "-no-remote"], "app.log");
     app_child.on("exit", (code, signal) => { app_exit = { code, signal }; });
   };
-  // Waits the full fixed startup. Meanwhile it asks for "state" with seq 0 (ask() counts from 1) until the reply shows DesertBird enabled
-  // and a mail tab, and times the first reply and those two, so the real startup time is measured while the wait stays as it was.
+  // The helper add-on answers "state" before DesertBird has its keys live, so the ready signal has two steps under the one ceiling `startup_ms`.
+  // First it asks for "state" with seq 0 (ask() counts from 1) until one reply shows DesertBird enabled and a mail tab.
+  // Then a key probe proves the keys are live: `t m` flips the message pane and the helper sees it. That is the one effect of a key the helper can read without a test hook in src/.
+  // Without the helper add-on there is nothing to ask, so that start keeps the fixed wait.
   const wait_startup = async () => {
+    if (!xpi_path) {
+      await sleep(startup_ms);
+      startups.push({ ceiling_ms: startup_ms, first_poll_ms: null, first_answer_ms: null, mail_tab_ms: null, enabled_ms: null, keys_live_ms: null });
+      return;
+    }
     const state_file = join(out_dir, "state_state.json");
     // A reply file left by the run before a restart could carry seq 0 too.
     rmSync(state_file, { force: true });
     const ask_state = () => { pending = { name: "state", seq: 0, args: null }; };
+    const elapsed = () => Date.now() - started_at;
+    let last = null;
+    const fail = (stage) => new Error(`${app} was not ready within E2E_STARTUP_MS (${startup_ms} ms): ${stage}. Last helper reply: ${last ? JSON.stringify({ desertbird_enabled: last.desertbird_enabled, mail_tab: last.mail_tab?.id ?? null }) : "none"}. App exit: ${JSON.stringify(app_exit)}. Log: ${join(work_dir, "app.log")}`);
+    const check_alive = (stage) => {
+      if (app_exit !== null) throw fail(`the app exited ${stage}`);
+      if (elapsed() > startup_ms) throw fail(stage);
+    };
     ask_state();
     let mail_tab_ms = null;
-    for (let waited = 0; waited < startup_ms; waited += 100) {
-      const reply = enabled_ms === null && existsSync(state_file) ? JSON.parse(readFileSync(state_file, "utf8")) : null;
+    while (enabled_ms === null) {
+      check_alive("the helper add-on never showed DesertBird enabled with a mail tab");
+      const reply = existsSync(state_file) ? JSON.parse(readFileSync(state_file, "utf8")) : null;
       if (reply?.seq === 0) {
-        first_answer_ms ??= Date.now() - started_at;
-        if (reply.mail_tab) mail_tab_ms ??= Date.now() - started_at;
+        last = reply;
+        first_answer_ms ??= elapsed();
+        if (reply.mail_tab) mail_tab_ms ??= elapsed();
         // Both conditions from the same reply, so a mail tab that closed again does not pair with an older enabled flag.
-        if (reply.desertbird_enabled === true && reply.mail_tab) enabled_ms = Date.now() - started_at;
+        if (reply.desertbird_enabled === true && reply.mail_tab) enabled_ms = elapsed();
         else { rmSync(state_file, { force: true }); ask_state(); }
       }
-      await sleep(100);
+      if (enabled_ms === null) await sleep(100);
     }
-    startups.push({ fixed_wait_ms: startup_ms, first_poll_ms, first_answer_ms, mail_tab_ms, enabled_ms });
-    console.log(`startup: helper polled at ${first_poll_ms} ms, first answer at ${first_answer_ms} ms, mail tab at ${mail_tab_ms} ms, DesertBird enabled with a mail tab at ${enabled_ms} ms, fixed wait ${startup_ms} ms`);
+    const pane_visible = async () => (await helper_ask("state", 3000).catch(() => null))?.mail_tab?.message_pane_visible ?? null;
+    // Escape first, so a `t` that landed alone does not pair with the `t` of the next try.
+    const press_probe = async () => {
+      for (const key of ["Escape", "t", "m"]) { await session.press(["-k", "Shift_L"]); await session.press(["-k", key]); }
+    };
+    const pane_start = await pane_visible();
+    if (pane_start === null) throw fail("the helper did not report the message pane");
+    // A key pressed before the window has painted and taken focus is dropped, so the probe is pressed again until the pane flips.
+    // Each try waits long enough for a slow key to land, and the restore below presses until the pane is back, so a late key cannot leave it flipped.
+    const settle_pane = async (want, tries_ms) => {
+      for (const until = Date.now() + tries_ms; Date.now() < until; await sleep(100)) if ((await pane_visible()) === want) return true;
+      return false;
+    };
+    do {
+      check_alive("the key probe `t m` never flipped the message pane, so the keys are not live");
+      await press_probe();
+    } while (!(await settle_pane(!pane_start, 1500)));
+    const keys_live_ms = elapsed();
+    while ((await pane_visible()) !== pane_start) {
+      check_alive("the key probe could not flip the message pane back");
+      await press_probe();
+      await settle_pane(pane_start, 1500);
+    }
+    startups.push({ ceiling_ms: startup_ms, first_poll_ms, first_answer_ms, mail_tab_ms, enabled_ms, keys_live_ms });
+    console.log(`startup: helper polled at ${first_poll_ms} ms, first answer at ${first_answer_ms} ms, mail tab at ${mail_tab_ms} ms, DesertBird enabled with a mail tab at ${enabled_ms} ms, keys live at ${keys_live_ms} ms, ceiling ${startup_ms} ms`);
   };
   let sampler = null;
   try {
@@ -112,16 +161,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     out_dir,
     sink_port: sink.address().port,
     // Queues a command for the helper add-on ("state", "select_tab" and so on) and returns its reply.
-    ask: async (name, timeout_ms = 20000, args = null) => {
-      const wanted = ++seq;
-      pending = { name, seq: wanted, args };
-      for (let waited = 0; waited < timeout_ms; waited += 100) {
-        const reply = existsSync(join(out_dir, "state_state.json")) ? JSON.parse(readFileSync(join(out_dir, "state_state.json"), "utf8")) : null;
-        if (reply?.seq === wanted) return reply;
-        await sleep(100);
-      }
-      throw new Error(`the helper add-on did not answer ${name}`);
-    },
+    ask: helper_ask,
     // Startup times of every start of this app (one more per restart) and the peak memory seen so far, in kB.
     startups,
     memory: () => sampler.peaks,
@@ -135,7 +175,6 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       if (app_exit === null) try { process.kill(-app_child.pid, "SIGKILL"); } catch {}
       for (let waited = 0; app_exit === null && waited < 5000; waited += 100) await sleep(100);
       if (app_exit === null) throw new Error("the old app did not exit after SIGKILL");
-      await sleep(2000);
       start_child_app();
       await wait_startup();
     },
