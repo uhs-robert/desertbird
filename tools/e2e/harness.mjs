@@ -99,9 +99,9 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       if (enabled_ms === null) await sleep(100);
     }
     const pane_visible = async () => (await helper_ask("state", 3000).catch(() => null))?.mail_tab?.message_pane_visible ?? null;
-    // Escape first, so a `t` that landed alone does not pair with the `t` of the next try.
+    // Escape first, so a `w` that landed alone does not pair with the `w` of the next try.
     const press_probe = async () => {
-      for (const key of ["Escape", "t", "m"]) { await session.press(["-k", "Shift_L"]); await session.press(["-k", key]); }
+      for (const key of ["Escape", "w", "m"]) { await session.press(["-k", "Shift_L"]); await session.press(["-k", key]); }
     };
     const pane_start = await pane_visible();
     if (pane_start === null) throw fail("the helper did not report the message pane");

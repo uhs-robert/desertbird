@@ -117,7 +117,7 @@ async function run_threads(instance, { app, kind, shot }) {
   expect("z M closes every thread", await keys(["j"]), id_of(1, 0));
   await keys(["G"]);
   // Hide the message pane so the list is tall enough to show several rows around the scrolled one.
-  await keys(["t", "m"]);
+  await keys(["w", "m"]);
   // The list shows about 21 of the 30 rows, so a row can only reach the top near the start and the bottom near the end.
   for (const [name, sequence, down] of [["top", ["z", "t"], ["5", "j"]], ["center", ["z", "z"], ["1", "5", "j"]], ["bottom", ["z", "b"], ["2", "5", "j"]]]) {
     await keys(["g", "g"]);
@@ -125,7 +125,7 @@ async function run_threads(instance, { app, kind, shot }) {
     await keys(sequence);
     await shot(`z_${name}`, `${down.slice(0, -1).join("")} rows down, then z ${sequence[1]}: the current row sits at the ${name} of the thread list`);
   }
-  await keys(["t", "m"]);
+  await keys(["w", "m"]);
   await keys(["g", "g"]);
 }
 
@@ -230,9 +230,9 @@ async function run_default(instance) {
   state = await instance.ask("state");
   check(app, kind, "no message is junk after the motions", Object.values(state.flags).every((flags) => !flags.junk));
 
-  // s, w and 1 must change nothing: same selection, folders and flags. The m key leads the message state keys now, so a lone m followed by a break key stands in for it: the stray m is dropped. w is unbound in every default tree (a archives, so it cannot stand here).
+  // s, x and 1 must change nothing: same selection, folders and flags. The m key leads the message state keys now, so a lone m followed by a break key stands in for it: the stray m is dropped. x is unbound in every default tree (a archives, so it cannot stand here).
   const before = await instance.ask("state");
-  for (const key of ["s", "m", "w", "1"]) await instance.press([key]);
+  for (const key of ["s", "m", "x", "1"]) await instance.press([key]);
   await sleep(1200);
   const after = await instance.ask("state");
   check(app, kind, "s, m w and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
@@ -849,21 +849,21 @@ async function run_panes(instance, { app, kind, shot }) {
 
   // A hidden pane takes no focus: the keys stay in the thread list, so Down moves the selection. Each check starts on the first row, so Down has a row to reach.
   await keys(["g", "g"]);
-  state = await keys(["t", "f"], 1500);
+  state = await keys(["w", "f"], 1500);
   const folder_pane_hidden = state.mail_tab?.folder_pane_visible === false;
   let list_row = first_selected(await keys(["H"], 1500));
   state = await down();
   check(app, kind, "H with the folder pane hidden leaves the focus in the thread list", folder_pane_hidden && first_selected(state) !== list_row && folder_of(state) === "/Inbox", `hidden ${folder_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
   await shot("panes_hidden_folder_H", "H with the folder pane hidden: a toast refuses it");
-  await keys(["t", "f"], 1500);
+  await keys(["w", "f"], 1500);
   await keys(["g", "g"]);
-  state = await keys(["t", "m"], 1500);
+  state = await keys(["w", "m"], 1500);
   const message_pane_hidden = state.mail_tab?.message_pane_visible === false;
   list_row = first_selected(await press_state(ALT("l"), 1500));
   await shot("panes_hidden_message_alt_l", "A-l with the message pane hidden: a toast refuses it");
   state = await down();
   check(app, kind, "A-l with the message pane hidden leaves the focus in the thread list", message_pane_hidden && first_selected(state) !== list_row, `hidden ${message_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
-  await keys(["t", "m"], 1500);
+  await keys(["w", "m"], 1500);
 
   // A chord typed into a text field passes through to it: H types into the quick filter. After each chord an a typed next must still reach the field: no subject holds "Ha", so the list empties. Had the focus left for the list, a would archive instead.
   const listed_before = (await keys(["g", "g"])).listed.length;
@@ -1132,9 +1132,9 @@ async function run_hud(instance, { app, kind, shot }) {
   check(app, kind, "g then g with the panel up closes it", (await pixels_of("hud_after_complete")) === bare);
   // A key that leads nowhere cancels the sequence before the delay: no panel ever shows. The key is w, which nothing binds, alone or after g (g s opens the Sent folder). A prefix key such as z would start a new sequence and show its own panel.
   await instance.press(["g"]);
-  await instance.press(["w"]);
+  await instance.press(["x"]);
   await sleep(1500);
-  check(app, kind, "g w before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
+  check(app, kind, "g x before the delay shows no panel", (await pixels_of("hud_after_stray")) === bare);
   // Backspace goes back one key. After g p the panel shows the children of g p, and Backspace leaves the panel of g, which differs from no panel. The next g then completes g g from the kept g, so the panel goes. A Backspace that only ended the sequence would leave no panel.
   await instance.press(["g"]);
   await instance.press(["p"]);
@@ -1145,10 +1145,10 @@ async function run_hud(instance, { app, kind, shot }) {
   await instance.press(["g"]);
   await sleep(1200);
   check(app, kind, "g after that Backspace completes g g and closes the panel", (await pixels_of("hud_backspace_complete")) === bare);
-  // C-j with only the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
-  await instance.press(CTRL("j"));
+  // J with only the main mail tab is refused, so a toast shows for toast_error_ms (6 s).
+  await instance.press(["J"]);
   await sleep(1000);
-  await shot(`hud_toast_${theme}`, "a toast: C-j with one tab is refused");
+  await shot(`hud_toast_${theme}`, "a toast: J with one tab is refused");
   check(app, kind, "a refused command shows a toast", (await pixels_of("hud_toast_pixels")) !== bare);
   await sleep(7000);
   check(app, kind, "the toast is gone after toast_error_ms", (await pixels_of("hud_toast_gone")) === bare);
@@ -1627,18 +1627,18 @@ async function run_view_settings(instance, check_in) {
   }
   const panes = (current) => `${current.mail_tab?.message_pane_visible}/${current.mail_tab?.folder_pane_visible}`;
   const before = await instance.ask("state");
-  await instance.press(["t"]);
+  await instance.press(["w"]);
   state = await key_and_state(instance, ["m"]);
-  check(app, kind, "t m toggles the message pane", state.mail_tab?.message_pane_visible === !before.mail_tab?.message_pane_visible, `message/folder pane ${panes(before)} then ${panes(state)}`);
-  await instance.press(["t"]);
+  check(app, kind, "w m toggles the message pane", state.mail_tab?.message_pane_visible === !before.mail_tab?.message_pane_visible, `message/folder pane ${panes(before)} then ${panes(state)}`);
+  await instance.press(["w"]);
   state = await key_and_state(instance, ["m"]);
-  check(app, kind, "a second t m restores the message pane", state.mail_tab?.message_pane_visible === before.mail_tab?.message_pane_visible, `message/folder pane ${panes(state)}`);
-  await instance.press(["t"]);
+  check(app, kind, "a second w m restores the message pane", state.mail_tab?.message_pane_visible === before.mail_tab?.message_pane_visible, `message/folder pane ${panes(state)}`);
+  await instance.press(["w"]);
   const folder_toggled = await key_and_state(instance, ["f"]);
-  check(app, kind, "t f toggles the folder pane", folder_toggled.mail_tab?.folder_pane_visible === !before.mail_tab?.folder_pane_visible, `message/folder pane ${panes(before)} then ${panes(folder_toggled)}`);
-  await instance.press(["t"]);
+  check(app, kind, "w f toggles the folder pane", folder_toggled.mail_tab?.folder_pane_visible === !before.mail_tab?.folder_pane_visible, `message/folder pane ${panes(before)} then ${panes(folder_toggled)}`);
+  await instance.press(["w"]);
   state = await key_and_state(instance, ["f"]);
-  check(app, kind, "a second t f restores the folder pane", state.mail_tab?.folder_pane_visible === before.mail_tab?.folder_pane_visible);
+  check(app, kind, "a second w f restores the folder pane", state.mail_tab?.folder_pane_visible === before.mail_tab?.folder_pane_visible);
   check(app, kind, "the view keys changed no mail", instance.exited() === null);
 }
 
@@ -1792,27 +1792,43 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   check(app, kind, "tabs.update makes the mail tab active again", active_index(state) === 0, `active index ${active_index(state)}`);
   await shot("mail_tab_again", "main window back on the mail tab after the content tab opened");
 
-  // A bound chord runs, and Thunderbird's own action for it does not happen. C-j opens Saved Files by default, C-k moves focus to the global search.
+  // J and K switch tabs, and C-j opens Saved Files again because DesertBird has no key on it.
   const before_chord = main_window_tabs(await instance.ask("state"));
-  state = await key_and_state(instance, CTRL("j"), 1500);
-  check(app, kind, "C-j switches to the next tab", active_index(state) === 1, `active index ${active_index(state)}`);
-  check(app, kind, "C-j does not open Saved Files, which is Thunderbird's own action for it", main_window_tabs(state).length === before_chord.length && !main_window_tabs(state).some((tab) => /saved/i.test(`${tab.title} ${tab.type}`)), `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}:${tab.title}`))}`);
+  state = await key_and_state(instance, ["J"], 1500);
+  check(app, kind, "J switches to the next tab", active_index(state) === 1, `active index ${active_index(state)}`);
+  check(app, kind, "J opens no Saved Files tab", main_window_tabs(state).length === before_chord.length && !main_window_tabs(state).some((tab) => /saved/i.test(`${tab.title} ${tab.type}`)), `tabs ${JSON.stringify(main_window_tabs(state).map((tab) => `${tab.type}:${tab.title}`))}`);
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(1000);
 
-  // C-k runs from the mail tab only. With a content tab beside it, C-k from the mail tab wraps to the last tab.
-  state = await key_and_state(instance, CTRL("k"), 1500);
-  check(app, kind, "C-k switches to the previous tab, wrapping to the last", active_index(state) === main_window_tabs(state).length - 1, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
-  await shot("after_ctrl_k", "the content tab in front after C-k from the mail tab");
+  // With a content tab beside it, K from the mail tab wraps to the last tab.
+  state = await key_and_state(instance, ["K"], 1500);
+  check(app, kind, "K switches to the previous tab, wrapping to the last", active_index(state) === main_window_tabs(state).length - 1, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  await shot("after_k", "the content tab in front after K from the mail tab");
 
   // From the content tab no key works: record what a key does there.
   const log_before_content_key = instance.app_log().length;
-  state = await key_and_state(instance, CTRL("j"), 1500);
-  note(app, kind, "C-j from a content tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}, tab types ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}, log grew ${instance.app_log().length - log_before_content_key} bytes`);
+  state = await key_and_state(instance, ["J"], 1500);
+  note(app, kind, "J from a content tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}, tab types ${JSON.stringify(main_window_tabs(state).map((tab) => tab.type))}, log grew ${instance.app_log().length - log_before_content_key} bytes`);
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(1000);
 
-  // Thunderbird's own C-j ran there and opened Saved Files, so the helper closes every extra tab. Then a fresh content tab measures tabs.remove away from the mail tab.
+  // The t group does the same from the mail tab. A content tab runs no key but Alt+Q, so each press starts on the mail tab.
+  await instance.press(["t"]);
+  state = await key_and_state(instance, ["n"], 1500);
+  check(app, kind, "t n switches to the next tab", active_index(state) === 1, `active index ${active_index(state)}`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  await instance.press(["t"]);
+  state = await key_and_state(instance, ["p"], 1500);
+  check(app, kind, "t p switches to the previous tab, wrapping to the last", active_index(state) === main_window_tabs(state).length - 1, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(1000);
+  // Ctrl+J is Thunderbird's again and opens Saved Files.
+  const before_ctrl_j = main_window_tabs(await instance.ask("state")).length;
+  state = await key_and_state(instance, CTRL("j"), 2000);
+  check(app, kind, "C-j opens Saved Files again, since DesertBird has no key on it", main_window_tabs(state).length === before_ctrl_j + 1, `tabs ${before_ctrl_j} then ${main_window_tabs(state).length}`);
+
+  // The helper closes every extra tab. Then a fresh content tab measures tabs.remove away from the mail tab.
   await instance.ask("reset_tabs");
   await sleep(1000);
   await instance.ask("open_content_tab");
@@ -1830,10 +1846,10 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const message_tab_count = main_window_tabs(state).length;
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(1000);
-  state = await key_and_state(instance, CTRL("j"), 1500);
-  check(app, kind, "C-j reaches the message tab from the mail tab", active_index(state) === 1 && message_tab_count === 2, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
-  state = await key_and_state(instance, CTRL("k"), 1500);
-  note(app, kind, "C-k from a message tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  state = await key_and_state(instance, ["J"], 1500);
+  check(app, kind, "J reaches the message tab from the mail tab", active_index(state) === 1 && message_tab_count === 2, `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
+  state = await key_and_state(instance, ["K"], 1500);
+  note(app, kind, "K from a message tab", `active index ${active_index(state)} of ${main_window_tabs(state).length}`);
   // q in the mail tab closes nothing: the main tab stays and the tab count holds.
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(1000);
@@ -2437,8 +2453,13 @@ async function run_message_scripts(instance) {
   }
   await instance.ask("select_tab", 20000, { index: 1 });
   await sleep(1000);
-  state = await key_and_state(instance, CTRL("k"), 1500);
-  check(app, kind, "message tab: C-k switches to the mail tab", active_index(state) === 0, `active ${active_index(state)}`);
+  state = await key_and_state(instance, ["K"], 1500);
+  check(app, kind, "message tab: K switches to the mail tab", active_index(state) === 0, `active ${active_index(state)}`);
+  await instance.ask("select_tab", 20000, { index: 1 });
+  await sleep(1000);
+  await instance.press(["t"]);
+  state = await key_and_state(instance, ["0"], 1500);
+  check(app, kind, "message tab: t 0 goes to the first tab", active_index(state) === 0, `active ${active_index(state)}`);
   await instance.ask("select_tab", 20000, { index: 1 });
   await sleep(1500);
   state = await key_and_state(instance, ["q"], 1500);
@@ -2465,8 +2486,8 @@ async function run_message_scripts(instance) {
   state = await flag_keys();
   check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys();
-  state = await key_and_state(instance, CTRL("j"), 1500);
-  check(app, kind, "message window: C-j changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+  state = await key_and_state(instance, ["J"], 1500);
+  check(app, kind, "message window: J changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   state = await key_and_state(instance, ["q"], 2500);
   check(app, kind, "message window: q closes the window", !state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await instance.ask("close_message_windows");

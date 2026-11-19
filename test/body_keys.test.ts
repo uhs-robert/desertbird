@@ -383,21 +383,22 @@ test("the mail keys send their command to the background, are cancelled and scro
         assert.deepEqual(window.scrolls, []);
     }
     const { window, sent } = await started();
-    assert.equal(window.press("j", { ctrlKey: true }).cancelled, true);
-    assert.equal(window.press("k", { ctrlKey: true }).cancelled, true);
-    assert.deepEqual(sent, [invoked("tab.next"), invoked("tab.prev")]);
+    for (const [key, options] of [["J", {}], ["K", {}], ["j", { altKey: true }], ["k", { altKey: true }]] as const) assert.equal(window.press(key, options).cancelled, true, key);
+    for (const key of ["t", "n", "t", "p"]) window.press(key);
+    assert.deepEqual(sent, [invoked("tab.next"), invoked("tab.prev"), invoked("tab.next"), invoked("tab.prev"), invoked("tab.next"), invoked("tab.prev")]);
+    assert.equal(window.press("j", { ctrlKey: true }).cancelled, false, "Ctrl+J has no key now, so Thunderbird gets it");
 });
 
 test("keys that need the thread list send nothing from a message", async () => {
     const { window, sent } = await started();
-    for (const keys of [["z", "z"], ["]", "u"], ["F", "t"], ["t", "m"]]) for (const key of keys) window.press(key);
+    for (const keys of [["z", "z"], ["]", "u"], ["F", "t"], ["w", "m"]]) for (const key of keys) window.press(key);
     assert.deepEqual(sent, []);
 });
 
 // The message tree lacks these prefixes, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
 test("a list prefix swallows its next key in a message, so u and a after it run nothing", async () => {
     const { window, sent } = await started();
-    for (const prefix of ["]", "[", "F", "s", "z", "t", "M", "'"]) for (const key of ["u", "a"]) {
+    for (const prefix of ["]", "[", "F", "s", "z", "w", "M", "'"]) for (const key of ["u", "a"]) {
         const before = sent.length;
         window.press(prefix);
         window.press(key);
@@ -413,7 +414,7 @@ test("a mail sequence typed in a message runs nothing, also under a prefix the m
     const { window, sent } = await started();
     window.elements = [Object.assign(new StubElement(), { href: "https://example.org/x" })];
     // `y ] a`: a stray `y` must not stop `] a` from being a list sequence.
-    for (const keys of [[";", ";", "y"], ["]", "a"], ["F", "a"], ["s", "a"], ["2", "t", "a"], ["y", "]", "a"]]) {
+    for (const keys of [[";", ";", "y"], ["]", "a"], ["F", "a"], ["s", "a"], ["2", "w", "a"], ["y", "]", "a"]]) {
         for (const key of keys) window.press(key);
         assert.deepEqual(sent.splice(0), [], keys.join(" "));
         assert.deepEqual(window.appended, [], `${keys.join(" ")} shows no labels`);
@@ -608,7 +609,8 @@ test("a null user binding removes a message key whatever its spelling, and one f
     const without_j = message_tree_json({ j: null });
     assert.doesNotMatch(without_j, /message\.scroll_down/);
     assert.match(without_j, /message\.scroll_up/);
-    assert.doesNotMatch(message_tree_json({ "<C-J>": null }), /tab\.next/);
+    const next_keys = (json: string) => json.match(/tab\.next/g)?.length ?? 0;
+    assert.equal(next_keys(message_tree_json({ "<A-J>": null })), next_keys(message_tree_json({})) - 1);
     assert.equal(message_tree_json({ Q: null }), message_tree_json({}));
 });
 
@@ -640,7 +642,7 @@ test("a half-typed sequence reports its prefix, and each way it ends reports an 
     window.press("g");
     window.press("j", { target: { localName: "input" } });
     window.press("g");
-    window.press("w");
+    window.press("x");
     assert.deepEqual(reports, [["g"], [], ["g"], [], ["g"], [], ["g"], [], ["g"], []]);
 });
 

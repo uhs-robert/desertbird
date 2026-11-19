@@ -156,8 +156,8 @@ test("the view keys run the planned commands with the planned args", () => {
         Fa: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
         sd: { id: "sort.set", args: { by: "date", order: "descending" }, label: "Date" },
         so: { id: "sort.set", args: { by: "current", order: "toggle" }, label: "Toggle direction" },
-        tm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
-        tf: { id: "pane.toggle", args: { pane: "folder" }, label: "Folder pane" },
+        wm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
+        wf: { id: "pane.toggle", args: { pane: "folder" }, label: "Folder pane" },
     };
     for (const [keys, binding] of Object.entries(planned)) assert.deepEqual(normal[keys], binding, keys);
 });
@@ -165,17 +165,20 @@ test("the view keys run the planned commands with the planned args", () => {
 test("the tab commands keep their keys and bridge values: moving between tabs is harmless, closing one is not", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
     const bound = (keys: string) => (normal[keys] as { id: string } | undefined)?.id;
-    assert.equal(bound("<C-j>"), "tab.next");
-    assert.equal(bound("<C-k>"), "tab.prev");
+    for (const keys of ["J", "<A-j>", "tn"]) assert.equal(bound(keys), "tab.next", keys);
+    for (const keys of ["K", "<A-k>", "tp"]) assert.equal(bound(keys), "tab.prev", keys);
+    assert.deepEqual(normal["t0"], { id: "tab.switch", args: { tab: "1" }, label: "First tab" });
+    assert.deepEqual(normal["tT"], normal["T"] && { ...(normal["T"] as object), label: "Switch tab" });
+    for (const keys of ["<C-j>", "<C-k>", "tm", "tf"]) assert.equal(normal[keys], undefined, keys);
     assert.equal(bound("q"), "tab.close");
     for (const id of ["tab.next", "tab.prev", "tab.switch"]) assert.equal(registry.get(id)?.bridge, true, id);
     assert.equal(registry.get("tab.close")?.bridge, false);
 });
 
-test("tab.switch takes a typed value, so it has no default key and its validator needs one", () => {
+test("tab.switch takes a typed value, so its one default key is t0 and its validator needs a value", () => {
     const switch_tab = registry.get("tab.switch");
     assert.ok(switch_tab);
-    assert.equal(Object.values(DEFAULT_KEYMAP.normal ?? {}).some((binding) => binding && !Array.isArray(binding) && binding.id === "tab.switch"), false);
+    assert.deepEqual(Object.entries(DEFAULT_KEYMAP.normal ?? {}).filter(([, binding]) => binding && !Array.isArray(binding) && binding.id === "tab.switch").map(([keys]) => keys), ["t0"]);
     assert.equal(check_args(switch_tab, { tab: "2" }).ok, true);
     assert.equal(check_args(switch_tab, {}).ok, false);
     assert.equal(check_args(switch_tab, { tab: "2", extra: "x" }).ok, false);
@@ -193,14 +196,14 @@ test("the reading keys bind in the message keymap only, so j and k keep scrollin
 
 test("the message keymap carries the mail keys of the message-capable groups with the ids of the mail tab, and none that need the list", () => {
     const message = default_keymap_of("message").normal ?? {};
-    for (const keys of ["a", "dd", "r", "R", "gF", "c", "yy", "ys", "<C-l>", "mr", "ms", "mj", "mfd", "mzt", ":", "mt", "<C-j>", "<C-k>", "q"]) assert.deepEqual(message[keys], DEFAULT_KEYMAP.normal?.[keys], keys);
+    for (const keys of ["a", "dd", "r", "R", "gF", "c", "yy", "ys", "<C-l>", "mr", "ms", "mj", "mfd", "mzt", ":", "mt", "J", "K", "<A-j>", "<A-k>", "tn", "tp", "t0", "tT", "q"]) assert.deepEqual(message[keys], DEFAULT_KEYMAP.normal?.[keys], keys);
     const excluded = /^(motion|step|view|folder|jump|mark)\.|^thread\.(?!open_conversation)|^(repeat\.last|visual\.toggle|filter\.set)$/;
     for (const [keys, binding] of Object.entries(message)) {
         const id = binding && !Array.isArray(binding) ? binding.id : "";
         assert.equal(excluded.test(id), false, keys);
         assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? ""), keys);
     }
-    for (const keys of ["mR", "Ft", "Ff", "ss", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "tm", "gi"]) assert.equal(message[keys], undefined, keys);
+    for (const keys of ["mR", "Ft", "Ff", "ss", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "wm", "wf", "gi"]) assert.equal(message[keys], undefined, keys);
 });
 
 // Every id here was audited for the bridge: it moves the view or the selection and does no harm doing so. A command newly marked `bridge: true` fails this test until it is reviewed and added. The bridge rules still refuse `repeat.last` and `hint.pick`, and every command that does not run in the background.

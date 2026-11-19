@@ -41,7 +41,7 @@ test("every group of both trees has a name, and the panel title is the chain of 
 
 test("the root lists each group by its name", () => {
     const root = rows_of(mail_root, []);
-    const names = { g: "Go", m: "Message", F: "Filter", s: "Sort", ",": "DesertBird", t: "Panes", z: "List view", y: "Copy", ";": "Hints", "]": "Next", "[": "Previous", M: "Set mark", "'": "Jump to mark", d: "Delete" };
+    const names = { g: "Go", m: "Message", F: "Filter", s: "Sort", ",": "DesertBird", t: "Tabs", w: "Panes", z: "Zoom and scroll", y: "Copy", ";": "Hints", "]": "Next", "[": "Previous", M: "Set mark", "'": "Jump to mark", d: "Delete" };
     for (const [key, name] of Object.entries(names)) assert.equal(root[key], name, key);
 });
 

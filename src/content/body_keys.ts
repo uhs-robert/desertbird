@@ -154,7 +154,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     window.addEventListener("keydown", on_keydown, true);
     // The labels sit at fixed places. They end when the page moves under them, the window loses the focus or a click lands elsewhere.
     for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, () => context.hints.cancel(), true);
-    // A half-typed `d` must not wait across a tab switch, or `d`, `<C-j>`, `<C-k>`, `d` trashes a message.
+    // A half-typed `d` must not wait across a tab switch, or `d`, `J`, `K`, `d` trashes a message.
     window.addEventListener("blur", reset_sequence, true);
     runtime.onMessage.addListener((message) => {
         const request = message as Partial<BodyFindRequest> | null;

@@ -34,7 +34,7 @@ Betterbird is `/usr/bin/betterbird`. Override a binary with `--binary thunderbir
 
 ## Startup
 
-`start_app` and `restart` return when the app is ready, not after a fixed wait. Ready is two steps. First the helper add-on answers `state` with DesertBird enabled and a mail tab. Then a key probe: Escape, `t`, `m` flips the message pane and the helper sees the flip. The probe is pressed until a press lands, because a key before the first paint and focus is dropped. It then presses until the pane is back as it was and has held that value for 1.5 s. `restart` waits for the old process to exit and clears the old reply file before it asks, so a stale answer never counts. If the ceiling `E2E_STARTUP_MS` passes first, the start fails with the stage it was in and the log path. A start with no helper add-on (the setup proof without `--xpi`) has nothing to ask and keeps the fixed wait.
+`start_app` and `restart` return when the app is ready, not after a fixed wait. Ready is two steps. First the helper add-on answers `state` with DesertBird enabled and a mail tab. Then a key probe: Escape, `w`, `m` flips the message pane and the helper sees the flip. The probe is pressed until a press lands, because a key before the first paint and focus is dropped. It then presses until the pane is back as it was and has held that value for 1.5 s. `restart` waits for the old process to exit and clears the old reply file before it asks, so a stale answer never counts. If the ceiling `E2E_STARTUP_MS` passes first, the start fails with the stage it was in and the log path. A start with no helper add-on (the setup proof without `--xpi`) has nothing to ask and keeps the fixed wait.
 
 ## Timings
 
