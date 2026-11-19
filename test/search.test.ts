@@ -318,7 +318,8 @@ function line_setup(options: { commit_error?: string; commit_gate?: Promise<void
     const histories: string[] = [];
     const service = create_cmdline_service({
         registry,
-        read_prompt: async () => "caret", read_widgets: async () => [],
+        read_prompt: async () => "caret",
+        read_widgets: async () => [],
         sources: { key_trees: async () => ({ mail: no_keys, message: no_keys }), folders: async () => [], tags: async () => [], tabs: async () => [] },
         overlay: { mount: async () => {}, unmount: async (args) => void log.push(`unmount ${args.windowId}`), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         history: { record: async () => {} },

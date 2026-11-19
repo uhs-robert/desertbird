@@ -1342,6 +1342,14 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await shot("cmdline_typed", "the line after j and a were typed into it");
   await close_command_line(instance);
   await shot("cmdline_closed", "the window after Escape, with no command line");
+  state = await key_and_state(instance, ["j"], 800);
+  check(app, kind, "after Escape a bound key runs again", selection_of(state) !== selected_before, `selected ${selected_before} then ${selection_of(state)}`);
+  const row_after_j = selection_of(state);
+  await instance.press(["-k", "Down"]);
+  await sleep(800);
+  state = await instance.ask("state");
+  check(app, kind, "after Escape the list has focus: Thunderbird's own Down moves the selection", selection_of(state) !== row_after_j && selection_of(state) !== "", `selected ${row_after_j} then ${selection_of(state)}`);
+
   // The widgets at the right end of the line: the folder and [n/m] at the normal width, none on a search line, none in a window under 30rem.
   await instance.press([":"]);
   await sleep(1500);
@@ -1359,13 +1367,6 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await close_command_line(instance);
   await instance.ask("close_normal_window", 10000, { id: narrow });
   await sleep(2000);
-  state = await key_and_state(instance, ["j"], 800);
-  check(app, kind, "after Escape a bound key runs again", selection_of(state) !== selected_before, `selected ${selected_before} then ${selection_of(state)}`);
-  const row_after_j = selection_of(state);
-  await instance.press(["-k", "Down"]);
-  await sleep(800);
-  state = await instance.ask("state");
-  check(app, kind, "after Escape the list has focus: Thunderbird's own Down moves the selection", selection_of(state) !== row_after_j && selection_of(state) !== "", `selected ${row_after_j} then ${selection_of(state)}`);
 
   // The keys column: archive, delete and reply are listed by msg. words, and sort by its own name.
   for (const word of ["msg.ar", "msg.del", "msg.rep", "sort"]) {

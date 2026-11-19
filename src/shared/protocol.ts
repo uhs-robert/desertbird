@@ -356,7 +356,6 @@ export interface CmdlineCompletion {
 
 export type SearchDirection = "forward" | "backward";
 
-/** `prompt` is the `cmdline_prompt` setting. `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. `confirm` is set when the background mounted the page for a confirm prompt and not for a command line. */
 /** One status widget at the right end of the command line. `kind` names the widget for its style. */
 export interface StatusWidget {
     kind: "folder" | "position";
@@ -368,6 +367,7 @@ export interface CmdlineWidgets {
     widgets: StatusWidget[];
 }
 
+/** `prompt` is the `cmdline_prompt` setting. `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. `confirm` is set when the background mounted the page for a confirm prompt and not for a command line. */
 export type CmdlineHello = { open: true; text: string; prompt: string; search?: SearchDirection } | { open: false; confirm?: ConfirmPrompt };
 
 export type ConfirmAction = "archive" | "trash" | "move";
