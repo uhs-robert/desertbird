@@ -24,8 +24,8 @@ function leaf_at(root: TreeBranch, ...tokens: string[]): { id: string; args?: un
 test("the default page tree holds the reading keys, the tab keys, the command line, the key list and the page chords", () => {
     const root = root_of();
     assert.deepEqual(
-        [["j"], ["k"], ["<C-d>"], ["<C-u>"], ["g", "g"], ["G"], ["q"], ["<A-q>"], [":"], ["g", "?"], ["<C-j>"], ["<C-k>"], ["g", "p", "a"], ["g", "p", "t"], ["g", "p", "c"]].map((tokens) => leaf_at(root, ...tokens)?.id),
-        ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom", "tab.close", "tab.close", "cmdline.open", "help.whichkey", "tab.next", "tab.prev", "app.open_page", "app.open_page", "app.open_page"],
+        [["j"], ["k"], ["<C-d>"], ["<C-u>"], ["g", "g"], ["G"], ["q"], ["<A-q>"], [":"], ["g", "?"], ["J"], ["K"], ["<A-j>"], ["<A-k>"], ["t", "n"], ["t", "p"], ["t", "0"], ["t", "T"], ["w", "m"], ["<C-j>"], ["g", "p", "a"], ["g", "p", "t"], ["g", "p", "c"]].map((tokens) => leaf_at(root, ...tokens)?.id),
+        ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom", "tab.close", "tab.close", "cmdline.open", "help.whichkey", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.switch", "cmdline.open", undefined, undefined, "app.open_page", "app.open_page", "app.open_page"],
     );
     assert.deepEqual(leaf_at(root, "g", "p", "c")?.args, { page: "config" });
 });
@@ -52,7 +52,11 @@ test("the page tree reads the same command table: the keys that gain a place are
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
     for (const id of ids_under(root_of())) assert.deepEqual(registry.get(id)?.needs?.filter((need) => (TAB_NEEDS as readonly string[]).includes(need)), ["tab"], id);
-    for (const token of ["m", "d", "s", "F", "y", ";", "]", "[", "t", "z", "o", "a", "r", "R", "f", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
+    for (const token of ["m", "d", "s", "F", "y", ";", "]", "[", "z", "o", "a", "r", "R", "f", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
+    const tabs_group = root_of().children["t"] as TreeBranch;
+    assert.equal(tabs_group.label, "Tabs");
+    assert.deepEqual(Object.keys(tabs_group.children).sort(), ["0", "T", "n", "p"]);
+    assert.equal(root_of().children["w"], undefined);
 });
 
 test("every command names a tab need, so a new command cannot leak into a tab by forgetting one", () => {

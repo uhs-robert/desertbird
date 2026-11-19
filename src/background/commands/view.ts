@@ -111,7 +111,7 @@ export const view: CommandGroup = {
         sr: sort_key("received", "descending", "Received"),
         sp: sort_key("priority", "ascending", "Priority"),
         so: sort_key("current", "toggle", "Toggle direction"),
-        tm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
-        tf: { id: "pane.toggle", args: { pane: "folder" }, label: "Folder pane" },
+        wm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
+        wf: { id: "pane.toggle", args: { pane: "folder" }, label: "Folder pane" },
     },
 };

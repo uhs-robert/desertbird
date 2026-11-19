@@ -3,7 +3,7 @@ import type { TabsApi } from "../handlers/tabs.ts";
 import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// These keys work in the mail tab, the reading pane, a message tab and a message window. In a message window there is no other tab, so `tab.next` and `tab.prev` refuse there.
+// These keys work in every tab (`J`, `K`, `<A-j>`, `<A-k>` and the `t` group). In a message window there is no other tab, so `tab.next` and `tab.prev` refuse there.
 export const tabs: CommandGroup = {
     commands: needing("tab", {
         "tab.next": { bridge: true, runs_in: "background", label: "Next tab", count: "repeat", intent: "Switch to the next tab. It wraps from the last tab to the first.", run: scoped<TabsApi>(next_tab) },
@@ -22,8 +22,13 @@ export const tabs: CommandGroup = {
         "tab.close_mail": { bridge: false, runs_in: "background", label: "Close tab (mail tab keys)", intent: "Close the current tab or message window. Its default keys are chords that run in the mail tab only, so copy and cut still work in message and web page tabs.", needs: ["list", "keys.paneFocus"], run: scoped<TabsApi>(close_tab) },
     }),
     normal_keys: {
-        "<C-j>": { id: "tab.next", label: "Next tab" },
-        "<C-k>": { id: "tab.prev", label: "Previous tab" },
+        J: { id: "tab.next", label: "Next tab" },
+        K: { id: "tab.prev", label: "Previous tab" },
+        "<A-j>": { id: "tab.next", label: "Next tab" },
+        "<A-k>": { id: "tab.prev", label: "Previous tab" },
+        tn: { id: "tab.next", label: "Next tab" },
+        tp: { id: "tab.prev", label: "Previous tab" },
+        t0: { id: "tab.switch", args: { tab: "1" }, label: "First tab" },
         q: { id: "tab.close", label: "Close tab" },
         "<C-x>": { id: "tab.close_mail", label: "Close tab" },
         "<C-c>": { id: "tab.close_mail", label: "Close tab" },

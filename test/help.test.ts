@@ -38,7 +38,7 @@ test("a key that sets args shows them", () => {
 
 test("a command with no key lists none, and the page can still show its usage", () => {
     const tab_switch = all_entries().find((entry) => entry.id === "tab.switch");
-    assert.deepEqual(tab_switch?.keys, []);
+    assert.deepEqual(tab_switch?.keys.map((key) => key.keys), ["t0"]);
     assert.equal(tab_switch?.word, "tab");
 });
 

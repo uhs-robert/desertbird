@@ -64,7 +64,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   };
   // The helper add-on answers "state" before DesertBird has its keys live, so the ready signal has two steps under the one ceiling `startup_ms`.
   // First it asks for "state" with seq 0 (ask() counts from 1) until one reply shows DesertBird enabled and a mail tab.
-  // Then a key probe proves the keys are live: `t m` flips the message pane and the helper sees it. That is the one effect of a key the helper can read without a test hook in src/.
+  // Then a key probe proves the keys are live: `w m` flips the message pane and the helper sees it. That is the one effect of a key the helper can read without a test hook in src/.
   // Without the helper add-on there is nothing to ask, so that start keeps the fixed wait.
   const wait_startup = async () => {
     if (!xpi_path) {
@@ -99,9 +99,9 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
       if (enabled_ms === null) await sleep(100);
     }
     const pane_visible = async () => (await helper_ask("state", 3000).catch(() => null))?.mail_tab?.message_pane_visible ?? null;
-    // Escape first, so a `t` that landed alone does not pair with the `t` of the next try.
+    // Escape first, so a `w` that landed alone does not pair with the `w` of the next try.
     const press_probe = async () => {
-      for (const key of ["Escape", "t", "m"]) { await session.press(["-k", "Shift_L"]); await session.press(["-k", key]); }
+      for (const key of ["Escape", "w", "m"]) { await session.press(["-k", "Shift_L"]); await session.press(["-k", key]); }
     };
     const pane_start = await pane_visible();
     if (pane_start === null) throw fail("the helper did not report the message pane");
@@ -113,7 +113,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     let changed_at = 0;
     let pressed_at = 0;
     for (;;) {
-      check_alive(keys_live_ms === null ? "the key probe `t m` never flipped the message pane, so the keys are not live" : "the key probe could not flip the message pane back");
+      check_alive(keys_live_ms === null ? "the key probe `w m` never flipped the message pane, so the keys are not live" : "the key probe could not flip the message pane back");
       const now = Date.now();
       const quiet = now - Math.max(changed_at, pressed_at) >= QUIET_MS;
       if (value === pane_start && keys_live_ms !== null && quiet) break;

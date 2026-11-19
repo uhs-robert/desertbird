@@ -30,6 +30,7 @@ export const cmdline: CommandGroup = {
         ss: { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" },
         Ft: { id: "cmdline.open", args: { text: "filter --tag --tag=" }, label: "By tag" },
         T: { id: "cmdline.open", args: { text: "tab " }, label: "Switch tab" },
+        tT: { id: "cmdline.open", args: { text: "tab " }, label: "Switch tab" },
         ";;": { id: "cmdline.open", args: { text: "hint " }, label: "Hint command line" },
     },
 };
