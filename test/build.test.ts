@@ -12,6 +12,7 @@ const HINTS_MAX_BYTES = Number(/HINTS_MAX_BYTES = (\d+);/.exec(readFileSync(join
 const FOLDERPANE_MAX_BYTES = Number(/FOLDERPANE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const CONTENT_MAX_BYTES = Number(/CONTENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const PAGES_MAX_BYTES = Number(/PAGES_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const PAGE_KEYS_MAX_BYTES = Number(/PAGE_KEYS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const COMPOSE_MAX_BYTES = Number(/COMPOSE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
@@ -66,7 +67,7 @@ const guard_prefixes = () => [...build_source().matchAll(/^const (\w+)_MAX_BYTES
 const number_of = (name: string) => Number(new RegExp(`^const ${name} = (\\d+);`, "m").exec(build_source())?.[1]);
 
 test("each size guard has a ceiling and is within it", () => {
-    assert.ok(guard_prefixes().length >= 6);
+    assert.ok(guard_prefixes().length >= 7);
     for (const prefix of guard_prefixes()) {
         const guard = number_of(`${prefix}_MAX_BYTES`);
         const ceiling = number_of(`${prefix}_CEILING_BYTES`);
@@ -134,6 +135,12 @@ test("the body script bundle stays within its size guard", () => {
 
 test("the pages bundle holds no code of the mail tab's key runtime, the hints or the folder pane", () => {
     assert.deepEqual(inputs["pages"]!.filter((input) => /^src\/chrome\/(runtime|motions|hint_[a-z]+|app_verbs|parent_(keys|hints|folderpane|overlay))\.ts$/.test(input)), []);
+});
+
+test("the own page script stays within its size guard", () => {
+    assert.ok(PAGE_KEYS_MAX_BYTES > 0 && PAGE_KEYS_MAX_BYTES < 100000);
+    const size = readFileSync(join(out_dir, "content/page_keys.js")).length;
+    assert.ok(size <= PAGE_KEYS_MAX_BYTES, `page_keys.js is ${size} bytes, over ${PAGE_KEYS_MAX_BYTES}`);
 });
 
 test("the compose script bundle takes only its own files and the shared protocol (which names the matcher file for a type, shaken out of the bundle), and stays within its guard", () => {

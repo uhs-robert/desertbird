@@ -47,6 +47,10 @@ const COMPOSE_CEILING_BYTES = 8192;
 const PAGES_MAX_BYTES = 22800;
 const PAGES_CEILING_BYTES = 34816;
 
+// `content/page_keys.js`, the message key script that runs on the own pages (options, help).
+const PAGE_KEYS_MAX_BYTES = 20600;
+const PAGE_KEYS_CEILING_BYTES = 31744;
+
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
 for (const [, prefix, guard] of own_source.matchAll(/^const (\w+)_MAX_BYTES = (\d+);/gm)) {
@@ -160,6 +164,11 @@ for (const [name, bytes] of parent_sizes) {
 
 if (message_display_bytes > CONTENT_MAX_BYTES) {
     console.error(`build: content/message_display.js is ${message_display_bytes} bytes, over the ${CONTENT_MAX_BYTES} byte message script budget`);
+    process.exit(1);
+}
+
+if (page_keys_bytes > PAGE_KEYS_MAX_BYTES) {
+    console.error(`build: content/page_keys.js is ${page_keys_bytes} bytes, over the ${PAGE_KEYS_MAX_BYTES} byte own page script budget`);
     process.exit(1);
 }
 

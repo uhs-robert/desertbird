@@ -195,6 +195,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
 | `experiment/pages.js` | 22800 | 34816 |
+| `content/page_keys.js` | 20600 | 31744 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
 The ceilings are provisional, about 1.5 times the guard of the day they were set (2026-11-18). A guard rises in steps of 512 bytes. The guards above predate that step and are not multiples of it, so the step applies to later raises only.
@@ -231,6 +232,10 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 ### Pages bundle
 
 `experiment/pages.js` (the `pages` Experiment) holds the key runtime of every tab that is not the mail tab. Its first measured size was 18982 bytes. That plus 20 percent made 22779, rounded up to 22800. The bundle carries its own copy of the vendored matcher and key token code, which `keys.js` holds too, because Experiment scopes share no modules. The ceiling is 1.5 times the guard rounded up to 1024. The planning estimate of 4.5 to 7 KB assumed a minified build: the bundle is unminified like the others.
+
+### Own page script bundle
+
+`content/page_keys.js` runs the message key script on the own pages (options, help). It had no guard. Its first guarded size was 17149 bytes. That plus 20 percent made 20579, rounded up to 20600. The ceiling is 1.5 times the guard rounded up to 1024.
 
 ### Folder pane bundle
 
