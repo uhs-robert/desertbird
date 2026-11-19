@@ -162,7 +162,7 @@ async function tab_command(command) {
     return { opened: await browser.runtime.sendMessage(own.id, command.args.page) };
   }
   if (command.name === "open_popup_window") return { opened: (await browser.windows.create({ type: "popup", url: "about:blank" })).id };
-  if (command.name === "open_normal_window") return { opened: (await browser.windows.create({ type: "normal" })).id };
+  if (command.name === "open_normal_window") return { opened: (await browser.windows.create({ type: "normal", ...command.args })).id };
   // The remove call can outlast the answer on a main window, so it is not awaited.
   if (command.name === "close_normal_window") return { closed: (browser.windows.remove(command.args.id).catch(console.error), true) };
   if (command.name === "close_popup_window") return { closed: await browser.windows.remove(command.args.id).then(() => true) };

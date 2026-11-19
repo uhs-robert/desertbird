@@ -1,6 +1,6 @@
 // The command line page. It draws the line and the completion rows and reads keys. Parsing, completion and running live in the background: this page sends the text and shows the answer.
 
-import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, ConfirmAnswerRequest, ConfirmAnswerResult, ConfirmPrompt, SearchDirection } from "../shared/protocol.ts";
+import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, CmdlineWidgets, ConfirmAnswerRequest, ConfirmAnswerResult, ConfirmPrompt, SearchDirection, StatusWidget } from "../shared/protocol.ts";
 import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
 import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
@@ -23,6 +23,7 @@ const input = document.getElementById("input") as HTMLInputElement;
 const list_element = document.getElementById("list") as HTMLDivElement;
 const note_element = document.getElementById("note") as HTMLDivElement;
 const prompt_element = document.getElementById("prompt") as HTMLSpanElement;
+const status_element = document.getElementById("status") as HTMLSpanElement;
 
 // Set when the line opened as a search line (`/` forward, `?` backward). It has no completion rows, and the background filters the list as the text changes.
 let search_direction: SearchDirection | undefined;
@@ -354,6 +355,12 @@ function show_prompt(setting: string): void {
     prompt_element.classList.toggle("desertfox-cmdline-prompt-colon", look.colon);
 }
 
+// Drawn once, a moment after the line opens: each widget is a snapshot. A failed read leaves the area hidden, because the widgets only decorate the line.
+function show_widgets(widgets: StatusWidget[]): void {
+    status_element.replaceChildren(...widgets.map((widget) => Object.assign(document.createElement("span"), { textContent: widget.text, className: `widget-${widget.kind}` })));
+    status_element.hidden = widgets.length === 0;
+}
+
 async function start(): Promise<void> {
     const hello = await send<CmdlineHello>({ type: "cmdline.hello", windowId: window_id });
     if (!hello.open) {
@@ -372,6 +379,8 @@ async function start(): Promise<void> {
     // History is a local read, so it goes first: a failed completion request must not skip it.
     await load_history();
     if (!search_direction) await refresh_completion();
+    // Last: the first read loads the folder pane script, which must not delay the focus or the completion rows.
+    if (!search_direction) send<CmdlineWidgets>({ type: "cmdline.widgets", windowId: window_id }).then(({ widgets }) => show_widgets(widgets), () => {});
 }
 
 start().catch(report_failure);

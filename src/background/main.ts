@@ -10,6 +10,7 @@ import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
 import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
+import { create_widget_reader } from "./cmdline/status_widgets.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
 import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
@@ -254,6 +255,7 @@ const cmdline = create_cmdline_service({
     },
     overlay: command_line_overlay,
     read_prompt: async () => (await config_store.read()).settings.cmdline_prompt,
+    read_widgets: create_widget_reader(messenger, async () => (await config_store.read()).settings.statusbar_widgets),
     history: create_cmdline_history(messenger.storage.local),
     search_history: create_cmdline_history(messenger.storage.local, SEARCH_HISTORY_STORAGE_KEY),
     search,

@@ -167,7 +167,7 @@ export const EXPERIMENT_VERBS = {
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
     hints: { functions: ["sendEnter", "pick"], events: [] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
-    folderpane: { functions: ["fold", "focused"], events: [] },
+    folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -233,10 +233,15 @@ export interface FolderpaneFocusedArgs {
     windowId: number;
 }
 
-/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. */
+export interface FolderpaneViewRowCountArgs {
+    windowId: number;
+}
+
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `keys.viewRows` does not tell. It sits here because the key script has no room for it. */
 export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
     focused(args: FolderpaneFocusedArgs): Promise<boolean>;
+    viewRowCount(args: FolderpaneViewRowCountArgs): Promise<number>;
 }
 
 export type Pane = "folders" | "threads" | "message";
@@ -323,6 +328,7 @@ export interface BodyYankRequest {
 /** Messages from the command line page to the background, sent with `runtime.sendMessage`. The page learns its `windowId` from the address the overlay loaded it with. */
 export type CmdlineRequest =
     | { type: "cmdline.hello"; windowId: number }
+    | { type: "cmdline.widgets"; windowId: number }
     | { type: "cmdline.complete"; windowId: number; text: string; caret: number }
     | { type: "cmdline.run"; windowId: number; text: string }
     | { type: "cmdline.close"; windowId: number }
@@ -349,6 +355,17 @@ export interface CmdlineCompletion {
 }
 
 export type SearchDirection = "forward" | "backward";
+
+/** One status widget at the right end of the command line. `kind` names the widget for its style. */
+export interface StatusWidget {
+    kind: "folder" | "position";
+    text: string;
+}
+
+/** The answer to `cmdline.widgets`: the widgets drawn once, as the line opens. Empty for a search line or a line that is closed. */
+export interface CmdlineWidgets {
+    widgets: StatusWidget[];
+}
 
 /** `prompt` is the `cmdline_prompt` setting. `search` is set when the line opened as a search line (`/` or `?`): the page then shows that prompt and asks for no completion. `confirm` is set when the background mounted the page for a confirm prompt and not for a command line. */
 export type CmdlineHello = { open: true; text: string; prompt: string; search?: SearchDirection } | { open: false; confirm?: ConfirmPrompt };

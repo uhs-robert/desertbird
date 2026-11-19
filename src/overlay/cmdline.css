@@ -10,4 +10,7 @@ body.confirming .desertfox-cmdline:not(.confirm) { display: none; }
 .confirm .headline { font-weight: 700; margin: 4px 0; }
 .confirm .more { color: var(--desertfox-fg-comment); }
 .confirm .keys { margin-bottom: 6px; color: var(--desertfox-primary); }
+/* A long folder name gives way to the input: the folder shrinks with an ellipsis and the position keeps its width. */
+.desertfox-cmdline-status .widget-folder { min-width: 0; max-width: 20ch; overflow: hidden; text-overflow: ellipsis; }
+.desertfox-cmdline-status { min-width: 0; }
 [hidden] { display: none !important; }

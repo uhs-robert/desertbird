@@ -4,7 +4,7 @@ import { focused_pane } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
-import type { FolderpaneFoldArgs, FolderpaneFocusedArgs } from "../shared/protocol.ts";
+import type { FolderpaneFoldArgs, FolderpaneFocusedArgs, FolderpaneViewRowCountArgs } from "../shared/protocol.ts";
 
 interface FolderRowLike {
     classList: { contains(name: string): boolean };
@@ -23,6 +23,7 @@ interface FolderTreeLike {
 
 interface FolderPane {
     folderTree: FolderTreeLike;
+    gDBView?: { rowCount: number };
     browsingContext: { topChromeWindow: MainWindow };
 }
 
@@ -61,6 +62,7 @@ export function get_folderpane_api(context: ExtensionContext) {
                 return in_folder_pane;
             }),
             focused: guard("folderpane.focused", ({ windowId }: FolderpaneFocusedArgs): boolean => has_focus(pane_of(windowId))),
+            viewRowCount: guard("folderpane.viewRowCount", ({ windowId }: FolderpaneViewRowCountArgs): number => pane_of(windowId).gDBView?.rowCount ?? 0),
         },
     };
 }

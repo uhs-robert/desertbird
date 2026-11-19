@@ -66,4 +66,8 @@ test("a custom prompt keeps its leading and trailing spaces, and a list setting 
     assert.deepEqual(parse_setting_text("cmdline_prompt", " $ "), { value: " $ " });
     assert.deepEqual(parse_setting_text("cmdline_prompt", ""), { error: "expected 1 to 8 characters" });
     assert.deepEqual(parse_setting_text("which_key_skip", " gu , x "), { value: ["gu", "x"] });
+    assert.deepEqual(parse_setting_text("statusbar_widgets", " position , folder "), { value: ["position", "folder"] });
+    assert.deepEqual(parse_setting_text("statusbar_widgets", ""), { value: [] });
+    assert.deepEqual(parse_setting_text("statusbar_widgets", "folder, url"), { error: "expected a list of folder, position" });
+    assert.equal(setting_to_text("statusbar_widgets", ["folder", "position"]), "folder, position");
 });

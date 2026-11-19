@@ -34,6 +34,21 @@
             }
           }
         ]
+      },
+      {
+        "name": "viewRowCount",
+        "type": "function",
+        "async": true,
+        "description": "Answers how many rows the message list shows now. A closed thread counts its root only.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" }
+            }
+          }
+        ]
       }
     ]
   }

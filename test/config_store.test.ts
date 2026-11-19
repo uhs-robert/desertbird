@@ -202,3 +202,13 @@ test("the prompt setting takes 1 to 8 characters and defaults to the caret", asy
         assert.equal((await create_config_store(other, { report: () => {} }).read()).settings.cmdline_prompt, "caret");
     }
 });
+
+test("statusbar_widgets defaults to the folder and the position, and a stored list keeps only known names", async () => {
+    const reports: string[] = [];
+    const { api } = stub_storage({ [SETTINGS_KEY]: { statusbar_widgets: ["position"] } });
+    assert.deepEqual((await create_config_store(api, { report: () => {} }).read()).settings.statusbar_widgets, ["position"]);
+    const bad = stub_storage({ [SETTINGS_KEY]: { statusbar_widgets: ["folder", "url"] } });
+    const store = create_config_store(bad.api, { report: (message: string) => void reports.push(message) });
+    assert.deepEqual((await store.read()).settings.statusbar_widgets, ["folder", "position"]);
+    assert.ok(reports.some((message) => message.includes("statusbar_widgets")));
+});
