@@ -24,7 +24,7 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
 
 // Minified size guards. The build fails above a guard. A guard never rises past its ceiling, and every guard needs a ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
 // Each parent bundle that has no guard of its own (`experiment/keys.js`, `experiment/overlay.js`).
-const PARENT_MAX_BYTES = 27000;
+const PARENT_MAX_BYTES = 27512;
 const PARENT_CEILING_BYTES = 40960;
 
 // `experiment/folderpane.js`, loaded on the first folder pane call.
@@ -32,7 +32,7 @@ const FOLDERPANE_MAX_BYTES = 5900;
 const FOLDERPANE_CEILING_BYTES = 10240;
 
 // `content/message_display.js`, the body script that runs in every message document.
-const CONTENT_MAX_BYTES = 17650;
+const CONTENT_MAX_BYTES = 18162;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.

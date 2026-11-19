@@ -647,3 +647,30 @@ test("a new tree ends the reported sequence", async () => {
     change(record());
     assert.deepEqual(reports, [["g"], []]);
 });
+
+test("Backspace steps back one key at depth two, and a second Backspace after the sequence empties is not cancelled", async () => {
+    const { window, reports } = await started();
+    window.press("g");
+    window.press("p");
+    assert.equal(window.press("Backspace").cancelled, true);
+    assert.deepEqual(reports.at(-1), ["g"]);
+    assert.equal(window.press("Backspace").cancelled, true);
+    assert.deepEqual(reports.at(-1), []);
+    assert.equal(window.press("Backspace").cancelled, false);
+});
+
+test("Backspace in a half-typed sequence goes back one key and reports the shorter prefix", async () => {
+    const { window, reports } = await started();
+    window.press("g");
+    const back = window.press("Backspace");
+    assert.equal(back.cancelled, true);
+    assert.deepEqual(reports, [["g"], []]);
+    window.press("g");
+    assert.deepEqual(reports, [["g"], [], ["g"]], "one g after the dropped one starts a new sequence");
+});
+
+test("Backspace with no sequence is not cancelled", async () => {
+    const { window, reports } = await started();
+    assert.equal(window.press("Backspace").cancelled, false);
+    assert.deepEqual(reports, []);
+});
