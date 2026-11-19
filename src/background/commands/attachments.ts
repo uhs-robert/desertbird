@@ -16,6 +16,7 @@ export const attachments: CommandGroup = {
                     type: "enum",
                     values: ["downloads", "ask"],
                     default: "downloads",
+                    short: { ask: "a" },
                     description: { ask: "Show the save dialog for each file." },
                 },
             ],

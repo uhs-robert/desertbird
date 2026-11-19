@@ -29,6 +29,7 @@ export const folders: CommandGroup = {
                     type: "enum",
                     optional: true,
                     values: SPECIAL,
+                    short: { inbox: "i", trash: "t", drafts: "d", sent: "s", archive: "a", junk: "j" },
                     description: { inbox: "Show the Inbox.", trash: "Show Trash.", drafts: "Show Drafts.", sent: "Show Sent.", archive: "Show Archives.", junk: "Show Junk." },
                 },
                 // Exactly one of the two. The default list makes the path required when no special use is given, and the arm refuses a path beside one. The plain pattern admits the empty text only because a default list value must match it.

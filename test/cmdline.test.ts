@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_completer } from "../src/background/cmdline/completion.ts";
 import { create_cmdline_service } from "../src/background/cmdline/service.ts";
-import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
+import { DEFAULT_KEYMAP, compile_message_keymap, registry } from "../src/background/commands/index.ts";
+import { compile_effective_keymap } from "../src/background/config/keymap.ts";
+import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
 import { create_router } from "../src/background/router.ts";
 import type { CmdlineCompletion, CmdlineHello, CmdlineRunResult, KeysInvocation } from "../src/shared/protocol.ts";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
@@ -76,7 +78,8 @@ test("the usage line comes from the params", () => {
 });
 
 const choice = (path: string, account_name = "Work", account_id = "a1") => ({ path, account_name, account_id });
-const sources = { folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"], tabs: async () => [] };
+const default_key_trees = async () => ({ mail: compile_effective_keymap({}).compiled.modes.normal as TreeBranch, message: compile_message_keymap().compiled.modes.normal as TreeBranch });
+const sources = { key_trees: default_key_trees, folders: async () => ["/Archive", "/Archive/2026", "/Inbox"].map((path) => choice(path)), tags: async () => ["Important", "Work stuff"], tabs: async () => [] };
 const no_selection = { window_id: 3, message_ids: [] };
 const complete = create_completer(registry, sources);
 
@@ -108,7 +111,7 @@ test("completion ranks a typed word and marks the matched letters", async () => 
 test("completion offers the folders for move and the tags for tag, and quotes a name with a space", async () => {
     const folders = await complete("move ", 5, no_selection);
     assert.deepEqual(folders.rows.map((row) => row.name), ["/Archive", "/Archive/2026", "/Inbox"]);
-    assert.equal(folders.usage, "move [--account=<account>] folder");
+    assert.equal(folders.usage, "move [-A=<account>|--account=<account>] folder");
     const tags = await complete("tag ", 4, no_selection);
     assert.deepEqual(tags.rows.map((row) => row.insert), ["Important ", '"Work stuff" ']);
     const narrowed = await complete("move arch", 9, no_selection);
@@ -420,4 +423,25 @@ test("accounts that share a name insert the id and show it, and a typed --accoun
     assert.deepEqual(rows.map((row) => [row.description, row.insert]), [["Mail (a1)", "--account=a1 /Inbox "], ["Mail (a2)", "--account=a2 /Inbox "]]);
     const typed = (await twins("open --account=Mail ", 20, no_selection)).rows;
     assert.deepEqual(typed.map((row) => row.insert), ["/Inbox ", "/Inbox "]);
+});
+
+// --- the keys column
+
+test("command rows carry the keys that run the command bare, mail keys and message keys counted once", async () => {
+    const { rows } = await complete("", 0, no_selection);
+    const keys_of = (name: string) => rows.find((row) => row.name === name)?.keys;
+    assert.equal(keys_of("sort"), "sa sd +8");
+    assert.equal(keys_of("search"), undefined);
+    assert.equal(keys_of("msg.archive"), "a");
+    assert.equal(keys_of("msg.delete"), "dd");
+    assert.equal(keys_of("msg.reply"), "r R");
+});
+
+test("the key labels follow the trees the source hands over", async () => {
+    const trees = await default_key_trees();
+    let current = trees;
+    const follows = create_completer(registry, { ...sources, key_trees: async () => current });
+    assert.ok((await follows("", 0, no_selection)).rows.some((row) => row.keys !== undefined));
+    current = { mail: { kind: "branch", children: {} } as unknown as TreeBranch, message: trees.message };
+    assert.equal((await follows("", 0, no_selection)).rows.find((row) => row.name === "archive")?.keys, undefined);
 });

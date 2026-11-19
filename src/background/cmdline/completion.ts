@@ -1,8 +1,10 @@
 // What the command line list offers at the caret: command rows, flag rows of the typed command and value rows. It reads the registry and two value lists (folders and tags) and ranks with the vendored scorer. The rows are plain data, so they cross to the page as a message.
 
 import type { CommandDef, ParamDef } from "../../../vendor/desertfox/command.ts";
+import { key_labels } from "../../../vendor/desertfox/completion/keys.ts";
 import { cursor_context, quote_word } from "../../../vendor/desertfox/completion/tokenize.ts";
 import type { CursorContext } from "../../../vendor/desertfox/completion/tokenize.ts";
+import type { CompiledKeymap, TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { Registry } from "../../../vendor/desertfox/registry/define.ts";
 import { always_default, bare_word_param, default_of, flag_params, is_dynamic_values, positional_params, static_values, subject_param } from "../../../vendor/desertfox/registry/params.ts";
 import { first_sentence } from "../../../vendor/desertfox/registry/summary.ts";
@@ -33,6 +35,13 @@ export interface ValueSources {
     tags(): Promise<string[]>;
     /** The tabs of one window, in tab-bar order. */
     tabs(window_id: number): Promise<TabChoice[]>;
+    /** The roots of the stored mail tree and message tree. The same object comes back until the keymap changes, so the labels are worked out once per keymap. */
+    key_trees(): Promise<KeyTrees>;
+}
+
+export interface KeyTrees {
+    mail: TreeBranch;
+    message: TreeBranch;
 }
 
 /** The most rows the page draws. A long folder list ranks in full and then keeps the best. */
@@ -40,7 +49,7 @@ export const MAX_ROWS = 50;
 
 // What the cursor context and the usage line read of a command.
 type Command = Pick<CommandDef, "id" | "name" | "params">;
-type Row = Candidate & { insert: string; description: string; args: string; usage?: string };
+type Row = Candidate & { insert: string; description: string; args: string; usage?: string; keys?: string };
 
 const NOTHING: Completion = { rows: [], start: 0, end: 0 };
 
@@ -113,15 +122,25 @@ function args_of(command: Command): string {
     return [...flag_params(command).flatMap((param) => flag_alternatives(param).filter((form) => form.startsWith("--")).map((form) => form.split("=")[0])), ...positional_params(command).map((param) => `<${param.name}>`), ...(subject ? [`<${subject.name}>`] : [])].join(" ");
 }
 
+// The vendored key labels read one keymap, and take the line's mode plus `browser`. Both trees go in as those two modes, so one pass reads the mail keys and the message keys, and a key in both counts once.
+const both_trees = (trees: KeyTrees) => ({ modes: { normal: trees.mail, browser: trees.message } }) as unknown as CompiledKeymap;
+
 export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number, session: { window_id: number; message_ids: number[] }) => Promise<Completion> {
+    let labeled: { trees: KeyTrees; labels: Map<string, string> } | undefined;
+    async function command_keys(): Promise<Map<string, string>> {
+        const trees = await sources.key_trees();
+        if (labeled?.trees !== trees) labeled = { trees, labels: key_labels(both_trees(trees), registry.list(), "normal") };
+        return labeled.labels;
+    }
+
     // Only commands that run in the background can run from the line, and a hidden command stays typeable but unlisted.
-    const listed = () =>
+    const listed = (keys: Map<string, string>) =>
         registry
             .list()
             .filter((command) => command.runs_in === "background" && command.completion !== "hidden")
             .map((command): Row => {
                 const name = command.name ?? command.id;
-                return { name, insert: command.params?.length ? `${name} ` : name, description: first_sentence(command.intent), args: args_of(command), usage: usage_line(command), also_named: command.name ? [command.id] : [], keywords: [...(command.aliases ?? []), command.label] };
+                return { name, insert: command.params?.length ? `${name} ` : name, description: first_sentence(command.intent), args: args_of(command), usage: usage_line(command), also_named: command.name ? [command.id] : [], ...(keys.has(command.id) && { keys: keys.get(command.id) ?? "" }), keywords: [...(command.aliases ?? []), command.label] };
             })
             .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 
@@ -134,7 +153,7 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match. For tabs only a number is whole: a title word always highlights, since the handler matches a title as a part and could pick another tab. A path two accounts hold is no whole value, since typed alone it names two folders.
         const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && !is_whole(context.word, rows, tab_numbers);
         return {
-            rows: ranked.map(({ name, insert, description, args, positions, usage }) => ({ name, insert, description, args, positions, ...(usage !== undefined && { usage }) })),
+            rows: ranked.map(({ name, insert, description, args, positions, usage, keys }) => ({ name, insert, description, args, positions, ...(usage !== undefined && { usage }), ...(keys !== undefined && { keys }) })),
             start: context.start,
             end: context.end,
             ...(usage !== undefined && { usage }),
@@ -145,7 +164,7 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
     return async (text, caret, session) => {
         const context = cursor_context(text, caret, (word) => registry.find(word));
         if (context.kind === "none") return NOTHING;
-        if (context.kind === "command") return finish(context, listed());
+        if (context.kind === "command") return finish(context, listed(await command_keys()));
         if (context.kind === "flag") return finish(context, flag_rows(context.command, context.typed), context.command);
         const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command) : undefined;
         const lists_values = param !== undefined && (is_dynamic_values(param.values) || static_values(param) !== undefined);

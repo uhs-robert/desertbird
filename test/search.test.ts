@@ -309,6 +309,9 @@ import { create_cmdline_service } from "../src/background/cmdline/service.ts";
 import { registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import { fake_api } from "./fake_api.ts";
+import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
+
+const no_keys = { kind: "branch", children: {} } as unknown as TreeBranch;
 
 function line_setup(options: { commit_error?: string; commit_gate?: Promise<void> } = {}) {
     const log: string[] = [];
@@ -316,7 +319,7 @@ function line_setup(options: { commit_error?: string; commit_gate?: Promise<void
     const service = create_cmdline_service({
         registry,
         read_prompt: async () => "caret",
-        sources: { folders: async () => [], tags: async () => [], tabs: async () => [] },
+        sources: { key_trees: async () => ({ mail: no_keys, message: no_keys }), folders: async () => [], tags: async () => [], tabs: async () => [] },
         overlay: { mount: async () => {}, unmount: async (args) => void log.push(`unmount ${args.windowId}`), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         history: { record: async () => {} },
         search_history: { record: async (line) => void histories.push(line) },
