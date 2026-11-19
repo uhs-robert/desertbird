@@ -1266,16 +1266,12 @@ async function run_window_hints(instance, { app, kind, shot }) {
   state = await key_and_state(instance, ["j"], 800);
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
-  await key_and_state(instance, ["g"], 600);
-  // The whole gesture in one burst. The last leaf is a motion, so a leaked `.` repeats it and moves the row. `.` is bound and no hint label, so the labels take it or the hold drops it.
-  state = await key_and_state(instance, ["j"], 800);
-  const burst_selected = selection_of(state);
-  await instance.press(["f.."]);
+  const burst_before = selection_of(await key_and_state(instance, ["g"], 600));
+  // The whole gesture in one burst. `c` is bound (msg.new opens a compose window) and is no hint label. The first `c` ends the labels and is swallowed, and the hold after `f` must drop the second, so no compose window may open.
+  await instance.press(["fcc"]);
   await sleep(2000);
   state = await instance.ask("state");
-  check(app, kind, "window hints: f . . in one burst moves no row and changes no mail", state.listed.length === rows_before && selection_of(state) === burst_selected, `listed ${state.listed.length} of ${rows_before}, selected ${burst_selected} then ${selection_of(state)}`);
-  // The labels of the checks below are fixed per app for the selection the section started with.
-  await key_and_state(instance, ["k"], 800);
+  check(app, kind, "window hints: f c c in one burst opens no compose window and changes no mail", !state.windows.some((window) => window.type === "messageCompose") && state.listed.length === rows_before && selection_of(state) === burst_before, `compose windows ${state.windows.filter((window) => window.type === "messageCompose").length}, listed ${state.listed.length} of ${rows_before}`);
   // A key that no label continues with ends the labels, and swallows the key.
   await instance.press(["f"]);
   await sleep(800);
