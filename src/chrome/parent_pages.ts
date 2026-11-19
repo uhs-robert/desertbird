@@ -8,7 +8,7 @@ import { create_page_runtime } from "./page_runtime.ts";
 import type { PageRuntime } from "./page_runtime.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
-import { situation_of } from "./readable_focus.ts";
+import { MESSAGE_TAB_MODE, situation_of } from "./readable_focus.ts";
 import type { KeyTarget, WindowListener } from "./runtime.ts";
 import type { KeysEvent, PagesInstallArgs } from "../shared/protocol.ts";
 
@@ -24,7 +24,9 @@ interface PagesWindow extends MainWindow {
 interface FrontTabInfo {
     mode: { name: string };
     browser?: { isRemoteBrowser?: boolean; contentDocument?: { scrollingElement?: ScrollNode | null } | null } | null;
-    chromeBrowser?: { contentDocument?: { scrollingElement?: ScrollNode | null } | null } | null;
+    chromeBrowser?: { contentDocument?: { scrollingElement?: ScrollNode | null } | null; contentWindow?: { gMessage?: unknown; document?: { getElementById(id: string): { contentDocument?: { scrollingElement?: ScrollNode | null } | null } | null } } | null } | null;
+    /** The header of the message a message tab shows. */
+    message?: unknown;
 }
 
 const invocation_listeners = new Set<(invocation: KeysEvent) => void>();
@@ -48,10 +50,18 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             const tab = front_tab_of(window);
             return situation_of(window.document, tab && { mode: tab.mode.name, browser_is_remote: tab.browser?.isRemoteBrowser === true }, event);
         },
+        message_ids_of(window) {
+            const tab = front_tab_of(window);
+            const header = tab?.message ?? tab?.chromeBrowser?.contentWindow?.gMessage;
+            const id = header ? context.extension.messageManager.convert(header, { skipFolder: true })?.id : undefined;
+            return id === undefined ? [] : [id];
+        },
         scroll(window, id, count) {
+            const tab = front_tab_of(window);
+            // The focus sits in the header of the message tab, so the body is scrolled, whatever the header holds.
+            if (tab?.mode.name === MESSAGE_TAB_MODE) return run_scroll(id, scroll_target(undefined, (tab.chromeBrowser?.contentWindow?.document?.getElementById("messagepane")?.contentDocument ?? {}) as { scrollingElement?: ScrollNode | null }), count);
             const chain = focus_chain(window.document);
             // The document the focus is in. With no focus inside the tab, the document of the tab's own browser: a page that has not been clicked into still scrolls.
-            const tab = front_tab_of(window);
             const document = chain.findLast((node) => node.contentDocument)?.contentDocument ?? (chain.length ? null : (tab?.browser ?? tab?.chromeBrowser)?.contentDocument) ?? window.document;
             return run_scroll(id, scroll_target(chain.at(-1) as FocusNode | undefined, document as { scrollingElement?: ScrollNode | null }), count);
         },
@@ -80,7 +90,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
 export function get_pages_api(context: ExtensionContext) {
     return {
         pages: {
-            install: guard("pages.install", ({ pageTree, holdCommands }: PagesInstallArgs): void => ensure_runtime(context).install(pageTree, holdCommands)),
+            install: guard("pages.install", ({ pageTree, messageTree, holdCommands }: PagesInstallArgs): void => ensure_runtime(context).install({ page: pageTree, message: messageTree }, holdCommands)),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "pages.onInvocation",

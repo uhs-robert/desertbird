@@ -4,6 +4,8 @@ import { focus_chain, is_typing, menu_is_open } from "./focus.ts";
 import type { FocusDocument, KeyEventTargets } from "./focus.ts";
 import { MAIL_TAB_MODE } from "./view.ts";
 
+export const MESSAGE_TAB_MODE = "mailMessageTab";
+
 
 /**
  * What a key meets in the front tab:
@@ -11,8 +13,9 @@ import { MAIL_TAB_MODE } from "./view.ts";
  * - `typing`: a text field or a message body that runs the body script.
  * - `remote`: a page of another process. Only chords are safe.
  * - `page`: a chrome or parent-process document.
+ * - `message`: a message tab whose focus is outside the body, in the header or the tab strip.
  */
-export type Situation = "pass" | "typing" | "remote" | "page";
+export type Situation = "pass" | "typing" | "remote" | "page" | "message";
 
 export interface FrontTab {
     mode: string;
@@ -33,5 +36,5 @@ export function situation_of(document: FocusDocument, tab: FrontTab | null, even
     if (tab === null || tab.mode === MAIL_TAB_MODE || menu_is_open(document)) return "pass";
     if (is_typing(event, document)) return "typing";
     if (page_is_remote(document, tab)) return "remote";
-    return "page";
+    return tab.mode === MESSAGE_TAB_MODE ? "message" : "page";
 }

@@ -4,7 +4,8 @@ import { create_page_runtime } from "../src/chrome/page_runtime.ts";
 import type { PageDeps } from "../src/chrome/page_runtime.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "../src/chrome/runtime.ts";
 import type { Situation } from "../src/chrome/readable_focus.ts";
-import { compile_page_keymap } from "../src/background/commands/page_keymap.ts";
+import { compile_message_keymap } from "../src/background/commands/index.ts";
+import { compile_page_keymap, page_message_tree } from "../src/background/commands/page_keymap.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import type { KeysEvent, KeysInvocation } from "../src/shared/protocol.ts";
 
@@ -38,7 +39,8 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
     return result;
 }
 
-const tree = (user?: Parameters<typeof compile_page_keymap>[0]) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(compile_page_keymap(user).compiled.modes.normal)) as unknown });
+const tree_of = (result: ReturnType<typeof compile_page_keymap>) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(result.compiled.modes.normal)) as unknown });
+const tree = (user?: Parameters<typeof compile_page_keymap>[0]) => ({ page: tree_of(compile_page_keymap(user)), message: page_message_tree(tree_of(compile_message_keymap(user)) as never) });
 
 function setup(window_count = 1) {
     const windows = Array.from({ length: window_count }, () => new FakeWindow());
@@ -57,6 +59,7 @@ function setup(window_count = 1) {
         open_windows: () => windows,
         key_target_of: (window) => window.root,
         situation_of: (window) => window.situation,
+        message_ids_of: () => [42],
         scroll: (_window, id, count) => (scrolls.push([id, count]), true),
         on_tab_select(window, listener) {
             window.tab_listeners.add(listener);
@@ -286,4 +289,51 @@ test("a bare modifier and an unnamed key pass", () => {
     runtime.install(tree());
     assert.equal(press(windows[0]!, "Shift").cancelled, false);
     assert.equal(scrolls.length, 0);
+});
+
+test("a message tab takes the message tree: reading keys scroll, mail commands run with the message id", () => {
+    const { windows, runtime, scrolls, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    press(window, "j");
+    press(window, "d");
+    assert.equal(press(window, "d").cancelled, true);
+    press(window, "r");
+    assert.deepEqual(scrolls.map(([id]) => id), ["message.scroll_down"]);
+    assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.delete", [42]], ["msg.reply", [42]]]);
+});
+
+test("in a message tab a plain key with no binding is cancelled, so Thunderbird's own single keys do not fire, and a chord passes", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    assert.equal(press(window, "J").cancelled, true);
+    assert.equal(press(window, "c", { ctrlKey: true }).cancelled, false);
+    assert.equal(invocations().length, 0);
+});
+
+test("in a message tab the find key opens no line, and the picks that need the body script run nothing", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    assert.equal(press(window, "/").cancelled, true);
+    press(window, "f");
+    assert.deepEqual(invocations().map((event) => event.command), []);
+});
+
+test("the page tree and the message tree keep separate half-typed sequences", () => {
+    const { windows, runtime, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "g");
+    window.situation = "message";
+    press(window, "g");
+    window.situation = "page";
+    press(window, "g");
+    assert.equal(scrolls.length, 0, "no gg out of three g in two tabs");
+    press(window, "g");
+    assert.deepEqual(scrolls.map(([id]) => id), ["page.top"]);
 });

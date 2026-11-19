@@ -171,6 +171,7 @@ DesertFox has one content script per web page. Thunderbird draws its tabs (calen
 - A key the page keymap leaves unbound passes to Thunderbird. DesertFox cancels unbound keys in some modes.
 - The page keys are a constant and a compile function (`src/background/commands/page.ts`, `page_keymap.ts`), not a field of `CommandGroup`. The user's bindings carry over only for the commands of the page keys, and never `tab.close_mail`, so Ctrl+C and Ctrl+X still copy and cut.
 - `<C-j>` and `<C-k>` switch tabs in these tabs, and `g p a`, `g p t` and `g p c` open the add-ons, themes and config pages. Thunderbird's own Ctrl+J (Saved Files) is shadowed there.
+- A message tab with the focus outside the body (in the header or on the tab strip) takes the message tree, so `d`, `a`, `r` and the reading keys work there, run on the message the tab shows. Find in the message and the hint picks do nothing there, because they need the body script. A plain key with no binding is cancelled in that tab, so Thunderbird's single keys such as `j` (junk) cannot fire. The body script keeps the keys while the body has the focus.
 - `j` and `k` scroll a focused list that has its own selection (the address book's books and cards) and do not move its selection.
 - The key list (`g ?`) still shows the mail keys. A which-key panel of the page keys is a later step.
 

@@ -14,7 +14,9 @@ export interface PageDeps<Window> {
     /** Where the key listener goes. It must sit above the window, so this bundle sees a key before the key runtime does. */
     key_target_of(window: Window): KeyTarget;
     situation_of(window: Window, event: KeydownEvent): Situation;
-    /** Runs a reading action of the front tab's document. Returns false for an id it has no action for. */
+    /** The MailExtension ids of the message the front tab shows, read when the key is pressed. */
+    message_ids_of(window: Window): number[];
+    /** Runs a reading action of the front tab's document. Returns false for an id it has no action for: a message step that needs the body script (hints, find) ends here. */
     scroll(window: Window, id: string, count: number | undefined): boolean;
     on_tab_select(window: Window, listener: () => void): () => void;
     on_window_blur(window: Window, listener: () => void): () => void;
@@ -25,7 +27,7 @@ export interface PageDeps<Window> {
 }
 
 export interface PageRuntime {
-    install(tree: { version: number; root: unknown }, hold_commands?: readonly string[]): void;
+    install(trees: { page: { version: number; root: unknown }; message: { version: number; root: unknown } }, hold_commands?: readonly string[]): void;
     shutdown(): void;
 }
 
@@ -37,6 +39,8 @@ const KEY_LIST = "help.whichkey";
 export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime {
     const hooked = new Map<Window, { target: KeyTarget; handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
+    // The message tab takes its own tree, so its keys and their meaning follow the message document's.
+    let message_matcher: ReturnType<typeof matcher_for_tree> | null = null;
     let listening = false;
     let sequence_window: Window | null = null;
     let hold_commands = new Set<string>();
@@ -50,7 +54,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     }
 
     function on_keydown(window: Window, event: KeydownEvent): void {
-        if (!matcher) return;
+        if (!matcher || !message_matcher) return;
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         const token = event_to_token(event);
         if (token === null) return;
@@ -65,24 +69,31 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
             }
         }
         end_key_list(window);
-        if (situation === "pass" || situation === "typing") return matcher.reset();
+        if (situation === "pass" || situation === "typing") return (matcher.reset(), message_matcher.reset());
         // A page of another process hides its text fields, so only a chord is safe there.
         if (situation === "remote" && is_plain_printable(token)) return matcher.reset();
-        if (sequence_window !== window) matcher.reset();
+        // The two matchers each keep a half-typed sequence, so the one not in use starts over.
+        const [active, idle] = situation === "message" ? [message_matcher, matcher] : [matcher, message_matcher];
+        idle.reset();
+        if (sequence_window !== window) active.reset();
         sequence_window = window;
-        const result = matcher.feed(NORMAL_MODE, token);
-        if (result.kind_ === "no_match") return;
+        const result = active.feed(NORMAL_MODE, token);
+        // Thunderbird binds single keys of its own in a message tab (`j` is junk), so a plain key stops here whether or not it matched.
+        if (result.kind_ === "no_match") {
+            if (situation === "message" && is_plain_printable(token)) (event.preventDefault(), event.stopPropagation());
+            return;
+        }
         if (result.kind_ === "match") {
             const steps = result.leaf.steps;
             // In a remote page only a bound command of the background runs, and one that takes no argument: the page's own chords stay its own.
             if (situation === "remote" && steps.some((step) => step.runs_in !== "background" || step.invocation.args)) return;
             for (const step of steps) {
                 const count = result.count ?? step.invocation.count;
-                if (step.runs_in === "chrome") deps.scroll(window, step.invocation.id, count);
-                else if (step.runs_in === "background") {
+                if (step.runs_in !== "background") deps.scroll(window, step.invocation.id, count);
+                else {
                     if (hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
                     if (step.invocation.id === KEY_LIST) key_list_shown = true;
-                    deps.emit({ command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count: count ?? 1, windowId: deps.window_id_of(window), messageIds: [] });
+                    deps.emit({ command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count: count ?? 1, windowId: deps.window_id_of(window), messageIds: situation === "message" ? deps.message_ids_of(window) : [] });
                 }
             }
         }
@@ -95,6 +106,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         const handler = (event: KeydownEvent) => on_keydown(window, event);
         const reset_typing = () => {
             matcher?.reset();
+            message_matcher?.reset();
             hold_until = 0;
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `g`, a click away and back, then `g` would run `gg`.
@@ -116,8 +128,9 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     }
 
     return {
-        install(tree, hold = []) {
-            matcher = matcher_for_tree(tree);
+        install(trees, hold = []) {
+            matcher = matcher_for_tree(trees.page);
+            message_matcher = matcher_for_tree(trees.message);
             hold_commands = new Set(hold);
             if (listening) return;
             listening = true;
@@ -130,6 +143,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
             if (listening) deps.unregister_window_listener();
             listening = false;
             matcher = null;
+            message_matcher = null;
             hold_until = 0;
             sequence_window = null;
         },

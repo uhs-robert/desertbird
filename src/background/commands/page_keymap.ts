@@ -3,6 +3,7 @@
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
 import { GROUP_NAMES, compile_bindings } from "./index.ts";
+import type { KeymapTree } from "../../shared/protocol.ts";
 import { PAGE_KEYS } from "./page.ts";
 
 const same_use = (binding: { id: string; args?: object }) => JSON.stringify([binding.id, Object.entries(binding.args ?? {}).sort(([left], [right]) => (left < right ? -1 : 1))]);
@@ -19,4 +20,20 @@ export function page_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig {
 /** The page keys are the default layer, so a user key that extends a page key (`ggz` over `gg`) drops that key as it does in the mail tab. */
 export function compile_page_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
     return compile_bindings(page_keymap(user), {}, { normal: PAGE_KEYS, group_names: GROUP_NAMES });
+}
+
+// Find in the message needs the body script, which a message tab with the focus outside the body does not run. The reading steps that need it (`hint.pick`, `message.find_next`) do nothing in the chrome, and the key that opens the line on `find ` is dropped here, so no line opens for a find that cannot run.
+const is_find_line = (step: { invocation: { id: string; args?: Record<string, unknown> } }) => step.invocation.id === "cmdline.open" && String(step.invocation.args?.["text"] ?? "").startsWith("find ");
+
+/** The message tree for a message tab with the focus outside the body: the message keys without the key that opens the find line. */
+export function page_message_tree(message_tree: KeymapTree): KeymapTree {
+    const root: KeymapTree["root"] = JSON.parse(JSON.stringify(message_tree.root));
+    const strip = (node: { children?: Record<string, { steps?: { invocation: { id: string; args?: Record<string, unknown> } }[]; children?: object }> }): void => {
+        for (const [token, child] of Object.entries(node.children ?? {})) {
+            if (child.steps?.some(is_find_line)) delete node.children![token];
+            else strip(child as typeof node);
+        }
+    };
+    strip(root as Parameters<typeof strip>[0]);
+    return { version: message_tree.version, root };
 }

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
-import { compile_page_keymap, page_keymap } from "../src/background/commands/page_keymap.ts";
+import { compile_message_keymap } from "../src/background/commands/index.ts";
+import { compile_page_keymap, page_keymap, page_message_tree } from "../src/background/commands/page_keymap.ts";
 import { PAGE_KEYS } from "../src/background/commands/page.ts";
 
 const root_of = (user?: Parameters<typeof compile_page_keymap>[0]) => compile_page_keymap(user).compiled.modes.normal as TreeBranch;
@@ -62,4 +63,14 @@ test("a user key that extends a default page key drops that key", () => {
     const root = root_of({ ggz: { id: "page.top" } });
     assert.equal(leaf_at(root, "g", "g"), undefined);
     assert.equal(leaf_at(root, "g", "g", "z")?.id, "page.top");
+});
+
+test("the message tree for a message tab keeps the message keys and drops the key that opens the find line", () => {
+    const full = { version: 1, root: JSON.parse(JSON.stringify(compile_message_keymap().compiled.modes.normal)) };
+    const kept = page_message_tree(full as never).root as unknown as TreeBranch;
+    assert.equal(leaf_at(full.root as TreeBranch, "/")?.id, "cmdline.open");
+    assert.equal(leaf_at(kept, "/"), undefined);
+    assert.equal(leaf_at(kept, "j")?.id, "message.scroll_down");
+    assert.equal(leaf_at(kept, "d", "d")?.id, "msg.delete");
+    assert.deepEqual(leaf_at(full.root as TreeBranch, "j"), leaf_at(kept, "j"));
 });

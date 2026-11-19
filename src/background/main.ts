@@ -5,7 +5,7 @@ import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_message_keymap, hold_command_ids, message_keymap, message_background_commands, registry } from "./commands/index.ts";
-import { compile_page_keymap, page_keymap } from "./commands/page_keymap.ts";
+import { compile_page_keymap, page_keymap, page_message_tree } from "./commands/page_keymap.ts";
 import { tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -170,11 +170,11 @@ async function load_record(): Promise<KeymapRecord> {
 async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
-    const { tree, page_tree } = await load_record();
-    const tree_json = JSON.stringify([tree, page_tree]);
+    const { tree, page_tree, message_tree } = await load_record();
+    const tree_json = JSON.stringify([tree, page_tree, message_tree]);
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
-    await messenger.pages?.install({ pageTree: page_tree, holdCommands: HOLD_COMMANDS });
+    await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), holdCommands: HOLD_COMMANDS });
     installed_tree_json = tree_json;
     // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
     hud.close_which_key();

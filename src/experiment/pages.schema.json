@@ -35,6 +35,21 @@
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
                 }
+              },
+              "messageTree": {
+                "type": "object",
+                "description": "The compiled message keymap as data, loose for the reason of `pageTree`. It is the tree of a message tab with the focus outside the body.",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "root": {
+                    "type": "any"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "any"
+                }
               }
             }
           }

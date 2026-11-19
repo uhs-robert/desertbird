@@ -18,6 +18,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const change_listeners: ((changes: Record<string, StorageChange>, area: string) => void)[] = [];
     const installs: unknown[] = [];
     const page_installs: unknown[] = [];
+    const message_installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
     const native = fake_native_messaging();
     let report_read: () => void = () => {};
@@ -46,7 +47,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
         compose: { onAfterSend: { addListener: (listener: (tab: { id?: number }, send_info: { error?: string }) => void) => void after_send_listeners.push(listener) } },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
-        pages: { install: async (args: { pageTree: unknown }) => void page_installs.push(args.pageTree), onInvocation: { addListener: () => {} } },
+        pages: { install: async (args: { pageTree: unknown; messageTree: unknown }) => void (page_installs.push(args.pageTree), message_installs.push(args.messageTree)), onInvocation: { addListener: () => {} } },
         runtime: {
             onMessage: { addListener: () => {} },
             connectNative: (application: string) => native.connectNative(application),
@@ -66,7 +67,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, page_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, page_installs, message_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -122,6 +123,16 @@ test("the page tree is stored in the record and installed in the pages Experimen
     assert.match(JSON.stringify(record.page_tree.root), /page\.scroll_down/);
     assert.deepEqual(page_installs, [record.page_tree]);
     assert.doesNotMatch(JSON.stringify(installs), /page\.scroll_down/);
+});
+
+test("the pages Experiment gets the message tree without the find key", async () => {
+    const { message_installs } = stub_messenger();
+    await start_background();
+    await settle();
+    assert.equal(message_installs.length, 1);
+    const root = (message_installs[0] as { root: { children: Record<string, unknown> } }).root;
+    assert.match(JSON.stringify(root), /message\.scroll_down/);
+    assert.equal(root.children["/"], undefined);
 });
 
 test("a stored record of version 4, with no page tree, is rebuilt with one", async () => {

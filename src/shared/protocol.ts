@@ -187,6 +187,8 @@ export interface KeysApi {
 /** Installs the page keymap: the keys of the tabs that are not the mail tab. */
 export interface PagesInstallArgs {
     pageTree: KeymapTree;
+    /** The keys of a message tab with the focus outside the body. The body script takes the keys while the body has the focus. */
+    messageTree: KeymapTree;
     /** Ids of the commands that open the overlay. The runtime holds plain keys after one fires, until the focus moves. */
     holdCommands: string[];
 }
