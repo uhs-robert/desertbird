@@ -203,7 +203,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/zoom.js` | 3544 | 6144 |
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13562 | 20480 |
-| `experiment/pages.js` | 23312 | 34816 |
+| `experiment/pages.js` | 23824 | 34816 |
 | `content/page_keys.js` | 21400 | 32768 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
@@ -242,7 +242,7 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 
 ### Pages bundle
 
-`experiment/pages.js` (the `pages` Experiment) holds the key runtime of every tab that is not the mail tab. Its first measured size was 18982 bytes. That plus 20 percent made 22779, rounded up to 22800. The scroll keys of page tabs (`h`, `l`, `<C-f>`, `<C-b>`, and the axis of a target) took the build to 23176, so the guard rose one step of 512 to 23312; they decide what happens to a key. The bundle carries its own copy of the vendored matcher and key token code, which `keys.js` holds too, because Experiment scopes share no modules. The ceiling is 1.5 times the guard rounded up to 1024. The sizes of these two guards are bytes of the unminified bundle, as the build writes it. The planning estimate of 4.5 to 7 KB assumed a minified build.
+`experiment/pages.js` (the `pages` Experiment) holds the key runtime of every tab that is not the mail tab. Its first measured size was 18982 bytes. That plus 20 percent made 22779, rounded up to 22800. The scroll keys of page tabs (`h`, `l`, `<C-f>`, `<C-b>`, and the axis of a target) took the build to 23176, so the guard rose one step of 512 to 23312; they decide what happens to a key. The marker check that leaves the keys to a hint pick in a page tab took it to 23352 (176 over main's 23176), so the guard rose one more step to 23824; it decides what happens to a key. The bundle carries its own copy of the vendored matcher and key token code, which `keys.js` holds too, because Experiment scopes share no modules. The ceiling is 1.5 times the guard rounded up to 1024. The sizes of these two guards are bytes of the unminified bundle, as the build writes it. The planning estimate of 4.5 to 7 KB assumed a minified build.
 
 ### Own page script bundle
 

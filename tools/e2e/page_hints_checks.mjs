@@ -34,17 +34,19 @@ export async function run_page_hints(instance, { check, note, shot, key_and_stat
       return true;
     }
     // One round of labels first: the first pick loads the bundle, and a click above leaves a hover mark that the labels end. The reference is taken once the labels show and are gone again. A tab that never shows them takes no keys at all, which a click-opened Betterbird calendar sometimes does with no `f` either, so the tab is opened once more.
+    // Returns the reference pixels, or the name of the step that failed.
     async function warm_up() {
       const unlabelled = await pixels("warm_before");
       await instance.press(["f"]);
       // Two equal reads in a row: the labels are drawn in full, not a frame on the way.
       const labelled = await poll_pixels((now, last) => now !== unlabelled && now === last);
-      if (labelled === null) return null;
+      if (labelled === null) return { failed: "f labels" };
       await instance.press(["-k", "Escape"]);
       const unlabelled_again = await poll_pixels((now, last) => now !== labelled && now === last);
+      if (unlabelled_again === null) return { failed: "Escape removes the labels of" };
       // The page keys drop plain keys for 1.5 s after `f`, so the next `f` waits that out.
       await sleep(PAST_THE_HOLD_MS);
-      return unlabelled_again;
+      return { plain: unlabelled_again };
     }
     const poll_pixels = async (done) => {
       let last = null;
@@ -56,15 +58,16 @@ export async function run_page_hints(instance, { check, note, shot, key_and_stat
       return null;
     };
     if (!(await open_tab())) return check(app, kind, `hints: the ${name} tab opens`, false, `tabs ${(await tabs_of()).length}`);
-    let plain = await warm_up();
-    if (plain === null) {
+    let warmed = await warm_up();
+    if (warmed.failed === "f labels") {
       note(app, kind, `hints: the ${name} tab showed no labels on its first f, opened again`, "the keys did not reach the tab");
       await instance.ask("remove_tab", 20000, { index: before });
       await sleep(1000);
-      if (await open_tab()) plain = await warm_up();
+      warmed = (await open_tab()) ? await warm_up() : { failed: "a second open shows" };
     }
-    if (plain === null) {
-      check(app, kind, `hints: f labels the ${name} tab after it was opened twice`, false);
+    const plain = warmed.plain;
+    if (plain === undefined) {
+      check(app, kind, `hints: ${warmed.failed} the ${name} tab (warm-up)`, false);
       if ((await tabs_of()).length > before) await instance.ask("remove_tab", 20000, { index: before });
       return instance.ask("select_tab", 20000, { index: 0 });
     }
