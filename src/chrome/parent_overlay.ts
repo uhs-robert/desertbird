@@ -1,12 +1,12 @@
 // The parent script of the `overlay` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `overlay`: `getAPI(context)` returns `get_overlay_api(context)` and `onShutdown` calls `shutdown()`.
 // The overlay is a remote `browser` element in the window document, not an iframe: see "Overlay mount" in docs/thunderbird-behavior.md.
 
-import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "./overlay_id.ts";
 import { capture_focus, in_text_field } from "./focus.ts";
 import { hook_page_focus } from "./page_focus.ts";
 import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
-import { create_overlay_host, on_escape_key } from "./overlay.ts";
+import { claim_id_when_page_ready, create_overlay_host, on_escape_key } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
@@ -50,11 +50,12 @@ interface OverlayElement {
     id: string;
     style: { cssText: string };
     appendChild(child: unknown): void;
+    removeEventListener(type: string, listener: () => void): void;
     remove(): void;
     focus(): void;
     setAttribute(name: string, value: string): void;
     toggleAttribute(name: string, force: boolean): void;
-    addEventListener(type: string, listener: () => void, options: { once: true }): void;
+    addEventListener(type: string, listener: () => void, options?: { once: true }): void;
     messageManager: { loadFrameScript(url: string, delay: boolean, run_in_global: boolean): void; sendAsyncMessage(name: string, data: object): void };
     fixupAndLoadURIString(page: string, options: { triggeringPrincipal: unknown }): void;
 }
@@ -81,7 +82,9 @@ function create_overlay_element(window: MainWindow, extension: OverlayExtension,
     box.id = spec.box_id;
     box.style.cssText = click_through ? `${spec.box_style} pointer-events: none;` : spec.box_style;
     const browser = document.createXULElement("browser");
-    browser.id = spec.browser_id;
+    // A browser that takes the keyboard answers to its keys only once its page has loaded: see `OVERLAY_LOADING_ID`.
+    browser.id = spec.takes_keyboard ? OVERLAY_LOADING_ID : spec.browser_id;
+    if (spec.takes_keyboard) claim_id_when_page_ready(browser, spec.browser_id);
     browser.setAttribute("type", "content");
     browser.setAttribute("disableglobalhistory", "true");
     browser.setAttribute("messagemanagergroup", "webext-browsers");

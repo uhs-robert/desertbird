@@ -64,7 +64,7 @@ let history_cursor: HistoryCursor = create_history_cursor(history);
 let walking_history = true;
 
 const FALLBACK_ROW_HEIGHT_PX = 20;
-const PAGE_TITLE = document.title;
+const PAGE_TITLE = "DesertBird command line";
 let escapes_answered = 0;
 
 const send = <Answer>(message: CmdlineRequest | ConfirmAnswerRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;
@@ -331,6 +331,11 @@ input.addEventListener("input", () => {
     refresh_line().catch(report_failure);
 });
 
+// The host counts the overlay's browser as a typing target only once the page has a title. A key typed before the input has the focus goes to Thunderbird's shortcuts, so the title comes after the focus.
+function mark_ready(): void {
+    document.title = PAGE_TITLE;
+}
+
 function start_confirm(prompt: ConfirmPrompt): void {
     confirming = true;
     document.body.classList.add("confirming");
@@ -348,6 +353,7 @@ function start_confirm(prompt: ConfirmPrompt): void {
         send_answer: (answer) => send<ConfirmAnswerResult>({ type: "confirm.answer", windowId: window_id, token: prompt.token, answer }),
         close: close_line,
     });
+    mark_ready();
 }
 
 function show_prompt(setting: string): void {
@@ -377,6 +383,7 @@ async function start(): Promise<void> {
     window.focus();
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
+    mark_ready();
     // History is a local read, so it goes first: a failed completion request must not skip it.
     await load_history();
     if (!search_direction) await refresh_completion();

@@ -108,10 +108,10 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         const reset_typing = () => {
             matcher?.reset();
             message_matcher?.reset();
-            hold_until = 0;
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `g`, a click away and back, then `g` would run `gg`.
-        const stop_tab_listening = deps.on_tab_select(window, reset_typing);
+        const stop_tab_listening = deps.on_tab_select(window, () => (reset_typing(), (hold_until = 0)));
+        // A blur leaves the hold: the overlay mount focuses its browser and blurs the window before its page loads.
         const stop_blur_listening = deps.on_window_blur(window, reset_typing);
         const target = deps.key_target_of(window);
         hooked.set(window, { target, handler, stop_tab_listening, stop_blur_listening });

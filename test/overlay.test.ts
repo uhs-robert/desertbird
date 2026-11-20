@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ESCAPE_ANSWER_MS, create_overlay_host, on_escape_key } from "../src/chrome/overlay.ts";
+import { ESCAPE_ANSWER_MS, claim_id_when_page_ready, create_overlay_host, on_escape_key } from "../src/chrome/overlay.ts";
 
 class FakeWindow {
     tab_listeners = new Set<() => void>();
@@ -224,4 +224,31 @@ test("a page that answers Escape by changing its title keeps the overlay open", 
     title = "DesertBird command line 1";
     waits[0]!();
     assert.deepEqual(closed, []);
+});
+
+function fake_browser() {
+    const listeners = new Map<string, Set<() => void>>();
+    return {
+        id: "loading",
+        listeners,
+        addEventListener: (type: string, listener: () => void) => void (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener),
+        removeEventListener: (type: string, listener: () => void) => void listeners.get(type)?.delete(listener),
+        fire: (type: string) => void [...(listeners.get(type) ?? [])].forEach((listener) => listener()),
+    };
+}
+
+test("the browser keeps its loading id until its page has a title, then takes the final id and drops its listeners", () => {
+    const browser = fake_browser();
+    claim_id_when_page_ready(browser, "final");
+    assert.equal(browser.id, "loading");
+    browser.fire("pagetitlechanged");
+    assert.equal(browser.id, "final");
+    assert.deepEqual([...browser.listeners.values()].map((set) => set.size), [0, 0]);
+});
+
+test("the older title event name claims the id too", () => {
+    const browser = fake_browser();
+    claim_id_when_page_ready(browser, "final");
+    browser.fire("DOMTitleChanged");
+    assert.equal(browser.id, "final");
 });

@@ -61,6 +61,11 @@ test("a remote page whose browser holds the overlay is typing, by its id", () =>
     assert.equal(situation_of(document_with(overlay), REMOTE_TAB, event()), "typing");
 });
 
+test("a remote page whose browser holds the overlay is no typing target until the overlay's page has loaded", () => {
+    const loading = { localName: "browser", id: "desertbird-overlay-loading", contentDocument: null };
+    assert.equal(situation_of(document_with(loading), REMOTE_TAB, event()), "remote");
+});
+
 test("a message tab with the focus outside the body is a message, and a message body that runs the body script is typing", () => {
     const tab: FrontTab = { mode: "mailMessageTab", browser_is_remote: false };
     assert.equal(situation_of(document_with({ localName: "button" }), tab, event()), "message");

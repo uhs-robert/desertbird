@@ -190,6 +190,7 @@ async function run_default(instance) {
   // E2E_ONLY=hud runs the which-key, toast and help checks alone, for a quick run of that part.
   if (process.env.E2E_ONLY === "hud") return run_hud(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "cmdline") return run_cmdline(instance, { app, kind, shot });
+  if (process.env.E2E_ONLY === "cmdline_launch") return run_cmdline_launch(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "search") return run_search(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "hints") return run_window_hints(instance, { app, kind, shot });
@@ -551,6 +552,7 @@ async function run_default(instance) {
   await timed(instance, "view_settings", () => run_view_settings(instance, { app, kind }));
   await shot("after_view_settings", "Views folder after the view setting keys");
   await timed(instance, "cmdline", () => run_cmdline(instance, { app, kind, shot }));
+  await timed(instance, "cmdline_launch", () => run_cmdline_launch(instance, { app, kind, shot }));
   await timed(instance, "folders", () => run_folders(instance));
   await timed(instance, "hud", () => run_hud(instance, { app, kind, shot }));
   await timed(instance, "followup", () => run_followup(instance));
@@ -1350,16 +1352,41 @@ async function run_window_hints(instance, { app, kind, shot }) {
   check(app, kind, "the app survived the window hint checks", instance.exited() === null);
 }
 
+// The full run arrives in Views. Run alone it would start in the Inbox, where Betterbird has the last row selected and Down cannot move, so the group shows Views itself.
+async function ensure_views_folder(instance, { app, kind }) {
+  const state = await instance.ask("state");
+  if (state.mail_tab?.folder === "/Views") return;
+  const prepared = await instance.ask("prepare_views", 30000);
+  await sleep(2000);
+  const shown = (await instance.ask("state")).mail_tab?.folder;
+  check(app, kind, "the helper shows the Views folder before the command line checks", prepared.prepared === true && shown === "/Views", prepared.error ?? `folder ${shown}`);
+}
+
+// Issue 97: the overlay mount focuses its browser before its page loads, and keys typed right after the colon used to reach Thunderbird's shortcuts. The old check ran with no message selected, so j and a had nothing to move or archive.
+async function run_cmdline_launch(instance, { app, kind, shot }) {
+  const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
+  await ensure_views_folder(instance, { app, kind });
+  await instance.ask("select:views-0@fixture.invalid", 30000);
+  await sleep(500);
+  const before = await instance.ask("state");
+  check(app, kind, "a message is selected before the colon", selection_of(before) === "views-0@fixture.invalid", `selected ${selection_of(before)}`);
+  await instance.press([":", "j", "a"]);
+  await sleep(2500);
+  await shot("cmdline_launch", "the command line right after : j a typed with no pause and a message selected: the line is open and empty");
+  const after = await instance.ask("state");
+  check(app, kind, "with a message selected, : then j a typed with no pause moves nothing and archives nothing", selection_of(after) === selection_of(before) && JSON.stringify(after.folders) === JSON.stringify(before.folders), `selected ${selection_of(before)} then ${selection_of(after)}, mail changed: ${JSON.stringify(after.folders) !== JSON.stringify(before.folders)}`);
+  // The page is ready now, so its keys reach the line and not the list.
+  await instance.press(["j", "a"]);
+  await sleep(500);
+  const typed = await instance.ask("state");
+  check(app, kind, "after the page is ready, j and a go to the line and not the list", selection_of(typed) === selection_of(before) && JSON.stringify(typed.folders) === JSON.stringify(before.folders), `selected ${selection_of(typed)}`);
+  await close_command_line(instance);
+}
+
 async function run_cmdline(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
   let state = await instance.ask("state");
-  // The full run arrives in Views. Run alone it would start in the Inbox, where Betterbird has the last row selected and Down cannot move, so the group shows Views itself.
-  if (state.mail_tab?.folder !== "/Views") {
-    const prepared = await instance.ask("prepare_views", 30000);
-    await sleep(2000);
-    const shown = (await instance.ask("state")).mail_tab?.folder;
-    check(app, kind, "the helper shows the Views folder before the command line checks", prepared.prepared === true && shown === "/Views", prepared.error ?? `folder ${shown}`);
-  }
+  await ensure_views_folder(instance, { app, kind });
   state = await settled_state(instance, selection_of);
   let selected_before = selection_of(state);
   let folders_before = JSON.stringify(state.folders);
