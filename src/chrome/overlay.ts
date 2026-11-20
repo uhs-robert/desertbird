@@ -127,7 +127,7 @@ export function on_escape_key(read_title: () => string, wait: (run: () => void, 
 // The browser element fires the first name where Thunderbird has renamed the second.
 const TITLE_EVENTS = ["pagetitlechanged", "DOMTitleChanged"];
 
-/** How long the host waits for the ready title before it closes the overlay. It is under the hold of the key runtime (1500 ms), so the hold never outlives the line it guards. */
+/** How long the host waits for the ready title before it closes the overlay. The key runtime drops plain keys for as long as the loading id lasts, so nothing depends on this wait ending before the hold does. */
 export const READY_FAILSAFE_MS = 1400;
 
 interface ReadyBrowser {

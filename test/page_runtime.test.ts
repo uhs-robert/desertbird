@@ -13,6 +13,7 @@ class FakeWindow {
     tab_listeners = new Set<() => void>();
     blur_listeners = new Set<() => void>();
     situation: Situation = "page";
+    overlay_loading = false;
     /** The target the runtime listens on, a stand-in for the window root. */
     root: KeyTarget = {
         addEventListener: (_type, listener) => void this.key_listeners.add(listener),
@@ -34,6 +35,7 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
         stopPropagation: () => void (result.stopped = true),
         ...options,
     };
+    window.overlay_loading = (event.target as { id?: string }).id === "desertbird-overlay-loading";
     for (const listener of [...window.key_listeners]) listener(event);
     return result;
 }
@@ -58,6 +60,7 @@ function setup(window_count = 1) {
         open_windows: () => windows,
         key_target_of: (window) => window.root,
         situation_of: (window) => window.situation,
+        overlay_is_loading: (window) => window.overlay_loading,
         message_ids_of: () => [42],
         scroll: (_window, id, count) => (scrolls.push([id, count]), true),
         on_tab_select(window, listener) {
@@ -204,6 +207,19 @@ test("plain keys are dropped after a held command until the focus reaches a text
     advance(1600);
     press(window, "q");
     assert.deepEqual(invocations().map((event) => event.command), ["cmdline.open", "cmdline.open", "tab.close"]);
+});
+
+test("plain keys are dropped while the focus is in a loading overlay, even after the hold ran out", () => {
+    const { windows, runtime, invocations, advance } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    advance(1600);
+    window.situation = "remote";
+    const loading = { target: { localName: "browser", id: "desertbird-overlay-loading" } };
+    assert.equal(press(window, "q", loading).cancelled, true);
+    assert.deepEqual(invocations().map((event) => event.command), ["cmdline.open"]);
+    assert.equal(press(window, "Escape", loading).cancelled, false);
 });
 
 test("a chord is not held", () => {

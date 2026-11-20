@@ -20,6 +20,8 @@ export interface PageDeps<Window> {
     scroll(window: Window, id: string, count: number | undefined): boolean;
     on_tab_select(window: Window, listener: () => void): () => void;
     on_window_blur(window: Window, listener: () => void): () => void;
+    /** Whether the focus sits in the overlay's browser while its page is not ready. Plain keys are dropped then, whatever the hold timer says. */
+    overlay_is_loading(window: Window): boolean;
     window_id_of(window: Window): number;
     /** Milliseconds, for the hold timeout. */
     now(): number;
@@ -60,6 +62,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         const token = event_to_token(event);
         if (token === null) return;
         const situation = deps.situation_of(window, event);
+        // The overlay's browser has the focus before its page can take a key, and the hold timer can run out first. Plain keys are dropped for as long as that lasts.
+        if (is_plain_printable(token) && deps.overlay_is_loading(window)) return void (event.preventDefault(), event.stopPropagation());
         if (hold_until > deps.now()) {
             // The hold ends when the focus is in a text field, which the overlay's browser counts as.
             if (situation === "typing") hold_until = 0;

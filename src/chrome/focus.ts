@@ -1,6 +1,6 @@
 // Finds out where a key is going: a text field, the reading pane or an open menu. The top window sees keys from every document below it, so the event target alone can name the wrapping element and not the field.
 
-import { OVERLAY_BROWSER_ID } from "./overlay_id.ts";
+import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "./overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 
 export interface FocusNode {
@@ -78,6 +78,9 @@ export interface KeyEventTargets {
 
 /** Whether focus sits in a text field of the window: insert mode. The body script counts as typing for a key and not here, since it runs commands of its own. */
 export const in_text_field = (document: FocusDocument): boolean => is_typing_element(innermost_focus(document));
+
+/** Whether the focus sits in the overlay's browser while its page is not ready. A key sent there reaches no page, so it must not reach Thunderbird's shortcuts either. */
+export const overlay_is_loading = (document: FocusDocument): boolean => innermost_focus(document)?.id === OVERLAY_LOADING_ID;
 
 /** A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside. */
 export function is_typing(event: KeyEventTargets, document: FocusDocument): boolean {

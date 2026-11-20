@@ -2,7 +2,7 @@
 
 import { app_verbs } from "./app_verbs.ts";
 import type { FolderTreeLike } from "./app_verbs.ts";
-import { focused_pane, in_reading_pane, is_typing, menu_is_open } from "./focus.ts";
+import { focused_pane, in_reading_pane, is_typing, menu_is_open, overlay_is_loading } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
@@ -44,6 +44,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         },
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
         menu_is_open: (window: MainWindow) => menu_is_open(window.document),
+        overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
         on_tab_select(window, listener) {
             // On the window and not on the tab strip: at startup the strip does not exist yet when the window is hooked (measured), and a capture listener on the window sees the event from any element below it.

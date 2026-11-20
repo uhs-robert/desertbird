@@ -47,7 +47,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Give the Experiment a fixed table of chrome verbs, each with typed args checked against its schema. Never add a verb that takes a free string to run, a script, or a URL. A new verb needs a reason in the commit message.
 - The chrome runtime follows the same admission rule as DesertFox `content.js`: code goes in only if it runs before the first key or decides what happens to a key, serves a key pressed in most windows (motions), is needed to load the other parts, or must work while the window changes state. Everything else goes in the background page or an on-demand bundle. The same rule applies to the body script bundle. Hint pick keys live in `experiment/hints.js`, which holds `sendEnter` and `pick` and nothing from the key runtime. The keys of every tab but the mail tab live in `experiment/pages.js`. Compose keys live in `content/compose_keys.js`, which takes only Ctrl+E, Ctrl+O and `e` after Ctrl+O or Escape.
 - Each bundle has a size guard in `tools/build.mjs` and a ceiling. The build fails above a guard, and `test/build.test.ts` checks each guard against its ceiling. The raise history is in `docs/design.md`, "Bundle size guards". Guards and ceilings, in bytes:
-  - `experiment/keys.js` and `experiment/overlay.js`, each: guard 26700, ceiling 40960 (`PARENT_MAX_BYTES`).
+  - `experiment/keys.js` and `experiment/overlay.js`, each: guard 27212, ceiling 40960 (`PARENT_MAX_BYTES`).
   - `content/message_display.js`: guard 18162, ceiling 24576 (`CONTENT_MAX_BYTES`).
   - `experiment/hints.js`: guard 13050, ceiling 20480 (`HINTS_MAX_BYTES`).
   - `experiment/pages.js`: guard 22800, ceiling 34816 (`PAGES_MAX_BYTES`).

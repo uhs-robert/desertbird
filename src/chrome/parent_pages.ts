@@ -1,6 +1,6 @@
 // The parent script of the `pages` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `pages`: `getAPI(context)` returns `get_pages_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { focus_chain } from "./focus.ts";
+import { focus_chain, overlay_is_loading } from "./focus.ts";
 import { run_scroll, scroll_focus, scroll_target } from "./page_actions.ts";
 import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
@@ -51,6 +51,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             const tab = front_tab_of(window);
             return situation_of(window.document, tab && { mode: tab.mode.name, browser_is_remote: tab.browser?.isRemoteBrowser === true }, event);
         },
+        overlay_is_loading: (window) => overlay_is_loading(window.document),
         message_ids_of(window) {
             const tab = front_tab_of(window);
             const header = tab?.message ?? tab?.chromeBrowser?.contentWindow?.gMessage;
