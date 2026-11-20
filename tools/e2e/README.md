@@ -42,6 +42,22 @@ Betterbird is `/usr/bin/betterbird`. Override a binary with `--binary thunderbir
 
 `start_app` and `restart` return when the app is ready, not after a fixed wait. Ready is two steps. First the helper add-on answers `state` with DesertBird enabled and a mail tab. Then a key probe: Escape, `w`, `m` flips the message pane and the helper sees the flip. The probe is pressed until a press lands, because a key before the first paint and focus is dropped. It then presses until the pane is back as it was and has held that value for 1.5 s. `restart` waits for the old process to exit and clears the old reply file before it asks, so a stale answer never counts. If the ceiling `E2E_STARTUP_MS` passes first, the start fails with the stage it was in and the log path. A start with no helper add-on (the setup proof without `--xpi`) has nothing to ask and keeps the fixed wait.
 
+## Waits
+
+A key is not followed by a fixed sleep where the helper add-on can read its result. `run.mjs` has these helpers, ported from the DesertFox key-test harness (`poll_until`, `barrier`, `expect_absent`):
+
+- `wait_state(instance, what, until, options)` asks for `state` until `until(state)` holds. It starts with `wait_for`, which takes any read. `key_and_state(instance, keys, { what, until })` presses and waits. A number as the third argument is the older fixed wait, which the sections not yet ported still use. `selects(id)`, `flag_becomes(id, name, value)` and `compose_opens(tab_is_ready)` build the common waits.
+- `barrier(instance)` presses an unbound key (`F13`) and then reads `state` twice. `expect_absent(instance, name, found)` records a check that nothing happened: it takes the barrier, then `found(state)` returns what appeared, or null. A fold or a scroll has no state of its own, so a barrier stands in for its wait.
+- `run_default` records a check that a `j` before a one-round barrier has moved the selection. A miss would mean the barrier is too weak for the negative checks.
+
+Departures from DesertFox:
+
+- A wait that times out does not throw. It records `FAIL wait for <what>` with the last read and returns that read, so the check after it reports the value and the checks behind it still run. `soft` waits only settle a state and record no FAIL. DesertFox throws, because a case there is one unit.
+- DesertFox reads a key-event feed from the page, so its barrier waits for the page to report the key. DesertBird has no such feed and no test hook in `src/`, so the barrier proves delivery by the order of a key and a state round trip. It does not wait for work a key starts in the background (an archive, a window opening): a wait on the resulting state does that. The key in a fold goes through the background page, so a motion after it can run first. That is why a fold is followed by a barrier.
+- The wait time is counted in `wait_stats` and printed as the NOTE `polled waits` at the end of the default section, not in a `waits` bucket of `timings.mjs`.
+- The helper add-on polls the sink every 50 ms (it was 200 ms), because the gap is the floor of every wait. It also reports `focused` for each window, which `close_compose` waits on.
+- Fixed waits that stay: the open context menu, which has no state (`run_default`).
+
 ## Timings
 
 Every run writes `$E2E_TIMINGS_FILE` (default `$E2E_DIR/timings.json`) after each profile kind. It has the shape of the DesertFox key-test report. `pieces` holds one entry per kind (`<app>/<kind>`, with its app starts as `startups` and its peak memory as `peak_memory_kb`) and one per section of the `default` kind (`<app>/default/<section>`), each with `wall_ms`. A kind piece includes its section pieces in its wall time. A startup entry has `first_poll_ms`, `first_answer_ms`, `mail_tab_ms`, `enabled_ms` and `keys_live_ms` from the launch, and the `ceiling_ms` it would have waited. Memory is the sum over the app's process group, so content processes count. `rss_kb` counts shared pages in every process, `pss_kb` splits them. `timings.mjs` holds the sampler.
