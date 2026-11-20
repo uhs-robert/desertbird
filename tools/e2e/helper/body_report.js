@@ -14,6 +14,8 @@ function report() {
       scroll_height: root.scrollHeight,
       inner_height: window.innerHeight,
       selection: String(window.getSelection()),
+      // The start of the text, so a wait can tell which message the document shows. A fixture body names its own message.
+      text_start: (document.body?.innerText ?? "").slice(0, 200),
     })
     .catch(() => {});
 }

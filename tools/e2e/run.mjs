@@ -153,9 +153,10 @@ const flag_becomes = (id, name, value) => ({ what: `${name} of ${id} to become $
 // A compose window opens late: the subject and the quote arrive after the window, and Thunderbird can take many seconds.
 const compose_opens = (tab_is_ready) => ({ what: "a compose window with its content", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some(tab_is_ready)), timeout_ms: 15000 });
 
-// Waits until the message a key just selected has loaded and the status bar is blank again. The pane has no helper state for a load in progress, but the helper's body script reports 1.5 s after a document loads. So the wait first takes a report from another document than `body_before` (the report read before the key) and newer than it, and only then compares the status bar text area with a blank stretch of the same bar. Before the load, that bar can be blank too, before "Loading Message..." shows.
-async function wait_message_loaded(instance, body_before) {
-  await wait_state(instance, "the selected message to load and report its body", (state) => state.body !== null && state.body.href !== body_before?.href && state.body.received > (body_before?.received ?? 0), { timeout_ms: 8000, soft: true });
+// Waits until the fixture message `header_id` has loaded in the pane and the status bar is blank again. The pane has no helper state for a load in progress, but the helper's body script reports 1.5 s after a document loads, with the start of its text, and a fixture body names its own message. So the wait first takes a report from that message's document, and only then compares the status bar text area with a blank stretch of the same bar. Before the load, that bar can be blank too, before "Loading Message..." shows.
+async function wait_message_loaded(instance, header_id) {
+  const body_names_it = `Body of ${header_id.replace("@fixture.invalid", "")}.`;
+  await wait_state(instance, `${header_id} to load and report its body`, (state) => (state.body?.text_start ?? "").includes(body_names_it), { timeout_ms: 8000, soft: true });
   const text_area = "200,698 140x20";
   const blank_area = "700,698 140x20";
   return wait_for(instance, "the status bar to stop showing a load", async () => (await hud_pixels(instance, `${instance.app}_status_text`, text_area)) === (await hud_pixels(instance, `${instance.app}_status_blank`, blank_area)), (idle) => idle, { timeout_ms: 8000, soft: true });
@@ -530,7 +531,6 @@ async function run_default(instance) {
   await sleep(500);
   await shot("reading_pane_focus", "message body has focus after one F6 from the list");
   const junk_before = Object.values((await instance.ask("state")).flags).filter((flags) => flags.junk).length;
-  const body_before = (await instance.ask("state")).body;
   await instance.press(["j"]);
   await expect_absent(instance, "j with focus in the message body neither junks nor moves the selection", (now) => {
     const junk_after = Object.values(now.flags).filter((flags) => flags.junk).length;
@@ -543,7 +543,7 @@ async function run_default(instance) {
   state = await key_and_state(instance, ["j"], selects(live_rows().at(-1)));
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
   // The message pane of the row just selected is still loading, which the status bar shows as "Loading Message...". run_tabs compares the bottom strip against a baseline it takes first, so the load has to end.
-  await wait_message_loaded(instance, body_before);
+  await wait_message_loaded(instance, live_rows().at(-1));
   await timed(instance, "tabs", () => run_tabs(instance, { check, note, shot, key_and_state }));
 
   // <C-l> on a collapsed thread root (several messages) refuses and opens no tab. On one message it opens a tab.
