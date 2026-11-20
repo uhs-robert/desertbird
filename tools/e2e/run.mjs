@@ -67,7 +67,7 @@ async function open_inbox(instance, folder_row_tabs = 7, { expanded = false } = 
   for (let count = 0; count < folder_row_tabs; count++) await instance.press(["-k", "Tab"]);
   if (!expanded) await instance.press(["-k", "Right"]);
   await instance.press(["-k", "Down"]);
-  const opened = (await wait_state(instance, "the Inbox to show after Down", (state) => state.mail_tab?.folder === "/Inbox", { soft: true })).mail_tab?.folder;
+  const opened = (await wait_state(instance, "the Inbox to show after Down", (state) => state.mail_tab?.folder === "/Inbox", { soft: true, timeout_ms: 3000 })).mail_tab?.folder;
   // The status bar keeps "Done" for a few seconds after a folder loads, and the first pixel reads of later checks include it. That has no helper state, so this wait stays fixed.
   await sleep(1500);
   await instance.press(["-k", "F6"]);
