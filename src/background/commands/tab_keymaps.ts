@@ -75,13 +75,22 @@ function complete_mail_sequences(branch: TreeBranch, mail_branch: TreeBranch, is
     }
 }
 
+// Before the zoom keys, a body tree lacked `z`, so `complete_mail_sequences` gave it a capture and any key after `z` ran nothing. The zoom keys made `z` a real prefix there, and a key with no zoom binding (a vim `z a`) would break the sequence and run as `a`, which archives. The capture beside the zoom keys keeps that guard: the matcher tries the typed key first and the capture second.
+function close_zoom_prefix(root: TreeBranch): void {
+    const zoom_branch = root.children["z"];
+    if (zoom_branch?.kind === "branch") zoom_branch.children[ANY_KEY] ??= { kind: "leaf", steps: [] };
+}
+
 /**
  * The tree of a tab kind. The default keys are the default layer, so a user key that extends a default key (`gfz` over `gf`) drops that key as it does in the mail tab.
  * A kind with a body script also ends the mail sequences it lacks in a leaf that runs nothing, so the tail of a list sequence never runs as a key of its own. `mail_root` is the mail tree with the user's keys, which the user's sequences are in.
  */
 export function compile_tab_keymap(kind: TabKind, user: KeymapConfig["normal"] = {}, mail_root = compile_default_keymap().compiled.modes.normal as TreeBranch): CompileResult {
     const result = compile_bindings(keymap_of(kind, user), {}, default_keymap_of(kind));
-    if (TAB_KINDS[kind].includes("body" as never)) complete_mail_sequences(result.compiled.modes.normal as TreeBranch, mail_root);
+    if (TAB_KINDS[kind].includes("body" as never)) {
+        complete_mail_sequences(result.compiled.modes.normal as TreeBranch, mail_root);
+        close_zoom_prefix(result.compiled.modes.normal as TreeBranch);
+    }
     return result;
 }
 

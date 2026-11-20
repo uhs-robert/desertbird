@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ANY_KEY } from "../vendor/desertfox/prefix_tree.ts";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { RuntimeRefusal } from "../vendor/desertfox/command.ts";
 import { compile_default_keymap } from "../src/background/commands/index.ts";
@@ -83,6 +84,37 @@ test("zoom.set clamps the level, and both refuse where there is nothing to zoom"
     assert.equal(clamp_zoom(1 + 0.1 + 0.1), 1.2);
 });
 
+test("a zoom-out step below the floor and a zoom-in step above the ceiling leave the level as it is", async () => {
+    for (const [from, delta] of [[0.2, -0.1], [0.2, -0.5], [6, 0.1], [6, 0.5]] as const) {
+        const { sets, scope } = scope_with(from);
+        await zoom_by(scope, { delta });
+        assert.deepEqual(sets, [], `${from} ${delta}`);
+    }
+    const { sets, scope } = scope_with(0.2);
+    await zoom_by(scope, { delta: 0.1 });
+    assert.deepEqual(sets, [0.3]);
+});
+
+test("two zoom steps fired together both count", async () => {
+    let level = 1;
+    // The Experiment answers after a turn of the event loop, as a real call does, so two unqueued steps would both read 1.
+    const later = <T>(value: () => T) => new Promise<T>((resolve) => setTimeout(() => resolve(value()), 5));
+    const zoom: ZoomApi = { get: () => later(() => level), set: ({ level: to }) => later(() => ((level = to), true)) };
+    const scope = { api: { zoom }, window_id: 4, message_ids: [], count: 1 };
+    await Promise.all([zoom_by(scope, { delta: 0.1 }), zoom_by(scope, { delta: 0.1 })]);
+    assert.equal(level, 1.2);
+});
+
+test("a refused step does not stop the next one", async () => {
+    const { scope } = scope_with(null);
+    const refused = zoom_by({ ...scope, window_id: 5 }, { delta: 0.1 });
+    const { sets, scope: next } = scope_with(1);
+    const followed = zoom_by({ ...next, window_id: 5 }, { delta: 0.1 });
+    await assert.rejects(refused, RuntimeRefusal);
+    await followed;
+    assert.deepEqual(sets, [1.1]);
+});
+
 function leaf_at(root: TreeBranch, ...tokens: string[]): { id: string; args?: unknown } | undefined {
     let node: TreeNode | undefined = root;
     for (const token of tokens) node = node?.kind === "branch" ? node.children[token] : undefined;
@@ -107,6 +139,13 @@ test("every tree binds the zoom keys, and the mail tab keeps zM and zR as thread
     for (const [name, root] of Object.entries(trees)) for (const [key, id, args] of ZOOM_KEYS) assert.deepEqual(leaf_at(root, "z", key), { id, args }, `${name} z${key}`);
     assert.equal(leaf_at(mail, "z", "M")?.id, "thread.fold_all");
     assert.equal(leaf_at(mail, "z", "R")?.id, "thread.fold_all");
+});
+
+test("an unbound key after z runs nothing in a body tree, beside the zoom keys", () => {
+    for (const kind of ["message", "own"] as const) {
+        const zoom_branch = (compile_tab_keymap(kind).compiled.modes.normal as TreeBranch).children["z"] as TreeBranch;
+        assert.deepEqual(zoom_branch.children[ANY_KEY], { kind: "leaf", steps: [] }, kind);
+    }
 });
 
 test("a message document and an own page may ask the background for both zoom commands", () => {

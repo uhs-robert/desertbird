@@ -255,11 +255,12 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 
 `experiment/zoom.js` is the Experiment API `zoom`, loaded on the first zoom key. No key waits on it in the key runtime, so the admission rule keeps it out of `keys.js`. Its first measured size was 3032 bytes. The guard is that plus one 512-byte step, 3544, with a ceiling of 6144 (1.5 times the guard, rounded up to 1024). It has had no raise.
 
-The zoom keys start from DesertFox `src/commands/zoom.ts`: the same `zoom.by {delta}` and `zoom.set {level}` (`:zoom`), the same steps (`z i`, `z +`, `z o`, `z -` by 0.1, `z m`, `z r` by 0.5, `z =` to 1, `z I` to 3, `z O` to 0.3) and the same clamp to 0.3 .. 5. Departures, each with its reason:
+The zoom keys run in the mail tab, message documents, own pages and the page tabs. Web pages get them with the page actor, which runs only the close chord there today. They start from DesertFox `src/commands/zoom.ts`: the same `zoom.by {delta}` and `zoom.set {level}` (`:zoom`), the same steps (`z i`, `z +`, `z o`, `z -` by 0.1, `z m`, `z r` by 0.5, `z =` to 1, `z I` to 3, `z O` to 0.3) and the same clamp to 0.3 .. 5. Departures, each with its reason:
 
 - An Experiment where DesertFox calls `tabs.getZoom` and `tabs.setZoom`. Thunderbird has neither (measured), and the message pane of the mail tab is no tab.
 - `z M` and `z R` stay the thread folds of the mail tab, so the half step has the lower-case keys only.
 - A count multiplies the step in one change (`3 z i` is +0.3), where DesertFox runs the command once per count. The result is the same, with one round trip.
+- A step that the clamp would turn the other way does nothing: Thunderbird's own Ctrl+minus reaches 20%, below the floor, where `z o` would zoom in. Firefox stops at 30%, so DesertFox never meets it.
 - No zoom memory per site. Thunderbird keeps the zoom on the browser: the message pane keeps it across messages and folders, and a new message tab or window starts at 100%.
 
 ### Body script bundle

@@ -3,6 +3,7 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { ZoomApi } from "../../shared/protocol.ts";
+import { keep_chain } from "../../shared/swallow.ts";
 import type { HandlerScope } from "./message.ts";
 
 export const ZOOM_MIN = 0.3;
@@ -26,10 +27,27 @@ async function set_level(scope: ZoomScope, level: number): Promise<void> {
 }
 
 /** A count multiplies the step, so `3zi` zooms in by three steps in one change. */
-export async function zoom_by(scope: ZoomScope, args: CheckedArgs): Promise<void> {
+async function step_level(scope: ZoomScope, args: CheckedArgs): Promise<void> {
     const level = await scope.api.zoom.get({ windowId: scope.window_id });
     if (level === null) throw new RuntimeRefusal(NOTHING_TO_ZOOM);
-    await set_level(scope, level + (args["delta"] as number) * scope.count);
+    const delta = (args["delta"] as number) * scope.count;
+    // Thunderbird's own Ctrl+minus reaches 0.2, below the 0.3 floor, so the clamp alone would make a zoom-out step zoom in.
+    const moves_against_step = Math.sign(clamp_zoom(level + delta) - level) === -Math.sign(delta);
+    if (moves_against_step) return;
+    await set_level(scope, level + delta);
+}
+
+// Each step reads the level and then sets it. Two fast presses would both read the old level and one step would be lost, so the steps of a window run one after the other.
+const steps_in_flight = new Map<number, Promise<void>>();
+
+export function zoom_by(scope: ZoomScope, args: CheckedArgs): Promise<void> {
+    const window_id = scope.window_id;
+    const step = (steps_in_flight.get(window_id) ?? Promise.resolve()).then(() => step_level(scope, args));
+    const queued = keep_chain(step);
+    steps_in_flight.set(window_id, queued);
+    // The chain of a window ends with its last step, so the map holds only the steps in flight.
+    void queued.then(() => steps_in_flight.get(window_id) === queued && steps_in_flight.delete(window_id));
+    return step;
 }
 
 export const zoom_set = (scope: ZoomScope, args: CheckedArgs): Promise<void> => set_level(scope, args["level"] as number);
