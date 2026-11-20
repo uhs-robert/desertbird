@@ -312,6 +312,7 @@ The event target seen from the top window is not enough to tell where focus is. 
 - Five Tabs from the thread list end on the message header buttons and then a notification button. They never reach the body.
 - Betterbird: three Tabs from the folder pane end on `button#threadColButton`, not on the thread list.
 - A key press with a context menu open (opened with `Shift+F10`) still reaches the top window listener. The menu is `menupopup#mailContext` in `about:3pane`. Its `state` is `open` and its `open` attribute stays unset. With no check, `j` moved the thread selection under the open menu on Thunderbird.
+- A popup opened by a mouse click, such as the app menu (hamburger button) on Betterbird, leaves the focus in the thread list, and a plain key still reaches the top window listener and then Thunderbird's own shortcuts: `j` marked the selected message as junk. The same key reaches the app menu's own access keys only when the menu has the keyboard focus. After a click, `n` did not open Add Account, with or without the key runtime, so the runtime lets an access key through and swallows the rest.
 
 ### F6 order
 

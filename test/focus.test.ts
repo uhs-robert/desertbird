@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
+import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_access_keys, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
@@ -185,4 +185,23 @@ test("the overlay's browser is a typing target by its final id and not by its lo
     const browser = (id: string) => element("browser", { id });
     assert.equal(is_typing({ target: browser(OVERLAY_BROWSER_ID) }, document_of(null)), true);
     assert.equal(is_typing({ target: browser(OVERLAY_LOADING_ID) }, document_of(browser(OVERLAY_LOADING_ID))), false);
+});
+
+test("the access keys of the open popups, in the light tree and in a shadow root", () => {
+    const item = (key: string) => ({ getAttribute: () => key });
+    const popup = (state: string, keys: string[], extra: object = {}) => ({ state, querySelectorAll: (selectors: string) => (selectors === "[accesskey]" ? keys.map(item) : []), ...extra });
+    const list = element("tbody");
+    const scope = (nodes: object[]) => ({ querySelectorAll: (selectors: string) => (selectors === "*" ? nodes : nodes.filter((node) => "state" in node || "hasAttribute" in node)) });
+    const doc = (nodes: object[]) => ({ activeElement: list, querySelectorAll: scope(nodes).querySelectorAll as never });
+    assert.deepEqual(menu_access_keys(doc([popup("open", ["A", "t"]), popup("closed", ["z"])])), ["a", "t"]);
+    assert.deepEqual(menu_access_keys(doc([popup("open", [])])), []);
+    assert.equal(menu_access_keys(doc([popup("closed", ["z"])])), null);
+    assert.equal(menu_access_keys(doc([])), null);
+    // A popup that exists only inside a shadow root, found through its host.
+    const host = { shadowRoot: scope([popup("showing", ["q"])]) };
+    assert.deepEqual(menu_access_keys(doc([host])), ["q"]);
+    assert.equal(menu_is_open(doc([host])), true);
+    // A panel-list has no state: its open attribute tells.
+    const panel_list = { hasAttribute: (name: string) => name === "open", querySelectorAll: () => [item("x")] };
+    assert.deepEqual(menu_access_keys(doc([panel_list])), ["x"]);
 });

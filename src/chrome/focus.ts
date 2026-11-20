@@ -20,7 +20,16 @@ export interface FocusDocument {
     activeElement: FocusNode | null;
     body?: FocusNode | null;
     documentElement?: MarkedRoot | null;
-    querySelectorAll?(selectors: string): Iterable<{ state?: string }>;
+    querySelectorAll?(selectors: string): Iterable<PopupNode>;
+}
+
+/** What the popup walk reads of an element. A shadow root has the same query. */
+export interface PopupNode {
+    state?: string;
+    shadowRoot?: { querySelectorAll?(selectors: string): Iterable<PopupNode> } | null;
+    hasAttribute?(name: string): boolean;
+    getAttribute?(name: string): string | null;
+    querySelectorAll?(selectors: string): Iterable<PopupNode>;
 }
 
 // Elements the user types text into. A `browser` is not one: the walk enters every browser it can read, and one it cannot read (a remote page) holds no Thunderbird text field.
@@ -62,13 +71,30 @@ export const in_reading_pane = (document: FocusDocument): boolean => focused_pan
 /** Whether the document that holds the focus is a message body that runs the body script. Only the innermost document counts: the script runs in the top frame only, so a key from a frame in the mail never reaches it. Focus in the message header or the thread list is in another document. */
 export const body_script_is_live = (document: FocusDocument): boolean => focus_chain(document).findLast((node) => node.contentDocument)?.contentDocument?.documentElement?.hasAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE) === true;
 
-// A menu or panel shows from the moment it opens until it closes. Its `open` attribute stays unset, so only `state` tells.
+// A menu or panel shows from the moment it opens until it closes. Its `open` attribute stays unset, so only `state` tells. A `panel-list` has no `state` and carries `open`.
 const SHOWN_POPUP_STATES = new Set(["showing", "open"]);
 
-/** Whether a menu or panel is open in the window or in a document on the way to the focus, such as the thread list's context menu in about:3pane. Its access keys are its own then. */
-export function menu_is_open(document: FocusDocument): boolean {
+type Scope = { querySelectorAll?(selectors: string): Iterable<PopupNode> };
+
+// `querySelectorAll` stops at a shadow root, and a popup can sit in one (or hold items in one), so every root below the scope is searched too.
+function find_deep(scope: Scope, selectors: string): PopupNode[] {
+    const found = [...(scope.querySelectorAll?.(selectors) ?? [])];
+    for (const host of scope.querySelectorAll?.("*") ?? []) if (host.shadowRoot) found.push(...find_deep(host.shadowRoot, selectors));
+    return found;
+}
+
+function open_popups(document: FocusDocument): PopupNode[] {
     const documents = [document, ...focus_chain(document).flatMap((node) => (node.contentDocument ? [node.contentDocument] : []))];
-    return documents.some((each) => [...(each.querySelectorAll?.("menupopup, panel") ?? [])].some((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "")));
+    return documents.flatMap((each) => find_deep(each, "menupopup, panel, panel-list").filter((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "") || popup.hasAttribute?.("open") === true));
+}
+
+/** Whether a menu or panel is open in the window or in a document on the way to the focus, such as the thread list's context menu in about:3pane. */
+export const menu_is_open = (document: FocusDocument): boolean => open_popups(document).length > 0;
+
+/** The access keys, lower case, of the items in the open popups, or null when no popup is open. A key outside the list is one the popup ignores, so it must not reach Thunderbird's own shortcuts. */
+export function menu_access_keys(document: FocusDocument): string[] | null {
+    const popups = open_popups(document);
+    return popups.length ? popups.flatMap((popup) => find_deep(popup, "[accesskey]").map((item) => (item.getAttribute?.("accesskey") ?? "").toLowerCase())) : null;
 }
 
 export interface KeyEventTargets {
