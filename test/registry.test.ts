@@ -13,7 +13,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
     snooze: { runs_in: "background", ids: ["msg.snooze"] },
-    tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close", "tab.close_mail"] },
+    tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.goto", "tab.alternate", "tab.move", "tab.close", "tab.close_mail"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
     reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.page_down", "message.page_up", "message.scroll_left", "message.scroll_right", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message"], background_ids: ["search.message"] },
     folders: { runs_in: "background", ids: ["folder.open", "folder.collapse", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
@@ -170,10 +170,14 @@ test("the tab commands keep their keys and bridge values: moving between tabs is
     for (const keys of ["K", "<A-k>", "tp"]) assert.equal(bound(keys), "tab.prev", keys);
     assert.deepEqual(normal["t0"], { id: "tab.switch", args: { tab: "1" }, label: "First tab" });
     assert.deepEqual(normal["tT"], normal["T"] && { ...(normal["T"] as object), label: "Switch tab" });
-    for (const keys of ["<C-j>", "<C-k>", "tm", "tf"]) assert.equal(normal[keys], undefined, keys);
+    assert.deepEqual(normal["t$"], { id: "tab.goto", args: { index: -1 }, label: "Last tab" });
+    assert.deepEqual(normal["tl"], { id: "tab.alternate", label: "Last used tab" });
+    assert.deepEqual(normal["tm"], { id: "cmdline.open", args: { text: "tab.move " }, label: "Move tab" });
+    assert.deepEqual(normal["tM"], { id: "cmdline.open", args: { text: "tab.move --offset=" }, label: "Move tab by offset" });
+    for (const keys of ["<C-j>", "<C-k>", "tf"]) assert.equal(normal[keys], undefined, keys);
     assert.equal(bound("q"), "tab.close");
-    for (const id of ["tab.next", "tab.prev", "tab.switch"]) assert.equal(registry.get(id)?.bridge, true, id);
-    assert.equal(registry.get("tab.close")?.bridge, false);
+    for (const id of ["tab.next", "tab.prev", "tab.switch", "tab.goto", "tab.alternate"]) assert.equal(registry.get(id)?.bridge, true, id);
+    for (const id of ["tab.close", "tab.move"]) assert.equal(registry.get(id)?.bridge, false, id);
 });
 
 test("tab.switch takes a typed value, so its one default key is t0 and its validator needs a value", () => {
@@ -212,7 +216,7 @@ test("the bridge: true set is the audited one", () => {
     const audited = [
         "motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle",
         "filter.set", "search.threads", "sort.set", "pane.toggle",
-        "tab.next", "tab.prev", "tab.switch",
+        "tab.next", "tab.prev", "tab.switch", "tab.goto", "tab.alternate",
         "message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.page_down", "message.page_up", "message.scroll_left", "message.scroll_right", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message",
         "folder.open", "folder.collapse", "mark.jump", "jump.back", "jump.forward",
         "motion.left", "motion.right", "step.thread_root", "view.reposition", "view.half_page", "thread.fold_all",

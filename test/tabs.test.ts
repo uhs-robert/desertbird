@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { registry } from "../src/background/commands/index.ts";
+import { record_activation } from "../src/background/handlers/tabs.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
 
@@ -15,7 +16,7 @@ interface FakeTab {
 /** A tab bar: the first tab is the main mail tab. `active` is the index of the active tab. */
 const bar = (active: number, titles: string[]): FakeTab[] => titles.map((title, index) => ({ id: 10 + index, index, active: index === active, title, window_id: 3 }));
 
-function with_tabs(tabs: FakeTab[], window_type = "normal") {
+function with_tabs(tabs: FakeTab[], window_type = "normal", session: Record<string, unknown> | null = {}) {
     const calls: string[] = [];
     // Each update moves the active mark, as the real API does, so a repeated step reads the state the step before left.
     const move_active = (id: number) => tabs.forEach((tab) => void (tab.active = tab.id === id));
@@ -23,20 +24,22 @@ function with_tabs(tabs: FakeTab[], window_type = "normal") {
         query: async (query: object) => (calls.push(`tabs.query ${JSON.stringify(query)}`), tabs),
         update: async (id: number, properties: object) => (calls.push(`tabs.update ${id} ${JSON.stringify(properties)}`), move_active(id)),
         remove: async (id: number) => void calls.push(`tabs.remove ${id}`),
+        move: async (id: number, properties: object) => void calls.push(`tabs.move ${id} ${JSON.stringify(properties)}`),
     };
+    const storage = { session: session === null ? undefined : { get: async (key: string) => (key in session ? { [key]: session[key] } : {}), set: async (items: Record<string, unknown>) => void Object.assign(session, items) } };
     // The tab commands read only `tabs` and the router only `notifications`, so the rest of the messenger is absent.
     const windows = {
         get: async (id: number) => (calls.push(`windows.get ${id}`), { type: window_type }),
         remove: async (id: number) => void calls.push(`windows.remove ${id}`),
     };
     const app = { paneFocus: async (args: object) => void calls.push(`paneFocus ${JSON.stringify(args)}`) };
-    const api = { tabs: tabs_api, windows, app, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") } };
+    const api = { tabs: tabs_api, windows, app, storage, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") } };
     return { api: api as unknown as RouterApi, calls };
 }
 
 const invoke = (command: string, args: Record<string, string> = {}, count = 1) => ({ command, args, count, windowId: 3, messageIds: [] });
 const run = (api: RouterApi, command: string, args?: Record<string, string>, count?: number) => create_router(registry, api).run(invoke(command, args, count));
-const writes = (calls: string[]) => calls.filter((call) => call.startsWith("tabs.update") || call.startsWith("tabs.remove") || call.startsWith("windows.remove"));
+const writes = (calls: string[]) => calls.filter((call) => call.startsWith("tabs.update") || call.startsWith("tabs.move") || call.startsWith("tabs.remove") || call.startsWith("windows.remove"));
 const notifications = (calls: string[]) => calls.filter((call) => call.startsWith("notify"));
 
 test("tab.next selects the next tab of the key's window and wraps from the last to the first", async () => {
@@ -163,3 +166,94 @@ test("tab.close with no tab id says so and removes nothing", async () => {
     assert.deepEqual(writes(calls), []);
     assert.deepEqual(notifications(calls), ["notify The tab has no id, so it cannot be closed."]);
 });
+
+test("tab.goto 1 and -1 pick the first and the last tab, and a place past either end refuses", async () => {
+    for (const [index, expected] of [["-1", "12"], ["1", "10"], ["-3", "10"]] as const) {
+        const { api, calls } = with_tabs(bar(1, ["Mail", "Docs", "Message"]));
+        await run(api, "tab.goto", { index });
+        assert.deepEqual(writes(calls), [`tabs.update ${expected} {"active":true}`], index);
+    }
+    for (const index of ["4", "-4", "0"]) {
+        const { api, calls } = with_tabs(bar(1, ["Mail", "Docs", "Message"]));
+        await run(api, "tab.goto", { index });
+        assert.deepEqual(writes(calls), [], index);
+        assert.equal(notifications(calls).length, 1, index);
+    }
+});
+
+test("tab.alternate goes to the tab the last activation left", async () => {
+    const session: Record<string, unknown> = {};
+    await record_activation(session_of(session), { windowId: 3, previousTabId: 10 });
+    const tabs = bar(2, ["Mail", "Docs", "Message"]);
+    const { api, calls } = with_tabs(tabs, "normal", session);
+    await run(api, "tab.alternate");
+    assert.deepEqual(writes(calls), ['tabs.update 10 {"active":true}']);
+    assert.equal(notifications(calls).length, 0);
+});
+
+test("tab.alternate reads the record of its own window only", async () => {
+    const session: Record<string, unknown> = {};
+    await record_activation(session_of(session), { windowId: 4, previousTabId: 10 });
+    const { api, calls } = with_tabs(bar(2, ["Mail", "Docs", "Message"]), "normal", session);
+    await run(api, "tab.alternate");
+    assert.deepEqual(writes(calls), []);
+    assert.equal(notifications(calls).length, 1);
+});
+
+test("tab.alternate refuses when the last used tab is closed, when nothing was recorded and in a window of one tab", async () => {
+    const closed = with_tabs(bar(2, ["Mail", "Docs", "Message"]), "normal", { desertbird_last_tab_3: 99 });
+    await run(closed.api, "tab.alternate");
+    const empty = with_tabs(bar(2, ["Mail", "Docs", "Message"]));
+    await run(empty.api, "tab.alternate");
+    const message_window = with_tabs(bar(0, ["Message"]), "messageDisplay", { desertbird_last_tab_3: 10 });
+    await run(message_window.api, "tab.alternate");
+    const no_session = with_tabs(bar(2, ["Mail", "Docs", "Message"]), "normal", null);
+    await run(no_session.api, "tab.alternate");
+    for (const { calls } of [closed, empty, message_window, no_session]) {
+        assert.deepEqual(writes(calls), []);
+        assert.equal(notifications(calls).length, 1);
+    }
+});
+
+test("record_activation stores nothing without a previous tab or without session storage", async () => {
+    const session: Record<string, unknown> = {};
+    await record_activation(session_of(session), { windowId: 3 });
+    await record_activation(undefined, { windowId: 3, previousTabId: 10 });
+    assert.deepEqual(session, {});
+});
+
+test("tab.move by offset moves the tab along the bar and stops before the mail tab and at the end", async () => {
+    const cases: [number, string, string][] = [[2, "-1", "1"], [2, "-5", "1"], [1, "1", "2"], [1, "5", "3"], [3, "2", "3"]];
+    for (const [active, offset, index] of cases) {
+        const { api, calls } = with_tabs(bar(active, ["Mail", "A", "B", "C"]));
+        await run(api, "tab.move", { offset });
+        const expected = Number(index) === active ? [] : [`tabs.move ${10 + active} {"index":${index}}`];
+        assert.deepEqual(writes(calls), expected, `${active} by ${offset}`);
+    }
+});
+
+test("tab.move by place counts from 1, from the end when negative, and a place wins over the offset", async () => {
+    for (const [tab, index] of [["3", 2], ["-1", 3], ["1", 1]] as const) {
+        const { api, calls } = with_tabs(bar(1, ["Mail", "A", "B", "C"]));
+        await run(api, "tab.move", { tab, offset: "1" });
+        assert.deepEqual(writes(calls), index === 1 ? [] : [`tabs.move 11 {"index":${index}}`], tab);
+    }
+});
+
+test("tab.move onto a tab by title takes its place", async () => {
+    const { api, calls } = with_tabs(bar(1, ["Mail", "Docs", "Budget"]));
+    await run(api, "tab.move", { tab: "budget" });
+    assert.deepEqual(writes(calls), ['tabs.move 11 {"index":2}']);
+});
+
+test("tab.move never moves the first tab and refuses a window of one tab, tab 0 and an unknown title", async () => {
+    const attempts: [FakeTab[], Record<string, string>][] = [[bar(0, ["Mail", "A"]), { offset: "1" }], [bar(0, ["Message"]), { offset: "1" }], [bar(1, ["Mail", "A"]), { tab: "0" }], [bar(1, ["Mail", "A"]), { tab: "nothing" }]];
+    for (const [tabs, args] of attempts) {
+        const { api, calls } = with_tabs(tabs);
+        await run(api, "tab.move", args);
+        assert.deepEqual(writes(calls), [], JSON.stringify(args));
+        assert.equal(notifications(calls).length, 1, JSON.stringify(args));
+    }
+});
+
+const session_of = (record: Record<string, unknown>) => ({ get: async (key: string) => (key in record ? { [key]: record[key] } : {}), set: async (items: Record<string, unknown>) => void Object.assign(record, items) });

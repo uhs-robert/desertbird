@@ -140,4 +140,55 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
     const closed = await key_and_state(instance, ["q"], 2000);
     check(app, kind, `q closes the message tab (${route})`, (closed.windows.find((window) => window.type === "normal")?.tabs ?? []).length === before, `tabs ${(closed.windows.find((window) => window.type === "normal")?.tabs ?? []).length}`);
   }
+  // The tab keys on three tabs: the mail tab and two message tabs. The helper add-on switches tabs by the tabs API, which is what `tl` reads.
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(500);
+  for (let count = 0; count < 2; count++) {
+    await instance.ask("open_message_tab");
+    await sleep(2500);
+    await instance.ask("select_tab", 20000, { index: 0 });
+    await sleep(500);
+  }
+  const active_index = async () => (await tabs_of()).find((tab) => tab.active)?.index;
+  const order_of = async () => (await tabs_of()).map((tab) => tab.id);
+  const start_order = await order_of();
+  check(app, kind, "two message tabs open for the tab keys", start_order.length === before + 2, `tabs ${start_order.length}, expected ${before + 2}`);
+  await instance.press(["t"]);
+  await instance.press(["$"]);
+  await sleep(1000);
+  check(app, kind, "t$ goes to the last tab", (await active_index()) === before + 1, `active ${await active_index()}`);
+  await instance.press(["t"]);
+  await instance.press(["l"]);
+  await sleep(1000);
+  check(app, kind, "tl goes back to the tab t$ left", (await active_index()) === 0, `active ${await active_index()}`);
+  await instance.press(["t"]);
+  await instance.press(["l"]);
+  await sleep(1000);
+  check(app, kind, "tl a second time returns to the last tab", (await active_index()) === before + 1, `active ${await active_index()}`);
+  // tm types the command in, so one more key and Enter move the last tab to place 2.
+  await instance.press(["t"]);
+  await instance.press(["m"]);
+  await sleep(1500);
+  await shot("tab_move_cmdline", "the last message tab after tm: the command line shows tab.move");
+  await instance.press(["2"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  const moved_order = await order_of();
+  check(app, kind, "tm then 2 moves the last tab to place 2", moved_order[1] === start_order[2] && moved_order[2] === start_order[1] && moved_order[0] === start_order[0], `before ${JSON.stringify(start_order)}, after ${JSON.stringify(moved_order)}`);
+  // tM types the offset flag. The tab sits at place 2 after tm, so 1 moves it back to the end and -5 moves it to place 2 again, stopping before the mail tab.
+  for (const [typed, expected, label] of [[[["1"]], [start_order[0], start_order[1], start_order[2]], "tM then 1 moves the tab one place later"], [[["-k", "minus"], ["5"]], [start_order[0], start_order[2], start_order[1]], "tM then -5 stops before the mail tab"]]) {
+    await instance.press(["t"]);
+    await instance.press(["M"]);
+    await sleep(1500);
+    for (const key of typed) await instance.press(key);
+    await instance.press(["-k", "Return"]);
+    await sleep(1500);
+    const order = await order_of();
+    check(app, kind, label, JSON.stringify(order) === JSON.stringify(expected), `expected ${JSON.stringify(expected)}, after ${JSON.stringify(order)}`);
+  }
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await sleep(500);
+  for (let count = 0; count < 2; count++) await instance.ask("remove_tab", 20000, { index: before });
+  await sleep(1000);
+  check(app, kind, "the tab key rows leave no tab behind", (await tabs_of()).length === before);
 }

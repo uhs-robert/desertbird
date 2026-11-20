@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 321 (Mail tab 142, Message 94, Own pages 46, Other tabs 39)
+bound: 337 (Mail tab 146, Message 98, Own pages 50, Other tabs 43)
 
 ### Mail tab
 
@@ -171,6 +171,10 @@ The thread list and the folder pane.
 | `tn` | `tab.next` |
 | `tp` | `tab.prev` |
 | `t0` | `tab 1` |
+| `t$` | `tab.goto -1` |
+| `tl` | `tab.alternate` |
+| `tm` | `cmdline.open 'tab.move '` |
+| `tM` | `cmdline.open tab.move --offset=` |
 | `tT` | `cmdline.open 'tab '` |
 
 #### Panes
@@ -367,6 +371,10 @@ A message in a tab, a window or the message pane.
 | `tn` | `tab.next` |
 | `tp` | `tab.prev` |
 | `t0` | `tab 1` |
+| `t$` | `tab.goto -1` |
+| `tl` | `tab.alternate` |
+| `tm` | `cmdline.open 'tab.move '` |
+| `tM` | `cmdline.open tab.move --offset=` |
 | `tT` | `cmdline.open 'tab '` |
 
 #### Panes
@@ -475,6 +483,10 @@ The options page and the help page.
 | `tn` | `tab.next` |
 | `tp` | `tab.prev` |
 | `t0` | `tab 1` |
+| `t$` | `tab.goto -1` |
+| `tl` | `tab.alternate` |
+| `tm` | `cmdline.open 'tab.move '` |
+| `tM` | `cmdline.open tab.move --offset=` |
 | `tT` | `cmdline.open 'tab '` |
 
 #### Zoom and scroll
@@ -556,6 +568,10 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `tn` | `tab.next` |
 | `tp` | `tab.prev` |
 | `t0` | `tab 1` |
+| `t$` | `tab.goto -1` |
+| `tl` | `tab.alternate` |
+| `tm` | `cmdline.open 'tab.move '` |
+| `tM` | `cmdline.open tab.move --offset=` |
 | `tT` | `cmdline.open 'tab '` |
 
 #### Zoom and scroll
