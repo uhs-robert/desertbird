@@ -71,6 +71,10 @@ const ACTOR_CHILD_CEILING_BYTES = 11264;
 const ACTOR_PARENT_MAX_BYTES = 5632;
 const ACTOR_PARENT_CEILING_BYTES = 9216;
 
+// `experiment/page_hints_child.sys.mjs`, the page actor's hint labels, which a child loads on the first hint pick in its process.
+const ACTOR_HINTS_MAX_BYTES = 6656;
+const ACTOR_HINTS_CEILING_BYTES = 10240;
+
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
 for (const [, prefix, guard] of own_source.matchAll(/^const (\w+)_MAX_BYTES = (\d+);/gm)) {
@@ -113,6 +117,7 @@ var ${parent.name} = class extends ExtensionAPI {
 const ACTORS = [
     { name: "page_actor_child", entry: "src/chrome/page_actor_child.ts", max_bytes: ACTOR_CHILD_MAX_BYTES },
     { name: "page_actor_parent", entry: "src/chrome/page_actor_parent.ts", max_bytes: ACTOR_PARENT_MAX_BYTES },
+    { name: "page_hints_child", entry: "src/chrome/page_hints_child.ts", max_bytes: ACTOR_HINTS_MAX_BYTES },
 ];
 
 const shared_options = {

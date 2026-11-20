@@ -344,3 +344,40 @@ test("a key typed in a field ends a half-typed sequence: the child says hello, s
     child.document.activeElement = { localName: "body" };
     assert.deepEqual(type_keys(child, [["?"]]), [["?", false, false]], "the walk is back at the root");
 });
+
+test("Hints loads the hint module beside the child, hands it the child and the request, and answers with its count", () => {
+    const loaded: string[] = [];
+    const started: unknown[] = [];
+    (globalThis as Record<string, unknown>)["ChromeUtils"] = { importESModule: (url: string) => (loaded.push(url), { start: (child: unknown, data: unknown) => (started.push([child, data]), 3) }) };
+    try {
+        const child = child_with();
+        const request = { scheme: { fill: "#000000", text: "#ffffff" }, action: "yank" };
+        assert.equal(child.receiveMessage({ name: "DesertBird:Hints", data: request }) as unknown, 3);
+        assert.deepEqual(loaded, [new URL("../src/chrome/page_hints_child.sys.mjs", import.meta.url).href], "the module sits beside the child, under the same root");
+        assert.deepEqual(started, [[child, request]]);
+        assert.deepEqual(child.sent, [], "nothing of the page goes to the parent but the answer");
+    } finally {
+        delete (globalThis as Record<string, unknown>)["ChromeUtils"];
+    }
+});
+
+test("while hint labels show, every key goes to them, even in insert mode or a field, and none goes to the parent", () => {
+    for (const [state, focus] of [[ON, { localName: "body" }], [{ ...ON, insert: true }, { localName: "body" }], [ON, { localName: "input", type: "text" }]] as const) {
+        const child = child_with(state, focus) as Child & { pick: { key(event: unknown): void; end(): void } | null };
+        const keys: string[] = [];
+        child.pick = { key: (event) => void keys.push((event as { key: string }).key), end() {} };
+        for (const name of ["j", "x", "Escape"]) child.handleEvent(keydown(name));
+        child.handleEvent(keydown("a", { isComposing: true }));
+        assert.deepEqual(keys, ["j", "x", "Escape", "a"]);
+        assert.deepEqual(child.sent, []);
+        assert.deepEqual(child.timers, [], "no Escape is sent later either");
+    }
+});
+
+test("a state push from the parent, which a tab change, a window blur and a shutdown send, ends the hint labels", () => {
+    const child = child_with() as Child & { pick: { key(event: unknown): void; end(): void } | null };
+    let ended = 0;
+    child.pick = { key() {}, end: () => void ended++ };
+    child.receiveMessage({ name: "DesertBird:State", data: { ...ON, on: false } });
+    assert.equal(ended, 1);
+});

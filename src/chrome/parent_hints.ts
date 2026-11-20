@@ -76,6 +76,15 @@ interface PickMainWindow extends ListenerTarget, HintWindow {
 interface PageBrowser {
     contentDocument?: unknown;
     contentWindow?: HintWindow & ListenerTarget;
+    isRemoteBrowser?: boolean;
+    browsingContext?: { currentWindowGlobal?: { getExistingActor(name: string): PageActor | undefined } | null } | null;
+    focus(): void;
+}
+
+/** The parent half of the page actor of `page_actor_parent.ts`, as this bundle reaches it through the browser. `on` is false on a page the actor leaves alone. */
+interface PageActor {
+    on: boolean;
+    sendQuery(name: string, data: unknown): Promise<unknown>;
 }
 
 type FrontTab = NonNullable<TabmailLike["currentTabInfo"]> & { browser?: PageBrowser | null; chromeBrowser?: PageBrowser | null };
@@ -116,7 +125,7 @@ export function get_hints_api(context: ExtensionContext) {
                 if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
-            pick: guard("hints.pick", ({ windowId, colors, action }: HintsPickArgs): number => {
+            pick: guard("hints.pick", async ({ windowId, colors, action }: HintsPickArgs): Promise<number> => {
                 const main = window_with_id(context, windowId) as unknown as PickMainWindow | null;
                 const tabmail = (main?.document.getElementById("tabmail") ?? null) as TabmailLike | null;
                 const tab = tabmail?.currentTabInfo as FrontTab | null | undefined;
@@ -128,6 +137,19 @@ export function get_hints_api(context: ExtensionContext) {
                     return start_pick(pick_host(main, [main, pane, ...(message ? [message] : [])]), collect_targets(main, pane), scheme, action);
                 }
                 const browser = tab.browser ?? tab.chromeBrowser;
+                const actor = browser?.isRemoteBrowser ? browser.browsingContext?.currentWindowGlobal?.getExistingActor("DesertBirdPage") : undefined;
+                if (actor?.on) {
+                    // The page's own child labels a remote page and answers with the count alone. The child ends the labels on a pick, a key, a scroll, a click and a page change, and on the state push that a tab change, a window blur or a shutdown sends it.
+                    end_pick();
+                    // The child reads the keys of its page only while the page has the focus. After the command line, say, the focus is in the window.
+                    browser!.focus();
+                    try {
+                        return (await actor.sendQuery("DesertBird:Hints", { scheme, action })) as number;
+                    } catch {
+                        // The tab closed or its page went before the child answered.
+                        return 0;
+                    }
+                }
                 const page = (browser?.contentDocument ? browser.contentWindow : null) ?? null;
                 return start_pick(pick_host(main, [main, ...(page ? [page] : [])]), collect_page_targets(main, page), scheme, action);
             }),

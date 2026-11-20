@@ -76,6 +76,8 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
     ];
 }
 
+/** The controls on screen in one document. The page actor's hint module labels a web page with these alone. */
+export const collect_window_targets = (window: TargetWindow): PickTarget[] => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus());
+
 /** The targets of a tab that is not the mail tab: the controls of the window, which holds a calendar or tasks tab itself, then those of the tab's own page (settings, the address book, an `about:` page). `page` is null when the tab has no page the parent can read. */
-export const collect_page_targets = (main: TargetWindow, page: TargetWindow | null): PickTarget[] =>
-    [main, ...(page ? [page] : [])].flatMap((window) => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus()));
+export const collect_page_targets = (main: TargetWindow, page: TargetWindow | null): PickTarget[] => [main, ...(page ? [page] : [])].flatMap(collect_window_targets);

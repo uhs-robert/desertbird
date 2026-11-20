@@ -1,4 +1,4 @@
-// A local web server for the `web` kind: a tall page with a text field, a contenteditable, and a button, which reports its keys, scroll and focus back here (`helper/page.js`). It listens on 127.0.0.1 only, on a free port. `close()` ends it, so a run leaves no process behind.
+// A local web server for the `web` kind: a tall page with a text field, a button, a link and a contenteditable, which reports its keys, scroll, focus, clicks and root children back here (`helper/page.js`). It listens on 127.0.0.1 only, on a free port. `close()` ends it, so a run leaves no process behind.
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -9,7 +9,7 @@ const page_script = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "
 const page_html = () => `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Web fixture</title></head>
 <body>
-<input id="field"> <button id="button">Button</button>
+<input id="field"> <button id="button">Button</button> <a id="link" href="#hinted">Link</a>
 <div id="editor" contenteditable="true">Editable</div>
 <iframe id="frame" src="/inner" width="300" height="60"></iframe>
 <div style="height: 5000px">A tall page.</div>

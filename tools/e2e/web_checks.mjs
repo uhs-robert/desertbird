@@ -20,6 +20,7 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
   const app = instance.app;
   const kind = "web";
   await open_inbox(instance);
+  const only_hints = process.env.E2E_ONLY === "web_hints";
   const tabs_of = async () => (await instance.ask("state")).windows.find((window) => window.type === "normal")?.tabs ?? [];
   const active_index = async () => (await tabs_of()).find((tab) => tab.active)?.index;
   const before = (await tabs_of()).length;
@@ -47,13 +48,14 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
     const from = fixture.log.length;
     for (const key of keys) await instance.press(key);
     await sleep(wait_ms);
-    return { scroll_y: latest().scroll_y ?? 0, seen: fixture.keys_since(from), latest: latest() };
+    return { from, scroll_y: latest().scroll_y ?? 0, seen: fixture.keys_since(from), latest: latest() };
   }
   async function close_extra_tabs() {
     await instance.ask("reset_tabs", 20000);
     await sleep(800);
   }
 
+  if (only_hints) return run_web_hint_rows(instance, { check, note, shot, fixture, open_web, press_and_read, close_extra_tabs, report_after, tabs_of });
   // Normal mode, no click: the actor's child takes the bound keys before the page.
   check(app, kind, "a web page of the local server opens in a tab", await open_web());
   const start_y = latest().scroll_y ?? 0;
@@ -184,6 +186,8 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
   check(app, kind, ": opens the command line over a web tab, and tab.close typed there closes it", (await tabs_of()).length === before && fixture.keys_since(from_cmdline).length === 0, `tabs ${(await tabs_of()).length}, page saw ${JSON.stringify(fixture.keys_since(from_cmdline))}`);
   await close_extra_tabs();
 
+  await run_web_hint_rows(instance, { check, note, shot, fixture, open_web, press_and_read, close_extra_tabs, report_after, tabs_of });
+
   // The mail tab keeps its keys with the actor running.
   await instance.ask("select_tab", 20000, { index: 0 });
   await sleep(800);
@@ -207,4 +211,104 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
     check(app, kind, "after a restart, j scrolls the restored web page with no click", restarted.scroll_y > before_restart_j && !restarted.seen.includes("j"), `scroll ${before_restart_j} then ${restarted.scroll_y}, page saw ${JSON.stringify(restarted.seen)}`);
   }
   check(app, kind, "the app survived", instance.exited() === null);
+}
+
+// The hint keys in a web page and in another add-on's page. The page's child draws the labels in the page, in one container on the root element, so the page's report of its root children tells whether labels show. Labels follow document order: a the field, s the button, d the link, f the contenteditable. A yank skips the field, which has no text, so there s is the link.
+// The page keys hold plain keys for 1.5 s after f (`HOLD_MS`), so each pick waits that out before the next f.
+async function run_web_hint_rows(instance, { check, note, shot, fixture, open_web, press_and_read, close_extra_tabs, report_after, tabs_of }) {
+  const app = instance.app;
+  const kind = "web";
+  const BASE_CHILDREN = 2;
+  // The root children the page reported last, so a page that never changed them reads as the head and body alone.
+  const children = (from = 0) => fixture.log.slice(from).filter((entry) => entry.kind === "children").at(-1)?.children ?? BASE_CHILDREN;
+  async function labels_shown_by(keys) {
+    const from = fixture.log.length;
+    for (const key of keys) await instance.press(key);
+    return (await report_after(from, (entry) => entry.kind === "children" && entry.children > BASE_CHILDREN, 6000)) !== null;
+  }
+  const pick = (keys) => press_and_read(keys, 1800);
+  const clicks_since = (from) => fixture.log.slice(from).filter((entry) => entry.kind === "click").map((entry) => entry.target);
+
+  check(app, kind, "the web page opens for the hint keys", await open_web());
+  check(app, kind, "f shows hint labels in the web page", await labels_shown_by([["f"]]), `root children ${children()}`);
+  await shot("web_hints", "web page with hint labels on the field, the button, the link and the editable text");
+  const button = await pick([["s"]]);
+  check(app, kind, "the button's label clicks it and ends the labels, and the page saw neither key", clicks_since(button.from).includes("button") && children() === BASE_CHILDREN && button.seen.length === 0, `clicks ${JSON.stringify(clicks_since(button.from))}, root children ${children()}, page saw ${JSON.stringify(button.seen)}`);
+
+  await labels_shown_by([["f"]]);
+  const link = await pick([["d"]]);
+  check(app, kind, "the link's label clicks the link", clicks_since(link.from).includes("link"), `clicks ${JSON.stringify(clicks_since(link.from))}`);
+
+  check(app, kind, "; f shows labels", await labels_shown_by([[";"], ["f"]]));
+  const focused = await pick([["a"]]);
+  check(app, kind, "; f then the field's label focuses the field and types nothing in it", focused.latest.active === "field" && focused.latest.value === "" && focused.seen.length === 0, `active ${focused.latest.active}, value ${JSON.stringify(focused.latest.value)}, page saw ${JSON.stringify(focused.seen)}`);
+  await instance.press(["-k", "Escape"]);
+  await press_and_read([], 1800);
+
+  check(app, kind, "; c shows labels", await labels_shown_by([[";"], ["c"]]));
+  const clicked = await pick([["s"]]);
+  check(app, kind, "; c then the button's label clicks the button", clicks_since(clicked.from).includes("button"), `clicks ${JSON.stringify(clicks_since(clicked.from))}`);
+
+  await instance.ask("clear_clipboard");
+  check(app, kind, "; y shows labels", await labels_shown_by([[";"], ["y"]]));
+  await pick([["s"]]);
+  const clipboard = (await instance.ask("read_clipboard")).text ?? "";
+  check(app, kind, "; y then the link's label copies the link address", clipboard.startsWith(`http://127.0.0.1:${fixture.port}/page`) && clipboard.endsWith("#hinted"), `clipboard ${JSON.stringify(clipboard)}`);
+
+  await labels_shown_by([["f"]]);
+  const escaped = await pick([["-k", "Escape"]]);
+  check(app, kind, "Escape ends the labels, and the page never saw it", children() === BASE_CHILDREN && escaped.seen.length === 0, `root children ${children()}, page saw ${JSON.stringify(escaped.seen)}`);
+  await labels_shown_by([["f"]]);
+  const other = await pick([["x"]]);
+  check(app, kind, "a key no label starts ends the labels, and the page never saw it", children() === BASE_CHILDREN && other.seen.length === 0, `root children ${children()}, page saw ${JSON.stringify(other.seen)}`);
+  // f is a label letter too: a second f narrows to the contenteditable and does not start a second pick.
+  await labels_shown_by([["f"]]);
+  const second = await pick([["f"]]);
+  check(app, kind, "a second f while labels show picks its label, the contenteditable", second.latest.active === "editor" && children() === BASE_CHILDREN && second.seen.length === 0, `active ${second.latest.active}, root children ${children()}, page saw ${JSON.stringify(second.seen)}`);
+  await instance.press(["-k", "Escape"]);
+  await press_and_read([], 1800);
+
+  // A tab change and a window blur end the labels: the parent's state push reaches the child.
+  const web_index = (await tabs_of()).find((tab) => tab.active)?.index;
+  await labels_shown_by([["f"]]);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  await press_and_read([], 1000);
+  check(app, kind, "a tab change ends the labels", children() === BASE_CHILDREN, `root children ${children()}`);
+  await instance.ask("select_tab", 20000, { index: web_index });
+  await press_and_read([], 1500);
+  check(app, kind, "f shows labels again after the tab change", await labels_shown_by([["f"]]));
+  const popup = await instance.ask("open_popup_window", 20000);
+  await press_and_read([], 1500);
+  await instance.ask("close_popup_window", 20000, { id: popup.opened });
+  await press_and_read([], 1500);
+  check(app, kind, "a window blur ends the labels", children() === BASE_CHILDREN, `root children ${children()}`);
+  await close_extra_tabs();
+
+  // The command line hands the focus back to the window, and the pick gives it to the page, whose child reads the label keys.
+  check(app, kind, "the web page opens for the command line pick", await open_web());
+  await instance.press([":"]);
+  await press_and_read([], 1500);
+  await instance.press(["hint"]);
+  check(app, kind, "hint typed on the command line shows labels in the web page", await labels_shown_by([["-k", "Return"]]));
+  const after_cmdline = await pick([["s"]]);
+  check(app, kind, "a label typed after the command line pick clicks the button", clicks_since(after_cmdline.from).includes("button") && after_cmdline.seen.length === 0, `clicks ${JSON.stringify(clicks_since(after_cmdline.from))}, page saw ${JSON.stringify(after_cmdline.seen)}`);
+  await close_extra_tabs();
+
+  // The page moves the focus into its field while the labels show. The keys typed then still go to the labels and never to the field.
+  check(app, kind, "the web page opens to focus its field later", await open_web("&focus_after=field"));
+  check(app, kind, "f shows labels before the page focuses its field", await labels_shown_by([["f"]]));
+  const field_focused = await report_after(0, (entry) => entry.kind === "focusin" && entry.active === "field" && entry.page.includes("focus_after"), 6000);
+  const in_field = await pick([["x"]]);
+  check(app, kind, "a key typed while labels show does not reach the focused field", field_focused !== null && in_field.latest.value === "" && in_field.seen.length === 0 && children() === BASE_CHILDREN, `field focused ${field_focused !== null}, value ${JSON.stringify(in_field.latest.value)}, page saw ${JSON.stringify(in_field.seen)}, root children ${children()}`);
+  await close_extra_tabs();
+
+  // Another add-on's page: its one field gets the label a.
+  const from_helper = fixture.log.length;
+  await instance.ask("open_helper_page", 20000, { log: fixture.port });
+  const helper_shown = await report_after(from_helper, (entry) => entry.kind === "pageshow");
+  await press_and_read([], 1500);
+  check(app, kind, "f shows labels in another add-on's page", helper_shown !== null && (await labels_shown_by([["f"]])));
+  const helper_pick = await pick([["a"]]);
+  check(app, kind, "the label in another add-on's page focuses its field", helper_pick.latest.active === "field" && helper_pick.seen.length === 0, `active ${helper_pick.latest.active}, page saw ${JSON.stringify(helper_pick.seen)}`);
+  await close_extra_tabs();
 }
