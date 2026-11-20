@@ -57,12 +57,15 @@ async function query_all(api: MessageQueryApi, header_message_id: string, folder
     }
 }
 
+/** Every folder at a supported Snoozed path in the account, in path order. */
+async function folders_at_snoozed_paths(api: SpecialFolderApi, account_id: string): Promise<MailFolder[]> {
+    const found: MailFolder[] = [];
+    for (const path of SNOOZED_PATHS) found.push(...(await api.folders.query({ accountId: account_id, path })));
+    return found;
+}
+
 async function existing_snoozed(api: SpecialFolderApi, account_id: string): Promise<MailFolder | undefined> {
-    for (const path of SNOOZED_PATHS) {
-        const [folder] = await api.folders.query({ accountId: account_id, path });
-        if (folder !== undefined) return folder;
-    }
-    return undefined;
+    return (await folders_at_snoozed_paths(api, account_id))[0];
 }
 
 function with_timeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
@@ -167,10 +170,8 @@ async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there
     const found: MessageHeader[] = [];
     for (const account_id of new Set([item.origin_account_id, ...local_ids])) {
         // Both paths, not the first match: a stray folder at one path must not hide the one at the other. A folder with a special use (Archives, a Gmail Starred view) is never a Snoozed folder.
-        for (const path of SNOOZED_PATHS) {
-            for (const folder of await api.folders.query({ accountId: account_id, path })) {
-                if (folder.specialUse === undefined || folder.specialUse.length === 0) found.push(...(await query_all(api, item.header_message_id, folder.id)));
-            }
+        for (const folder of await folders_at_snoozed_paths(api, account_id)) {
+            if (folder.specialUse === undefined || folder.specialUse.length === 0) found.push(...(await query_all(api, item.header_message_id, folder.id)));
         }
     }
     return found;
