@@ -3,7 +3,7 @@
 import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, CmdlineWidgets, ConfirmAnswerRequest, ConfirmAnswerResult, ConfirmPrompt, SearchDirection, StatusWidget } from "../shared/protocol.ts";
 import { create_history_cursor } from "../../vendor/desertfox/history_cursor.ts";
 import type { HistoryCursor } from "../../vendor/desertfox/history_cursor.ts";
-import { CMDLINE_HISTORY_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
+import { CMDLINE_HISTORY_STORAGE_KEY, OVERLAY_READY_TITLE, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import { CMDLINE_STYLE } from "../../vendor/desertfox/cmdline_style.ts";
@@ -64,7 +64,7 @@ let history_cursor: HistoryCursor = create_history_cursor(history);
 let walking_history = true;
 
 const FALLBACK_ROW_HEIGHT_PX = 20;
-const PAGE_TITLE = "DesertBird command line";
+const PAGE_TITLE = OVERLAY_READY_TITLE;
 let escapes_answered = 0;
 
 const send = <Answer>(message: CmdlineRequest | ConfirmAnswerRequest): Promise<Answer> => messenger.runtime.sendMessage(message) as Promise<Answer>;

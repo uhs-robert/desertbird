@@ -1,4 +1,6 @@
 // The id of the overlay's `browser` element. The key runtime reads it to leave the overlay's keys alone, and the overlay parent sets it. The two live in separate bundles, so the shared name sits here.
+// Both ids of the browser start with this, so one test finds the browser in either state.
+export const OVERLAY_ID_PREFIX = "desertbird-overlay-";
 export const OVERLAY_BROWSER_ID = "desertbird-overlay-browser";
 // The command line's browser has this id from the mount until its page takes keys (its title is set), then `OVERLAY_BROWSER_ID`. The key runtime counts only the second id as a typing target: the mount focuses the browser before its page exists, and a page that is not ready takes no key, so a key typed then would reach Thunderbird's own shortcuts.
 export const OVERLAY_LOADING_ID = "desertbird-overlay-loading";

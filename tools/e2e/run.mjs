@@ -1375,11 +1375,16 @@ async function run_cmdline_launch(instance, { app, kind, shot }) {
   await shot("cmdline_launch", "the command line right after : j a typed with no pause and a message selected: the line is open and empty");
   const after = await instance.ask("state");
   check(app, kind, "with a message selected, : then j a typed with no pause moves nothing and archives nothing", selection_of(after) === selection_of(before) && JSON.stringify(after.folders) === JSON.stringify(before.folders), `selected ${selection_of(before)} then ${selection_of(after)}, mail changed: ${JSON.stringify(after.folders) !== JSON.stringify(before.folders)}`);
-  // The page is ready now, so its keys reach the line and not the list.
-  await instance.press(["j", "a"]);
+  // Keys typed before the page is ready are dropped, not replayed into the line.
+  check(app, kind, "keys typed before the page was ready were dropped: the list did not change and no mail changed", selection_of(after) === selection_of(before) && JSON.stringify(after.folders) === JSON.stringify(before.folders), `selected ${selection_of(after)}`);
+  // The line takes keys now: a typed command runs, which only the line can do.
+  const order = before.mail_tab?.sort_order === "ascending" ? "descending" : "ascending";
+  await instance.press([`sort --date --${order}`]);
   await sleep(500);
-  const typed = await instance.ask("state");
-  check(app, kind, "after the page is ready, j and a go to the line and not the list", selection_of(typed) === selection_of(before) && JSON.stringify(typed.folders) === JSON.stringify(before.folders), `selected ${selection_of(typed)}`);
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  const sorted = await instance.ask("state");
+  check(app, kind, "once the line is ready, a typed command reaches it and runs", sorted.mail_tab?.sort_type === "date" && sorted.mail_tab?.sort_order === order, `sort ${sorted.mail_tab?.sort_type} ${sorted.mail_tab?.sort_order}, wanted date ${order}`);
   await close_command_line(instance);
 }
 
