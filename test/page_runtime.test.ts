@@ -6,7 +6,7 @@ import type { KeydownEvent, KeyTarget, WindowListener } from "../src/chrome/runt
 import type { Situation } from "../src/chrome/readable_focus.ts";
 import { compile_tab_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
-import type { KeysEvent, KeysInvocation } from "../src/shared/protocol.ts";
+import type { KeysEvent, KeysInvocation, KeysPending } from "../src/shared/protocol.ts";
 
 class FakeWindow {
     key_listeners = new Set<(event: KeydownEvent) => void>();
@@ -80,7 +80,7 @@ function setup(window_count = 1) {
     return { windows, events, invocations, pending, scrolls, advance: (ms: number) => void (time += ms), runtime: create_page_runtime(deps), counts: () => ({ registers, unregisters }), load: (window: FakeWindow) => window_listener!.on_load_window(window), unload: (window: FakeWindow) => window_listener!.on_unload_window(window) };
 }
 
-test("j, k, the half page keys and gg and G scroll the page, take the key and report nothing", () => {
+test("j, k, the half page keys and gg and G scroll the page, take the key and report only the half-typed g", () => {
     const { windows, runtime, scrolls, events } = setup();
     runtime.install(tree());
     const window = windows[0]!;
@@ -91,7 +91,7 @@ test("j, k, the half page keys and gg and G scroll the page, take the key and re
     press(window, "g");
     assert.equal(press(window, "g").cancelled, true);
     assert.deepEqual(scrolls.map(([id]) => id), ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.bottom", "page.top"]);
-    assert.equal(events.length, 0);
+    assert.deepEqual(events.map((event) => ("keys" in event ? event.keys.join("") : event.command)), ["g", ""]);
 });
 
 test("a count reaches the scroll", () => {
@@ -172,24 +172,62 @@ test("a remote page runs only the close chord and passes every other key, J, K a
 });
 
 
-test("g ? shows the key list and the next key reports its end once", () => {
-    const { windows, runtime, invocations, pending } = setup();
+const reports = (events: KeysEvent[]) => events.filter((event) => "keys" in event).map((event) => (event as KeysPending).keys.join("") + ((event as KeysPending).root ? "!" : ""));
+
+test("g ? asks for the root of the page tree, with no end before it, and the next key reports its end once", () => {
+    const { windows, runtime, invocations, events, pending } = setup();
     runtime.install(tree());
     const window = windows[0]!;
     press(window, "g");
     press(window, "?");
-    assert.deepEqual(invocations().map((event) => event.command), ["help.whichkey"]);
-    assert.deepEqual(pending(), []);
+    assert.deepEqual(invocations(), []);
+    assert.deepEqual(reports(events), ["g", "!"]);
+    assert.deepEqual([pending().at(-1)?.source, pending().at(-1)?.root], ["page", true]);
     press(window, "j");
     press(window, "j");
-    assert.deepEqual(pending().map((event) => [event.keys, event.windowId]), [[[], 7]]);
+    assert.deepEqual(reports(events), ["g", "!", ""]);
+    assert.equal(pending().at(-1)?.windowId, 7);
 });
 
-test("a half-typed g reports no pending keys", () => {
+test("a key that extends the prefix sends no end event, and Escape after a prefix sends one", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree({ zab: { id: "page.scroll_down" } }));
+    const window = windows[0]!;
+    press(window, "z");
+    press(window, "a");
+    assert.deepEqual(reports(events), ["z", "za"]);
+    press(window, "b");
+    assert.deepEqual(reports(events), ["z", "za", ""]);
+    press(window, "z");
+    press(window, "Escape");
+    assert.deepEqual(reports(events), ["z", "za", "", "z", ""]);
+});
+
+test("a tab change drops the armed end, so the next key in the new tab reports none", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "g");
+    window.tab_listeners.forEach((listener) => listener());
+    press(window, "j");
+    assert.deepEqual(reports(events), ["g"]);
+});
+
+test("a half-typed t reports its keys with the page source, and the key after it ends the panel", () => {
     const { windows, runtime, pending } = setup();
     runtime.install(tree());
-    press(windows[0]!, "g");
-    assert.deepEqual(pending(), []);
+    press(windows[0]!, "t");
+    assert.deepEqual(pending().map((event) => [event.keys, event.source]), [[["t"], "page"]]);
+    press(windows[0]!, "n");
+    assert.deepEqual(pending().map((event) => event.keys), [["t"], []]);
+});
+
+test("a half-typed key in a message tab names the message source", () => {
+    const { windows, runtime, pending } = setup();
+    runtime.install(tree());
+    windows[0]!.situation = "message";
+    press(windows[0]!, "t");
+    assert.deepEqual(pending().map((event) => event.source), ["message"]);
 });
 
 test("plain keys are dropped after a held command until the focus reaches a text field, and a hold ends after 1.5 seconds", () => {

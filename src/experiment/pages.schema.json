@@ -68,7 +68,7 @@
             "properties": {
               "command": {
                 "type": "string",
-                "description": "A command id, or \"pending\" for a change of the half-typed sequence. That event carries `keys` and `windowId` only."
+                "description": "A command id, or \"pending\" for a change of the half-typed sequence. That event carries `keys`, `windowId`, and `source` and `root` when a page tab sends them."
               },
               "keys": {
                 "type": "array",
@@ -85,6 +85,15 @@
               },
               "count": {
                 "type": "integer"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["page", "message"],
+                "description": "Which tree the panel of a pending event lists. Left out, it is the mail tree."
+              },
+              "root": {
+                "type": "boolean",
+                "description": "With no keys: show the root of the tree at once, and do not end the panel."
               },
               "windowId": {
                 "type": "integer"

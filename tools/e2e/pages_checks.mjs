@@ -51,6 +51,15 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
     await sleep(1500);
     verdict(`the next key removes the key list in the ${name} tab`, (await hud_pixels(instance, `${app}_${slug}_list_gone`, key_list_region)) === list_before);
 
+    // A half-typed t lists the tab keys after the which-key delay.
+    await instance.press(["t"]);
+    await sleep(1500);
+    verdict(`a half-typed t shows the key list in the ${name} tab`, (await hud_pixels(instance, `${app}_${slug}_pending_shown`, key_list_region)) !== list_before);
+    await shot(`${slug}_pending_t`, `${name} tab after t: the tab keys show`);
+    await instance.press(["-k", "Escape"]);
+    await sleep(1500);
+    verdict(`the next key removes the half-typed key list in the ${name} tab`, (await hud_pixels(instance, `${app}_${slug}_pending_gone`, key_list_region)) === list_before);
+
     await instance.press([":"]);
     await sleep(1500);
     await shot(`${slug}_cmdline`, `${name} tab after the colon key: the command line shows`);

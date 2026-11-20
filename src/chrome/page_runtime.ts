@@ -48,7 +48,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     let sequence_window: Window | null = null;
     let hold_commands = new Set<string>();
     let hold_until = 0;
-    // Whether the last report left the key list open. The next key then reports its end, and plain keys report nothing. Pending keys are never reported from a page tab, so the panel of a half-typed sequence does not show.
+    // Whether the last report left the panel open. The next key then reports its end, unless it extends the typed prefix.
     let key_list_shown = false;
 
     function end_key_list(window: Window): void {
@@ -73,16 +73,20 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
                 return;
             }
         }
-        end_key_list(window);
-        if (situation === "pass" || situation === "typing") return (matcher.reset(), message_matcher.reset());
+        if (situation === "pass" || situation === "typing") return (end_key_list(window), matcher.reset(), message_matcher.reset());
         // A page of another process hides its text fields, so only a chord is safe there.
-        if (situation === "remote" && is_plain_printable(token)) return matcher.reset();
+        if (situation === "remote" && is_plain_printable(token)) return (end_key_list(window), matcher.reset());
         // The two matchers each keep a half-typed sequence, so the one not in use starts over.
         const [active, idle] = situation === "message" ? [message_matcher, matcher] : [matcher, message_matcher];
         idle.reset();
         if (sequence_window !== window) active.reset();
         sequence_window = window;
         const result = active.feed(NORMAL_MODE, token);
+        const source = situation === "message" ? "message" : "page";
+        if (result.kind_ === "pending") {
+            key_list_shown = true;
+            deps.emit({ command: "pending", keys: result.typed_, windowId: deps.window_id_of(window), source });
+        } else if (!(result.kind_ === "match" && result.leaf.steps.some((step) => step.invocation.id === KEY_LIST))) end_key_list(window);
         // Thunderbird binds single keys of its own in a message tab (`j` is junk), so a plain key stops here whether or not it matched.
         if (result.kind_ === "no_match") {
             if (situation === "message" && is_plain_printable(token)) (event.preventDefault(), event.stopPropagation());
@@ -95,9 +99,12 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
             for (const step of steps) {
                 const count = result.count ?? step.invocation.count;
                 if (step.runs_in !== "background") deps.scroll(window, step.invocation.id, count);
-                else {
+                else if (step.invocation.id === KEY_LIST) {
+                    // The background cannot tell which tree this tab runs, so the event names it.
+                    key_list_shown = true;
+                    deps.emit({ command: "pending", keys: [], windowId: deps.window_id_of(window), source, root: true });
+                } else {
                     if (hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
-                    if (step.invocation.id === KEY_LIST) key_list_shown = true;
                     deps.emit({ command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count: count ?? 1, windowId: deps.window_id_of(window), messageIds: situation === "message" ? deps.message_ids_of(window) : [] });
                 }
             }
@@ -113,6 +120,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
             matcher?.reset();
             message_matcher?.reset();
             hold_until = 0;
+            key_list_shown = false;
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `g`, a click away and back, then `g` would run `gg`.
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);
