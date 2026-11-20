@@ -46,7 +46,8 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
     ["compileScript", /compileScript/],
     ["innerHTML", /innerHTML/],
     ["ChromeUtils.import", /ChromeUtils\.import\(/],
-    ["importESModule with a computed url", /importESModule\(\s*[^"'\s]/],
+    // One computed url is allowed: the page actor's parent under the `resource://` root that `parent_pages.ts` names from a fixed prefix and the load time.
+    ["importESModule with a computed url", /importESModule\(\s*(?!`resource:\/\/\$\{root\}\/experiment\/page_actor_parent\.sys\.mjs`)[^"'\s]/],
 ];
 
 let out_dir = "";
@@ -179,6 +180,36 @@ test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
     for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/app.schema.json", "experiment/app.js", "experiment/hints.schema.json", "experiment/hints.js", "experiment/pages.schema.json", "experiment/pages.js", "experiment/zoom.schema.json", "experiment/zoom.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
+});
+
+// The child runs in every web page's process. It may hold the token reader and the scroll table and nothing else: no matcher, no focus reader of the chrome, no platform globals.
+const ACTOR_ALLOWED_INPUTS: Record<string, RegExp[]> = {
+    page_actor_child: [/^src\/chrome\/page_actor_child\.ts$/, /^src\/chrome\/page_actions\.ts$/, /^vendor\/desertfox\/keys\/token\.ts$/],
+    page_actor_parent: [/^src\/chrome\/page_actor_parent\.ts$/],
+};
+
+const bytes_by_input = (name: string) => {
+    const outputs = (JSON.parse(readFileSync(join(out_dir, `meta/${name}.json`), "utf8")) as { outputs: Record<string, { inputs: Record<string, { bytesInOutput: number }> }> }).outputs;
+    return Object.values(outputs).flatMap((output) => Object.entries(output.inputs)).filter(([, entry]) => entry.bytesInOutput > 0).map(([input]) => input);
+};
+
+test("the page actor halves are ES modules that export their class, hold only allowlisted code, use no banned API and stay within their guards", () => {
+    const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
+    for (const [name, class_name, guard] of [["page_actor_child", "DesertBirdPageChild", "ACTOR_CHILD_MAX_BYTES"], ["page_actor_parent", "DesertBirdPageParent", "ACTOR_PARENT_MAX_BYTES"]] as const) {
+        const file = `experiment/${name}.sys.mjs`;
+        const source = readFileSync(join(out_dir, file), "utf8");
+        assert.match(source, new RegExp(`^export \\{[^}]*\\b${class_name}\\b`, "m"), `${file} exports ${class_name}`);
+        assert.doesNotMatch(source, /^\(\(\) => \{/m, `${file} is no IIFE`);
+        for (const input of bytes_by_input(name)) assert.ok(ACTOR_ALLOWED_INPUTS[name]!.some((allowed) => allowed.test(input)), `${input} is not allowed in ${file}`);
+        for (const [banned, pattern] of BANNED_IN_PARENT) assert.ok(!pattern.test(source), `${file} contains ${banned}`);
+        assert.ok(source.length <= number_of(guard), `${file} is ${source.length} bytes, over ${number_of(guard)}`);
+        assert.ok(listing.includes(file), `the xpi holds ${file}`);
+    }
+});
+
+test("the pages bundle loads the actor parent by URL and never bundles either half", () => {
+    assert.doesNotMatch(sources["pages"]!, /DesertBirdPage(Child|Parent)/);
+    assert.deepEqual(inputs["pages"]!.filter((input) => /page_actor_/.test(input)), []);
 });
 
 test("--out with no value fails and empties nothing", () => {

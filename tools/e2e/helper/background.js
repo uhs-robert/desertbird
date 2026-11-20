@@ -156,6 +156,9 @@ async function tab_command(command) {
   const [window] = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
   const tabs = window.tabs;
   if (command.name === "open_content_tab") return { opened: (await browser.tabs.create({ url: "about:blank" })).id };
+  // The `web` kind: a page of the local web fixture, and the helper's own page as another add-on's page. Both report to the fixture on `log`.
+  if (command.name === "open_web_tab") return { opened: (await browser.tabs.create({ url: command.args.url })).id };
+  if (command.name === "open_helper_page") return { opened: (await browser.tabs.create({ url: browser.runtime.getURL(`page.html?log=${command.args.log}`) })).id };
   // The tabs API refuses another add-on's page, so the own_pages kind installs a copy of DesertBird that opens its pages on this message.
   if (command.name === "open_own_page") {
     const own = (await browser.management.getAll()).find((addon) => addon.name === "DesertBird");
@@ -280,7 +283,7 @@ async function poll_forever() {
       } else if (command.name === "clear_clipboard") {
         await clipboard_text("");
         await post({ seq: command.seq, cleared: true });
-      } else if (["open_content_tab", "open_own_page", "open_popup_window", "close_popup_window", "open_normal_window", "close_normal_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs"].includes(command.name)) {
+      } else if (["open_content_tab", "open_own_page", "open_popup_window", "close_popup_window", "open_normal_window", "close_normal_window", "open_message_tab", "open_mail_tab", "move_first_tab", "select_tab", "remove_tab", "reset_tabs", "open_web_tab", "open_helper_page"].includes(command.name)) {
         await post({ seq: command.seq, ...(await tab_command(command)) });
       } else if (command.name === "click_link") {
         const [tab] = await browser.tabs.query({ active: true, currentWindow: true });

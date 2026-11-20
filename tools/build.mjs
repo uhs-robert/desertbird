@@ -56,12 +56,20 @@ const COMPOSE_MAX_BYTES = 3500;
 const COMPOSE_CEILING_BYTES = 8192;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
-const PAGES_MAX_BYTES = 25360;
+const PAGES_MAX_BYTES = 26384;
 const PAGES_CEILING_BYTES = 34816;
 
 // `content/page_keys.js`, the message key script that runs on the own pages (options, help).
 const PAGE_KEYS_MAX_BYTES = 21400;
 const PAGE_KEYS_CEILING_BYTES = 32768;
+
+// `experiment/page_actor_child.sys.mjs`, the page actor's child, which runs in the process of every web page and other add-on's page a tab shows.
+const ACTOR_CHILD_MAX_BYTES = 8192;
+const ACTOR_CHILD_CEILING_BYTES = 11264;
+
+// `experiment/page_actor_parent.sys.mjs`, the page actor's parent, loaded with the pages bundle.
+const ACTOR_PARENT_MAX_BYTES = 5632;
+const ACTOR_PARENT_CEILING_BYTES = 9216;
 
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
@@ -101,6 +109,12 @@ var ${parent.name} = class extends ExtensionAPI {
 `,
 }));
 
+// The page actor's two halves. The actor system loads each by URL as an ES module and finds its class by name, so they build as ES modules with no IIFE and no footer.
+const ACTORS = [
+    { name: "page_actor_child", entry: "src/chrome/page_actor_child.ts", max_bytes: ACTOR_CHILD_MAX_BYTES },
+    { name: "page_actor_parent", entry: "src/chrome/page_actor_parent.ts", max_bytes: ACTOR_PARENT_MAX_BYTES },
+];
+
 const shared_options = {
     bundle: true,
     format: "iife",
@@ -124,6 +138,13 @@ for (const parent of PARENTS) {
     writeFileSync(join(out_dir, "meta", `parent_${parent.name}.json`), JSON.stringify(result.metafile));
     copyFileSync(join(root, "src", "experiment", `${parent.name}.schema.json`), join(out_dir, "experiment", `${parent.name}.schema.json`));
     parent_sizes.push([parent.name, statSync(outfile).size]);
+}
+const actor_sizes = [];
+for (const actor of ACTORS) {
+    const outfile = join(out_dir, "experiment", `${actor.name}.sys.mjs`);
+    const result = await build({ ...shared_options, format: "esm", entryPoints: [actor.entry], outfile });
+    writeFileSync(join(out_dir, "meta", `${actor.name}.json`), JSON.stringify(result.metafile));
+    actor_sizes.push([actor, statSync(outfile).size]);
 }
 writeFileSync(join(out_dir, "meta", "background.json"), JSON.stringify(background.metafile));
 const message_display_file = join(out_dir, "content", "message_display.js");
@@ -176,6 +197,13 @@ for (const [name, bytes] of parent_sizes) {
     }
 }
 
+for (const [actor, bytes] of actor_sizes) {
+    if (bytes > actor.max_bytes) {
+        console.error(`build: experiment/${actor.name}.sys.mjs is ${bytes} bytes, over the ${actor.max_bytes} byte budget`);
+        process.exit(1);
+    }
+}
+
 if (message_display_bytes > CONTENT_MAX_BYTES) {
     console.error(`build: content/message_display.js is ${message_display_bytes} bytes, over the ${CONTENT_MAX_BYTES} byte message script budget`);
     process.exit(1);
@@ -192,4 +220,4 @@ if (compose_keys_bytes > COMPOSE_MAX_BYTES) {
 }
 
 execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help", "vendor"], { cwd: out_dir });
-console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`, `compose_keys.js ${compose_keys_bytes} bytes`].join(", ")})`);
+console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), ...actor_sizes.map(([actor, bytes]) => `${actor.name}.sys.mjs ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`, `compose_keys.js ${compose_keys_bytes} bytes`].join(", ")})`);

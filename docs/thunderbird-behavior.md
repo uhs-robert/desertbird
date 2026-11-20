@@ -570,3 +570,15 @@ Measured on Thunderbird 153.7.0esr and Betterbird 153.7.0esr-bb13 with the `zoom
 - `messenger.tabs.getZoom` and `tabs.setZoom` do not exist. `window.ZoomManager` exists in the main window and the message window, with MIN 0.2, MAX 5 and full zoom.
 - `window.getBrowser()` names the browser Thunderbird zooms: `#messagepane` in the mail tab (when a message shows), a message tab and a message window, and the tab's own browser in the address book, settings and content tabs (own pages and web pages). It is null in calendar, tasks and a mail tab with no message, where `ZoomManager.setZoomForBrowser` throws.
 - The zoom stays on the browser. The message pane of the mail tab keeps it on another message, another folder and after other tabs; a new message tab or window starts at 100%. The address book and settings keep it across a tab switch. A content tab keeps it on reload and on another path of the same host; a new tab of the same page starts at 100%.
+
+## Page actor
+
+Measured on Thunderbird 153.7.0esr and Betterbird 153.7.0esr-bb13 by the `web` kind of `tools/e2e/` (`web_checks.mjs`), 2026-11-20. Rerun that kind on every ESR bump: the actor API is chrome-only and changes without notice.
+
+- `ChromeUtils.registerWindowActor` takes `esModuleURI` for both halves. The modules load from a `resource://` root set with `nsIResProtocolHandler.setSubstitution` onto the add-on's `rootURI` (`jar:file:...xpi!/`), in the web content process and in the extension process. The older `moduleURI` was not tried: it named a JSM, which these versions no longer load.
+- `tabs.create` with an `http` address opens a content tab whose browser (`contentTabBrowser<n>`) is remote and sits in `#tabpanelcontainer` of `messenger.xhtml`. Its `currentTabInfo.browser` is that browser.
+- From the actor parent module, `ownerGlobal` reads `undefined` on that embedder browser. `ownerDocument.defaultView` gives the main window.
+- The child's `keydown` listener with `capture: true` runs before the page's own capture listener on its window: a key it cancels never reaches the page.
+- With `allFrames: false`, a key typed in a same-origin frame reaches no child: the top-level page's listener does not see it.
+- Going back to a page restores it from the back-forward cache (`pageshow` with `persisted` true), with its old child. The child's `pageshow` listener runs then.
+- Neither app restores a web page tab after a restart, so the e2e cannot open a page before the actor registers. Not measured: whether a registration reaches the listeners of a page loaded before it, and whether `unregisterWindowActor` stops the listener of a child that exists. The actor does not rely on either: its start makes an actor for each open tab, and its stop turns every child off first.

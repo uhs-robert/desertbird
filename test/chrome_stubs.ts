@@ -36,13 +36,17 @@ export function stub_platform(main_windows: unknown[] = []): PlatformStub {
         },
         "resource://gre/modules/ExtensionUtils.sys.mjs": { ExtensionUtils: { ExtensionError: StubExtensionError } },
     };
+    // The pages API loads the page actor's parent from a `resource://` root of its own. Here it is a module that does nothing.
+    const page_actor = { start() {}, stop() {}, set_keys() {}, set_insert() {}, takes_keys: () => false, scroll: () => false, blur: () => false };
     const globals = globalThis as Record<string, unknown>;
-    const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"] };
-    globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] };
-    globals["Services"] = { wm: { getEnumerator: () => main_windows } };
+    const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"], Ci: globals["Ci"] };
+    globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] ?? (url.startsWith("resource://desertbird-actor-") ? page_actor : undefined) };
+    globals["Services"] = { wm: { getEnumerator: () => main_windows }, io: { getProtocolHandler: () => ({ QueryInterface: () => ({ setSubstitution() {} }) }) } };
+    globals["Ci"] = { nsIResProtocolHandler: {} };
     stub.restore = () => {
         globals["ChromeUtils"] = before.ChromeUtils;
         globals["Services"] = before.Services;
+        globals["Ci"] = before.Ci;
     };
     return stub;
 }
