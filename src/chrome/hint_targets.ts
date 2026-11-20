@@ -32,9 +32,11 @@ const INSIDE_A_ROW = "#folderTree, tbody";
 const FOLDER_ROWS = "#folderTree li:not(.unselectable) > .container";
 const THREAD_ROWS = "#threadTree tbody tr";
 
-// A page tab has no rows this file knows, so each control is a target. The list is DesertFox's clickable selector with the XUL controls of Thunderbird's pages added. Left out: `[tabindex]`, which in a chrome document marks whole panes and lists; `[onclick]` and `label[for]`, which sit on wrappers and labels whose own control already gets a label; `[role=menuitemcheckbox]` and `[role=menuitemradio]`, which live in closed menus; and `[contenteditable=""]`, which no Thunderbird page uses.
-const PAGE_CONTROLS = `${CONTROLS}, a[href], select:not([disabled]), textarea:not([disabled]), search-textbox, [contenteditable=true], summary, checkbox:not([disabled]), radio:not([disabled]), menulist:not([disabled]), richlistitem, [role=link], [role=tab], [role=checkbox], [role=switch], [role=radio], [role=option], [role=treeitem], [role=menuitem]`;
-const FIELDS = "input, select, textarea, search-textbox, [contenteditable=true]";
+// A page tab has no rows this file knows, so each control is a target. The list is DesertFox's clickable selector with the XUL controls of Thunderbird's pages added. Left out: `[tabindex]`, which in a chrome document marks whole panes and lists; `[onclick]` and `label[for]`, which sit on wrappers and labels whose own control already gets a label; `[role=menuitemcheckbox]` and `[role=menuitemradio]`, which live in closed menus.
+// Any `contenteditable` but `false` makes an editor: the bare attribute, `true` and `plaintext-only`. A web page writes all three.
+const EDITABLE = "[contenteditable]:not([contenteditable=false])";
+const PAGE_CONTROLS = `${CONTROLS}, a[href], select:not([disabled]), textarea:not([disabled]), search-textbox, ${EDITABLE}, summary, checkbox:not([disabled]), radio:not([disabled]), menulist:not([disabled]), richlistitem, [role=link], [role=tab], [role=checkbox], [role=switch], [role=radio], [role=option], [role=treeitem], [role=menuitem]`;
+const FIELDS = `input, select, textarea, search-textbox, ${EDITABLE}`;
 
 const pick_control = (element: TargetElement): void => {
     if (element.matches(FIELDS)) element.focus();
@@ -76,6 +78,8 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
     ];
 }
 
+/** The controls on screen in one document. The page actor's hint module labels a web page with these alone. */
+export const collect_window_targets = (window: TargetWindow): PickTarget[] => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus());
+
 /** The targets of a tab that is not the mail tab: the controls of the window, which holds a calendar or tasks tab itself, then those of the tab's own page (settings, the address book, an `about:` page). `page` is null when the tab has no page the parent can read. */
-export const collect_page_targets = (main: TargetWindow, page: TargetWindow | null): PickTarget[] =>
-    [main, ...(page ? [page] : [])].flatMap((window) => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus()));
+export const collect_page_targets = (main: TargetWindow, page: TargetWindow | null): PickTarget[] => [main, ...(page ? [page] : [])].flatMap(collect_window_targets);

@@ -5,6 +5,7 @@ import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
 import { run_scroll, scroll_axis_of, scroll_target } from "./page_actions.ts";
 import type { ScrollDocument } from "./page_actions.ts";
 import type { ActorState, Skeleton } from "./page_actor_parent.ts";
+import type * as PageHints from "./page_hints_child.ts";
 
 interface FieldNode {
     localName?: string;
@@ -28,6 +29,8 @@ interface ChildEvent extends KeyEventLike {
     preventDefault(): void;
     stopPropagation(): void;
 }
+
+declare const ChromeUtils: { importESModule(url: string): typeof PageHints };
 
 declare class JSWindowActorChild {
     document: ChildDocument;
@@ -63,6 +66,8 @@ export class DesertBirdPageChild extends JSWindowActorChild {
     typing: Skeleton = {};
     typed: string[] = [];
     counted = 0;
+    // Set by the hint module while its labels show in this page.
+    pick: PageHints.HintsChild["pick"] = null;
 
     actorCreated(): void {
         // Until the parent answers, the child takes no key: a key pressed that early goes to the page.
@@ -81,6 +86,8 @@ export class DesertBirdPageChild extends JSWindowActorChild {
         this.insert = state.insert === true;
         this.page = state.page;
         this.typing = state.typing;
+        // The parent pushes the state on a tab change, a window blur and a shutdown, and each ends the hint labels.
+        this.pick?.end();
         this.restart();
     }
 
@@ -125,7 +132,10 @@ export class DesertBirdPageChild extends JSWindowActorChild {
     handleEvent(event: ChildEvent): void {
         // A page back from the back-forward cache keeps its child and its old copy, so it asks again.
         if (event.type === "pageshow" && event.persisted) return this.hello();
-        if (event.type !== "keydown" || !this.on || event.isComposing) return;
+        if (event.type !== "keydown") return;
+        // The labels take every key, so neither the page nor a page key sees a hint letter.
+        if (this.pick) return this.pick.key(event);
+        if (!this.on || event.isComposing) return;
         const token = event_to_token(event);
         if (token === null) return;
         // In insert mode a plain key is the page's at once.
@@ -155,8 +165,10 @@ export class DesertBirdPageChild extends JSWindowActorChild {
         this.send(event, field, false);
     }
 
-    receiveMessage({ name, data }: { name: string; data?: { id?: unknown; count?: unknown } & Partial<ActorState> }): void {
+    receiveMessage({ name, data }: { name: string; data?: { id?: unknown; count?: unknown } & Partial<ActorState> }): number | void {
         if (name === "DesertBird:State" && data) this.apply(data as ActorState);
+        // The hint code loads on the first pick only, so a page that never sees one never loads it.
+        else if (name === "DesertBird:Hints") return ChromeUtils.importESModule(new URL("page_hints_child.sys.mjs", import.meta.url).href).start(this, data as never);
         else if (name === "DesertBird:Blur") deepest_focus(this.document)?.blur?.();
         else if (name === "DesertBird:Scroll" && typeof data?.id === "string") {
             // The count comes from the parent's matcher, a number or none.

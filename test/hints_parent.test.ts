@@ -122,6 +122,27 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
         assert.equal(await pick({ windowId: 7, colors }), 1);
         assert.deepEqual(drawn_in, ["main"]);
         shutdown();
+        // A remote page with the page actor on: its child labels the page, and the parent draws nothing and holds no key.
+        const queries: [string, unknown][] = [];
+        let answer: Promise<unknown> = Promise.resolve(4);
+        const actor = { on: true, sendQuery: (name: string, data: unknown) => (queries.push([name, data]), answer) };
+        let focused = 0;
+        tab["browser"] = { isRemoteBrowser: true, contentDocument: null, focus: () => void focused++, browsingContext: { currentWindowGlobal: { getExistingActor: (name: string) => (name === "DesertBirdPage" ? actor : undefined) } } };
+        drawn_in.length = 0;
+        added.length = 0;
+        assert.equal(await pick({ windowId: 7, colors, action: "yank" }), 4);
+        assert.deepEqual(queries, [["DesertBird:Hints", { scheme: colors.dark, action: "yank" }]], "only the colors and the action cross");
+        assert.equal(focused, 1, "the page gets the focus, so its child reads the label keys");
+        assert.deepEqual(drawn_in, []);
+        assert.deepEqual(added, []);
+        // The tab closed or its page went before the child answered.
+        answer = Promise.reject(new Error("Actor 'DesertBirdPage' destroyed before query 'DesertBird:Hints' was resolved"));
+        assert.equal(await pick({ windowId: 7, colors }), 0);
+        // An actor that is off (the add-on's own page, a stopped actor) leaves the old path: the window's own controls.
+        actor.on = false;
+        assert.equal(await pick({ windowId: 7, colors }), 1);
+        assert.deepEqual(drawn_in, ["main"]);
+        shutdown();
         await assert.rejects(pick({ windowId: 9, colors }), /no tab in window 9/, "a message window has no tab to label");
     } finally {
         platform.restore();

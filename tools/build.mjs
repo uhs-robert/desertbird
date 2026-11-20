@@ -48,7 +48,7 @@ const CONTENT_MAX_BYTES = 18162;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.
-const HINTS_MAX_BYTES = 13562;
+const HINTS_MAX_BYTES = 14074;
 const HINTS_CEILING_BYTES = 20480;
 
 // `content/compose_keys.js`, registered into every compose body.
@@ -64,12 +64,16 @@ const PAGE_KEYS_MAX_BYTES = 21400;
 const PAGE_KEYS_CEILING_BYTES = 32768;
 
 // `experiment/page_actor_child.sys.mjs`, the page actor's child, which runs in the process of every web page and other add-on's page a tab shows.
-const ACTOR_CHILD_MAX_BYTES = 8192;
+const ACTOR_CHILD_MAX_BYTES = 8704;
 const ACTOR_CHILD_CEILING_BYTES = 11264;
 
 // `experiment/page_actor_parent.sys.mjs`, the page actor's parent, loaded with the pages bundle.
 const ACTOR_PARENT_MAX_BYTES = 5632;
 const ACTOR_PARENT_CEILING_BYTES = 9216;
+
+// `experiment/page_hints_child.sys.mjs`, the page actor's hint labels, which a child loads on the first hint pick in its process.
+const ACTOR_HINTS_MAX_BYTES = 6656;
+const ACTOR_HINTS_CEILING_BYTES = 10240;
 
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
@@ -113,6 +117,7 @@ var ${parent.name} = class extends ExtensionAPI {
 const ACTORS = [
     { name: "page_actor_child", entry: "src/chrome/page_actor_child.ts", max_bytes: ACTOR_CHILD_MAX_BYTES },
     { name: "page_actor_parent", entry: "src/chrome/page_actor_parent.ts", max_bytes: ACTOR_PARENT_MAX_BYTES },
+    { name: "page_hints_child", entry: "src/chrome/page_hints_child.ts", max_bytes: ACTOR_HINTS_MAX_BYTES },
 ];
 
 const shared_options = {
