@@ -168,6 +168,7 @@ DesertFox has one content script per web page. Thunderbird draws its tabs (calen
 - The page keys run in a bundle of their own on the window root, where DesertFox has one `content.js`. The size guard of `keys.js` was full, and the admission rule keeps this code out of it. `hints.js` is the precedent for a bundle that listens on the window root. It sees a key before the key runtime and steps aside in the mail tab, so the two never take the same key.
 - A decision by focus (`src/chrome/readable_focus.ts`) where DesertFox has no decision. A tab is readable when its document is a chrome document or a parent-process document. It is out of reach when the focus chain ends in a browser whose document the walk cannot enter, or when nothing in the tab has the focus and the front tab's browser is remote. Only the close chord runs there, because the chrome cannot see a text field inside such a page. A text field or an open menu passes every key.
 - The scroll target is the nearest scrollable ancestor of the focused element, else the scrolling element of its document, else, when that does not scroll, the largest visible scrollable element of the document, or of the front tab's panel in the window document (the settings tab scrolls inside a pane the focused sidebar button is not part of). DesertFox adds a site selector and always scans for the largest box. The chrome documents are known and there are no site rules here, and the scan runs only when the root does not scroll.
+- `h` and `l` scroll 50 pixels sideways and `<C-f>` and `<C-b>` a page (the height of the target), as in DesertFox. A sideways key looks for a target that overflows in width, and a page tab and a message tab take them. `<C-f>` is Find in Thunderbird, so it stops being Find in these tabs only. In the mail tab `h` and `l` stay the thread fold keys, since the list layer comes first.
 - No smooth scroll and no insert mode `i`. The page actor of a later step owns pages that draw their own editors.
 - The hold after a command that opens the overlay and the end report of the key list are copies of the mail runtime's, because the two bundles share no state.
 - A key the page keymap leaves unbound passes to Thunderbird. DesertFox cancels unbound keys in some modes.
@@ -200,7 +201,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/zoom.js` | 3544 | 6144 |
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
-| `experiment/pages.js` | 22800 | 34816 |
+| `experiment/pages.js` | 23312 | 34816 |
 | `content/page_keys.js` | 21400 | 32768 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
@@ -239,7 +240,7 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 
 ### Pages bundle
 
-`experiment/pages.js` (the `pages` Experiment) holds the key runtime of every tab that is not the mail tab. Its first measured size was 18982 bytes. That plus 20 percent made 22779, rounded up to 22800. The bundle carries its own copy of the vendored matcher and key token code, which `keys.js` holds too, because Experiment scopes share no modules. The ceiling is 1.5 times the guard rounded up to 1024. The sizes of these two guards are bytes of the unminified bundle, as the build writes it. The planning estimate of 4.5 to 7 KB assumed a minified build.
+`experiment/pages.js` (the `pages` Experiment) holds the key runtime of every tab that is not the mail tab. Its first measured size was 18982 bytes. That plus 20 percent made 22779, rounded up to 22800. The scroll keys of page tabs (`h`, `l`, `<C-f>`, `<C-b>`, and the axis of a target) took the build to 23176, so the guard rose one step of 512 to 23312; they decide what happens to a key. The bundle carries its own copy of the vendored matcher and key token code, which `keys.js` holds too, because Experiment scopes share no modules. The ceiling is 1.5 times the guard rounded up to 1024. The sizes of these two guards are bytes of the unminified bundle, as the build writes it. The planning estimate of 4.5 to 7 KB assumed a minified build.
 
 ### Own page script bundle
 

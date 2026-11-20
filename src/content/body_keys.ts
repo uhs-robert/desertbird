@@ -24,7 +24,7 @@ export interface BodyWindow extends FindWindow, HintWindow {
     addEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
     addEventListener(type: "scroll" | "blur" | "pointerdown", listener: () => void, capture: boolean): void;
     removeEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
-    scrollBy(options: { top: number; behavior: "instant" }): void;
+    scrollBy(options: { top?: number; left?: number; behavior: "instant" }): void;
     scrollTo(options: { top: number; behavior: "instant" }): void;
     document: HintWindow["document"] & { body: unknown; documentElement: { scrollHeight: number; setAttribute(name: string, value: string): void; removeAttribute(name: string): void } };
 }
@@ -49,12 +49,23 @@ interface BodyContext {
 
 type Action = (context: BodyContext, count: number, args: Record<string, unknown>) => void;
 
+// Pixels of one `h` or `l`, the step of DesertFox.
+const SIDEWAYS_PX = 50;
+
+const scroll_by = (side: "top" | "left", pixels_of: (context: BodyContext) => number): Action => (context, count) => context.window.scrollBy({ [side]: pixels_of(context) * count, behavior: "instant" });
+const half_page = ({ window }: BodyContext) => window.innerHeight / 2;
+const whole_page = ({ window }: BodyContext) => window.innerHeight;
+
 // The fixed table of what a leaf of this document may run. An id that is not here does nothing.
 const ACTIONS: Record<string, Action> = {
-    "message.scroll_down": ({ window, step_px }, count) => window.scrollBy({ top: step_px * count, behavior: "instant" }),
-    "message.scroll_up": ({ window, step_px }, count) => window.scrollBy({ top: -step_px * count, behavior: "instant" }),
-    "message.half_page_down": ({ window }, count) => window.scrollBy({ top: (window.innerHeight / 2) * count, behavior: "instant" }),
-    "message.half_page_up": ({ window }, count) => window.scrollBy({ top: -(window.innerHeight / 2) * count, behavior: "instant" }),
+    "message.scroll_down": scroll_by("top", ({ step_px }) => step_px),
+    "message.scroll_up": scroll_by("top", ({ step_px }) => -step_px),
+    "message.half_page_down": scroll_by("top", half_page),
+    "message.half_page_up": scroll_by("top", (context) => -half_page(context)),
+    "message.page_down": scroll_by("top", whole_page),
+    "message.page_up": scroll_by("top", (context) => -whole_page(context)),
+    "message.scroll_left": scroll_by("left", () => -SIDEWAYS_PX),
+    "message.scroll_right": scroll_by("left", () => SIDEWAYS_PX),
     "message.top": ({ window }) => window.scrollTo({ top: 0, behavior: "instant" }),
     "message.bottom": ({ window }) => window.scrollTo({ top: window.document.documentElement.scrollHeight, behavior: "instant" }),
     "message.find_next": ({ finder }) => finder.step(false),

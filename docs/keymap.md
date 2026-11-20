@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 305 (Mail tab 140, Message 88, Own pages 42, Other tabs 35)
+bound: 317 (Mail tab 140, Message 92, Own pages 46, Other tabs 39)
 
 ### Mail tab
 
@@ -256,6 +256,10 @@ A message in a tab, a window or the message pane.
 | `k` | `message.scroll_up` |
 | `<C-d>` | `message.half_page_down` |
 | `<C-u>` | `message.half_page_up` |
+| `<C-f>` | `message.page_down` |
+| `<C-b>` | `message.page_up` |
+| `h` | `message.scroll_left` |
+| `l` | `message.scroll_right` |
 | `G` | `message.bottom` |
 | `/` | `cmdline.open 'find '` |
 | `n` | `message.find_next` |
@@ -413,6 +417,10 @@ The options page and the help page.
 | `k` | `message.scroll_up` |
 | `<C-d>` | `message.half_page_down` |
 | `<C-u>` | `message.half_page_up` |
+| `<C-f>` | `message.page_down` |
+| `<C-b>` | `message.page_up` |
+| `h` | `message.scroll_left` |
+| `l` | `message.scroll_right` |
 | `G` | `message.bottom` |
 | `/` | `cmdline.open 'find '` |
 | `n` | `message.find_next` |
@@ -503,6 +511,10 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `k` | `page.scroll_up` |
 | `<C-d>` | `page.half_down` |
 | `<C-u>` | `page.half_up` |
+| `<C-f>` | `page.page_down` |
+| `<C-b>` | `page.page_up` |
+| `h` | `page.scroll_left` |
+| `l` | `page.scroll_right` |
 | `G` | `page.bottom` |
 
 #### Go

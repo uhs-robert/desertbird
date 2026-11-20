@@ -2,6 +2,7 @@
 // Departs from `run_own_pages`, which keeps the after-a-click case of the address book and calendar: this file covers the no-click case and the other tabs. It takes the helpers of `run.mjs` as arguments, as `run_tabs` does.
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-m", "ctrl"];
 
 // Where the spaces toolbar buttons sit at the e2e window size. The calendar position is measured. The tasks button and the settings gear were read from a screenshot. Chat has no button in this profile, so it has no row.
@@ -69,10 +70,17 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
     const page_before = await hud_pixels(instance, `${app}_${slug}_page_before`, PAGE_REGION);
     for (let count = 0; count < 5; count++) await instance.press(["j"]);
     await sleep(500);
-    const scrolled = (await hud_pixels(instance, `${app}_${slug}_page_after`, PAGE_REGION)) !== page_before;
+    const scrolled_pixels = await hud_pixels(instance, `${app}_${slug}_page_after`, PAGE_REGION);
+    const scrolled = scrolled_pixels !== page_before;
     if (scrolls) verdict(`j scrolls the ${name} tab`, scrolled);
     else note(app, kind, `j in the ${name} tab`, scrolled ? "the page pixels changed" : "the page pixels did not change");
     await shot(`${slug}_after_j`, `${name} tab after five j`);
+    // Ctrl+F is Find in Thunderbird, so a change of the pixels shows the page key took it.
+    if (scrolls) {
+      await instance.press(CTRL("f"));
+      await sleep(500);
+      verdict(`Ctrl+F scrolls the ${name} tab a page`, (await hud_pixels(instance, `${app}_${slug}_page_down`, PAGE_REGION)) !== scrolled_pixels);
+    }
     await instance.press(["g"]);
     await instance.press(["g"]);
 

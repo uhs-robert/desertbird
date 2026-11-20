@@ -124,8 +124,8 @@ class StubWindow implements BodyWindow {
         return [...this.elements].reverse().find((element) => element.style.visibility === "visible" && x >= element.box.left && x <= element.box.left + element.box.width && y >= element.box.top && y <= element.box.top + element.box.height) ?? null;
     }
     removeEventListener() {}
-    scrollBy(options: { top: number }) {
-        this.scrolls.push(`by ${options.top}`);
+    scrollBy(options: { top?: number; left?: number }) {
+        this.scrolls.push(options.left === undefined ? `by ${options.top}` : `by left ${options.left}`);
     }
     scrollTo(options: { top: number }) {
         this.scrolls.push(`to ${options.top}`);
@@ -200,6 +200,16 @@ test("a count multiplies the line step", async () => {
     window.press("2");
     window.press("k");
     assert.deepEqual(window.scrolls, [`by ${5 * MESSAGE_SCROLL_STEP_PX}`, `by ${-12 * MESSAGE_SCROLL_STEP_PX}`]);
+});
+
+test("Ctrl+f and Ctrl+b scroll a page, and h and l scroll 50 pixels sideways, with a count", async () => {
+    const { window } = await started();
+    assert.equal(window.press("f", { ctrlKey: true }).cancelled, true);
+    window.press("b", { ctrlKey: true });
+    window.press("h");
+    window.press("3");
+    window.press("l");
+    assert.deepEqual(window.scrolls, [`by ${VIEWPORT}`, `by ${-VIEWPORT}`, "by left -50", "by left 150"]);
 });
 
 test("Ctrl+d and Ctrl+u scroll half a page, with a count", async () => {
