@@ -119,6 +119,8 @@ async function expect_absent(instance, name, found, { margin_ms, in_list }) {
   return state;
 }
 
+const wait_for_state = (instance, wanted) => wait_state(instance, wanted.what, wanted.until, wanted);
+
 // Presses a key and returns the state. `wait` is a number of ms (the older fixed wait, still used by the sections not yet ported) or { what, until, ...options } for wait_state.
 async function key_and_state(instance, args, wait = 700) {
   await instance.press(args);
@@ -126,7 +128,7 @@ async function key_and_state(instance, args, wait = 700) {
     await sleep(wait);
     return instance.ask("state");
   }
-  return wait_state(instance, wait.what, wait.until, wait);
+  return wait_for_state(instance, wait);
 }
 
 // Restarts the app and records a check that the process changed, so a skipped restart fails the run.
@@ -149,6 +151,7 @@ const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 // Wait descriptions for key_and_state, one per kind of result the keys of the default section cause.
 const selects = (id) => ({ what: `the selection to reach ${id}`, until: (state) => first_selected(state) === id, show: (state) => `selected ${first_selected(state)}` });
+const at_bottom = { what: "the selection to reach the last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-1), show: (state) => `selected ${first_selected(state)}` };
 const flag_becomes = (id, name, value) => ({ what: `${name} of ${id} to become ${value}`, until: (state) => state.flags[id]?.[name] === value, show: (state) => `${name} ${state.flags[id]?.[name]}` });
 // A compose window opens late: the subject and the quote arrive after the window, and Thunderbird can take many seconds.
 const compose_opens = (tab_is_ready) => ({ what: "a compose window with its content", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some(tab_is_ready)), timeout_ms: 15000 });
@@ -860,7 +863,6 @@ async function run_panes(instance, { app, kind, shot }) {
   const folder_lands_on = (path) => ({ what: `the folder selection to reach ${path}`, until: (state) => folder_of(state) === path, show: (state) => `folder ${folder_of(state)}` });
   const folder_leaves = (path) => ({ what: `the folder selection to leave ${path}`, until: (state) => folder_of(state) !== path && folder_of(state) !== null, show: (state) => `folder ${folder_of(state)}` });
   const at_top = { what: "the selection to reach the first row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed[0], show: (state) => `selected ${first_selected(state)}` };
-  const at_bottom = { what: "the selection to reach the last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-1), show: (state) => `selected ${first_selected(state)}` };
   const at_second_last = { what: "the selection to reach the second last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-2), show: (state) => `selected ${first_selected(state)}` };
   const at_second = { what: "the selection to reach the second row", until: (state) => first_selected(state) !== null && state.listed.indexOf(first_selected(state)) === 1, show: (state) => `selected ${first_selected(state)}` };
   const leaves_row = (row) => ({ what: `the selection to leave ${row}`, until: (state) => first_selected(state) !== null && first_selected(state) !== row, show: (state) => `selected ${first_selected(state)}` });
@@ -1035,7 +1037,7 @@ async function run_panes(instance, { app, kind, shot }) {
     check(app, kind, `g p ${key} opens the ${page} page in a tab`, tabs_of(state).includes(address), `tabs ${tabs_of(state).join(" ")}`);
     await shot(`panes_gp${key}`, `the page g p ${key} opened`);
     await instance.ask("reset_tabs");
-    await wait_state(instance, only_tab.what, only_tab.until, only_tab);
+    await wait_for_state(instance, only_tab);
     await keys(["g", "e"]);
   }
   // The leader: , h opens the help page and , s the options page, each in a tab of the window.
@@ -1044,14 +1046,14 @@ async function run_panes(instance, { app, kind, shot }) {
     state = await keys([",", key], opens_tab(`the ${page} page`, is_page));
     check(app, kind, `, ${key} opens the ${page} page in a tab`, tabs_of(state).some(is_page), `tabs ${tabs_of(state).join(" ")}`);
     await instance.ask("reset_tabs");
-    await wait_state(instance, only_tab.what, only_tab.until, only_tab);
+    await wait_for_state(instance, only_tab);
     await keys(["g", "e"]);
   }
   // The conversation command may be disabled and open nothing, so no state says it finished: this wait stays fixed.
   state = await keys(["g", "C"], 2500);
   note(app, kind, "g C", `tabs after: ${tabs_of(state).length}; the conversation command is ${tabs_of(state).length > 1 ? "enabled and opened a tab" : "disabled, so it opened nothing"}`);
   await instance.ask("reset_tabs");
-  await wait_state(instance, only_tab.what, only_tab.until, only_tab);
+  await wait_for_state(instance, only_tab);
   await keys(["g", "e"]);
 
   // u and :undo run DesertBird's own undo log. d d, a and the API delete record a step there. A delete by the native Delete key is Thunderbird's, so u leaves it alone.
@@ -1062,10 +1064,22 @@ async function run_panes(instance, { app, kind, shot }) {
     await instance.press(["-k", "Return"]);
     return wait_state(instance, `:undo to bring ${id} back to the Inbox`, (current) => in_folder(current, id, "/Inbox"), { timeout_ms: 10000, show: (current) => `${current.folders["/Inbox"].length} in the Inbox` });
   };
+  // No helper state marks the end of the queued undo steps, so the counts of the three folders must stay put for QUIET_MS.
+  const wait_for_quiet_counts = async () => {
+    const QUIET_MS = 3500;
+    const counts_of = (current) => ["/Inbox", "/Trash", "/Archives"].map((path) => current.folders[path]?.length ?? 0).join(",");
+    let counts = counts_of(await instance.ask("state"));
+    let since = Date.now();
+    const give_up = Date.now() + 60000;
+    while (Date.now() - since < QUIET_MS && Date.now() < give_up) {
+      await sleep(250);
+      const now_counts = counts_of(await instance.ask("state"));
+      if (now_counts !== counts) { counts = now_counts; since = Date.now(); }
+    }
+    check(app, kind, "the undo queue drains after the 42 u: the folder counts hold still", Date.now() - since >= QUIET_MS, `counts ${counts}`);
+  };
   await keys(["g", "t"]);
   await keys(["g", "i"], 2500);
-  // g i leaves the focus off the thread list, so a g g typed now is lost. g e first, as the later resets do.
-  await keys(["g", "e"]);
   await keys(["g", "g"], at_top);
   let victim = first_selected(await keys(["j"], at_second));
   state = await keys(["d", "d"], holds("d d", "/Trash", victim, true));
@@ -1100,12 +1114,13 @@ async function run_panes(instance, { app, kind, shot }) {
   // One stack serves the whole run, so the next u steps back to an older entry: the archive that . made in visual mode.
   state = await keys(["u"], { what: "the next u to undo the older . archive", until: (current) => messages_in_inbox(current) === inbox_before + 1, timeout_ms: 10000, show: (current) => `Inbox ${messages_in_inbox(current)}` });
   check(app, kind, "the next u undoes the older . archive, one message back in the Inbox", messages_in_inbox(state) === inbox_before + 1, `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
-  // Empty the stack: it holds at most 20 entries, and a step whose message is gone takes a second u to drop. Most of these u change nothing, so no state shows each one land. The barrier after the loop proves the last one reached the key runtime, and the final check below fails if a step is left.
+  // Empty the stack: it holds at most 20 entries, and a step whose message is gone takes a second u to drop. Most of these u change nothing, so no state shows each one land. The barrier proves the last u reached the key runtime. It does not prove the background has drained the queue: undo_newest runs the steps one after another, with retries. So the folder counts must then hold for a quiet period.
   for (let press = 0; press < 42; press++) {
     await instance.press(["u"]);
     await sleep(100);
   }
   await barrier(instance);
+  await wait_for_quiet_counts();
   await keys(["g", "e"]);
   await keys(["g", "g"], at_top);
   victim = first_selected(await keys(["j"], at_second));
@@ -1927,15 +1942,15 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const trash_is = (count) => ({ what: `Trash to hold ${count}`, until: (state) => trash_count(state) === count, show: (state) => `Trash holds ${trash_count(state)}`, timeout_ms: 10000 });
   const select_tab = async (index) => {
     await instance.ask("select_tab", 20000, { index });
-    return wait_state(instance, active_is(index).what, active_is(index).until, active_is(index));
+    return wait_for_state(instance, active_is(index));
   };
   const reset_tabs = async () => {
     await instance.ask("reset_tabs");
-    return wait_state(instance, tab_count_is(1).what, tab_count_is(1).until, tab_count_is(1));
+    return wait_for_state(instance, tab_count_is(1));
   };
   const open_tab = async (command, count) => {
     const reply = await instance.ask(command);
-    return { reply, state: await wait_state(instance, tab_count_is(count).what, tab_count_is(count).until, tab_count_is(count)) };
+    return { reply, state: await wait_for_state(instance, tab_count_is(count)) };
   };
 
   // q on the only mail tab: tabs.remove does nothing there, so q moves the focus to the thread list, shows no toast and the tab stays.
@@ -2006,7 +2021,7 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   await reset_tabs();
   await open_tab("open_content_tab", 2);
   const removed = await instance.ask("remove_tab", 20000, { index: 1 });
-  state = await wait_state(instance, tab_count_is(1).what, tab_count_is(1).until, tab_count_is(1));
+  state = await wait_for_state(instance, tab_count_is(1));
   check(app, kind, "tabs.remove closes a content tab", removed.removed === true && main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
 
   // A message tab: open one for the selected message, switch to it, and measure a key there.
@@ -2030,8 +2045,7 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   await open_tab("open_content_tab", 2);
   await select_tab(0);
   await instance.press(["g"]);
-  const at_last_row = () => ({ what: "G to select the last row", until: (now) => first_selected(now) !== null && first_selected(now) === now.listed.at(-1), show: (now) => `selected ${first_selected(now)}` });
-  state = await key_and_state(instance, ["G"], at_last_row());
+  state = await key_and_state(instance, ["G"], at_bottom);
   const trash_before = trash_count(state);
   await instance.press(["d"]);
   await select_tab(1);
@@ -2040,11 +2054,13 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   state = await key_and_state(instance, ["d"], 2500);
   check(app, kind, "a d typed before a tab switch does not pair with a d typed after it", (state.folders["/Trash"]?.length ?? 0) === trash_before, `Trash holds ${state.folders["/Trash"]?.length ?? 0}, it held ${trash_before}`);
   // One more d: it pairs with the d typed after the switch only if that d reached the app, so a lost first key fails here.
+  const doomed = first_selected(state);
   state = await key_and_state(instance, ["d"], trash_is(trash_before + 1));
   check(app, kind, "the d after the switch counted, so the next d trashes", (state.folders["/Trash"]?.length ?? 0) === trash_before + 1, `Trash holds ${state.folders["/Trash"]?.length ?? 0}`);
   // A count is part of the half-typed state too: 3, a tab switch and back, then k moves one row. Three rows means the count survived. No move means the key was lost.
   const listed_index = (snapshot) => snapshot.listed.indexOf(first_selected(snapshot));
-  state = await key_and_state(instance, ["G"], at_last_row());
+  // The trashed row has to leave the list first, or G can stop on it and last_row is one too far down.
+  state = await key_and_state(instance, ["G"], { ...at_bottom, until: (now) => at_bottom.until(now) && !now.listed.includes(doomed) });
   const last_row = listed_index(state);
   await instance.press(["3"]);
   await select_tab(1);
@@ -2052,9 +2068,9 @@ async function run_tabs(instance, { check, note, shot, key_and_state }) {
   state = await key_and_state(instance, ["k"], { what: "k to move the selection off the last row", until: (now) => listed_index(now) !== last_row, show: (now) => `row ${listed_index(now)}` });
   check(app, kind, "a count typed before a tab switch is dropped, so k moves one row", listed_index(state) === last_row - 1, `row ${listed_index(state)} after k from row ${last_row}`);
   await instance.ask("remove_tab", 20000, { index: 1 });
-  await wait_state(instance, tab_count_is(1).what, tab_count_is(1).until, tab_count_is(1));
+  await wait_for_state(instance, tab_count_is(1));
   // A window blur ends the sequence too: d, another window takes focus and gives it back, then d. The popup takes focus when it opens, so the main window blurs.
-  state = await key_and_state(instance, ["G"], at_last_row());
+  state = await key_and_state(instance, ["G"], at_bottom);
   const trash_before_blur = trash_count(state);
   await instance.press(["d"]);
   const popup = await instance.ask("open_popup_window", 20000);
