@@ -6,7 +6,7 @@ import type { KeydownEvent, KeyTarget, WindowListener } from "../src/chrome/runt
 import type { Situation } from "../src/chrome/readable_focus.ts";
 import { compile_tab_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
-import type { KeysEvent, KeysInvocation } from "../src/shared/protocol.ts";
+import type { KeysEvent, KeysInvocation, KeysPending } from "../src/shared/protocol.ts";
 
 class FakeWindow {
     key_listeners = new Set<(event: KeydownEvent) => void>();
@@ -172,17 +172,45 @@ test("a remote page runs only the close chord and passes every other key, J, K a
 });
 
 
-test("g ? asks for the root of the page tree and the next key reports its end once", () => {
-    const { windows, runtime, invocations, pending } = setup();
+const reports = (events: KeysEvent[]) => events.filter((event) => "keys" in event).map((event) => (event as KeysPending).keys.join("") + ((event as KeysPending).root ? "!" : ""));
+
+test("g ? asks for the root of the page tree, with no end before it, and the next key reports its end once", () => {
+    const { windows, runtime, invocations, events, pending } = setup();
     runtime.install(tree());
     const window = windows[0]!;
     press(window, "g");
     press(window, "?");
     assert.deepEqual(invocations(), []);
-    assert.deepEqual(pending().slice(2).map((event) => [event.keys, event.source, event.root]), [[[], "page", true]]);
+    assert.deepEqual(reports(events), ["g", "!"]);
+    assert.deepEqual([pending().at(-1)?.source, pending().at(-1)?.root], ["page", true]);
     press(window, "j");
     press(window, "j");
-    assert.deepEqual(pending().slice(3).map((event) => [event.keys, event.windowId, event.root]), [[[], 7, undefined]]);
+    assert.deepEqual(reports(events), ["g", "!", ""]);
+    assert.equal(pending().at(-1)?.windowId, 7);
+});
+
+test("a key that extends the prefix sends no end event, and Escape after a prefix sends one", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree({ zab: { id: "page.scroll_down" } }));
+    const window = windows[0]!;
+    press(window, "z");
+    press(window, "a");
+    assert.deepEqual(reports(events), ["z", "za"]);
+    press(window, "b");
+    assert.deepEqual(reports(events), ["z", "za", ""]);
+    press(window, "z");
+    press(window, "Escape");
+    assert.deepEqual(reports(events), ["z", "za", "", "z", ""]);
+});
+
+test("a tab change drops the armed end, so the next key in the new tab reports none", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "g");
+    window.tab_listeners.forEach((listener) => listener());
+    press(window, "j");
+    assert.deepEqual(reports(events), ["g"]);
 });
 
 test("a half-typed t reports its keys with the page source, and the key after it ends the panel", () => {

@@ -86,7 +86,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         if (result.kind_ === "pending") {
             key_list_shown = true;
             deps.emit({ command: "pending", keys: result.typed_, windowId: deps.window_id_of(window), source });
-        } else end_key_list(window);
+        } else if (!(result.kind_ === "match" && result.leaf.steps.some((step) => step.invocation.id === KEY_LIST))) end_key_list(window);
         // Thunderbird binds single keys of its own in a message tab (`j` is junk), so a plain key stops here whether or not it matched.
         if (result.kind_ === "no_match") {
             if (situation === "message" && is_plain_printable(token)) (event.preventDefault(), event.stopPropagation());
@@ -120,6 +120,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
             matcher?.reset();
             message_matcher?.reset();
             hold_until = 0;
+            key_list_shown = false;
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `g`, a click away and back, then `g` would run `gg`.
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);
