@@ -1,7 +1,7 @@
 import { focus_pane, focus_pane_beside, open_conversation, open_page } from "../handlers/app.ts";
 import { undo } from "../handlers/undo.ts";
 import type { UndoApi } from "../handlers/undo.ts";
-import type { AppApi } from "../handlers/app.ts";
+import type { AppHandlerApi } from "../handlers/app.ts";
 import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
@@ -35,42 +35,42 @@ export const app: CommandGroup = {
             runs_in: "background",
             label: "Open the conversation",
             intent: "Open the conversation view of the selected message.",
-            needs: ["keys.appCommand"],
-            run: scoped<AppApi>(open_conversation),
+            needs: ["app.appCommand"],
+            run: scoped<AppHandlerApi>(open_conversation),
         },
         "app.open_page": {
             bridge: false,
             runs_in: "background",
             label: "Open a Thunderbird page",
             intent: "Open the add-ons, themes or config page in a tab.",
-            needs: ["tab", "keys.appOpenPage"],
+            needs: ["tab", "app.appOpenPage"],
             params: [{ name: "page", type: "enum", values: ["addons", "themes", "config"], short: { addons: "a", themes: "t", config: "c" }, description: { addons: "Open the add-ons manager.", themes: "Open the themes page.", config: "Open the configuration editor." } }],
-            run: scoped<AppApi>(open_page),
+            run: scoped<AppHandlerApi>(open_page),
         },
         "pane.focus": {
             bridge: true,
             runs_in: "background",
             label: "Focus a pane",
             intent: "Move the focus to a pane. A hidden pane, or a message pane that shows no single message, is refused.",
-            needs: ["keys.paneFocus"],
+            needs: ["app.paneFocus"],
             params: [{ name: "pane", type: "enum", values: ["folders", "threads", "message"], short: { folders: "f", threads: "e", message: "m" }, description: { folders: "Focus the folder pane.", threads: "Focus the thread list.", message: "Focus the message pane." } }],
-            run: scoped<AppApi>(focus_pane),
+            run: scoped<AppHandlerApi>(focus_pane),
         },
         "pane.left": {
             bridge: true,
             runs_in: "background",
             label: "Focus the pane to the left",
             intent: "Move the focus to the pane left of the focused one. From the message pane it goes to the thread list, from the thread list to the folder pane. It stops at the folder pane, and a hidden folder pane counts as the end.",
-            needs: ["keys.paneFocus"],
-            run: scoped<AppApi>(focus_pane_beside("left")),
+            needs: ["app.paneFocus"],
+            run: scoped<AppHandlerApi>(focus_pane_beside("left")),
         },
         "pane.right": {
             bridge: true,
             runs_in: "background",
             label: "Focus the pane to the right",
             intent: "Move the focus to the pane right of the focused one. From the folder pane it goes to the thread list, from the thread list to the message pane. It stops at the message pane, and a hidden message pane or one with no message counts as the end.",
-            needs: ["keys.paneFocus"],
-            run: scoped<AppApi>(focus_pane_beside("right")),
+            needs: ["app.paneFocus"],
+            run: scoped<AppHandlerApi>(focus_pane_beside("right")),
         },
     }),
     normal_keys: {

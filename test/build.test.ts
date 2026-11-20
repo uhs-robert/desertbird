@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const PARENT_MAX_BYTES = Number(/PARENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const KEYS_MAX_BYTES = Number(/KEYS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const APP_MAX_BYTES = Number(/APP_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const HINTS_MAX_BYTES = Number(/HINTS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const FOLDERPANE_MAX_BYTES = Number(/FOLDERPANE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const CONTENT_MAX_BYTES = Number(/CONTENT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
@@ -47,7 +49,7 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-const PARENT_NAMES = ["keys", "overlay", "hints", "pages", "folderpane"];
+const PARENT_NAMES = ["keys", "overlay", "hints", "pages", "folderpane", "app"];
 const sources: Record<string, string> = {};
 const inputs: Record<string, string[]> = {};
 
@@ -99,9 +101,15 @@ test("each parent bundle stays within the size guard", () => {
     assert.ok(PARENT_MAX_BYTES > 0);
     for (const name of PARENT_NAMES) {
         const size = readFileSync(join(out_dir, `experiment/${name}.js`)).length;
-        const max_bytes = { folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
+        const max_bytes = { app: APP_MAX_BYTES, keys: KEYS_MAX_BYTES, folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
         assert.ok(size <= max_bytes, `${name}.js is ${size} bytes, over ${max_bytes}`);
     }
+});
+
+// The verb modules load on the first `app` call. In the key script they would load at startup again, which is the growth this test stops.
+test("the key script takes no verb module", () => {
+    assert.deepEqual(inputs["keys"]!.filter((input) => /^src\/chrome\/(app_verbs|view_verbs|parent_app)\.ts$/.test(input)), []);
+    assert.ok(inputs["app"]!.some((input) => input === "src/chrome/app_verbs.ts") && inputs["app"]!.some((input) => input === "src/chrome/view_verbs.ts"));
 });
 
 test("each manifest entry names its own script and schema", () => {
@@ -134,7 +142,7 @@ test("the body script bundle stays within its size guard", () => {
 });
 
 test("the pages bundle holds no code of the mail tab's key runtime, the hints or the folder pane", () => {
-    assert.deepEqual(inputs["pages"]!.filter((input) => /^src\/chrome\/(runtime|motions|hint_[a-z]+|app_verbs|parent_(keys|hints|folderpane|overlay))\.ts$/.test(input)), []);
+    assert.deepEqual(inputs["pages"]!.filter((input) => /^src\/chrome\/(runtime|motions|hint_[a-z]+|app_verbs|view_verbs|parent_(keys|hints|folderpane|app|overlay))\.ts$/.test(input)), []);
 });
 
 test("the own page script stays within its size guard", () => {
@@ -168,7 +176,7 @@ test("the manifest injects the body script into message documents and the xpi ho
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/hints.schema.json", "experiment/hints.js", "experiment/pages.schema.json", "experiment/pages.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/app.schema.json", "experiment/app.js", "experiment/hints.schema.json", "experiment/hints.js", "experiment/pages.schema.json", "experiment/pages.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
 });
 

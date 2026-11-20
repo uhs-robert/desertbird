@@ -106,7 +106,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
         },
         accounts: { list: async () => [{ id: "a1", name: "Work" }, { id: "a2", name: "Home" }] },
         notifications: { create: async (_id: string | undefined, notification: { message: string }) => (notices.push(notification.message), "n1") },
-        keys: { viewRows: async ({ first, last }: { first: number; last: number }) => ({ current: options.current ?? -1, rows: (options.rows ?? []).filter((row) => row.index >= first && row.index <= last) }) },
+        app: { viewRows: async ({ first, last }: { first: number; last: number }) => ({ current: options.current ?? -1, rows: (options.rows ?? []).filter((row) => row.index >= first && row.index <= last) }) },
         undo: { log, retry_delays_ms: options.retry_delays_ms ?? [1, 1] },
     };
     const router = create_router(registry, api as unknown as RouterApi);

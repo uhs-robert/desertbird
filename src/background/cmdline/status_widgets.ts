@@ -1,6 +1,6 @@
 // The widgets at the right end of the command line: the displayed folder and the place of the current row in the message list. Each is a snapshot of the moment the line opens.
 
-import type { FolderpaneApi, KeysApi, StatusWidget } from "../../shared/protocol.ts";
+import type { AppApi, FolderpaneApi, StatusWidget } from "../../shared/protocol.ts";
 
 export interface RowPlace {
     /** Zero-based index of the current row, or -1 when no row is selected. */
@@ -24,7 +24,7 @@ export function status_widgets(names: readonly string[], facts: { folder?: strin
 
 export interface WidgetReaderApi {
     mailTabs: { query(query: { windowId: number; active: true }): Promise<{ displayedFolder?: { name?: string; path: string } | null }[]> };
-    keys?: Pick<KeysApi, "viewRows"> | undefined;
+    app?: Pick<AppApi, "viewRows"> | undefined;
     folderpane?: Pick<FolderpaneApi, "viewRowCount"> | undefined;
 }
 
@@ -51,7 +51,7 @@ export function create_widget_reader(api: WidgetReaderApi, read_names: () => Pro
 }
 
 async function read_place(api: WidgetReaderApi, window_id: number): Promise<RowPlace | undefined> {
-    if (!api.keys || !api.folderpane) return undefined;
-    const [{ current }, count] = await Promise.all([api.keys.viewRows({ windowId: window_id, first: 0, last: 0 }), api.folderpane.viewRowCount({ windowId: window_id })]);
+    if (!api.app || !api.folderpane) return undefined;
+    const [{ current }, count] = await Promise.all([api.app.viewRows({ windowId: window_id, first: 0, last: 0 }), api.folderpane.viewRowCount({ windowId: window_id })]);
     return { current, count };
 }

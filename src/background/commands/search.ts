@@ -15,7 +15,7 @@ export const search: CommandGroup = {
             intent: "Narrow the list as you type, then select a match.",
             // The key opens the line, so the list of typed commands has no use for it.
             completion: "hidden",
-            needs: ["overlay.mount", "keys.viewRows"],
+            needs: ["overlay.mount", "app.viewRows"],
             params: [{ name: "direction", type: "enum", values: ["forward", "backward"], short: { forward: "f", backward: "b" }, description: { forward: "Select the first match on Enter.", backward: "Select the last match on Enter, and make n go up." } }],
             run: scoped<SearchOpenApi>(open_search),
         },
@@ -25,7 +25,7 @@ export const search: CommandGroup = {
             label: "Next search match",
             intent: "Select the next match of the last search.",
             count: "ignore",
-            needs: ["keys.viewRows"],
+            needs: ["app.viewRows"],
             run: scoped<{ search: SearchOpenApi["search"] }>(search_next),
         },
         "search.prev": {
@@ -34,7 +34,7 @@ export const search: CommandGroup = {
             label: "Previous search match",
             intent: "Select the previous match of the last search.",
             count: "ignore",
-            needs: ["keys.viewRows"],
+            needs: ["app.viewRows"],
             run: scoped<{ search: SearchOpenApi["search"] }>(search_prev),
         },
     }),

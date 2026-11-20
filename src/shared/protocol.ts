@@ -169,25 +169,31 @@ export interface OverlayClosed {
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */
 export const EXPERIMENT_VERBS = {
-    keys: { functions: ["install", "viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: ["onInvocation"] },
+    keys: { functions: ["install"], events: ["onInvocation"] },
     overlay: { functions: ["mount", "unmount", "setModeLabel"], events: ["onClosed"] },
     hints: { functions: ["sendEnter", "pick"], events: [] },
     pages: { functions: ["install"], events: ["onInvocation"] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
     folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
+    // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
+    app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
 export interface KeysApi {
     install(args: KeysInstallArgs): Promise<void>;
     onInvocation: { addListener(listener: (event: KeysEvent) => void): void; removeListener(listener: (event: KeysEvent) => void): void };
-    viewRows(args: KeysViewRowsArgs): Promise<KeysViewRowsResult>;
-    viewThread(args: KeysViewThreadArgs): Promise<void>;
-    viewAllThreads(args: KeysViewAllThreadsArgs): Promise<void>;
-    viewScroll(args: KeysViewScrollArgs): Promise<void>;
-    paneFocus(args: KeysPaneFocusArgs): Promise<boolean>;
-    appCommand(args: KeysAppCommandArgs): Promise<boolean>;
-    appOpenPage(args: KeysAppOpenPageArgs): Promise<void>;
+}
+
+/** Call shapes as the background sees them on `browser.app`: the thread list, pane focus and app verbs. Its script loads when the first call is made. */
+export interface AppApi {
+    viewRows(args: AppViewRowsArgs): Promise<AppViewRowsResult>;
+    viewThread(args: AppViewThreadArgs): Promise<void>;
+    viewAllThreads(args: AppViewAllThreadsArgs): Promise<void>;
+    viewScroll(args: AppViewScrollArgs): Promise<void>;
+    paneFocus(args: AppPaneFocusArgs): Promise<boolean>;
+    appCommand(args: AppCommandArgs): Promise<boolean>;
+    appOpenPage(args: AppOpenPageArgs): Promise<void>;
 }
 
 /** Installs the page keymap: the keys of the tabs that are not the mail tab. */
@@ -215,30 +221,30 @@ export interface ViewRow {
     flags: number;
 }
 
-export interface KeysViewRowsArgs {
+export interface AppViewRowsArgs {
     windowId: number;
     first: number;
     last: number;
 }
 
 /** `current` is the current row, or -1. `rows` holds the rows from `first` to `last` that exist, at most 500. */
-export interface KeysViewRowsResult {
+export interface AppViewRowsResult {
     current: number;
     rows: ViewRow[];
 }
 
-export interface KeysViewThreadArgs {
+export interface AppViewThreadArgs {
     windowId: number;
     row: number;
     open: boolean;
 }
 
-export interface KeysViewAllThreadsArgs {
+export interface AppViewAllThreadsArgs {
     windowId: number;
     open: boolean;
 }
 
-export interface KeysViewScrollArgs {
+export interface AppViewScrollArgs {
     windowId: number;
     row: number;
     position: "center" | "top" | "bottom";
@@ -259,7 +265,7 @@ export interface FolderpaneViewRowCountArgs {
     windowId: number;
 }
 
-/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `keys.viewRows` does not tell. It sits here because the key script has no room for it. */
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. */
 export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
     focused(args: FolderpaneFocusedArgs): Promise<boolean>;
@@ -269,7 +275,7 @@ export interface FolderpaneApi {
 export type Pane = "folders" | "threads" | "message";
 
 /** `left` and `right` name the pane beside the focused one, in the order folders, threads, message. The answer is false, with the focus left where it was, when the target pane is hidden, shows no message, or lies past the end. */
-export interface KeysPaneFocusArgs {
+export interface AppPaneFocusArgs {
     windowId: number;
     pane: Pane | "left" | "right";
 }
@@ -277,7 +283,7 @@ export interface KeysPaneFocusArgs {
 /** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. */
 export const APP_COMMANDS = ["cmd_openConversation"] as const;
 
-export interface KeysAppCommandArgs {
+export interface AppCommandArgs {
     windowId: number;
     name: (typeof APP_COMMANDS)[number];
 }
@@ -285,7 +291,7 @@ export interface KeysAppCommandArgs {
 /** The pages the Experiment opens. The parent holds the addresses and no caller names one. */
 export const APP_PAGES = ["addons", "themes", "config"] as const;
 
-export interface KeysAppOpenPageArgs {
+export interface AppOpenPageArgs {
     windowId: number;
     page: (typeof APP_PAGES)[number];
 }

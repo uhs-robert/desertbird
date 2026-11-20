@@ -10,13 +10,13 @@ const ok = (id: string, args: Record<string, unknown>) => check_args(registry.ge
 
 function app_fake(command_enabled = true, pane_focused = true) {
     const calls: string[] = [];
-    const keys = {
+    const app = {
         appCommand: async ({ name }: { name: string }) => (calls.push(`appCommand ${name}`), command_enabled),
         appOpenPage: async ({ page }: { page: string }) => void calls.push(`appOpenPage ${page}`),
         paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), pane_focused),
     };
     const notifications = { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") };
-    const api = { keys, notifications } as unknown as RouterApi;
+    const api = { app, notifications } as unknown as RouterApi;
     const run = (command: string, args: Record<string, unknown> = {}) => create_router(registry, api).run({ command, args: args as never, count: 1, windowId: 3, messageIds: [] });
     return { run, calls };
 }
@@ -92,7 +92,7 @@ test("H collapses in the folder pane and focuses the folder pane from any other"
     const calls: string[] = [];
     let in_folder_pane = true;
     const api = {
-        keys: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) },
+        app: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) },
         folderpane: { fold: async ({ extent }: { extent: string }) => (calls.push(`fold ${extent}`), in_folder_pane) },
     } as unknown as RouterApi;
     const run = () => create_router(registry, api).run({ command: "folder.collapse", args: {} as never, count: 1, windowId: 3, messageIds: [] });
@@ -105,7 +105,7 @@ test("H collapses in the folder pane and focuses the folder pane from any other"
 test("H still focuses the folder pane when the folder script fails to load or is absent", async () => {
     for (const folderpane of [{ fold: async () => Promise.reject(new Error("the folder script did not load")) }, undefined]) {
         const calls: string[] = [];
-        const api = { keys: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) }, folderpane } as unknown as RouterApi;
+        const api = { app: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) }, folderpane } as unknown as RouterApi;
         await create_router(registry, api).run({ command: "folder.collapse", args: {} as never, count: 1, windowId: 3, messageIds: [] });
         assert.deepEqual(calls, ["paneFocus folders"]);
     }

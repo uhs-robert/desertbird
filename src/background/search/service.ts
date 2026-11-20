@@ -4,7 +4,7 @@
 import { ignore_refusal, keep_chain } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
-import type { CmdlineSearchNote, KeysApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
+import type { AppApi, CmdlineSearchNote, SearchDirection, ViewRow } from "../../shared/protocol.ts";
 import { select_row } from "../handlers/thread_view.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
 import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
@@ -17,10 +17,10 @@ import type { SearchRegisterStore } from "./register.ts";
 /** How long the filter waits after a keystroke. A burst of typing filters once, and a slow folder is not asked for each letter. */
 export const SEARCH_DEBOUNCE_MS = 150;
 
-// The most rows one `keys.viewRows` call returns.
+// The most rows one `app.viewRows` call returns.
 const BLOCK = 500;
 
-export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { keys?: Pick<KeysApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"] } & Partial<Pick<FolderSearchApi, "folders">>;
+export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"] } & Partial<Pick<FolderSearchApi, "folders">>;
 
 export interface SearchDeps {
     api: SearchApi;
@@ -78,9 +78,9 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     const scope_of = (window_id: number) => ({ api: deps.api as unknown as ThreadViewApi, window_id, message_ids: [], count: 1 });
 
-    function viewer(): Pick<KeysApi, "viewRows"> {
-        if (deps.api.keys === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
-        return deps.api.keys;
+    function viewer(): Pick<AppApi, "viewRows"> {
+        if (deps.api.app === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
+        return deps.api.app;
     }
 
     // The view gives no row count, so a full block means more rows follow.

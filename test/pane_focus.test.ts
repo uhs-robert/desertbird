@@ -31,8 +31,8 @@ function mail_window({ folder_pane = true, message_pane = true, body_live = true
 
 function verbs(window: unknown) {
     const platform = stub_platform([window]);
-    const keys = app_verbs({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } });
-    return { focus: (pane: Pane | "left" | "right") => keys.paneFocus({ windowId: 1, pane }), restore: platform.restore };
+    const app = app_verbs({ extension: { windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } });
+    return { focus: (pane: Pane | "left" | "right") => app.paneFocus({ windowId: 1, pane }), restore: platform.restore };
 }
 
 test("pane focus by name moves the focus there and answers true", async () => {

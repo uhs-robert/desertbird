@@ -1,6 +1,6 @@
 import { refused_as } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
-import type { KeysApi } from "../../shared/protocol.ts";
+import type { AppApi } from "../../shared/protocol.ts";
 import { require_messages } from "./each_message.ts";
 import type { AccountsApi } from "./account_choice.ts";
 import type { IdentityApi } from "./identity.ts";
@@ -68,17 +68,17 @@ export interface HandlerScope<Api = MessageApi> {
 }
 
 /** What archive and delete need: the undo log, and the thread list rows a count reaches. */
-export type TrashApi = MessageApi & UndoApi & { keys: Pick<KeysApi, "viewRows"> | undefined };
+export type TrashApi = MessageApi & UndoApi & { app: Pick<AppApi, "viewRows"> | undefined };
 
 // A count acts on that many rows from the current one, as `3dd` deletes three lines in vim. The rows are read when the command runs, so the current row must still be one the key press selected.
 export async function counted_messages(scope: HandlerScope<TrashApi>): Promise<number[]> {
     const ids = require_messages(scope.message_ids);
     if (scope.count <= 1) return ids;
-    const keys = scope.api.keys;
-    if (keys === undefined) throw new RuntimeRefusal("A count needs the DesertBird Experiment, which is not loaded.");
-    const { current } = await refused_as(keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 }), { current: -1 });
+    const app = scope.api.app;
+    if (app === undefined) throw new RuntimeRefusal("A count needs the DesertBird Experiment, which is not loaded.");
+    const { current } = await refused_as(app.viewRows({ windowId: scope.window_id, first: 0, last: 0 }), { current: -1 });
     if (current < 0) throw new RuntimeRefusal("A count works only in the thread list, so nothing changed.");
-    const [first, ...following] = (await keys.viewRows({ windowId: scope.window_id, first: current, last: current + scope.count - 1 })).rows;
+    const [first, ...following] = (await app.viewRows({ windowId: scope.window_id, first: current, last: current + scope.count - 1 })).rows;
     if (first?.id === null || first?.id === undefined || !ids.includes(first.id)) throw new RuntimeRefusal("The selection moved before the count ran, so nothing changed.");
     // The row of a closed thread names only its first message, so a count would split the thread.
     if (following.some((row) => row.collapsed)) throw new RuntimeRefusal("A count does not reach into a closed thread, so nothing changed. Open the thread, or select the messages with v.");

@@ -6,7 +6,8 @@ import { create_router } from "../src/background/router.ts";
 import { while_loading } from "../src/background/handlers/loading.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
 import type { RouterApi } from "../src/background/router.ts";
-import { read_rows, scroll_row, tab_kind } from "../src/chrome/view.ts";
+import { tab_kind } from "../src/chrome/view.ts";
+import { read_rows, scroll_row } from "../src/chrome/view_verbs.ts";
 
 const INBOX = { id: "f-inbox", accountId: "a1", path: "/Inbox" };
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;

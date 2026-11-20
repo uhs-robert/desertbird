@@ -1,22 +1,16 @@
-// The `keys` verbs that move the focus between panes, run a Thunderbird command and open a fixed page. Each table below is the whole set a verb can reach: the schema enum names the keys, and no caller passes a function name or an address.
+// The `app` verbs that move the focus between panes, run a Thunderbird command and open a fixed page. Each table below is the whole set a verb can reach: the schema enum names the keys, and no caller passes a function name or an address.
 
 import { focused_pane } from "./focus.ts";
 import type { MainWindow, ExtensionContext } from "./platform.ts";
 import { guard, open_main_windows, open_windows, tabmail_of } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
-import type { ThreadVerbPane } from "./view.ts";
+import type { FolderTreeLike, ThreadVerbPane } from "./view.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
-import type { KeysAppCommandArgs, KeysAppOpenPageArgs, KeysPaneFocusArgs } from "../shared/protocol.ts";
+import type { AppCommandArgs, AppOpenPageArgs, AppPaneFocusArgs } from "../shared/protocol.ts";
 
 interface Controller {
     isCommandEnabled(name: string): boolean;
     doCommand(name: string): void;
-}
-
-export interface FolderTreeLike {
-    rowCount: number;
-    selectedIndex: number;
-    focus(): void;
 }
 
 interface AppWindow extends MainWindow {
@@ -75,7 +69,7 @@ const PANE_NAMES = ["folders", "threads", "message"];
 export function app_verbs(context: ExtensionContext) {
     const pane_of = (window_id: number) => mail_pane_of(context, window_id) as AppPane;
     return {
-        paneFocus: guard("keys.paneFocus", ({ windowId, pane }: KeysPaneFocusArgs): boolean => {
+        paneFocus: guard("app.paneFocus", ({ windowId, pane }: AppPaneFocusArgs): boolean => {
             const about_3pane = pane_of(windowId);
             const focused = focused_pane(about_3pane.browsingContext.topChromeWindow.document);
             // Past either end the index finds no pane, so the focus stays.
@@ -83,7 +77,7 @@ export function app_verbs(context: ExtensionContext) {
             element && element.focus?.();
             return !!element;
         }),
-        appCommand: guard("keys.appCommand", ({ windowId, name }: KeysAppCommandArgs): boolean => {
+        appCommand: guard("app.appCommand", ({ windowId, name }: AppCommandArgs): boolean => {
             const holder = controller_holder_of(context, windowId);
             const controller = holder && CONTROLLERS[name](holder);
             if (!controller) throw new Error("the window shows no message");
@@ -91,6 +85,6 @@ export function app_verbs(context: ExtensionContext) {
             if (enabled) controller.doCommand(name);
             return enabled;
         }),
-        appOpenPage: guard("keys.appOpenPage", ({ windowId, page }: KeysAppOpenPageArgs): void => PAGES[page](pane_of(windowId).browsingContext.topChromeWindow)),
+        appOpenPage: guard("app.appOpenPage", ({ windowId, page }: AppOpenPageArgs): void => PAGES[page](pane_of(windowId).browsingContext.topChromeWindow)),
     };
 }

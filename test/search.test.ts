@@ -74,7 +74,7 @@ function setup(options: { folder?: string; root?: boolean } = {}) {
             },
             setSelectedMessages: async (_id: number, ids: number[]) => void (state.selected = visible().findIndex((mail) => mail.id === ids[0])),
         },
-        keys: {
+        app: {
             viewRows: async ({ first, last }: { first: number; last: number }) => ({
                 current: state.selected,
                 rows: visible().flatMap((mail, index) => (index >= first && index <= last ? [{ index, id: mail.id, depth: 0, collapsed: false, unread: false, flags: 0 }] : [])),
@@ -299,7 +299,7 @@ test("a register of the wrong shape counts as none", async () => {
 
 test("a window with no Experiment cannot search", async () => {
     const { service, api } = setup();
-    (api as { keys?: unknown }).keys = undefined;
+    (api as { app?: unknown }).app = undefined;
     await assert.rejects(service.start(3, "forward"), /Experiment/);
 });
 
@@ -430,10 +430,10 @@ test("? is backward search and g? is the key list, / and n and N are bound in th
 test("Escape while an Enter is still counting cancels the search and the late commit does not keep its text", async () => {
     const { service, filters, api, state } = setup();
     await service.start(3, "forward");
-    const rows = api.keys.viewRows;
+    const rows = api.app.viewRows;
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
-    api.keys.viewRows = async (range) => (await held, rows(range));
+    api.app.viewRows = async (range) => (await held, rows(range));
     const committed = service.commit(3, "invoice");
     await new Promise((resolve) => setImmediate(resolve));
     const cancelled = service.cancel(3);

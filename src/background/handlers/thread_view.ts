@@ -1,12 +1,12 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
-import type { FolderpaneApi, KeysApi, ViewRow } from "../../shared/protocol.ts";
+import type { AppApi, FolderpaneApi, ViewRow } from "../../shared/protocol.ts";
 import type { HandlerScope } from "./message.ts";
 import { active_mail_tab } from "./view.ts";
 import type { ViewApi } from "./view.ts";
 
 export interface ThreadViewApi {
-    keys: KeysApi;
+    app: AppApi;
     /** Absent or failing when its script did not load. The keys that try it then act on the thread list as before. */
     folderpane: FolderpaneApi | undefined;
     mailTabs: ViewApi["mailTabs"] & { setSelectedMessages(tab_id: number, message_ids: number[]): Promise<void> };
@@ -29,9 +29,9 @@ async function folded_in_folder_pane(scope: ThreadScope, open: boolean, extent: 
 
 /** The current row and its place in the list, or a refusal when nothing is selected. */
 async function current_row(scope: ThreadScope): Promise<ViewRow> {
-    const { current } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
+    const { current } = await scope.api.app.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
     if (current < 0) throw new RuntimeRefusal("No row is selected.");
-    const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: current, last: current });
+    const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first: current, last: current });
     if (rows[0] === undefined) throw new RuntimeRefusal("No row is selected.");
     return rows[0];
 }
@@ -39,7 +39,7 @@ async function current_row(scope: ThreadScope): Promise<ViewRow> {
 /** The nearest thread root at or before `index`. The API gives no thread tree, so the depth of the rows says where a thread starts. */
 async function root_at_or_before(scope: ThreadScope, index: number): Promise<ViewRow | undefined> {
     for (let last = index; last >= 0; last -= BLOCK) {
-        const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: Math.max(0, last - BLOCK + 1), last });
+        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first: Math.max(0, last - BLOCK + 1), last });
         const root = rows.findLast((row) => row.depth === 0);
         if (root) return root;
     }
@@ -48,7 +48,7 @@ async function root_at_or_before(scope: ThreadScope, index: number): Promise<Vie
 
 async function root_after(scope: ThreadScope, index: number): Promise<ViewRow | undefined> {
     for (let first = index + 1; ; first += BLOCK) {
-        const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
+        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
         const root = rows.find((row) => row.depth === 0);
         if (root || rows.length < BLOCK) return root;
     }
@@ -81,11 +81,11 @@ export async function step_thread_root(scope: ThreadScope, args: CheckedArgs): P
 export async function move_left(scope: ThreadScope): Promise<void> {
     if (await folded_in_folder_pane(scope, false, "parent")) return;
     const row = await current_row(scope);
-    if (row.depth === 0) return void (await scope.api.keys.viewThread({ windowId: scope.window_id, row: row.index, open: false }));
+    if (row.depth === 0) return void (await scope.api.app.viewThread({ windowId: scope.window_id, row: row.index, open: false }));
     const root = await root_at_or_before(scope, row.index);
     if (!root) return;
     // The root is a group header with this row's id, so selecting it changes nothing: close the group.
-    if (root.id === row.id) await scope.api.keys.viewThread({ windowId: scope.window_id, row: root.index, open: false });
+    if (root.id === row.id) await scope.api.app.viewThread({ windowId: scope.window_id, row: root.index, open: false });
     else await select_row(scope, root);
 }
 
@@ -93,14 +93,14 @@ export async function move_left(scope: ThreadScope): Promise<void> {
 export async function move_right(scope: ThreadScope): Promise<void> {
     if (await folded_in_folder_pane(scope, true, "row")) return;
     const row = await current_row(scope);
-    if (row.collapsed) return void (await scope.api.keys.viewThread({ windowId: scope.window_id, row: row.index, open: true }));
-    const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: row.index + 1, last: row.index + 1 });
+    if (row.collapsed) return void (await scope.api.app.viewThread({ windowId: scope.window_id, row: row.index, open: true }));
+    const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first: row.index + 1, last: row.index + 1 });
     if (rows[0] && rows[0].depth > row.depth) await select_row(scope, rows[0]);
 }
 
 export async function reposition(scope: ThreadScope, args: CheckedArgs): Promise<void> {
     const row = await current_row(scope);
-    await scope.api.keys.viewScroll({ windowId: scope.window_id, row: row.index, position: args["position"] as "center" | "top" | "bottom" });
+    await scope.api.app.viewScroll({ windowId: scope.window_id, row: row.index, position: args["position"] as "center" | "top" | "bottom" });
 }
 
 // A page is a fixed count of rows, because the chrome verb that reads the list gives no screen height and the key script has no room for one.
@@ -108,11 +108,11 @@ const HALF_PAGE_ROWS = 10;
 
 // A press at either end stays there, as in Vim. The list answers a read past its end with the rows that exist, so the last one returned is the clamped target.
 export async function half_page(scope: ThreadScope, args: CheckedArgs): Promise<void> {
-    const { current } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
+    const { current } = await scope.api.app.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
     if (current < 0) throw new RuntimeRefusal("No row is selected.");
     const forward = args["direction"] === "next";
     const first = forward ? current : Math.max(0, current - HALF_PAGE_ROWS);
-    const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first, last: forward ? current + HALF_PAGE_ROWS : first });
+    const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first, last: forward ? current + HALF_PAGE_ROWS : first });
     const target = forward ? rows.at(-1) : rows[0];
     if (target && target.index !== current) await select_row(scope, target);
 }
@@ -120,5 +120,5 @@ export async function half_page(scope: ThreadScope, args: CheckedArgs): Promise<
 export async function fold_all(scope: ThreadScope, args: CheckedArgs): Promise<void> {
     // In the folder pane `z M` and `z R` close and open every folder.
     if (await folded_in_folder_pane(scope, args["open"] === true, "all")) return;
-    await scope.api.keys.viewAllThreads({ windowId: scope.window_id, open: args["open"] === true });
+    await scope.api.app.viewAllThreads({ windowId: scope.window_id, open: args["open"] === true });
 }

@@ -29,8 +29,8 @@ function with_tabs(tabs: FakeTab[], window_type = "normal") {
         get: async (id: number) => (calls.push(`windows.get ${id}`), { type: window_type }),
         remove: async (id: number) => void calls.push(`windows.remove ${id}`),
     };
-    const keys = { paneFocus: async (args: object) => void calls.push(`paneFocus ${JSON.stringify(args)}`) };
-    const api = { tabs: tabs_api, windows, keys, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") } };
+    const app = { paneFocus: async (args: object) => void calls.push(`paneFocus ${JSON.stringify(args)}`) };
+    const api = { tabs: tabs_api, windows, app, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") } };
     return { api: api as unknown as RouterApi, calls };
 }
 

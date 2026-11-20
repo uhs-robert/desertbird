@@ -3,7 +3,7 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
-import type { HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
+import type { AppApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
 import { compile_tab_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
 import { tab_choices } from "./handlers/tabs.ts";
@@ -82,7 +82,7 @@ interface StorageChange {
     newValue?: unknown;
 }
 
-interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
+interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdline" | "snooze" | "quick_replies" | "followup" | "undo" | "windows">, Pick<SchedulerApi, "alarms">, Pick<BodyRequestApi, "messageDisplay"> {
     windows: BodyRequestApi["windows"] &
         RouterApi["windows"] & {
             getAll(query: { windowTypes: string[] }): Promise<{ id?: number }[]>;
@@ -117,6 +117,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "overlay" | "cmdline" | "sn
     };
     // The Experiment namespace is absent when it fails to load.
     keys?: KeysApi;
+    app?: AppApi;
     overlay?: OverlayApi;
     pages?: PagesApi;
     hints?: HintsApi;
@@ -295,7 +296,7 @@ const external_editor = create_external_editor({
 });
 
 // The keys and the bridge `act` frame share this API, so a bridge move lands in the same undo log as a key move.
-const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS }, external_editor };
+const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, app: messenger.app, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS }, external_editor };
 const router = create_router(registry, handler_api);
 
 // The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.
