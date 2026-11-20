@@ -131,11 +131,11 @@ test("the message tree for a message tab keeps the message keys and drops the ke
 });
 
 test("a group need joins the capability needs of a command and does not replace them", () => {
-    const grouped = needing("message", { a: { bridge: false, runs_in: "background", label: "A", intent: "A.", needs: ["hints.pick"], run: async () => {} }, b: { bridge: false, runs_in: "background", label: "B", intent: "B.", needs: ["tab", "keys.paneFocus"], run: async () => {} } });
+    const grouped = needing("message", { a: { bridge: false, runs_in: "background", label: "A", intent: "A.", needs: ["hints.pick"], run: async () => {} }, b: { bridge: false, runs_in: "background", label: "B", intent: "B.", needs: ["tab", "app.paneFocus"], run: async () => {} } });
     assert.deepEqual(grouped["a"]?.needs, ["message", "hints.pick"]);
-    assert.deepEqual(grouped["b"]?.needs, ["tab", "keys.paneFocus"], "a command with a tab need of its own keeps its needs as written");
+    assert.deepEqual(grouped["b"]?.needs, ["tab", "app.paneFocus"], "a command with a tab need of its own keeps its needs as written");
     assert.ok(registry.get("hint.window")?.needs?.includes("hints.pick"));
-    assert.ok(registry.get("folder.collapse")?.needs?.includes("keys.paneFocus"));
+    assert.ok(registry.get("folder.collapse")?.needs?.includes("app.paneFocus"));
     assert.deepEqual(tab_needs_of(registry.get("folder.collapse")!), ["list"], "a capability need is no tab need");
     assert.ok(registry.get("msg.reply")?.needs?.includes("message"));
 });

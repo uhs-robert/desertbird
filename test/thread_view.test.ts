@@ -12,7 +12,7 @@ const ok = (id: string, args: Record<string, unknown>) => check_args(registry.ge
 function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: number[], in_folder_pane = false, fold_fails = false) {
     const rows: ViewRow[] = spec.map((entry, index) => ({ index, id: ids?.[index] ?? index + 100, depth: entry === "+" ? 0 : entry, collapsed: entry === "+", unread: false, flags: 0 }));
     const calls: string[] = [];
-    const keys = {
+    const app = {
         viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current, rows: rows.slice(first, last + 1) }),
         viewThread: async ({ row, open }: { row: number; open: boolean }) => void calls.push(`viewThread ${row} ${open}`),
         viewAllThreads: async ({ open }: { open: boolean }) => void calls.push(`viewAllThreads ${open}`),
@@ -30,7 +30,7 @@ function list_fake(spec: (number | "+")[], current: number, count = 1, ids?: num
         setSelectedMessages: async (tab_id: number, ids: number[]) => void calls.push(`select ${tab_id} ${ids.join(",")}`),
     };
     const notifications = { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") };
-    const api = { keys, folderpane, mailTabs, notifications } as unknown as RouterApi;
+    const api = { app, folderpane, mailTabs, notifications } as unknown as RouterApi;
     const run = (command: string, args: Record<string, unknown> = {}) => create_router(registry, api).run({ command, args: args as never, count, windowId: 3, messageIds: [] });
     return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows") && !call.startsWith("fold ")), all: calls };
 }
@@ -60,7 +60,7 @@ test("the keys h l z z z t z b z M z R and the thread root steps bind their comm
 });
 
 test("the thread commands need the chrome verbs they call", () => {
-    for (const id of ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"]) assert.ok(registry.get(id)?.needs?.some((need) => need.startsWith("keys.view")), id);
+    for (const id of ["motion.left", "motion.right", "step.thread_root", "view.reposition", "thread.fold_all"]) assert.ok(registry.get(id)?.needs?.some((need) => need.startsWith("app.view")), id);
 });
 
 test("h on a reply selects the root of its thread, and on a root closes the thread", async () => {
@@ -139,7 +139,7 @@ test("view.reposition scrolls the current row and thread.fold_all passes the ope
 
 test("a thread command refuses when the Experiment is missing", async () => {
     const calls: string[] = [];
-    const api = { keys: undefined, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(notification.message), "n1") } } as unknown as RouterApi;
+    const api = { app: undefined, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(notification.message), "n1") } } as unknown as RouterApi;
     await create_router(registry, api).run({ command: "motion.left", args: {}, count: 1, windowId: 3, messageIds: [] });
     assert.match(calls[0] ?? "", /Experiment/);
 });

@@ -30,14 +30,14 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
         return { index, id: index + 100, depth: 0, collapsed: false, unread: marked?.unread === true, flags: (marked?.flagged ? 0x4 : 0) | (marked?.attachment ? 0x10000000 : 0) };
     });
     const folders = options.folders ?? [{ id: "f1", unread: 0 }];
-    const keys = { viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current: options.current, rows: rows.slice(first, last + 1) }) };
+    const app = { viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current: options.current, rows: rows.slice(first, last + 1) }) };
     const mailTabs = {
         query: async () => [{ id: 9, displayedFolder: { id: options.shown ?? "f1", accountId: "a", path: "/x" } }],
         update: async (_tab: number, update: { displayedFolder: { id: string } }) => void calls.push(`show ${update.displayedFolder.id}`),
         setSelectedMessages: async (tab_id: number, ids: number[]) => void calls.push(`select ${tab_id} ${ids.join(",")}`),
     };
     const api = {
-        keys,
+        app,
         mailTabs,
         folders: {
             query: async () => folders.map((folder) => ({ id: folder.id, accountId: "a", path: `/${folder.id}`, specialUse: folder.special, isVirtual: folder.virtual, isRoot: folder.root })),

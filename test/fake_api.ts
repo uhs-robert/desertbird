@@ -159,6 +159,11 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 : {
                       install: async () => {},
                       onInvocation: { addListener: () => {}, removeListener: () => {} },
+                  },
+        app:
+            options.experiment === false
+                ? undefined
+                : {
                       viewRows: async () => ({ current: -1, rows: [] }),
                       viewThread: async () => {},
                       viewAllThreads: async () => {},

@@ -1,9 +1,8 @@
-// The one file that touches the thread list of `about:3pane`. Everything else in the chrome runtime sees a ViewPort.
+// The files that touch the thread list of `about:3pane` are this one and `view_verbs.ts`. Everything else in the chrome runtime sees a ViewPort.
 
 import type { ViewPort } from "./motions.ts";
-import { guard, open_main_windows, tabmail_of } from "./platform.ts";
+import { open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
-import type { KeysViewAllThreadsArgs, KeysViewRowsArgs, KeysViewRowsResult, KeysViewScrollArgs, KeysViewThreadArgs } from "../shared/protocol.ts";
 
 /** What the runtime reads from `about:3pane`. Thunderbird has no typings, so the used members are listed here. */
 export interface DbViewLike {
@@ -28,7 +27,7 @@ export interface About3PaneLike {
     threadTree: ThreadTreeLike;
 }
 
-/** The members only the thread verbs read, kept apart so the key path needs none of them. */
+/** The members only the `app` thread verbs read, kept apart so the key path needs none of them. */
 export interface RowsDbView extends DbViewLike {
     getMsgHdrAt(index: number): { isRead: boolean; flags: number } | null;
     getLevel(index: number): number;
@@ -49,6 +48,12 @@ export interface ThreadVerbPane extends About3PaneLike {
     threadTree: RowsThreadTree;
     /** Thunderbird's own command table of the thread pane, which `cmd_expandAllThreads` and `cmd_collapseAllThreads` run through. */
     commandController: { doCommand(command: string): void };
+}
+
+export interface FolderTreeLike {
+    rowCount: number;
+    selectedIndex: number;
+    focus(): void;
 }
 
 export interface TabInfoLike {
@@ -111,42 +116,10 @@ export function create_list_port(about_3pane: About3PaneLike, message_id_of: Mes
     };
 }
 
-export function read_rows(about_3pane: ThreadVerbPane, first: number, last: number, message_id_of: MessageIdOf): KeysViewRowsResult {
-    const view = about_3pane.gDBView;
-    const rows: KeysViewRowsResult["rows"] = [];
-    for (let index = first; view && index <= Math.min(last, view.rowCount - 1, first + 499); index++) {
-        const header = view.getMsgHdrAt(index);
-        rows.push({ index, id: header && message_id_of(header), depth: view.getLevel(index), collapsed: view.isContainer(index) && !view.isContainerOpen(index), unread: header?.isRead === false, flags: header?.flags ?? 0 });
-    }
-    return { current: about_3pane.threadTree.currentIndex ?? -1, rows };
-}
-
-const SCROLL_BLOCK = { top: "start", center: "center", bottom: "end" } as const;
-// The sticky column header covers the top of the list, which scrollIntoView ignores. Top moves back by its height and center by half.
-const HEADER_SHARE = { top: 1, center: 0.5, bottom: 0 } as const;
-
-// scrollToIndex first, because only rows near the view have an element.
-export function scroll_row(tree: RowsThreadTree, row: number, position: KeysViewScrollArgs["position"]): void {
-    tree.scrollToIndex?.(row, true);
-    tree.getRowAtIndex(row)?.scrollIntoView({ block: SCROLL_BLOCK[position], behavior: "instant" });
-    tree.scrollBy({ top: -(tree.table?.header?.clientHeight ?? 0) * HEADER_SHARE[position], behavior: "instant" });
-}
-
 /** The `about:3pane` of the front mail tab of a window named by id, or a throw when the window shows no mail tab. */
 export function mail_pane_of(context: ExtensionContext, window_id: number): ThreadVerbPane {
     const window = open_main_windows().find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === window_id);
     const about_3pane = window && front_about_3pane<ThreadVerbPane>(tabmail_of(window));
     if (!about_3pane) throw new Error("the window shows no mail tab");
     return about_3pane;
-}
-
-/** The `keys` thread verbs: each names a window by id and acts on its front mail tab. */
-export function view_verbs(context: ExtensionContext) {
-    const about_3pane_of = (window_id: number) => mail_pane_of(context, window_id);
-    return {
-        viewRows: guard("keys.viewRows", ({ windowId, first, last }: KeysViewRowsArgs) => read_rows(about_3pane_of(windowId), first, last, (header) => context.extension.messageManager.convert(header, { skipFolder: true })?.id ?? null)),
-        viewThread: guard("keys.viewThread", ({ windowId, row, open }: KeysViewThreadArgs): void => about_3pane_of(windowId).threadTree[open ? "expandRowAtIndex" : "collapseRowAtIndex"](row)),
-        viewAllThreads: guard("keys.viewAllThreads", ({ windowId, open }: KeysViewAllThreadsArgs): void => about_3pane_of(windowId).commandController.doCommand(open ? "cmd_expandAllThreads" : "cmd_collapseAllThreads")),
-        viewScroll: guard("keys.viewScroll", ({ windowId, row, position }: KeysViewScrollArgs): void => scroll_row(about_3pane_of(windowId).threadTree, row, position)),
-    };
 }

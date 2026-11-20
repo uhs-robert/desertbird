@@ -33,7 +33,7 @@ type RowFlag = keyof typeof FLAG_BIT;
 // Unread is the absence of the read bit.
 const has_flag = (row: ViewRow, flag: RowFlag): boolean => (flag === "unread" ? row.unread : (row.flags & FLAG_BIT[flag]) !== 0);
 
-// The most rows one `keys.viewRows` call returns.
+// The most rows one `app.viewRows` call returns.
 const BLOCK = 500;
 
 // Trash and Junk hold unread mail nobody wants to visit, so `] U` skips them.
@@ -47,7 +47,7 @@ async function find_row(scope: StepScope, flag: RowFlag, from: number, forward: 
         const last = forward ? from + (block + 1) * BLOCK - 1 : from - block * BLOCK;
         const first = forward ? from + block * BLOCK : last - BLOCK + 1;
         if (last < 0) return found;
-        const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: Math.max(first, 0), last });
+        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first: Math.max(first, 0), last });
         const hits = rows.filter((row) => has_flag(row, flag));
         if (!forward) hits.reverse();
         if (hits.length >= wanted) return hits[wanted - 1];
@@ -83,14 +83,14 @@ async function show_first_unread(scope: StepScope, folder: MailFolder): Promise<
 // With no row selected, `[` starts after the last row. The view gives no row count, so a full block means more rows follow.
 async function last_row_index(scope: StepScope): Promise<number> {
     for (let first = 0; ; first += BLOCK) {
-        const { rows } = await scope.api.keys.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
+        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
         if (rows.length < BLOCK) return first + rows.length - 1;
     }
 }
 
 async function step(scope: StepScope, flag: RowFlag, args: CheckedArgs): Promise<void> {
     const forward = args["direction"] === "next";
-    const { current } = await scope.api.keys.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
+    const { current } = await scope.api.app.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
     // With no row selected (`current` is -1) `]` starts before the first row, which `current + 1` already gives.
     const target = await find_row(scope, flag, forward ? current + 1 : (current < 0 ? await last_row_index(scope) : current - 1), forward, scope.count);
     if (target) return select_row(scope, target);

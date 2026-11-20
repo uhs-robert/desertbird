@@ -1,4 +1,4 @@
-// Builds dist/: background.js, the vendored library files, experiment/{keys,overlay}.{schema.json,js}, overlay/ (the command line and hud pages), help/, manifest.json and an unsigned desertbird.xpi.
+// Builds dist/: background.js, the vendored library files, experiment/{keys,overlay,app}.{schema.json,js}, overlay/ (the command line and hud pages), help/, manifest.json and an unsigned desertbird.xpi.
 //   node tools/build.mjs [--out <dir>]
 // The esbuild metafiles go to <out>/meta/ and stay out of the xpi. test/build.test.ts reads them.
 
@@ -23,9 +23,17 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
 }
 
 // Size guards, in bytes of the bundle as written (the build does not minify). The build fails above a guard. A guard never rises past its ceiling, and every guard needs a ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
-// Each parent bundle that has no guard of its own (`experiment/keys.js`, `experiment/overlay.js`).
+// `experiment/overlay.js`, the parent bundle that has no guard of its own.
 const PARENT_MAX_BYTES = 27212;
 const PARENT_CEILING_BYTES = 40960;
+
+// `experiment/keys.js`, the key runtime that loads at startup. A verb module may not enter it (test/build.test.ts), so it stays near its measured size.
+const KEYS_MAX_BYTES = 22844;
+const KEYS_CEILING_BYTES = 40960;
+
+// `experiment/app.js`, loaded on the first thread list, pane focus or app call.
+const APP_MAX_BYTES = 8549;
+const APP_CEILING_BYTES = 12288;
 
 // `experiment/folderpane.js`, loaded on the first folder pane call.
 const FOLDERPANE_MAX_BYTES = 5900;
@@ -71,10 +79,11 @@ const VENDORED_LIBRARY_FILES = ["vendor/turndown/turndown.js", "vendor/turndown/
 // Thunderbird finds an Experiment API as a top-level `var` named after its manifest key. The IIFE hides the module exports, so the footer reaches them through its global.
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
 const PARENTS = [
-    { name: "keys", entry: "src/chrome/parent_keys.ts" },
+    { name: "keys", entry: "src/chrome/parent_keys.ts", max_bytes: KEYS_MAX_BYTES },
     { name: "overlay", entry: "src/chrome/parent_overlay.ts" },
     { name: "hints", entry: "src/chrome/parent_hints.ts", max_bytes: HINTS_MAX_BYTES },
     { name: "pages", entry: "src/chrome/parent_pages.ts", max_bytes: PAGES_MAX_BYTES },
+    { name: "app", entry: "src/chrome/parent_app.ts", max_bytes: APP_MAX_BYTES },
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
 ].map((parent) => ({
     ...parent,

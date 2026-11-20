@@ -1,15 +1,13 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { app_verbs } from "./app_verbs.ts";
-import type { FolderTreeLike } from "./app_verbs.ts";
 import { focused_pane, in_reading_pane, is_typing, menu_is_open, overlay_is_loading } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
 import type { KeysInstallArgs, KeysEvent } from "../shared/protocol.ts";
 import type { KeydownEvent, Runtime, WindowListener } from "./runtime.ts";
-import { create_list_port, front_about_3pane, tab_kind, view_verbs } from "./view.ts";
-import type { About3PaneLike } from "./view.ts";
+import { create_list_port, front_about_3pane, tab_kind } from "./view.ts";
+import type { About3PaneLike, FolderTreeLike } from "./view.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/keys";
@@ -72,8 +70,6 @@ export function get_keys_api(context: ExtensionContext) {
     return {
         keys: {
             install: guard("keys.install", ({ tree, holdCommands }: KeysInstallArgs): void => ensure_runtime(context).install(tree, holdCommands)),
-            ...view_verbs(context),
-            ...app_verbs(context),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "keys.onInvocation",

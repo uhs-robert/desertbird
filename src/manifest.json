@@ -28,6 +28,14 @@
                 "script": "experiment/keys.js"
             }
         },
+        "app": {
+            "schema": "experiment/app.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["app"]],
+                "script": "experiment/app.js"
+            }
+        },
         "folderpane": {
             "schema": "experiment/folderpane.schema.json",
             "parent": {

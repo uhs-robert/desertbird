@@ -22,7 +22,7 @@ function reader_setup(names: string[], options: { tabs?: { displayedFolder?: { n
     const api = {
         mailTabs: { query: async () => (calls.push("mailTabs.query"), options.tabs ?? [{ displayedFolder: { name: "Inbox", path: "/INBOX" } }]) },
         ...(options.experiment !== false && {
-            keys: { viewRows: async () => (calls.push("keys.viewRows"), { current: 4, rows: [] }) },
+            app: { viewRows: async () => (calls.push("app.viewRows"), { current: 4, rows: [] }) },
             folderpane: { viewRowCount: async () => (calls.push("folderpane.viewRowCount"), 20) },
         }),
     };
@@ -40,7 +40,7 @@ test("the reader asks only for what the setting names", async () => {
     assert.deepEqual(folder_only.calls, ["mailTabs.query"]);
     const position_only = reader_setup(["position"]);
     await position_only.read(3);
-    assert.deepEqual(position_only.calls.sort(), ["folderpane.viewRowCount", "keys.viewRows", "mailTabs.query"]);
+    assert.deepEqual(position_only.calls.sort(), ["app.viewRows", "folderpane.viewRowCount", "mailTabs.query"]);
     const none = reader_setup([]);
     assert.deepEqual(await none.read(3), []);
     assert.deepEqual(none.calls, []);

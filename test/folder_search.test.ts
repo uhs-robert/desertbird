@@ -30,7 +30,7 @@ function setup(options: { focused?: boolean } = {}) {
             update: async (_id: number, update: { displayedFolder: { id: string } }) => void (calls.push(`open ${update.displayedFolder.id}`), (state.shown = update.displayedFolder.id)),
             setQuickFilter: async () => calls.push("filter"),
         },
-        keys: {
+        app: {
             paneFocus: async ({ pane }: { pane: string }) => {
                 calls.push(`focus ${pane}`);
                 await state.select_gate;
@@ -138,7 +138,7 @@ test("an empty line repeats a folder register and refuses after a thread search"
     assert.equal(state.shown, "sent");
 });
 
-// The thread search reads rows through `keys.viewRows`, which this fake lacks, so an Enter that reaches it fails and opens no folder.
+// The thread search reads rows through `app.viewRows`, which this fake lacks, so an Enter that reaches it fails and opens no folder.
 test("with the folder pane unfocused, a forward search is the thread search", async () => {
     const { service, calls } = setup({ focused: false });
     await service.start(3, "forward");

@@ -17,9 +17,9 @@ export const tabs: CommandGroup = {
             params: [{ name: "tab", type: "string", main: true, rest: true, values: { from: "tabs" } }],
             run: scoped<TabsApi>(switch_tab),
         },
-        "tab.close": { bridge: false, runs_in: "background", label: "Close tab", intent: "Close the current tab, or the message window. On the main mail tab it moves the focus to the thread list.", needs: ["keys.paneFocus"], run: scoped<TabsApi>(close_tab) },
+        "tab.close": { bridge: false, runs_in: "background", label: "Close tab", intent: "Close the current tab, or the message window. On the main mail tab it moves the focus to the thread list.", needs: ["app.paneFocus"], run: scoped<TabsApi>(close_tab) },
         // A second id for the chords that copy, cut and go back elsewhere. The chrome runs only `PAGE_COMMANDS` ids in other tabs, so these chords close a tab from the mail tab alone.
-        "tab.close_mail": { bridge: false, runs_in: "background", label: "Close tab (mail tab keys)", intent: "Close the current tab or message window. Its default keys are chords that run in the mail tab only, so copy and cut still work in message and web page tabs.", needs: ["list", "keys.paneFocus"], run: scoped<TabsApi>(close_tab) },
+        "tab.close_mail": { bridge: false, runs_in: "background", label: "Close tab (mail tab keys)", intent: "Close the current tab or message window. Its default keys are chords that run in the mail tab only, so copy and cut still work in message and web page tabs.", needs: ["list", "app.paneFocus"], run: scoped<TabsApi>(close_tab) },
     }),
     normal_keys: {
         J: { id: "tab.next", label: "Next tab" },

@@ -22,7 +22,7 @@ interface Namespace {
     events?: SchemaNode[];
 }
 
-const PARENTS = ["keys", "overlay", "hints", "pages", "folderpane"];
+const PARENTS = ["keys", "overlay", "hints", "pages", "folderpane", "app"];
 const schema = PARENTS.flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
 const namespace_named = (name: string): Namespace => schema.find((entry) => entry.namespace === name)!;
 
@@ -44,7 +44,8 @@ test("the schema functions and events equal the parent exports", async () => {
     const hints_parent = await import("../src/chrome/parent_hints.ts");
     const pages_parent = await import("../src/chrome/parent_pages.ts");
     const folderpane_parent = await import("../src/chrome/parent_folderpane.ts");
-    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context) } as Record<string, Record<string, unknown>>;
+    const app_parent = await import("../src/chrome/parent_app.ts");
+    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context), ...app_parent.get_app_api(context) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
