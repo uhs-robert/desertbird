@@ -6,7 +6,7 @@ import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { AppApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
 import { compile_tab_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
-import { tab_choices } from "./handlers/tabs.ts";
+import { record_activation, tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
 import { create_cmdline_history } from "./cmdline/history.ts";
@@ -95,7 +95,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdlin
         };
     tabs: Pick<TabsApi["tabs"], "query"> & {
         get(tab_id: number): Promise<unknown>;
-        onActivated: { addListener(listener: () => void): void };
+        onActivated: { addListener(listener: (info: { windowId: number; previousTabId?: number }) => void): void };
         onRemoved: { addListener(listener: (tab_id: number) => void): void };
     };
     compose: RouterApi["compose"] & { onAfterSend: { addListener(listener: (tab: { id?: number }, send_info: { error?: string }) => void): void } };
@@ -368,6 +368,8 @@ messenger.pages?.onInvocation.addListener(on_key_event);
 
 // A half-typed sequence the key runtime cannot see end: a tab change, or the window losing the focus.
 messenger.tabs.onActivated.addListener(() => hud.close_which_key());
+// `tl` goes back to the tab this event says the window just left.
+messenger.tabs.onActivated.addListener((info) => void record_activation(messenger.storage.session, info).catch(console.error));
 messenger.windows.onFocusChanged.addListener((window_id) => {
     hud.close_which_key(window_id === NO_WINDOW ? undefined : window_id);
     if (window_id !== NO_WINDOW) void bridge.mode_changed();

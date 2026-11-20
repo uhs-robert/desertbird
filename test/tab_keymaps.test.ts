@@ -31,6 +31,14 @@ test("the default page tree holds the reading keys, the tab keys, the command li
     assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["page.scroll_left", "page.scroll_right", "page.page_down", "page.page_up"]);
 });
 
+test("the page tree has the last tab, last used tab and move keys, and tm and tM type tab.move", () => {
+    const root = root_of();
+    assert.deepEqual(leaf_at(root, "t", "$"), { id: "tab.goto", args: { index: -1 } });
+    assert.equal(leaf_at(root, "t", "l")?.id, "tab.alternate");
+    assert.deepEqual(leaf_at(root, "t", "m")?.args, { text: "tab.move " });
+    assert.deepEqual(leaf_at(root, "t", "M")?.args, { text: "tab.move --offset=" });
+});
+
 test("the page tree has one mail key (new message) and no close chord that must copy and cut", () => {
     const ids = ids_under(root_of());
     assert.ok(!ids.includes("tab.close_mail"));
@@ -56,7 +64,7 @@ test("the page tree holds no command that needs a list, a message or a body, and
     for (const token of ["m", "d", "s", "F", "y", ";", "]", "[", "o", "a", "r", "R", "f", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
-    assert.deepEqual(Object.keys(tabs_group.children).sort(), ["0", "T", "n", "p"]);
+    assert.deepEqual(Object.keys(tabs_group.children).sort(), ["$", "0", "M", "T", "l", "m", "n", "p"]);
     assert.equal(root_of().children["w"], undefined);
     const zoom_group = root_of().children["z"] as TreeBranch;
     assert.equal(zoom_group.label, "Zoom and scroll");

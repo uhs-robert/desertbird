@@ -22,6 +22,11 @@ test("options.open parses by its short name and by its id", () => {
     assert.deepEqual(parse("options.open"), opens);
 });
 
+test("the text of tm and tM parses once the offset is typed", () => {
+    assert.deepEqual(parse("tab.move --offset=-1"), { kind: "invocation", invocation: { id: "tab.move", args: { offset: "-1" } } });
+    assert.deepEqual(parse("tab.move 2"), { kind: "invocation", invocation: { id: "tab.move", args: { tab: "2" } } });
+});
+
 test("typed-value commands parse by their command line name", () => {
     assert.deepEqual(parse("tag Work stuff"), { kind: "invocation", invocation: { id: "msg.tag", args: { tag: "Work stuff" } } });
     assert.deepEqual(parse("msg.tag work"), { kind: "invocation", invocation: { id: "msg.tag", args: { tag: "work" } } });

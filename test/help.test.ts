@@ -42,6 +42,15 @@ test("a command with no key lists none, and the page can still show its usage", 
     assert.equal(tab_switch?.word, "tab");
 });
 
+test("the new tab keys are listed under their commands, and tm and tM show the typed text", () => {
+    const entry = (id: string) => all_entries().find((candidate) => candidate.id === id);
+    assert.deepEqual(entry("tab.goto")?.keys.map((key) => key.keys), ["t$"]);
+    assert.deepEqual(entry("tab.alternate")?.keys.map((key) => key.keys), ["tl"]);
+    const open = entry("cmdline.open");
+    assert.ok(open?.keys.some((key) => key.keys === "tm" && key.args === "text: tab.move"));
+    assert.ok(open?.keys.some((key) => key.keys === "tM" && key.args === "text: tab.move --offset="));
+});
+
 test("the user's bindings change the listed keys: a rebound key moves and an unbound one goes", () => {
     const keymap = effective_keymap({ normal: { x: null, X: { id: "msg.archive" } } });
     const archive = all_entries(keymap).find((entry) => entry.id === "msg.archive");
