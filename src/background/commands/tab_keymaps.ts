@@ -75,10 +75,12 @@ function complete_mail_sequences(branch: TreeBranch, mail_branch: TreeBranch, is
     }
 }
 
-// Before the zoom keys, a body tree lacked `z`, so `complete_mail_sequences` gave it a capture and any key after `z` ran nothing. The zoom keys made `z` a real prefix there, and a key with no zoom binding (a vim `z a`) would break the sequence and run as `a`, which archives. The capture beside the zoom keys keeps that guard: the matcher tries the typed key first and the capture second.
-function close_zoom_prefix(root: TreeBranch): void {
-    const zoom_branch = root.children["z"];
-    if (zoom_branch?.kind === "branch") zoom_branch.children[ANY_KEY] ??= { kind: "leaf", steps: [] };
+// Before the zoom keys, a body tree lacked `z`, so `complete_mail_sequences` gave it a capture and any key after `z` ran nothing. The zoom keys made `z` a real prefix there, and a key with no zoom binding (a vim `z a`) would break the sequence and run as `a`, which archives. The pane keys do the same to `w`. The capture beside the real keys keeps that guard: the matcher tries the typed key first and the capture second.
+function close_shared_prefixes(root: TreeBranch): void {
+    for (const prefix of ["z", "w"]) {
+        const branch = root.children[prefix];
+        if (branch?.kind === "branch") branch.children[ANY_KEY] ??= { kind: "leaf", steps: [] };
+    }
 }
 
 /**
@@ -89,7 +91,7 @@ export function compile_tab_keymap(kind: TabKind, user: KeymapConfig["normal"] =
     const result = compile_bindings(keymap_of(kind, user), {}, default_keymap_of(kind));
     if (TAB_KINDS[kind].includes("body" as never)) {
         complete_mail_sequences(result.compiled.modes.normal as TreeBranch, mail_root);
-        close_zoom_prefix(result.compiled.modes.normal as TreeBranch);
+        close_shared_prefixes(result.compiled.modes.normal as TreeBranch);
     }
     return result;
 }

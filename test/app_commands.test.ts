@@ -37,7 +37,7 @@ test("the app keys bind their commands and add no warning, and u undoes", () => 
     for (const keys of ["gx", "gT", "gc"]) assert.equal(normal[keys], undefined, keys);
     for (const [keys, pane, label] of [["gf", "folders", "Folder pane"], ["ge", "threads", "Thread list"], ["gm", "message", "Message pane"], ["<A-h>", "threads", "Focus thread list"], ["L", "threads", "Focus thread list"], ["<A-l>", "message", "Focus message pane"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane }, label }, keys);
     assert.deepEqual(normal["H"], { id: "folder.collapse", label: "Collapse folder or go to folders" });
-    for (const id of ["pane.left", "pane.right"]) assert.ok(!Object.values(normal).some((binding) => binding !== null && typeof binding === "object" && "id" in binding && binding.id === id), id);
+    for (const [keys, id] of [["wh", "pane.left"], ["wl", "pane.right"]] as const) assert.deepEqual(normal[keys], { id, label: id === "pane.left" ? "Pane left" : "Pane right" }, keys);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
 
