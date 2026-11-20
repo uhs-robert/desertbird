@@ -22,6 +22,8 @@ class FakeWindow implements KeyTarget {
     /** The folder tree rows and selection while the folder pane has the focus, or null. */
     folder: { rows: number; selected: number } | null = null;
     body_script_live = false;
+    /** The focus sits in the overlay's browser and its page is not ready. */
+    overlay_loading = false;
     menu_open = false;
     has_focus = true;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
@@ -90,6 +92,8 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
         stopPropagation: () => {},
         ...options,
     };
+    // The loading id on the target stands for a focus in the overlay browser whose page is not ready.
+    window.overlay_loading = (event.target as { id?: string }).id === OVERLAY_LOADING_ID;
     for (const listener of [...window.listeners]) listener(event);
     return result;
 }
@@ -143,6 +147,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
         is_typing_target: (window, event) => is_typing_element(event.target as { localName: string }) || window.body_script_live,
         menu_is_open: (window) => window.menu_open,
+        overlay_is_loading: (window) => window.overlay_loading,
         in_reading_pane: (window) => window.in_reading_pane,
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
@@ -705,20 +710,29 @@ test("once the overlay page is ready, its keys reach the line and the hold ends"
     assert.equal(window.selected, 1);
 });
 
-test("a page that is never ready is never a typing target: keys stay dropped until the host closes the overlay and the hold runs out", () => {
+test("a page that is never ready is never a typing target: plain keys stay dropped while the loading id lasts, even after the hold timer ran out", () => {
     const { windows, advance, runtime } = setup();
     runtime.install(tree(), ["cmdline.open"]);
     const window = windows[0]!;
     press(window, ":");
-    advance(1350);
+    advance(1600);
     assert.equal(press(window, "j", in_loading_overlay).cancelled, true);
-    // The host closes the overlay at 1400 ms and the focus is back on the list.
-    advance(50);
-    assert.equal(press(window, "a").cancelled, true);
+    assert.equal(press(window, "a", in_loading_overlay).cancelled, true);
+    advance(5000);
+    assert.equal(press(window, "x", in_loading_overlay).cancelled, true);
     assert.equal(window.selected, 0);
-    advance(200);
+    // The host closes the overlay and the focus is back on the list: keys run again.
     press(window, "j");
-    assert.equal(window.selected, 1, "the hold ran out");
+    assert.equal(window.selected, 1);
+});
+
+test("named keys and chords pass through a loading overlay, so Escape still closes it", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    assert.equal(press(window, "Escape", in_loading_overlay).cancelled, false);
+    assert.equal(press(window, "x", { ...in_loading_overlay, ctrlKey: true }).cancelled, false);
 });
 
 test("an overlay that closes before its page is ready leaves the hold to run out", () => {

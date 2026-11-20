@@ -41,6 +41,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     is_typing_target(window: Window, event: KeydownEvent): boolean;
     /** Whether a menu or panel is open. Keys then belong to it, its access keys among them. */
     menu_is_open(window: Window): boolean;
+    /** Whether the focus sits in the overlay's browser while its page is not ready. Plain keys are dropped then, whatever the hold timer says. */
+    overlay_is_loading(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
@@ -135,6 +137,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         const token = event_to_token(event);
         if (token === null) return;
+        // The overlay's browser has the focus before its page can take a key, and the hold timer can run out first. Plain keys are dropped for as long as that lasts.
+        if (is_plain_printable(token) && deps.overlay_is_loading(window)) return void (event.preventDefault(), event.stopPropagation());
         // The hold ends when the focus is in a text field, which the overlay's browser counts as.
         if (hold_until > deps.now()) {
             if (deps.is_typing_target(window, event)) hold_until = 0;

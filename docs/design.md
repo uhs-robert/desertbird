@@ -191,7 +191,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 
 | Bundle | Guard | Ceiling |
 | --- | --- | --- |
-| `experiment/keys.js`, `experiment/overlay.js` (each) | 26700 | 40960 |
+| `experiment/keys.js`, `experiment/overlay.js` (each) | 27212 | 40960 |
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
@@ -220,6 +220,7 @@ The first measured size of `keys.js` as its own bundle was 15003 bytes. That plu
 - Running the conversation command through the controller of the page that shows the message (a message tab or window as well as the mail tab) made it 26992 (722 over main's 26270). The guard was that measured size rounded up to 27000.
 - Backspace in an open which-key (the back step in `matcher_for_tree`, clause: decides what happens to a key) made it 27441 (449 over main's 26992). The guard rose by one 512-byte step to 27512. The body bundles grew by 449 and stay under their guard.
 - The keys of the other tabs moved to `experiment/pages.js` (the branch on the tab kind, the list of page commands and the three-way tab check) and took it from 27451 on main to 26625 (826 under). The guard fell to that measured size rounded up to 26700. The room freed is not a reserve: growth fails the build.
+- Dropping plain keys while the focus sits in the overlay browser before its page is ready (a key could reach the thread list after the hold timer ran out; clause: decides what happens to a key) made it 26987 (362 over main's 26625). The guard rose by one 512-byte step to 27212, under the 40960 ceiling.
 
 ### Backspace in an open which-key
 
