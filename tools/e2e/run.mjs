@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
+import { run_popup_keys } from "./popup_checks.mjs";
 
 const e2e_dir = resolve(process.env.E2E_DIR ?? "/tmp/desertbird-e2e");
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
@@ -194,6 +195,7 @@ async function run_default(instance) {
   if (process.env.E2E_ONLY === "search") return run_search(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "mode_label") return run_mode_label(instance, { app, kind, shot });
   if (process.env.E2E_ONLY === "hints") return run_window_hints(instance, { app, kind, shot });
+  if (process.env.E2E_ONLY === "popup") return run_popup_keys(instance, { check, shot, key_and_state, first_selected });
   // Right after the Inbox opens, while the window still has the layout the fixed labels were read from.
   await timed(instance, "window_hints", () => run_window_hints(instance, { app, kind, shot }));
   await timed(instance, "mode_label", () => run_mode_label(instance, { app, kind, shot }));

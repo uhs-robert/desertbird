@@ -24,7 +24,8 @@ class FakeWindow implements KeyTarget {
     body_script_live = false;
     /** The focus sits in the overlay's browser and its page is not ready. */
     overlay_loading = false;
-    menu_open = false;
+    /** The keys the open menu takes, or null with no menu open. */
+    menu_keys: string[] | null = null;
     has_focus = true;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
     selected = 0;
@@ -146,7 +147,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
         folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
         is_typing_target: (window, event) => is_typing_element(event.target as { localName: string }) || window.body_script_live,
-        menu_is_open: (window) => window.menu_open,
+        menu_takes_key: (window, key) => window.menu_keys && window.menu_keys.includes(key.toLowerCase()),
         overlay_is_loading: (window) => window.overlay_loading,
         in_reading_pane: (window) => window.in_reading_pane,
         on_tab_select: (window, listener) => {
@@ -444,7 +445,7 @@ test("a key that leaves the list ends a half-typed sequence", () => {
     const leave: [string, (window: FakeWindow) => KeyResult, (window: FakeWindow) => void][] = [
         ["a key typed into an input", (window) => press(window, "o", { target: { localName: "input" } }), () => {}],
         ["a key in the reading pane", (window) => ((window.in_reading_pane = true), press(window, "o")), (window) => void (window.in_reading_pane = false)],
-        ["a key in an open menu", (window) => ((window.menu_open = true), press(window, "o")), (window) => void (window.menu_open = false)],
+        ["a key in an open menu", (window) => ((window.menu_keys = []), press(window, "o")), (window) => void (window.menu_keys = null)],
         ["a key in another tab", (window) => ((window.in_mail_tab = false), press(window, "o")), (window) => void (window.in_mail_tab = true)],
     ];
     for (const [name, step_away, come_back] of leave) {
@@ -490,10 +491,20 @@ test("with a menu open every key passes to the menu and runs nothing", () => {
     const { windows, emitted, runtime } = setup();
     runtime.install(tree());
     const window = windows[0]!;
-    window.menu_open = true;
-    for (const key of ["j", "k", "x", "m"]) assert.equal(press(window, key).cancelled, false, key);
+    window.menu_keys = ["k"];
+    assert.equal(press(window, "k").cancelled, false, "an access key of the menu passes to it");
+    assert.equal(press(window, "K").cancelled, false, "also in upper case");
+    for (const key of ["j", "x", "m", "a"]) assert.equal(press(window, key).cancelled, true, `${key} is swallowed, no item takes it`);
+    for (const key of ["Enter", "ArrowDown", "Escape", " "]) assert.equal(press(window, key).cancelled, false, key);
     assert.equal(window.selected, 0);
     assert.deepEqual(emitted, []);
+});
+
+test("a key typed into a text field inside an open menu passes", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    windows[0]!.menu_keys = [];
+    assert.equal(press(windows[0]!, "j", { target: { localName: "input" } }).cancelled, false);
 });
 
 // The chords the phase 2 groups bind. No default binding exists yet, so a test tree binds each one to its own background id.
@@ -535,7 +546,7 @@ test("an unbound chord passes untouched and runs nothing", () => {
 test("a bound chord passes untouched in a text field, an open menu, the reading pane and another tab", () => {
     const away: [string, (window: FakeWindow) => KeyResult][] = [
         ["a text field", (window) => press_ctrl(window, "c", { target: { localName: "input" } })],
-        ["an open menu", (window) => ((window.menu_open = true), press_ctrl(window, "c"))],
+        ["an open menu", (window) => ((window.menu_keys = []), press_ctrl(window, "c"))],
         ["the reading pane", (window) => ((window.in_reading_pane = true), press_ctrl(window, "c"))],
         ["another tab", (window) => ((window.in_mail_tab = false), press_ctrl(window, "c"))],
     ];

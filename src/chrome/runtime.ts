@@ -39,8 +39,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     folder_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for someone else: a text field, or a message body that runs the body script. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
-    /** Whether a menu or panel is open. Keys then belong to it, its access keys among them. */
-    menu_is_open(window: Window): boolean;
+    /** Whether an open menu or panel takes the plain key, or null when none is open. Plain keys then belong to the menu: one it takes passes to it and the rest are swallowed. */
+    menu_takes_key(window: Window, key: string): boolean | null;
     /** Whether the focus sits in the overlay's browser while its page is not ready. Plain keys are dropped then, whatever the hold timer says. */
     overlay_is_loading(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
@@ -127,11 +127,6 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         }
     }
 
-    /** The thread list a key acts on, or null when the key goes to a text field, an open menu or a tab that is not the mail tab. */
-    function list_port_for(window: Window, event: KeydownEvent): ListPort | null {
-        return deps.is_typing_target(window, event) || deps.menu_is_open(window) ? null : deps.list_port_of(window);
-    }
-
     function on_keydown(window: Window, event: KeydownEvent): void {
         if (!matcher) return;
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
@@ -149,13 +144,17 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             }
         }
         if (deps.tab_kind_of(window)) return matcher.reset();
-        const port = list_port_for(window, event);
+        const typing = deps.is_typing_target(window, event);
+        const menu_takes = typing ? null : deps.menu_takes_key(window, token);
+        // The thread list is the target unless the key goes to a text field or an open menu.
+        const port = typing || menu_takes !== null ? null : deps.list_port_of(window);
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
             visual_anchor = -1;
             pend(window, []);
-            if (port && is_plain_printable(token)) {
+            // A menu opened by a click leaves the focus in the list, so Thunderbird's single-key shortcuts (`j` marks junk) would act under the menu.
+            if (is_plain_printable(token) && (port || menu_takes === false)) {
                 event.preventDefault();
                 event.stopPropagation();
             }

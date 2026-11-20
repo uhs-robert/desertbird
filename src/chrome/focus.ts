@@ -20,7 +20,18 @@ export interface FocusDocument {
     activeElement: FocusNode | null;
     body?: FocusNode | null;
     documentElement?: MarkedRoot | null;
-    querySelectorAll?(selectors: string): Iterable<{ state?: string }>;
+    querySelectorAll?(selectors: string): Iterable<PopupNode>;
+}
+
+/** What the popup check reads of an element. */
+export interface PopupNode {
+    localName?: string;
+    state?: string;
+    hasAttribute?(name: string): boolean;
+    getAttribute?(name: string): string | null;
+    contains?(node: unknown): boolean;
+    closest?(selectors: string): unknown;
+    querySelectorAll?(selectors: string): Iterable<PopupNode>;
 }
 
 // Elements the user types text into. A `browser` is not one: the walk enters every browser it can read, and one it cannot read (a remote page) holds no Thunderbird text field.
@@ -65,10 +76,17 @@ export const body_script_is_live = (document: FocusDocument): boolean => focus_c
 // A menu or panel shows from the moment it opens until it closes. Its `open` attribute stays unset, so only `state` tells.
 const SHOWN_POPUP_STATES = new Set(["showing", "open"]);
 
-/** Whether a menu or panel is open in the window or in a document on the way to the focus, such as the thread list's context menu in about:3pane. Its access keys are its own then. */
-export function menu_is_open(document: FocusDocument): boolean {
-    const documents = [document, ...focus_chain(document).flatMap((node) => (node.contentDocument ? [node.contentDocument] : []))];
-    return documents.some((each) => [...(each.querySelectorAll?.("menupopup, panel") ?? [])].some((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "")));
+const documents_on_the_way = (document: FocusDocument): FocusDocument[] => [document, ...focus_chain(document).flatMap((node) => (node.contentDocument ? [node.contentDocument] : []))];
+
+/** Whether a menu or panel is open in the window or in a document on the way to the focus, such as the thread list's context menu in about:3pane. */
+export const menu_is_open = (document: FocusDocument): boolean => documents_on_the_way(document).some((each) => [...(each.querySelectorAll?.("menupopup, panel") ?? [])].some((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "")));
+
+/** Whether an open popup takes the plain key: null when none is open. A `menupopup` consumes its own keys, so it takes the access keys of its direct items. A `panel` (the app menu) or `panel-list` ignores access keys after a click and leaves the key to Thunderbird's shortcuts, so it takes every key while the focus is inside it and none otherwise. Items of closed submenus and hidden panel views are not direct items of an open popup and do not count. The search stays in the light tree: no shadow popup exists in the mail window. */
+export function menu_takes_key(document: FocusDocument, key: string): boolean | null {
+    const open = documents_on_the_way(document).flatMap((each) => [...(each.querySelectorAll?.("menupopup, panel, panel-list") ?? [])].filter((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "") || (popup.localName === "panel-list" && popup.hasAttribute?.("open") === true)));
+    if (!open.length) return null;
+    const focus = focus_chain(document);
+    return open.some((popup) => (popup.localName === "menupopup" ? [...(popup.querySelectorAll?.("[accesskey]") ?? [])].some((item) => item.closest?.("menupopup") === popup && !item.hasAttribute?.("hidden") && item.getAttribute?.("accesskey")?.toLowerCase() === key.toLowerCase()) : focus.some((node) => popup.contains?.(node))));
 }
 
 export interface KeyEventTargets {
