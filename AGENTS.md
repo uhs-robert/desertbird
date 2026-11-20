@@ -104,5 +104,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`, and open a PR for each change.
+- Put worktrees in a `desertbird-worktrees/` folder beside the main checkout.
+- Every new `.ts`, `.css` or `.html` file under `src/` needs a line in its folder README (a line like "- `name.ts`: what it does"). `test/tools/readme_coverage.test.ts` fails and names the file when the line is missing. It follows DesertFox's test of the same name with two departures: it scans `src/` only, because DesertBird has no other source tree with READMEs, and it also accepts the path from the README's folder (`handlers/undo.ts`), because the background README lists its subfolder files that way.
 - CI: `.github/workflows/ci.yml` and `.claude/pre-merge` run `npm run check` and `npm run build`.
 - The `justfile` follows DesertFox's. Departures: `just` calls npm (DesertFox's npm scripts hold the checks and its `test` also runs host tests, which DesertBird lacks); `install_deps` compares `package-lock.json` with `node_modules/.package-lock.json` and runs `npm ci` (DesertFox pins web-ext through `jq`, which DesertBird does not use); the scratch prefix is `desertbird-test-run.*`; the scope has no `just` sub-run, only `npm run check`; no key-test or owner-test recipes (DesertBird has none of those tools). The `docs-gen` recipe calls `npm run docs:gen`.
