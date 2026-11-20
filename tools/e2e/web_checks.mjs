@@ -71,6 +71,11 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
   check(app, kind, "g g scrolls back to the top across two child keys", top.scroll_y === 0 && top.seen.length === 0, `scroll ${top.scroll_y}, page saw ${JSON.stringify(top.seen)}`);
   const unbound = await press_and_read([["x"]]);
   check(app, kind, "x, which the page tree does not bind, reaches the page", unbound.seen.includes("x"), `page saw ${JSON.stringify(unbound.seen)}`);
+  // `m` and `0` follow a prefix in the page tree (`t m`, `t 0`) and bind nothing as first keys, so a site's own `m` (mute) and `0` keep working.
+  const second_keys = await press_and_read([["m"], ["0"]]);
+  check(app, kind, "m and 0, which bind only after a prefix, reach the page", second_keys.seen.includes("m") && second_keys.seen.includes("0"), `page saw ${JSON.stringify(second_keys.seen)}`);
+  const broken = await press_and_read([["g"], ["x"], ["j"]]);
+  check(app, kind, "g then an unbound x ends the sequence: the page gets x, and j then scrolls", broken.seen.includes("x") && !broken.seen.includes("g") && broken.scroll_y > top.scroll_y, `scroll ${top.scroll_y} then ${broken.scroll_y}, page saw ${JSON.stringify(broken.seen)}`);
   const web_index = await active_index();
   await instance.press(["K"]);
   await sleep(1000);
@@ -148,7 +153,7 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
   note(app, kind, "the first page comes back from the back-forward cache", restored === null ? "no pageshow seen" : `persisted ${restored.persisted}`);
   const before_back_j = latest().scroll_y ?? 0;
   const after_back = await press_and_read([["j"]]);
-  check(app, kind, "after going back, j scrolls the first page", after_back.scroll_y > before_back_j && !after_back.seen.includes("j"), `scroll ${before_back_j} then ${after_back.scroll_y}, page saw ${JSON.stringify(after_back.seen)}`);
+  check(app, kind, "after going back, j scrolls the first page", restored !== null && after_back.scroll_y > before_back_j && !after_back.seen.includes("j"), `scroll ${before_back_j} then ${after_back.scroll_y}, page saw ${JSON.stringify(after_back.seen)}`);
   await close_extra_tabs();
 
   // A same-origin frame runs in the page's process, but the child runs in the top page only (allFrames false).
