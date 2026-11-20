@@ -7,6 +7,7 @@ export type WindowState = {
   profile: string;
   log: string;
   stamp: string;
+  addon_id: string;
   app: string;
   binary: string;
   started: string;
@@ -17,7 +18,7 @@ export type WindowState = {
 
 export type ReadState = { kind: "none" } | { kind: "corrupt"; reason: string } | { kind: "ok"; state: WindowState };
 
-const STRING_FIELDS = ["worktree", "profile", "log", "stamp", "app", "binary", "started"] as const;
+const STRING_FIELDS = ["worktree", "profile", "log", "stamp", "addon_id", "app", "binary", "started"] as const;
 const NUMBER_FIELDS = ["app_pid", "app_start_ticks"] as const;
 
 export function read_state(state_file: string): ReadState {
@@ -29,6 +30,8 @@ export function read_state(state_file: string): ReadState {
     return { kind: "corrupt", reason: (error as Error).message };
   }
   if (typeof parsed !== "object" || parsed === null) return { kind: "corrupt", reason: "not an object" };
+  // A state file written before addon_id existed still names a running window. It reads with an empty id: close and reload work, and status says the build cannot be checked.
+  if (parsed.addon_id === undefined) parsed.addon_id = "";
   for (const field of STRING_FIELDS) if (typeof parsed[field] !== "string") return { kind: "corrupt", reason: `${field} is not a string` };
   for (const field of NUMBER_FIELDS) if (!Number.isInteger(parsed[field])) return { kind: "corrupt", reason: `${field} is not an integer` };
   if (parsed.unit !== null && typeof parsed.unit !== "string") return { kind: "corrupt", reason: "unit is neither null nor a string" };

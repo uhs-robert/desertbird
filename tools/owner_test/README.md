@@ -3,12 +3,15 @@
 Opens a visible Betterbird or Thunderbird window with one worktree's build in a throwaway profile, so the maintainer can test by hand. Each worktree has its own window, profile and state, keyed by the worktree path. Two worktrees never touch each other's window.
 
 ```
-node --no-warnings tools/owner_test/cli.ts open   [worktree] [--app betterbird|thunderbird] [--binary path]
-node --no-warnings tools/owner_test/cli.ts reload [worktree] [--app ...]
+node --no-warnings tools/owner_test/cli.ts open   [worktree] [hint]... [--app betterbird|thunderbird] [--binary path]
+node --no-warnings tools/owner_test/cli.ts reload [worktree] [--app ...] [--binary ...]
+node --no-warnings tools/owner_test/cli.ts status [worktree]
 node --no-warnings tools/owner_test/cli.ts close  [worktree]
 ```
 
-`open` builds the worktree, stamps a copy of the xpi, builds a fresh profile and starts the app. `reload` rebuilds, closes the app and starts it again on the same profile. `close` stops the app and deletes the window folder. The agent workflow is in `.claude/skills/owner-test/SKILL.md`.
+`open` builds the worktree, stamps a copy of the xpi, builds a fresh profile and starts the app. `reload` rebuilds, closes the app and starts it again on the same profile. `status` reports what is open and whether the loaded build matches. `close` stops the app and deletes the window folder.
+
+A hint is `name value`, one setting the maintainer must change on the options page for the check. Open checks each against `SETTING_KINDS` and the options page value rules, so a typo fails at once, and prints the valid ones. The agent workflow is in `.claude/skills/owner-test/SKILL.md`.
 
 ## Safety
 
@@ -29,7 +32,12 @@ The tool never reads, copies or writes a real profile folder (`~/.thunderbird`, 
 - `process_guard.ts`: a recorded pid counts only while its start ticks (field 22 of `/proc/<pid>/stat`) still match, so a reused pid is never signalled.
 - `close.ts`: stops the recorded process, then any main process whose command line holds exactly `-profile <this profile>`, then deletes the window folder. It escalates from SIGTERM to SIGKILL and keeps the folder and state when a process survives.
 - `lifecycle.ts`: open, reload and close, with the machine passed in as deps so tests drive them with fakes. The build comes first and the old window is closed only after it succeeded. Reload keeps the app and binary the window was opened with and refuses an explicit `--app` that differs. The stamped xpi is staged in `<cache root>/<key>.stage/` and removed at the end.
-- `launch.ts`: the binary, the stamped xpi, the profile, the detached start and the real system calls close uses. The unit field of the state and `stop_unit` are in place for a systemd unit later.
+- `launch.ts`: the binary, the stamped xpi, the profile, the start and the real system calls close uses. The app starts in a systemd user unit (`systemd-run --user`, a 4 GB memory cap), and as a plain detached process when `systemd-run` fails or `OWNER_TEST_DETACHED=1` is set.
+- `hints.ts`: the check of `name value` hints.
+
+## The unit
+
+The unit is `desertbird-owner-test-<key>`. The key holds a hash of the worktree path, so two worktrees never share a unit. Close and reload stop the unit first, so forked children and processes that left the process group die with it, then run the start tick and profile command line checks for the detached fallback. The name always comes from the key, never from the state file, and the tool passes only names of the form `desertbird-owner-test-<key characters>` to `systemctl`, which takes glob patterns. A state file that names another unit is refused whole. Every open and close also stops and resets a unit of that name, so a failed or stale one left by a crash never blocks the next start. Close is complete only when the unit is confirmed stopped (`inactive` or `failed`) while the state records a unit. A window run without systemd has nothing to confirm.
 
 Betterbird is `/usr/bin/betterbird`. Thunderbird comes from `tools/measure/fetch_thunderbird.sh` (`$MEASURE_DIR`, default `/tmp/desertbird-measure`). `--binary` overrides both.
 
@@ -48,4 +56,6 @@ DesertFox `tools/owner_test/` is the base. These differ, each for the reason giv
 - Nested sessions are not refused. DesertFox refuses them, since its tool is for the maintainer's own desktop. Here the unit tests and the real launches of an agent that tests the tool run inside the nested headless session from `tools/measure/session.mjs`, so the rule lives in the skill: an agent opens a window on the maintainer's display only for a hand check the maintainer asked for, and tests or debugs the tool only in a nested session.
 - The files are `.ts` run by `node --no-warnings`, as in DesertFox. The `tools/**/*.ts` lint glob matched no file before and now covers these.
 - Reload starts a new app when the old one is gone, where DesertFox refuses. The 2 GB free-space check is dropped: the profile holds a few small fixture folders.
-- Left for a later change: the systemd unit (this one starts the app detached), the `:set` hints and a status action.
+- The unit has a 4 GB memory cap and a 15 second stop timeout, where DesertFox has the cap only. Betterbird closes slowly, and without the timeout a stuck stop waits 90 seconds. Unlike DesertFox, close always stops the unit derived from the key and confirms it only when the state records a unit.
+- Hints are `name value` and name settings of the options page. DesertBird has no `:set` command, so the DesertFox `:set name value` form would send the maintainer to a command that does not exist. The check reads `SETTING_KINDS` and `parse_setting_text` where DesertFox reads its settings table, and the DesertFox `settable` flag has no counterpart.
+- Status takes no lock, so it never waits behind an open. It reads the state, the process, the unit and the loaded add-on record. DesertFox probes the debugger.
