@@ -128,6 +128,7 @@ The table has 42 rows. 27 run without the Experiment (26 Standard and one Standa
 - Phase 2 scope: `step.*` is deferred, and the typed-value commands listed in build order 2 get default keys with the phase 3 command line. The keymap matches a chord only when it binds that chord. The alt chords (`<A-h>`, `<A-l>`) stay out of phase 2, because the motions that use them are out of it.
 - `downloads` is a required permission, for the same reason: an add-on with an Experiment cannot use optional permissions. Only `msg.save_attachments` uses it.
 - `nativeMessaging` is a required permission, because an add-on with an Experiment cannot use optional permissions. The host itself stays optional. A command that needs it refuses with a message when it is missing.
+- Hand checks go through `tools/owner_test/`: a visible Betterbird or Thunderbird with the worktree's build in a throwaway profile under `$XDG_CACHE_HOME/desertbird/owner-test/`. It never reads or writes a real profile. Its departures from the DesertFox tool are in [`tools/owner_test/README.md`](../tools/owner_test/README.md).
 
 ## Store rules
 

@@ -119,6 +119,8 @@ const THEME_PREFS = {
   default_os_light: { "ui.systemUsesDarkTheme": 0 },
 };
 
+const OWNER_PREFS = { "toolkit.telemetry.reportingpolicy.firstRun": false };
+
 // E2E_CONSOLE=1 prints the app and add-on console to app.log.
 const CONSOLE_PREFS = { "devtools.console.stdout.chrome": true, "devtools.console.stdout.content": true };
 
@@ -127,6 +129,7 @@ const mail_account_inbox = () =>
     .map(([id, subject, to], index) => [`From sender@fixture.invalid ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString()}`, "X-Mozilla-Status: 0000", "X-Mozilla-Status2: 00000000", `Message-ID: <${id}@fixture.invalid>`, `Date: ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString().replace("GMT", "+0000")}`, "From: Fixture Sender <sender@fixture.invalid>", `To: Someone <${to}>`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", `Body of ${id}.`, ""].join("\n") + "\n")
     .join("");
 
+// kind "owner" is the default plus the prefs a window a person looks at needs: no first-run policy tab. owner-test uses it.
 // kinds "quick_reply_plain" and "quick_reply_html" have an identity with a signature. kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
   rmSync(profile_dir, { recursive: true, force: true });
@@ -148,7 +151,8 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const mail_prefs = kind === "mail_account" ? { ...MAIL_ACCOUNT_PREFS, "mail.server.server2.directory": mail_dir } : {};
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
   const remote_prefs = kind === "message_remote" ? { "mailnews.message_display.disable_remote_image": false } : {};
-  const prefs = { ...BASE_PREFS, ...identity_prefs, ...mail_prefs, ...remote_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
+  const owner_prefs = kind === "owner" ? OWNER_PREFS : {};
+  const prefs = { ...BASE_PREFS, ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   return { profile_dir, folder_dir };
 }
