@@ -340,7 +340,7 @@ test("open prints the hints to apply on the options page", async () => {
 test("status: nothing open, running and matching, stale, wrong build, unloaded", async () => {
   const w = world();
   try {
-    assert.equal(await status_window(request(w), w.deps), true);
+    assert.equal(await status_window(request(w), w.deps), false, "no window is open: the hand-over check must fail");
     assert.equal(w.said.at(-1), "nothing open");
     await open_window(request(w), "betterbird", "/usr/bin/betterbird", w.deps);
     w.said.length = 0;

@@ -23,3 +23,11 @@ test("the names come from the settings table, so a new setting is accepted with 
 test("the old DesertFox form with :set is a typo here, because there is no :set command", () => {
   assert.equal(check_hint(":set toast_ms 3000").ok, false);
 });
+
+test("the value keeps its spaces, so a line setting is counted as the options page counts it", () => {
+  assert.equal(check_hint("cmdline_prompt 12345678 ").ok, false, "nine characters with the trailing space");
+  assert.equal(check_hint("cmdline_prompt 12345678").ok, true);
+  assert.equal(check_hint("cmdline_prompt $ ").ok, true);
+  assert.equal(check_hint("  toast_ms 3000").ok, true, "leading spaces before the name are dropped");
+  assert.equal(check_hint("toast_ms   ").ok, false, "a blank value is no value");
+});

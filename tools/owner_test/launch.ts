@@ -141,10 +141,14 @@ export function unit_state(unit: string): string | null {
   return result.error === undefined && result.stdout.trim() !== "" ? result.stdout.trim() : null;
 }
 
-// Environment values go to the unit one by one, because a user unit inherits nothing from this process.
+// systemd expands `$VAR` and `%` specifiers in the words of a command line. A profile path with a literal `$` or `%` must reach the app as it is.
+const escape_for_systemd = (word: string) => word.replaceAll("$", "$$$$").replaceAll("%", "%%");
+
+// A user unit inherits the user manager's environment (the real DISPLAY, the session bus, desktop variables), and `--setenv` only adds to it. So the app runs through `env -i NAME=value ... <binary>`: env execs the app, which keeps the pid of the unit's main process, and the app gets exactly the filtered environment and nothing else.
 export function systemd_run_args(unit: string, argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string): string[] {
-  const setenv = Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string").map(([name, value]) => `--setenv=${name}=${value}`);
-  return ["--user", "--collect", "--quiet", `--unit=${unit}`, "-p", "MemoryMax=4G", "-p", "TimeoutStopSec=15", `--working-directory=${cwd}`, "-p", `StandardOutput=append:${log_file}`, "-p", `StandardError=append:${log_file}`, ...setenv, "--", ...argv];
+  const assignments = Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string").map(([name, value]) => `${name}=${value}`);
+  const command = ["/usr/bin/env", "-i", ...assignments, ...argv].map(escape_for_systemd);
+  return ["--user", "--collect", "--quiet", `--unit=${unit}`, "-p", "MemoryMax=4G", "-p", "TimeoutStopSec=15", `--working-directory=${cwd}`, "-p", `StandardOutput=append:${log_file}`, "-p", `StandardError=append:${log_file}`, "--", ...command];
 }
 
 function start_detached(argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string): { unit: null; pid: number } {
@@ -163,6 +167,13 @@ export function start_app(argv: string[], env: NodeJS.ProcessEnv, cwd: string, l
     if (run.status === 0) {
       const pid = Number(spawnSync("systemctl", ["--user", "show", "-p", "MainPID", "--value", unit], { encoding: "utf8", timeout: 10_000 }).stdout.trim());
       return { unit, pid: Number.isInteger(pid) ? pid : 0 };
+    }
+    // A timed-out or half-answered request can still have created the unit. Stop it, and start no second app on the profile while it is not confirmed down. When systemd cannot say at all (no user bus), the fallback is the right path.
+    stop_unit(unit);
+    const left = unit_state(unit);
+    if (left !== null && !is_confirmed_stopped(left)) {
+      console.error(`owner-test: systemd-run failed and the unit ${unit} is still ${left}, so no second app is started. Run close.`);
+      return { unit, pid: 0 };
     }
     console.error("owner-test: systemd-run failed, so the window runs without a systemd unit and may end with this session.");
   }

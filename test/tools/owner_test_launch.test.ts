@@ -118,9 +118,66 @@ test("a name that is not this tool's unit never reaches systemctl", () => {
   }
 });
 
-test("the unit command line names the unit, passes the environment one value at a time and runs the argv last", () => {
+test("the unit runs the app through env -i, so the manager's environment never reaches it", () => {
   const args = systemd_run_args("desertbird-owner-test-k", ["/bin/app", "-profile", "/p", "-no-remote"], { HOME: "/h", WAYLAND_DISPLAY: "w" }, "/cwd", "/log");
   assert.ok(args.includes("--unit=desertbird-owner-test-k") && args.includes("--collect"));
-  assert.ok(args.includes("--setenv=HOME=/h") && args.includes("--setenv=WAYLAND_DISPLAY=w"));
-  assert.deepEqual(args.slice(args.indexOf("--") + 1), ["/bin/app", "-profile", "/p", "-no-remote"]);
+  assert.equal(args.some((word) => word.startsWith("--setenv")), false, "--setenv only adds to the manager's environment");
+  assert.deepEqual(args.slice(args.indexOf("--") + 1), ["/usr/bin/env", "-i", "HOME=/h", "WAYLAND_DISPLAY=w", "/bin/app", "-profile", "/p", "-no-remote"]);
+});
+
+test("the filtered environment is exactly what the app gets: no DISPLAY or DBUS variable unless the filter passes it", () => {
+  const manager_like = { HOME: "/h", PATH: "/bin", DISPLAY: ":0", DBUS_SESSION_BUS_ADDRESS: "unix:path=/x", WAYLAND_DISPLAY: "w", XDG_CONFIG_HOME: "/real" };
+  const command = systemd_run_args("desertbird-owner-test-k", ["/bin/app"], launch_env(manager_like, "/c/home"), "/cwd", "/log");
+  const words = command.slice(command.indexOf("/usr/bin/env"));
+  assert.ok(words.includes("DISPLAY=:0"), "DISPLAY passes only because the filter lets it through");
+  assert.equal(words.some((word) => word.startsWith("DBUS_") || word.startsWith("XDG_CONFIG_HOME")), false);
+  const without = systemd_run_args("desertbird-owner-test-k", ["/bin/app"], launch_env({ PATH: "/bin", WAYLAND_DISPLAY: "w" }, "/c/home"), "/cwd", "/log");
+  assert.equal(without.some((word) => word.startsWith("DISPLAY=")), false);
+});
+
+test("a literal dollar or percent sign in a word reaches the app as it is, since systemd would expand it", () => {
+  const args = systemd_run_args("desertbird-owner-test-k", ["/bin/app", "-profile", "/tmp/cache-${LANG}/50%/p"], { HOME: "/h$X" }, "/cwd", "/log");
+  const words = args.slice(args.indexOf("--") + 1);
+  assert.ok(words.includes("/tmp/cache-$${LANG}/50%%/p") && words.includes("HOME=/h$$X"));
+});
+
+// Stubs for systemd-run and systemctl in a PATH of their own, so the failure paths run with no real unit.
+function with_stub_systemd(is_active: string, body: (dir: string) => void) {
+  const dir = mkdtempSync(join(tmpdir(), "owner-test-stub-"));
+  const saved_path = process.env.PATH;
+  try {
+    writeFileSync(join(dir, "systemd-run"), "#!/bin/sh\nexit 1\n");
+    writeFileSync(join(dir, "systemctl"), `#!/bin/sh\n[ "$2" = is-active ] && echo ${is_active}\nexit 0\n`);
+    writeFileSync(join(dir, "app"), `#!/bin/sh\necho started > "${join(dir, "marker")}"\n`);
+    for (const name of ["systemd-run", "systemctl", "app"]) chmodSync(join(dir, name), 0o755);
+    process.env.PATH = `${dir}:${saved_path}`;
+    body(dir);
+  } finally {
+    process.env.PATH = saved_path;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("a failed systemd-run whose unit is still active starts no second app", () => {
+  with_stub_systemd("active", (dir) => {
+    const started = start_app([join(dir, "app")], { PATH: process.env.PATH }, dir, join(dir, "log"), "desertbird-owner-test-k");
+    assert.deepEqual(started, { unit: "desertbird-owner-test-k", pid: 0 });
+    assert.equal(existsSync(join(dir, "marker")), false);
+  });
+});
+
+test("a failed systemd-run with no unit left falls back to the detached start", () => {
+  const saved = process.env.OWNER_TEST_DETACHED;
+  delete process.env.OWNER_TEST_DETACHED;
+  try {
+    with_stub_systemd("inactive", (dir) => {
+      const started = start_app([join(dir, "app")], { PATH: process.env.PATH }, dir, join(dir, "log"), "desertbird-owner-test-k");
+      assert.equal(started.unit, null);
+      assert.ok(started.pid > 1);
+      for (let tries = 0; tries < 50 && !existsSync(join(dir, "marker")); tries++) spawnSync("sleep", ["0.1"]);
+      assert.equal(existsSync(join(dir, "marker")), true);
+    });
+  } finally {
+    if (saved !== undefined) process.env.OWNER_TEST_DETACHED = saved;
+  }
 });

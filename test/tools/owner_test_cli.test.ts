@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { find_app_by_profile, group_members } from "../../tools/owner_test/launch.ts";
+import { read_start_ticks } from "../../tools/owner_test/process_guard.ts";
 import { canonical_worktree, unit_name, window_paths } from "../../tools/owner_test/paths.ts";
 
 const CLI = join(import.meta.dirname, "..", "..", "tools", "owner_test", "cli.ts");
@@ -12,13 +13,16 @@ const CLI = join(import.meta.dirname, "..", "..", "tools", "owner_test", "cli.ts
 type Run = { status: number; out: string };
 
 // Safety net: a test that fails or times out must not leave a stand-in app or a temp folder. Every setup registers here, and the process exit or a kill signal sweeps whatever is left.
-const live = new Set<{ base: string; profile_dir: string }>();
+const live = new Set<{ base: string; profile_dir: string; unit: string }>();
 function sweep(): void {
   for (const item of live) {
     for (let found = find_app_by_profile(item.profile_dir); found !== null; found = find_app_by_profile(item.profile_dir)) {
       for (const member of group_members(found.pid)) try { process.kill(member.pid, "SIGKILL"); } catch { /* gone */ }
       try { process.kill(found.pid, "SIGKILL"); } catch { /* gone */ }
     }
+    // The unit name comes from the key, so this reaches only this fixture's unit. A killed run leaves the unit, and its escaped children are in the unit's cgroup, not in the group the lookup above covers.
+    spawnSync("systemctl", ["--user", "stop", item.unit], { stdio: "ignore", timeout: 30_000 });
+    spawnSync("systemctl", ["--user", "reset-failed", item.unit], { stdio: "ignore", timeout: 10_000 });
     rmSync(item.base, { recursive: true, force: true });
   }
   live.clear();
@@ -27,7 +31,7 @@ process.on("exit", sweep);
 for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { sweep(); process.exit(1); });
 
 // The cli as a real subprocess, in a temp world: its own HOME, cache and state folders, a git worktree whose build script writes a tiny xpi, and stand-in apps (shell scripts). No display and no real app are used.
-function setup() {
+function setup(cache_name = "cache") {
   const base = mkdtempSync(join(tmpdir(), "owner-test-cli-"));
   const worktree = join(base, "tree");
   mkdirSync(join(worktree, "src"), { recursive: true });
@@ -64,13 +68,13 @@ wait
     chmodSync(file, 0o755);
     return file;
   };
-  const env = { PATH: process.env.PATH ?? "", HOME: join(base, "home"), XDG_CACHE_HOME: join(base, "cache"), XDG_STATE_HOME: join(base, "state"), WAYLAND_DISPLAY: "none", OWNER_TEST_DETACHED: "1" };
+  const env = { PATH: process.env.PATH ?? "", HOME: join(base, "home"), XDG_CACHE_HOME: join(base, cache_name), XDG_STATE_HOME: join(base, "state"), WAYLAND_DISPLAY: "none", OWNER_TEST_DETACHED: "1" };
   mkdirSync(env.HOME, { recursive: true });
   const real_worktree = canonical_worktree(worktree);
   const paths = window_paths(real_worktree, { cache_home: env.XDG_CACHE_HOME, state_home: env.XDG_STATE_HOME });
   const run = (args: string[], extra: Record<string, string> = {}): Promise<Run> =>
     new Promise((done) => execFile("node", ["--no-warnings", CLI, ...args], { env: { ...env, ...extra }, cwd: worktree, timeout: 90_000, killSignal: "SIGKILL" }, (error, stdout, stderr) => done({ status: error === null ? 0 : (error as { code?: number }).code ?? 1, out: stdout + stderr })));
-  const item = { base, profile_dir: paths.profile_dir };
+  const item = { base, profile_dir: paths.profile_dir, unit: unit_name(paths.key) };
   live.add(item);
   const cleanup = async () => {
     await run(["close", worktree]);
@@ -246,14 +250,15 @@ const has_user_systemd = spawnSync("systemd-run", ["--user", "--scope", "--quiet
 
 // The real unit path with a stand-in app: no display, but the real user manager. The unit and every process in it must be gone at the end.
 test("under systemd: the app runs in a unit, a failed leftover unit does not block open, close takes the escaped child down with the unit", { skip: !has_user_systemd }, async () => {
-  const t = setup();
+  // A literal dollar sign in the cache path: systemd would expand it in the command line if it were not escaped.
+  const t = setup("cache-$HOME");
   const unit = unit_name(t.paths.key);
   const user_env = { ...t.env, OWNER_TEST_DETACHED: "", XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR ?? "", DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS ?? "" };
-  const escaped = () => readdirSync("/proc").some((entry) => { try { return readFileSync(`/proc/${entry}/cmdline`, "utf8") === "sleep\x00301\x00"; } catch { return false; } });
   const is_active = () => spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout.trim();
   try {
     spawnSync("systemd-run", ["--user", "--quiet", `--unit=${unit}`, "/bin/false"], { stdio: "ignore" });
-    const bb = t.app("bb", "setsid sleep 301 </dev/null >/dev/null 2>&1 &");
+    // The stand-in records its environment and the pid of the child it moves into a new session.
+    const bb = t.app("bb", 'env > "$profile/../env.txt"\nsetsid sleep 301 </dev/null >/dev/null 2>&1 &\necho $! > "$profile/../escaped.pid"');
     const opened = await t.run(["open", t.worktree, "--binary", bb], user_env);
     assert.equal(opened.status, 0, opened.out);
     assert.equal(is_active(), "active");
@@ -261,11 +266,16 @@ test("under systemd: the app runs in a unit, a failed leftover unit does not blo
     const status = await t.run(["status", t.worktree], user_env);
     assert.equal(status.status, 0, status.out);
     assert.match(status.out, /unit: .*\(active\)/);
-    assert.equal(escaped(), true, "the escaped child runs");
+    const environment = readFileSync(join(t.paths.window_dir, "env.txt"), "utf8").split("\n");
+    assert.deepEqual(environment.filter((line) => /^(DISPLAY|DBUS_|HYPRLAND|XDG_CURRENT_DESKTOP|XDG_CONFIG_HOME|GTK_THEME)/.test(line)), [], "nothing of the user manager's environment reaches the app");
+    assert.ok(environment.includes(`HOME=${t.paths.home_dir}`) && environment.includes("WAYLAND_DISPLAY=none"));
+    const escaped_pid = Number(readFileSync(join(t.paths.window_dir, "escaped.pid"), "utf8").trim());
+    const escaped_ticks = read_start_ticks(escaped_pid);
+    assert.ok(escaped_ticks !== null, "the escaped child runs");
     const closed = await t.run(["close", t.worktree], user_env);
     assert.equal(closed.status, 0, closed.out);
     assert.notEqual(is_active(), "active");
-    assert.equal(escaped(), false, "the unit's cgroup took the escaped child down");
+    assert.notEqual(read_start_ticks(escaped_pid), escaped_ticks, "the unit's cgroup took the escaped child down (this child only, by pid and start ticks)");
     assert.equal(t.apps_running(), null);
     assert.equal(existsSync(t.paths.window_dir), false);
   } finally {

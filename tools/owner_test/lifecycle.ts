@@ -172,7 +172,7 @@ export async function status_window(request: Request, deps: LifecycleDeps): Prom
   if (read.kind === "none") {
     const orphan = deps.close.find_app_by_profile(paths.profile_dir);
     deps.say(orphan === null ? "nothing open" : `no state file, but an app runs with this profile (pid ${orphan.pid}). Close cleans it.`);
-    return orphan === null;
+    return false;
   }
   if (read.kind === "corrupt") {
     deps.say(`state file is unreadable: ${read.reason}. Close cleans it.`);

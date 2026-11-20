@@ -55,3 +55,12 @@ test("a leftover temp file from a crashed write does not disturb the next write"
     assert.equal(read_state(file).kind, "ok");
   });
 });
+
+test("a state file written before addon_id existed still reads, with an empty id", () => {
+  in_temp_dir((dir) => {
+    const file = join(dir, "k.json");
+    const { addon_id: _omitted, ...old } = state;
+    writeFileSync(file, JSON.stringify(old));
+    assert.deepEqual(read_state(file), { kind: "ok", state: { ...state, addon_id: "" } });
+  });
+});
