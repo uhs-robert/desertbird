@@ -57,7 +57,7 @@ async function query_all(api: MessageQueryApi, header_message_id: string, folder
     }
 }
 
-async function existing_snoozed(api: SnoozeApi, account_id: string): Promise<MailFolder | undefined> {
+async function existing_snoozed(api: SpecialFolderApi, account_id: string): Promise<MailFolder | undefined> {
     for (const path of SNOOZED_PATHS) {
         const [folder] = await api.folders.query({ accountId: account_id, path });
         if (folder !== undefined) return folder;
@@ -142,7 +142,6 @@ export async function snooze_messages(scope: HandlerScope<SnoozeApi & Notificati
 
 /** A message missing from both folders keeps its item this long after the due time, since an account can show it late. The wait only counts once the start grace is over, so a Thunderbird that was closed past the due time still gets its sync. */
 const MISSING_MESSAGE_GIVE_UP_MS = 30 * 60 * 1000;
-const NOT_WAITING_USES = ["inbox", "trash", "junk", "sent", "archives", "drafts", "templates"];
 
 /** The clock of one wake: the tick time and when the background page started. */
 export interface WakeTiming {
@@ -161,21 +160,25 @@ async function folder_by_id(api: WakeApi, folder_id: string): Promise<MailFolder
     }
 }
 
-/** Where the message waits: the stored Snoozed folder, or, when that folder is gone or renamed, the folders of the origin account and of Local Folders (the only fallback home of a Snoozed folder). Folders where a filed, sent or other-account copy lives are left alone. */
+/** Where the message waits: the stored Snoozed folder, or, when that folder is gone or renamed, the Snoozed folder found again by path in the origin account and in Local Folders (the only fallback home of one). Nothing outside those folders is queried, so a Gmail Starred, label or All Mail copy, a filed copy and an other-account copy stay put. */
 async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there: boolean): Promise<MessageHeader[]> {
     if (folder_still_there) return query_all(api, item.header_message_id, item.folder_id);
-    const own_accounts = new Set([item.origin_account_id, ...(await api.accounts.list()).filter((account) => account.type === LOCAL_ACCOUNT_TYPE).map((account) => account.id)]);
-    return (await query_all(api, item.header_message_id)).filter((message) => own_accounts.has(message.folder?.accountId ?? "") && !message.folder?.specialUse?.some((use) => NOT_WAITING_USES.includes(use)));
+    const local_ids = (await api.accounts.list()).filter((account) => account.type === LOCAL_ACCOUNT_TYPE).map((account) => account.id);
+    const found: MessageHeader[] = [];
+    for (const account_id of new Set([item.origin_account_id, ...local_ids])) {
+        const folder = await existing_snoozed(api, account_id);
+        if (folder !== undefined) found.push(...(await query_all(api, item.header_message_id, folder.id)));
+    }
+    return found;
 }
 
 // Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_GIVE_UP_MS` past its due time. The notice names the subject only when `notice_show_subject` is on, since the notice can reach the desktop.
 export async function wake_snoozed(api: WakeApi, item: SnoozeItem, timing: WakeTiming): Promise<void> {
     const snoozed_folder_still_there = (await folder_by_id(api, item.folder_id)) !== undefined;
-    // The Inbox of the origin account, or the folder the message came from when the account has no Inbox (Local Folders can lack one).
-    const [inbox] = await api.folders.query({ accountId: item.origin_account_id, specialUse: ["inbox"] });
-    const destination = inbox ?? (await folder_by_id(api, item.origin_folder_id));
+    // Always the Inbox of the origin account. The recorded origin folder can be a Gmail label view, which is no place to return to.
+    const [destination] = await api.folders.query({ accountId: item.origin_account_id, specialUse: ["inbox"] });
     if (destination === undefined) {
-        await notify_refusal(api, snoozed_folder_still_there ? "A snoozed message could not return, because its account has no Inbox and its folder is gone. It stays in the Snoozed folder." : "A snoozed message did not return, because its Snoozed folder is gone and its account has no Inbox.");
+        await notify_refusal(api, "A snoozed message did not return, because its account has no Inbox. It stays in the Snoozed folder.");
         return;
     }
     // Every copy moves: two messages with one Message-ID share one item.
