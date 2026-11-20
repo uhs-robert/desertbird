@@ -249,7 +249,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `experiment/zoom.js` | 3544 | 6144 |
 | `content/message_display.js` | 18162 | 24576 |
-| `experiment/hints.js` | 13562 | 20480 |
+| `experiment/hints.js` | 14074 | 20480 |
 | `experiment/pages.js` | 26896 | 34816 |
 | `experiment/page_actor_child.sys.mjs` | 8704 | 11264 |
 | `experiment/page_actor_parent.sys.mjs` | 5632 | 9216 |
@@ -346,6 +346,7 @@ The zoom keys run in the mail tab, message documents, own pages and the page tab
 - The card view subject lookup made it 13004 (4 over that). The guard rose to 13004 rounded up to 13050.
 - Dropping the action phase made it 12507 (497 under the guard). The guard stays at 13050.
 - `f` in the page tabs (a target list for a tab that is not the mail tab, its own page read through the tab's browser, and the marker that makes the page keys step aside) made it 13384 (826 over main's 12558, clause: decides what happens to a key). The guard rose by one 512-byte step to 13562.
+- `f` in web pages and other add-ons' pages (the remote branch of `pick`: find the page actor, focus the browser, ask the child and take its count) made it 13841 (457 over main's 13384, clause: decides what happens to a key). The guard rose by one 512-byte step to 14074.
 
 ### Compose script bundle
 
