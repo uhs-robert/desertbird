@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,6 +64,7 @@ test("without a checkout the script skips loudly and exits 0", () => {
     const script = join(import.meta.dirname, "../../tools/check_default_settings.ts");
     const env = { ...process.env };
     delete env.DESERTFOX_DIR;
-    const result = execFileSync("node", ["--no-warnings", script], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    assert.equal(result, "");
+    const result = spawnSync("node", ["--no-warnings", script], { env, encoding: "utf8" });
+    assert.equal(result.status, 0);
+    assert.match(result.stderr, /SKIPPED/);
 });
