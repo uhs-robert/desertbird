@@ -9,9 +9,10 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && node tools/build.mjs",
     "lint": "eslint",
-    "test": "node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\"",
+    "unit": "node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\"",
+    "test": "npm run --silent check",
     "e2e": "node tools/e2e/run.mjs",
-    "check": "npm run --silent lint && npm run --silent typecheck && npm run --silent test"
+    "check": "npm run --silent lint && npm run --silent typecheck && npm run --silent unit"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
