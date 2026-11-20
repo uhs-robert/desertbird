@@ -253,13 +253,23 @@ test("a gone Snoozed folder leaves a copy in another account and a Starred-like 
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    box.messages[0]!.folder_id = "imap-other";
     box.add("<a@x>", "other-inbox");
     box.add("<a@x>", "other-misc");
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "other-inbox", "other-misc"]);
+});
+
+test("a gone Snoozed folder leaves a Gmail label copy in the same account alone", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    box.add("<a@x>", "imap-other");
+    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(gone);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
+    assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "imap-other"]);
 });
 
 test("a message that shows up in the Snoozed folder after a missed tick still returns", async () => {
@@ -303,13 +313,12 @@ test("every copy that shares a Message-ID returns on one wake", async () => {
     assert.deepEqual(box.messages.map((message) => message.read), [false, false]);
 });
 
-test("a Snoozed folder that was deleted or renamed does not stall the wake: the message is found by its Message-ID in the account", async () => {
+test("a Snoozed folder id that went stale does not stall the wake: the folder is found again by its path", async () => {
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    box.messages[0]!.folder_id = "imap-other";
-    const renamed = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
-    await box.store.add(renamed);
+    const stale = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(stale);
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
     assert.deepEqual(await box.store.list(), []);
@@ -323,19 +332,17 @@ test("a gone Snoozed folder with several copies moves only the waiting one, not 
     box.add("<a@x>", "imap-archive");
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
-    box.messages[0]!.folder_id = "imap-other";
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>").sort(), ["imap-archive", "imap-inbox", "imap-sent"]);
 });
 
-test("a gone Snoozed folder in Local Folders still finds the message there", async () => {
-    const box = mailbox();
+test("a gone Snoozed folder in Local Folders is found again there", async () => {
+    const box = mailbox({ cannot_create_in: ["imap"] });
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
-    box.messages[0]!.folder_id = "local-inbox";
+    assert.deepEqual(box.where("<a@x>"), ["local-Snoozed"]);
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
-    box.messages[0]!.folder_id = "local-root";
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
@@ -381,25 +388,14 @@ test("a repeat of a wake that already moved the message only marks it unread and
     assert.equal(box.messages[0]?.read, false);
 });
 
-test("an account with no Inbox gets the message back in the folder it came from", async () => {
+test("an account with no Inbox leaves the message in Snoozed and notifies, even when it came from another folder", async () => {
     const box = mailbox({ no_inbox_in: ["imap"] });
-    const message = box.add("<a@x>", "imap-sent");
+    const message = box.add("<a@x>", "imap-other");
     await snooze(box, [message.id]);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
-    assert.deepEqual(box.where("<a@x>"), ["imap-sent"]);
-    assert.equal(box.messages[0]?.read, false);
-    assert.deepEqual(await box.store.list(), []);
-});
-
-test("an account with no Inbox and no origin folder drops the item with a notification and leaves the message in Snoozed", async () => {
-    const box = mailbox({ no_inbox_in: ["imap"] });
-    const message = box.add("<a@x>");
-    await snooze(box, [message.id]);
-    const [item] = await box.store.list();
     box.notices.length = 0;
-    await wake_snoozed(box.api, { ...item!, origin_folder_id: "removed-folder" }, at(tomorrow_8));
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
-    assert.match(box.notices[0]!, /no Inbox and its folder is gone/);
+    assert.match(box.notices[0]!, /no Inbox/);
 });
 
 test("a wake whose Snoozed folder no longer exists drops the item with a notification and does not retry", async () => {

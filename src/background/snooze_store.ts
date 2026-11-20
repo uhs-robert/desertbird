@@ -14,7 +14,7 @@ export interface SnoozeItem {
     origin_account_id: string;
     /** The Snoozed folder the message was moved into. The wake looks only there, so a copy of the message in another folder is never taken. */
     folder_id: string;
-    /** The folder the message was in. The wake returns the message there when the origin account has no Inbox. */
+    /** The folder the message was in. Kept for the record. The wake does not use it, since it can be a Gmail label view. */
     origin_folder_id: string;
     due_ms: number;
 }
