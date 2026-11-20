@@ -295,11 +295,13 @@ async function run_web_hint_rows(instance, { check, note, shot, fixture, open_we
   await close_extra_tabs();
 
   // The page moves the focus into its field while the labels show. The keys typed then still go to the labels and never to the field.
-  check(app, kind, "the web page opens to focus its field later", await open_web("&focus_after=field"));
+  check(app, kind, "the web page opens to focus its field once labels show", await open_web("&focus_after=field"));
+  const from_f = fixture.log.length;
   check(app, kind, "f shows labels before the page focuses its field", await labels_shown_by([["f"]]));
-  const field_focused = await report_after(0, (entry) => entry.kind === "focusin" && entry.active === "field" && entry.page.includes("focus_after"), 6000);
+  const field_focused = await report_after(from_f, (entry) => entry.kind === "focusin" && entry.active === "field" && entry.page.includes("focus_after"), 6000);
   const in_field = await pick([["x"]]);
-  check(app, kind, "a key typed while labels show does not reach the focused field", field_focused !== null && in_field.latest.value === "" && in_field.seen.length === 0 && children() === BASE_CHILDREN, `field focused ${field_focused !== null}, value ${JSON.stringify(in_field.latest.value)}, page saw ${JSON.stringify(in_field.seen)}, root children ${children()}`);
+  const seen_since_f = fixture.keys_since(from_f);
+  check(app, kind, "neither f nor a key typed while labels show reaches the page or its focused field", field_focused !== null && in_field.latest.value === "" && seen_since_f.length === 0 && children() === BASE_CHILDREN, `field focused ${field_focused !== null}, value ${JSON.stringify(in_field.latest.value)}, page saw ${JSON.stringify(seen_since_f)}, root children ${children()}`);
   await close_extra_tabs();
 
   // Another add-on's page: its one field gets the label a.

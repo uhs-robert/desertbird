@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collect_page_targets, collect_targets } from "../src/chrome/hint_targets.ts";
+import { JSDOM } from "jsdom";
+import { collect_page_targets, collect_targets, collect_window_targets } from "../src/chrome/hint_targets.ts";
 import type { HintMailPane } from "../src/chrome/hint_targets.ts";
 
 const CONTROLS = "button:not([disabled]), toolbarbutton:not([disabled]), tab, [role=button], input:not([type=hidden]):not([disabled])";
@@ -133,4 +134,22 @@ test("a page tab labels the controls of the window and then of its page: a field
 test("a page tab with no page the parent can read labels the window alone", () => {
     const main = fake_window({ page: [{ name: "button today" }] });
     assert.deepEqual(collect_page_targets(main as never, null).map(name_of), ["button today"]);
+});
+
+// The real selectors against a real document: a web page writes `contenteditable` bare, `true` or `plaintext-only`.
+test("every contenteditable but false gets a label, and a pick focuses it and does not click it", () => {
+    const { window } = new JSDOM(`<div id="bare" contenteditable></div><div id="on" contenteditable="true"></div><div id="plain" contenteditable="plaintext-only"></div><div id="off" contenteditable="false"></div><button id="button">Go</button>`);
+    const log: string[] = [];
+    Object.assign(window.HTMLElement.prototype, {
+        getBoundingClientRect: () => ({ top: 10, left: 10, width: 20, height: 10 }),
+        contains: () => true,
+        focus(this: { id: string }) { log.push(`focus ${this.id}`); },
+        click(this: { id: string }) { log.push(`click ${this.id}`); },
+    });
+    const page = { innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: { querySelectorAll: (selector: string) => window.document.querySelectorAll(selector), elementFromPoint: () => null } };
+    const targets = collect_window_targets(page as never);
+    assert.deepEqual(targets.map((target) => (target.element as unknown as { id: string }).id), ["bare", "on", "plain", "button"]);
+    for (const target of targets) target.act();
+    assert.deepEqual(log, ["focus bare", "focus on", "focus plain", "click button"]);
+    window.close();
 });

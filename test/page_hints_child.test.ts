@@ -30,7 +30,7 @@ interface FakeControl {
 
 /** A web page as the child's `contentWindow` shows it: controls on screen, a root element that takes the label container, and the listeners the hint module adds. */
 function fake_page(controls: FakeControl[]) {
-    const listeners = new Map<string, Set<() => void>>();
+    const listeners = new Map<string, Set<(event: { type: string; target: unknown }) => void>>();
     const containers: { removed: boolean }[] = [];
     const elements = controls.map((control) => ({
         ...control,
@@ -51,10 +51,10 @@ function fake_page(controls: FakeControl[]) {
         innerWidth: 800,
         getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }),
         document: { querySelectorAll: () => elements, elementFromPoint: () => null, createElement: make, documentElement: { append() {} } },
-        addEventListener: (type: string, listener: () => void) => void (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener),
-        removeEventListener: (type: string, listener: () => void) => void listeners.get(type)?.delete(listener),
+        addEventListener: (type: string, listener: (event: { type: string; target: unknown }) => void) => void (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener),
+        removeEventListener: (type: string, listener: (event: { type: string; target: unknown }) => void) => void listeners.get(type)?.delete(listener),
     };
-    const fire = (type: string) => [...(listeners.get(type) ?? [])].forEach((listener) => listener());
+    const fire = (type: string, target: unknown = page) => [...(listeners.get(type) ?? [])].forEach((listener) => listener({ type, target }));
     const listening = () => [...listeners.entries()].filter(([, set]) => set.size > 0).map(([type]) => type);
     return { page, containers, fire, listening };
 }
@@ -73,7 +73,7 @@ test("start labels the controls on screen, hands the child the key reader, and a
     const child: HintsChild = { contentWindow: page, pick: null };
     assert.equal(start(child, { scheme: SCHEME, action: "activate" }), 2);
     assert.equal(containers.length, 1);
-    assert.deepEqual(listening().sort(), ["pagehide", "pointerdown", "scroll"]);
+    assert.deepEqual(listening().sort(), ["blur", "pagehide", "pointerdown", "scroll"]);
     const typed = key("s");
     child.pick!.key(typed);
     assert.ok(typed.cancelled && typed.stopped, "the page never sees the label key");
@@ -111,7 +111,7 @@ test("the focus action focuses, and the yank copies the link address in the page
     assert.equal(link.clicked, 0);
 });
 
-for (const type of ["pagehide", "scroll", "pointerdown"]) {
+for (const type of ["pagehide", "scroll", "pointerdown", "blur"]) {
     test(`a ${type} in the page ends the labels`, () => {
         const { page, containers, fire, listening } = fake_page([control("button", "Button")]);
         const child: HintsChild = { contentWindow: page, pick: null };
@@ -122,6 +122,15 @@ for (const type of ["pagehide", "scroll", "pointerdown"]) {
         assert.deepEqual(listening(), []);
     });
 }
+
+test("a blur of an element inside the page keeps the labels, since the focus stays in the page", () => {
+    const { page, containers, fire } = fake_page([control("button", "Button")]);
+    const child: HintsChild = { contentWindow: page, pick: null };
+    start(child, { scheme: SCHEME, action: "activate" });
+    fire("blur", { id: "field" });
+    assert.notEqual(child.pick, null);
+    assert.equal(containers[0]!.removed, false);
+});
 
 test("the child's end, which a state push from the parent calls, ends the labels", () => {
     const { page, containers } = fake_page([control("button", "Button")]);
