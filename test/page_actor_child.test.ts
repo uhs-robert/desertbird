@@ -32,7 +32,13 @@ before(async () => {
     deepest_focus = module.deepest_focus as typeof deepest_focus;
 });
 
-const ON: ActorState = { on: true, insert: false, page: ["j", "g", "<C-d>", "i", "1"], typing: ["<A-j>", "<Escape>", "<C-[>"] };
+// A small page tree as the parent pushes it: `g g`, `g ?`, `t 0`, `m` followed by any key, `i` into insert mode.
+const ON: ActorState = {
+    on: true,
+    insert: false,
+    page: { j: "run", G: "run", g: { g: "run", "?": "run" }, t: { "0": "run" }, "<C-d>": "run", i: "insert", m: { "": "run" } },
+    typing: { "<A-j>": "run", "<Escape>": "normal", "<C-[>": "normal" },
+};
 
 function child_with(state: ActorState = ON, focus: unknown = { localName: "body" }): Child {
     const child = new ChildClass();
@@ -158,7 +164,7 @@ test("a pushed state replaces the copy at once: insert on, then the keymap chang
     const in_insert = keydown("j");
     child.handleEvent(in_insert);
     assert.equal(in_insert.cancelled, false);
-    child.receiveMessage({ name: "DesertBird:State", data: { ...ON, page: ["x"] } });
+    child.receiveMessage({ name: "DesertBird:State", data: { ...ON, page: { x: "run" } } });
     const old_key = keydown("j");
     const new_key = keydown("x");
     child.handleEvent(old_key);
@@ -181,8 +187,94 @@ test("Escape stays the page's and is sent once the page's handlers ran, with whe
     assert.deepEqual(keys_sent(child).map((key) => [key["key"], key["field"], key["prevented"]]), [["Escape", true, true]]);
 });
 
+/** Presses keys in order and returns, per key, whether the child cancelled it and whether it sent it. */
+function type_keys(child: Child, keys: [string, Record<string, unknown>?][]) {
+    return keys.map(([key, options]) => {
+        const before = keys_sent(child).length;
+        const event = keydown(key, options);
+        child.handleEvent(event);
+        return [key, event.cancelled, keys_sent(child).length > before];
+    });
+}
+
+test("only the first keys of the page tree are taken at the root: a key that appears only after a prefix (YouTube m's neighbors 0, ?) stays the page's", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["?"], ["0"], ["x"], ["j"]]), [["?", false, false], ["0", false, false], ["x", false, false], ["j", true, true]]);
+});
+
+test("after a prefix the child takes the branch's keys, and g g reaches the parent as two taken keys", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["g"], ["?"], ["t"], ["0"], ["g"], ["g"]]), [["g", true, true], ["?", true, true], ["t", true, true], ["0", true, true], ["g", true, true], ["g", true, true]]);
+});
+
+test("g then an unbound x is sent uncancelled, so the parent ends the sequence and its key list, and the page still gets x", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["g"], ["x"], ["g"], ["x"]]), [["g", true, true], ["x", false, true], ["g", true, true], ["x", false, true]]);
+    // The walk is back at the root: a lone x is the page's and is not sent.
+    assert.deepEqual(type_keys(child, [["x"]]), [["x", false, false]]);
+});
+
+test("a key that breaks a prefix and binds at the root is taken as a first key, as the matcher retries it", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["g"], ["j"], ["g"], ["g"]]), [["g", true, true], ["j", true, true], ["g", true, true], ["g", true, true]]);
+});
+
+test("a count is taken: 1 to 9 start it, 0 continues it whatever the bindings, and an unbound key after it ends it", () => {
+    const child = child_with({ ...ON, page: { j: "run" } });
+    assert.deepEqual(type_keys(child, [["1"], ["0"], ["j"]]), [["1", true, true], ["0", true, true], ["j", true, true]]);
+    assert.deepEqual(type_keys(child, [["0"]]), [["0", false, false]], "0 alone starts no count");
+    assert.deepEqual(type_keys(child, [["5"], ["x"]]), [["5", true, true], ["x", false, true]]);
+});
+
+test("Backspace in a half-typed sequence is taken and drops the last key, and without one it stays the page's", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["Backspace"]]), [["Backspace", false, false]]);
+    assert.deepEqual(type_keys(child, [["g"], ["Backspace"], ["j"]]), [["g", true, true], ["Backspace", true, true], ["j", true, true]]);
+    assert.deepEqual(type_keys(child, [["x"]]), [["x", false, false]], "the Backspace left the walk at the root");
+});
+
+test("a branch that captures any key takes the next printable key", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["m"], ["q"], ["q"]]), [["m", true, true], ["q", true, true], ["q", false, false]]);
+});
+
+test("i enters insert mode in the child at once, so a fast key after it reaches the page before the parent's push", () => {
+    const child = child_with();
+    assert.deepEqual(type_keys(child, [["i"], ["j"]]), [["i", true, true], ["j", false, false]]);
+    assert.equal(child.insert, true);
+});
+
+test("Escape the page did not use leaves insert mode in the child, so a fast key after it is taken again; a used Escape keeps insert mode", () => {
+    const child = child_with({ ...ON, insert: true });
+    const used = keydown("Escape");
+    child.handleEvent(used);
+    used.defaultPrevented = true;
+    for (const timer of child.timers.splice(0)) timer();
+    assert.equal(child.insert, true);
+    child.handleEvent(keydown("Escape"));
+    for (const timer of child.timers.splice(0)) timer();
+    assert.equal(child.insert, false);
+    assert.deepEqual(type_keys(child, [["j"]]), [["j", true, true]]);
+    const bracket = child_with({ ...ON, insert: true });
+    assert.deepEqual(type_keys(bracket, [["[", { ctrlKey: true }], ["j"]]), [["[", true, true], ["j", true, true]], "Ctrl+[ leaves at once");
+});
+
+test("in insert mode a focused link is no field: Escape goes to the parent with field false", () => {
+    const child = child_with({ ...ON, insert: true }, { localName: "a" });
+    child.handleEvent(keydown("Escape"));
+    for (const timer of child.timers) timer();
+    assert.deepEqual(keys_sent(child).map((key) => [key["key"], key["field"]]), [["Escape", false]]);
+});
+
+test("a pushed state starts the walk over", () => {
+    const child = child_with();
+    type_keys(child, [["g"]]);
+    child.receiveMessage({ name: "DesertBird:State", data: ON });
+    assert.deepEqual(type_keys(child, [["?"]]), [["?", false, false]]);
+});
+
 test("Escape is not sent when no tree binds it", () => {
-    const child = child_with({ ...ON, typing: ["<A-j>"] });
+    const child = child_with({ ...ON, typing: { "<A-j>": "run" } });
     child.handleEvent(keydown("Escape"));
     assert.deepEqual(child.timers, []);
 });

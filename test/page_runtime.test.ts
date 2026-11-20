@@ -753,3 +753,25 @@ test("a key of the child for a window the runtime never hooked, or after shutdow
     runtime.on_child_key(stranger, child_key("Escape"));
     assert.deepEqual(scrolls, []);
 });
+
+test("g then an unbound x from the child ends the sequence and its key list, so a later g does not run g g", () => {
+    const { windows, runtime, scrolls, pending } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("g"));
+    runtime.on_child_key(window, child_key("x"));
+    runtime.on_child_key(window, child_key("g"));
+    assert.deepEqual(scrolls, []);
+    assert.deepEqual(pending().map((event) => ("keys" in event ? event.keys.join("") : "")), ["g", "", "g"]);
+});
+
+test("a new page in the front tab ends a half-typed sequence and its key list, as a tab change does", () => {
+    const { windows, runtime, scrolls, pending } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("g"));
+    runtime.on_child_key(window, null);
+    runtime.on_child_key(window, child_key("g"));
+    assert.deepEqual(scrolls, []);
+    assert.deepEqual(pending().map((event) => ("keys" in event ? event.keys.join("") : "")), ["g", "", "g"]);
+});

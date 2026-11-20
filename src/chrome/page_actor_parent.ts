@@ -2,12 +2,17 @@
 
 import type { ChildKey, ChildPort } from "./page_runtime.ts";
 
-/** What a child holds: whether it takes keys at all, the window's insert flag, and the key tokens it takes outside a text field (`page`) and inside one (`typing`). */
+/** A key tree as the child walks it: each token leads to a branch or to a leaf, and a leaf tells what it does to insert mode. The commands stay in the parent. */
+export interface Skeleton {
+    [token: string]: Skeleton | "run" | "insert" | "normal";
+}
+
+/** What a child holds: whether it takes keys at all, the window's insert flag, and the skeletons of the keys it takes outside a text field (`page`) and inside one or in insert mode (`typing`). */
 export interface ActorState {
     on: boolean;
     insert: boolean;
-    page: string[];
-    typing: string[];
+    page: Skeleton;
+    typing: Skeleton;
 }
 
 export interface ActorHooks {
@@ -58,22 +63,29 @@ declare class JSWindowActorParent {
 
 const ACTOR_NAME = "DesertBirdPage";
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
-// The digits that start a count. `0` only continues one, so it is taken only where a binding has it (`t 0`).
-const COUNT_DIGITS = [..."123456789"];
-// The key the matcher reads as any key after a prefix. A token set cannot hold it, so such a second key stays the page's.
-const ANY_KEY = "";
 
 let hooks: ActorHooks | null = null;
-let page_tokens: string[] = [];
-let typing_tokens: string[] = [];
+let page_skeleton: Skeleton = {};
+let typing_skeleton: Skeleton = {};
 // The windows in insert mode, as the page runtime last pushed them.
 const insert_windows = new Set<unknown>();
 // The actors whose child said hello or got a push. Each leaves on `didDestroy`, so a push never reaches a page that is gone.
 const live = new Set<DesertBirdPageParent>();
 
-function tokens_of(node: unknown): string[] {
-    const children = (node as { children?: Record<string, unknown> } | null)?.children ?? {};
-    return Object.entries(children).flatMap(([token, child]) => [...(token === ANY_KEY ? [] : [token]), ...tokens_of(child)]);
+interface TreeNode {
+    kind?: string;
+    children?: Record<string, TreeNode>;
+    steps?: { invocation?: { id?: string } }[];
+}
+
+const leaf_effect = (leaf: TreeNode): "run" | "insert" | "normal" => {
+    const ids = (leaf.steps ?? []).map((step) => step.invocation?.id);
+    return ids.includes("mode.insert") ? "insert" : ids.includes("mode.escape") ? "normal" : "run";
+};
+
+export function skeleton_of(node: unknown): Skeleton {
+    const children = (node as TreeNode | null)?.children ?? {};
+    return Object.fromEntries(Object.entries(children).map(([token, child]) => [token, child.kind === "branch" ? skeleton_of(child) : leaf_effect(child)]));
 }
 
 // The child's message is rebuilt field by field: a page process is not trusted with more than a key and two flags. The event cancels nothing, since the child already did.
@@ -104,7 +116,7 @@ export class DesertBirdPageParent extends JSWindowActorParent {
     }
 
     state(): ActorState {
-        return { on: this.on, insert: insert_windows.has(this.window), page: page_tokens, typing: typing_tokens };
+        return { on: this.on, insert: insert_windows.has(this.window), page: page_skeleton, typing: typing_skeleton };
     }
 
     push(): void {
@@ -170,8 +182,8 @@ export function stop(): void {
     push_all();
     live.clear();
     insert_windows.clear();
-    page_tokens = [];
-    typing_tokens = [];
+    page_skeleton = {};
+    typing_skeleton = {};
     try {
         ChromeUtils.unregisterWindowActor(ACTOR_NAME);
     } catch {
@@ -180,10 +192,10 @@ export function stop(): void {
     Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler).setSubstitution(new URL(import.meta.url).host, null);
 }
 
-/** Takes the key tokens of the page tree and the typing tree, with the count digits, and pushes them to every child. */
+/** Takes the skeletons of the page tree and the typing tree and pushes them to every child. */
 export function set_keys(page: KeyTree, typing: KeyTree): void {
-    page_tokens = [...new Set([...tokens_of(page.root), ...COUNT_DIGITS])];
-    typing_tokens = [...new Set(tokens_of(typing.root))];
+    page_skeleton = skeleton_of(page.root);
+    typing_skeleton = skeleton_of(typing.root);
     push_all();
 }
 

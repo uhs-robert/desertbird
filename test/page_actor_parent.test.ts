@@ -132,9 +132,13 @@ test("a hello from the front tab's page turns the child on, ends insert mode the
     const state = parent.receiveMessage({ name: "DesertBird:Hello" }) as PageActor.ActorState;
     assert.equal(state.on, true);
     assert.equal(state.insert, false);
-    for (const token of ["j", "G", "g", "<C-d>", "i", "1", "9"]) assert.ok(state.page.includes(token), token);
-    assert.ok(!state.page.includes("x"));
-    assert.deepEqual([...state.typing].sort(), ["<A-j>", "<A-k>", "<C-[>", "<Escape>"]);
+    // The skeleton keeps the tree's shape: `m`, `0` and `?` only follow a prefix, so they are no first keys.
+    for (const token of ["j", "G", "<C-d>"]) assert.equal(state.page[token], "run", token);
+    assert.equal(state.page["i"], "insert");
+    assert.deepEqual(state.page["g"], { "?": "run", g: "run", p: { a: "run", t: "run", c: "run" } });
+    for (const token of ["x", "m", "0", "?"]) assert.equal(state.page[token], undefined, token);
+    assert.equal((state.page["t"] as PageActor.Skeleton)["0"], "run");
+    assert.deepEqual(state.typing, { "<A-j>": "run", "<A-k>": "run", "<Escape>": "normal", "<C-[>": "normal" });
     assert.deepEqual(keys, [[window, null]]);
 });
 
@@ -187,9 +191,9 @@ test("a keymap change pushes the new keys to every live child", () => {
     const tabs = [make_tab(window, { front: false }), make_tab(window)];
     for (const { parent } of tabs) parent.receiveMessage({ name: "DesertBird:Hello" });
     actor_module.set_keys(page_tree(), typing_tree());
-    for (const { parent } of tabs) assert.ok(states(parent).at(-1)!.page.includes("j"));
+    for (const { parent } of tabs) assert.equal(states(parent).at(-1)!.page["j"], "run");
     actor_module.set_keys({ root: { kind: "branch", children: { x: { kind: "leaf" }, m: { kind: "branch", children: { "": { kind: "leaf" } } } } } }, typing_tree());
-    for (const { parent } of tabs) assert.deepEqual([...states(parent).at(-1)!.page].sort(), ["1", "2", "3", "4", "5", "6", "7", "8", "9", "m", "x"]);
+    for (const { parent } of tabs) assert.deepEqual(states(parent).at(-1)!.page, { x: "run", m: { "": "run" } });
 });
 
 test("the insert flag reaches only the children of its window, and a later hello there answers it", () => {

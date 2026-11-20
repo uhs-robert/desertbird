@@ -64,7 +64,7 @@ const PAGE_KEYS_MAX_BYTES = 21400;
 const PAGE_KEYS_CEILING_BYTES = 32768;
 
 // `experiment/page_actor_child.sys.mjs`, the page actor's child, which runs in the process of every web page and other add-on's page a tab shows.
-const ACTOR_CHILD_MAX_BYTES = 7168;
+const ACTOR_CHILD_MAX_BYTES = 8192;
 const ACTOR_CHILD_CEILING_BYTES = 11264;
 
 // `experiment/page_actor_parent.sys.mjs`, the page actor's parent, loaded with the pages bundle.

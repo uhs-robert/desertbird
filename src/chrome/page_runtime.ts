@@ -49,7 +49,7 @@ export interface ChildPort {
 }
 
 export interface PageRuntime {
-    /** Runs a key from the page actor's child as the front tab's own. Null tells that the front tab shows a new page, which ends insert mode. */
+    /** Runs a key from the page actor's child as the front tab's own. Null tells that the front tab shows a new page, which ends insert mode, the half-typed sequence and its key list, as a tab change does. */
     on_child_key(window: unknown, key: ChildKey | null): void;
     install(trees: { page: { version: number; root: unknown }; message: { version: number; root: unknown }; typing: { version: number; root: unknown } }, hold_commands?: readonly string[]): void;
     shutdown(): void;
@@ -62,7 +62,7 @@ const KEY_LIST = "help.whichkey";
 const CLOSE_TAB = "tab.close";
 
 export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime {
-    const hooked = new Map<Window, { target: KeyTarget; handler: (event: KeydownEvent) => void; settle: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
+    const hooked = new Map<Window, { target: KeyTarget; handler: (event: KeydownEvent) => void; settle: (event: KeydownEvent) => void; reset_typing: () => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     // The message tab takes its own tree, so its keys and their meaning follow the message document's.
     let message_matcher: ReturnType<typeof matcher_for_tree> | null = null;
@@ -177,7 +177,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);
         const stop_blur_listening = deps.on_window_blur(window, reset_typing);
         const target = deps.key_target_of(window);
-        hooked.set(window, { target, handler, settle, stop_tab_listening, stop_blur_listening });
+        hooked.set(window, { target, handler, settle, reset_typing, stop_tab_listening, stop_blur_listening });
         target.addEventListener("keydown", handler, true);
         target.addEventListener("keydown", settle, false);
     }
@@ -197,7 +197,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     return {
         on_child_key(window, key) {
             if (key) (on_keydown(window as Window, key, key.field ? "field" : "page"), hooked.get(window as Window)?.settle(key));
-            else set_insert(window as Window, false);
+            else (end_key_list(window as Window), hooked.get(window as Window)?.reset_typing());
         },
         install(trees, hold = []) {
             matcher = matcher_for_tree(trees.page);
