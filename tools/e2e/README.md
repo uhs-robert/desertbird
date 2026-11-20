@@ -56,7 +56,7 @@ Departures from DesertFox:
 - DesertFox reads a key-event feed from the page, so its barrier waits for the page to report the key. DesertBird has no such feed and no test hook in `src/`, so the barrier proves delivery by the order of a key and a state round trip. It does not wait for work a key starts in the background (an archive, a window opening): a wait on the resulting state does that. The key in a fold goes through the background page, so a motion after it can run first. That is why a fold is followed by a barrier.
 - The wait time is counted in `wait_stats` and printed as the NOTE `polled waits` at the end of the default section, not in a `waits` bucket of `timings.mjs`.
 - The helper add-on polls the sink every 50 ms (it was 200 ms), because the gap is the floor of every wait. It also reports `focused` for each window, which `close_compose` waits on.
-- Fixed waits that stay: the open context menu, which has no state (`run_default`).
+- Fixed waits that stay: the open context menu (`run_default`) and the 1.5 s after a folder opens in `open_inbox`, where the status bar still shows "Done" and a pixel read in a later check would include it. Neither has helper state.
 
 ## Timings
 

@@ -68,6 +68,8 @@ async function open_inbox(instance, folder_row_tabs = 7, { expanded = false } = 
   if (!expanded) await instance.press(["-k", "Right"]);
   await instance.press(["-k", "Down"]);
   const opened = (await wait_state(instance, "the Inbox to show after Down", (state) => state.mail_tab?.folder === "/Inbox", { soft: true })).mail_tab?.folder;
+  // The status bar keeps "Done" for a few seconds after a folder loads, and the first pixel reads of later checks include it. That has no helper state, so this wait stays fixed.
+  await sleep(1500);
   await instance.press(["-k", "F6"]);
   return opened;
 }
@@ -84,7 +86,8 @@ async function wait_for(instance, what, read, until, { timeout_ms = 5000, step_m
       if (until(value)) return value;
       if (Date.now() - began > timeout_ms) {
         wait_stats.timeouts++;
-        if (!soft) check(instance.app, instance.kind ?? "default", `wait for ${what}`, false, `not met within ${timeout_ms} ms${show ? `, last read: ${show(value)}` : ""}`);
+        if (soft) console.log(`WAIT ${instance.app}/${instance.kind ?? "default"} timed out after ${timeout_ms} ms: ${what}`);
+        else check(instance.app, instance.kind ?? "default", `wait for ${what}`, false, `not met within ${timeout_ms} ms${show ? `, last read: ${show(value)}` : ""}`);
         return value;
       }
       await sleep(step_ms);
@@ -142,6 +145,13 @@ const selects = (id) => ({ what: `the selection to reach ${id}`, until: (state) 
 const flag_becomes = (id, name, value) => ({ what: `${name} of ${id} to become ${value}`, until: (state) => state.flags[id]?.[name] === value, show: (state) => `${name} ${state.flags[id]?.[name]}` });
 // A compose window opens late: the subject and the quote arrive after the window, and Thunderbird can take many seconds.
 const compose_opens = (tab_is_ready) => ({ what: "a compose window with its content", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some(tab_is_ready)), timeout_ms: 15000 });
+
+// Waits until the status bar text area is as blank as a stretch of the same bar beside it, which is when "Loading Message..." is gone. The message pane has no helper state for a load in progress: the body script reports 1.5 s after a document loads, and a report from the document before can arrive in that gap.
+async function wait_status_idle(instance) {
+  const text_area = "200,698 140x20";
+  const blank_area = "700,698 140x20";
+  return wait_for(instance, "the status bar to stop showing a load", async () => (await hud_pixels(instance, `${instance.app}_status_text`, text_area)) === (await hud_pixels(instance, `${instance.app}_status_blank`, blank_area)), (idle) => idle, { timeout_ms: 8000, soft: true });
+}
 
 // Closes the compose windows and waits until the mail window has the focus again, since keys go to the focused window.
 async function close_compose(instance) {
@@ -512,11 +522,10 @@ async function run_default(instance) {
   // Shift+F6 goes back one pane. j then moves one row, which proves the j above ran one pane after the list, in the message body.
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await barrier(instance);
-  const last_row_key_at = Date.now();
   state = await key_and_state(instance, ["j"], selects(live_rows().at(-1)));
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
-  // The message pane of the row just selected is still loading, which the status bar shows in the bottom strip. run_tabs compares that strip against a baseline it takes first, so the load has to end. The body script reports 1.5 s after a message document loads.
-  await wait_state(instance, "the message pane to report its loaded body", (now) => now.body !== null && now.body.received > last_row_key_at, { timeout_ms: 8000, soft: true });
+  // The message pane of the row just selected is still loading, which the status bar shows as "Loading Message...". run_tabs compares the bottom strip against a baseline it takes first, so the load has to end.
+  await wait_status_idle(instance);
   await timed(instance, "tabs", () => run_tabs(instance, { check, note, shot, key_and_state }));
 
   // <C-l> on a collapsed thread root (several messages) refuses and opens no tab. On one message it opens a tab.
