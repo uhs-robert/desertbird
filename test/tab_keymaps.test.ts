@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
-import { GROUPS, registry } from "../src/background/commands/index.ts";
+import { GROUPS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
 import { compile_tab_keymap, default_keymap_of, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 
@@ -77,6 +77,12 @@ test("the message tree has the mail keys that need a message, the reading keys a
     for (const keys of [["m", "R"], ["F", "t"], ["F", "f"], ["s", "s"], [";", ";"], ["<C-x>"], ["<C-c>"], ["o"], ["s", "d"], ["]", "u"], ["z", "z"], ["."], ["?"], ["v"]]) assert.equal(leaf_at(root, ...keys)?.id, undefined, keys.join(" "));
     // `h` and `l` fold a thread in the mail tab and scroll sideways here, where no list exists.
     assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["message.scroll_left", "message.scroll_right", "message.page_down", "message.page_up"]);
+});
+
+test("w h and w l step the pane relatively in the mail and message trees, beside the absolute chords", () => {
+    for (const root of [compile_default_keymap().compiled.modes.normal as TreeBranch, message_root()]) {
+        assert.deepEqual([["w", "h"], ["w", "l"], ["<A-h>"], ["<A-l>"], ["L"]].map((keys) => [leaf_at(root, ...keys)?.id, leaf_at(root, ...keys)?.args]), [["pane.left", undefined], ["pane.right", undefined], ["pane.focus", { pane: "threads" }], ["pane.focus", { pane: "message" }], ["pane.focus", { pane: "threads" }]]);
+    }
 });
 
 test("the own page tree is the page tree plus find and hints, with the reading keys of the body script", () => {
