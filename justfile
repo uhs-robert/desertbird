@@ -54,3 +54,15 @@ install_deps:
 # Compare the setting defaults with the DesertFox table at the pin. The checkout is the argument or DESERTFOX_DIR, and the check skips with a warning when neither is set.
 settings-defaults checkout=env('DESERTFOX_DIR', ''):
     DESERTFOX_DIR={{quote(checkout)}} npm run --silent defaults:check
+
+# Open a visible Betterbird (or `--app thunderbird`) with a worktree's build in a throwaway profile. An agent runs it on the maintainer's display only for a hand check the maintainer asked for, and tests the tool only in a nested headless session.
+owner-test worktree="." *args:
+    node --no-warnings tools/owner_test/cli.ts open {{quote(worktree)}} {{args}}
+
+# Rebuild and restart the test window on the same profile.
+owner-test-reload worktree="." *args:
+    node --no-warnings tools/owner_test/cli.ts reload {{quote(worktree)}} {{args}}
+
+# Stop the test window and delete its profile folder.
+owner-test-close worktree=".":
+    node --no-warnings tools/owner_test/cli.ts close {{quote(worktree)}}
