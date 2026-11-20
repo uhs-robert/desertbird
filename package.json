@@ -12,8 +12,10 @@
     "unit": "node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\"",
     "test": "npm run --silent check",
     "e2e": "node tools/e2e/run.mjs",
+    "docs:gen": "node --no-warnings tools/gen-keymap-docs.ts --write",
+    "docs:check": "node --no-warnings tools/gen-keymap-docs.ts --check",
     "defaults:check": "node tools/check_default_settings.ts",
-    "check": "npm run --silent lint && npm run --silent typecheck && npm run --silent unit && npm run --silent defaults:check"
+    "check": "npm run --silent docs:check && npm run --silent lint && npm run --silent typecheck && npm run --silent unit && npm run --silent defaults:check"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
