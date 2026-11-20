@@ -1,6 +1,6 @@
 // The which-key panel as data: what follows the keys typed so far. Pure functions over the compiled tree and the settings.
 
-import { token_label } from "../../../vendor/desertfox/prefix_tree.ts";
+import { ANY_KEY, token_label } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { TreeBranch, TreeNode } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { Settings } from "../../../vendor/desertfox/config.ts";
 import { WHICH_KEY_ROOT_TITLE } from "../../shared/protocol.ts";
@@ -64,3 +64,14 @@ export function which_key_panel(root: TreeBranch, keys: readonly string[], setti
 /** Whether the panel may open on its own after the delay. A sequence in `which_key_skip` waits for a key that leads on, and a panel already up redraws at once. */
 export const may_open_by_itself = (settings: Pick<Settings, "which_key_delay_ms" | "which_key_skip">, keys: readonly string[], panel_is_up: boolean): boolean =>
     settings.which_key_delay_ms > 0 && (panel_is_up || !settings.which_key_skip.includes(keys.join("")));
+
+/** Under `M` and `'` the panel lists the stored marks, slot key and folder path, in place of the capture row `<key>`. With no mark stored the capture row stays. DesertFox `with_page_marks` also splits page marks from global ones and hides the previous-position slot. Folder marks here are one global set with no such slot. */
+export function with_stored_marks(panel: WhichKeyPanel, root: TreeBranch, keys: readonly string[], marks: Readonly<Record<string, { path: string }>>): WhichKeyPanel {
+    const branch = branch_at(root, keys);
+    const capture = branch !== null && Object.keys(branch.children).length === 1 ? branch.children[ANY_KEY] : undefined;
+    if (capture === undefined || is_branch(capture) || capture.steps.length === 0 || !capture.steps.every((step) => step.invocation.id === "mark.set" || step.invocation.id === "mark.jump")) return panel;
+    const rows = Object.entries(marks).map(([slot, { path }]) => ({ key: slot, label: path, is_group: false }));
+    if (rows.length === 0) return panel;
+    rows.sort(compare_rows);
+    return { ...panel, rows };
+}

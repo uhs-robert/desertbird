@@ -13,6 +13,7 @@ const message_root = (): TreeBranch => ({ kind: "branch", children: { g: { kind:
 
 function setup(overrides: Partial<Settings> = {}) {
     const log: string[] = [];
+    const marks: Record<string, { path: string }> = {};
     const timers = fake_timers();
     let settings = settings_with({ mode_indicator: "off", ...overrides });
     const labels: string[] = [];
@@ -26,6 +27,7 @@ function setup(overrides: Partial<Settings> = {}) {
         },
         read_settings: async () => settings,
         read_root: async (source) => (source === "main" ? sample_root() : source === "own" || source === "page" ? own_root() : message_root()),
+        read_marks: async () => marks,
         send_changed: (window_id) => void log.push(`changed ${window_id}`),
         timers,
     });
@@ -231,6 +233,7 @@ test("the label of a failing Experiment call is logged and the next update still
         overlay: { mount: async () => {}, unmount: async () => {}, setModeLabel: async ({ mode }) => (calls.push(mode), Promise.reject(new Error("no such window"))), onClosed: { addListener: () => {}, removeListener: () => {} } },
         read_settings: async () => settings_with({ mode_indicator: "always" }),
         read_root: async () => sample_root(),
+        read_marks: async () => ({}),
         send_changed: () => {},
         timers: fake_timers(),
     });
@@ -281,7 +284,7 @@ test("a toast time of zero or a missing window shows no toast, so the caller fal
 });
 
 test("without the Experiment no toast shows", async () => {
-    const hud = create_hud_service({ overlay: undefined, read_settings: async () => settings_with({}), read_root: async () => sample_root(), send_changed: () => {}, timers: fake_timers() });
+    const hud = create_hud_service({ overlay: undefined, read_settings: async () => settings_with({}), read_root: async () => sample_root(), read_marks: async () => ({}), send_changed: () => {}, timers: fake_timers() });
     assert.equal(await hud.toast(1, "x", true), false);
 });
 
@@ -328,6 +331,7 @@ function failing_mount() {
         overlay: { mount: async () => Promise.reject(new Error("no such window")), unmount: async () => void log.push("unmount"), setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
         read_settings: async () => settings_with({ mode_indicator: "off" }),
         read_root: async () => sample_root(),
+        read_marks: async () => ({}),
         send_changed: () => {},
         timers: fake_timers(),
     });
