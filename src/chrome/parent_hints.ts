@@ -4,13 +4,15 @@ import { focus_chain } from "./focus.ts";
 import type { FocusDocument } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
+import { HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 import type { HintsPickArgs, HintsSendEnterArgs } from "../shared/protocol.ts";
-import { collect_targets } from "./hint_targets.ts";
+import { collect_page_targets, collect_targets } from "./hint_targets.ts";
 import type { HintMailPane } from "./hint_targets.ts";
 import { end_pick, start_pick } from "./hint_pick.ts";
 import type { PickHost, PickKeyEvent } from "./hint_pick.ts";
 import type { HintWindow } from "../shared/hint_view.ts";
-import { mail_pane_of } from "./view.ts";
+import { front_about_3pane } from "./view.ts";
+import type { TabmailLike } from "./view.ts";
 
 declare const Services: { wm: { getEnumerator(type: string | null): Iterable<EnterWindow> } };
 declare const Cc: Record<string, { createInstance(iface: unknown): TextInputProcessor; getService(iface: unknown): { copyString(text: string): void } }>;
@@ -59,12 +61,24 @@ interface ListenerTarget {
     removeEventListener(type: string, listener: (event: never) => void, capture: boolean): void;
 }
 
-interface PickMainWindow extends ListenerTarget {
+interface PickMainWindow extends ListenerTarget, HintWindow {
     /** The parent of the window in the event path. A capture listener there sees a key before every listener of the window, the key runtime's among them. */
     windowRoot?: ListenerTarget;
-    document: { hasFocus(): boolean };
+    document: HintWindow["document"] & {
+        hasFocus(): boolean;
+        getElementById(id: string): unknown;
+        documentElement: { setAttribute(name: string, value: string): void; removeAttribute(name: string): void };
+    };
     matchMedia(query: string): { matches: boolean };
 }
+
+/** The browser of a tab that is not the mail tab. A remote page has no `contentDocument` the parent can read. */
+interface PageBrowser {
+    contentDocument?: unknown;
+    contentWindow?: HintWindow & ListenerTarget;
+}
+
+type FrontTab = NonNullable<TabmailLike["currentTabInfo"]> & { browser?: PageBrowser | null; chromeBrowser?: PageBrowser | null };
 
 function listen(target: ListenerTarget, type: string, listener: (event: never) => void): () => void {
     target.addEventListener(type, listener, true);
@@ -77,7 +91,13 @@ const copy_to_clipboard = (text: string): void => Cc["@mozilla.org/widget/clipbo
 function pick_host(main: PickMainWindow, documents: ListenerTarget[]): PickHost {
     return {
         copy: copy_to_clipboard,
-        on_key: (listener) => listen(main.windowRoot ?? main, "keydown", listener as (event: PickKeyEvent) => void),
+        on_key(listener) {
+            // The page keys listen on the same window root and were there first, so the marker tells them to leave the keys to the labels.
+            const root = main.document.documentElement;
+            root.setAttribute(HINTS_LIVE_ATTRIBUTE, "");
+            const stop = listen(main.windowRoot ?? main, "keydown", listener as (event: PickKeyEvent) => void);
+            return () => (stop(), root.removeAttribute(HINTS_LIVE_ATTRIBUTE));
+        },
         on_disturb(listener) {
             // The blur lands on the focused element when focus moves inside the window too, so only a window that lost the focus counts.
             const on_blur = () => main.document.hasFocus() || listener();
@@ -97,11 +117,19 @@ export function get_hints_api(context: ExtensionContext) {
                 press_enter(window);
             }),
             pick: guard("hints.pick", ({ windowId, colors, action }: HintsPickArgs): number => {
-                const pane = mail_pane_of(context, windowId) as unknown as HintMailPane & { browsingContext: { topChromeWindow: PickMainWindow & HintWindow } };
-                const main = pane.browsingContext.topChromeWindow;
-                const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
+                const main = window_with_id(context, windowId) as unknown as PickMainWindow | null;
+                const tabmail = (main?.document.getElementById("tabmail") ?? null) as TabmailLike | null;
+                const tab = tabmail?.currentTabInfo as FrontTab | null | undefined;
+                if (!main || !tab) throw new Error(`no tab in window ${windowId}`);
                 const scheme = main.matchMedia("(prefers-color-scheme: light)").matches ? colors.light : colors.dark;
-                return start_pick(pick_host(main, [main, pane as unknown as ListenerTarget, ...(message ? [message] : [])]), collect_targets(main, pane), scheme, action);
+                const pane = front_about_3pane(tabmail) as (HintMailPane & ListenerTarget) | null;
+                if (pane) {
+                    const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
+                    return start_pick(pick_host(main, [main, pane, ...(message ? [message] : [])]), collect_targets(main, pane), scheme, action);
+                }
+                const browser = tab.browser ?? tab.chromeBrowser;
+                const page = (browser?.contentDocument ? browser.contentWindow : null) ?? null;
+                return start_pick(pick_host(main, [main, ...(page ? [page] : [])]), collect_page_targets(main, page), scheme, action);
             }),
         },
     };

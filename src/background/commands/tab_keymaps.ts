@@ -17,7 +17,7 @@ import type { KeymapTree } from "../../shared/protocol.ts";
 export const TAB_KINDS = {
     message: ["message", "tab", "body"],
     own: ["tab", "body"],
-    page: ["tab"],
+    page: ["tab", "page"],
 } as const satisfies Record<string, readonly TabNeed[]>;
 
 export type TabKind = keyof typeof TAB_KINDS;

@@ -1,4 +1,4 @@
-// What a hint can point at in a mail tab, and what picking it does. It reads the main window and the `about:3pane` and `about:message` documents inside it, and names Thunderbird members only through the interfaces below.
+// What a hint can point at in the front tab, and what picking it does. In a mail tab it reads the main window and the `about:3pane` and `about:message` documents inside it, and names Thunderbird members only through the interfaces below. Any other tab offers the controls of the window and of its own page.
 
 import { is_on_screen } from "../shared/hint_view.ts";
 import type { HintElement, HintWindow } from "../shared/hint_view.ts";
@@ -32,8 +32,12 @@ const INSIDE_A_ROW = "#folderTree, tbody";
 const FOLDER_ROWS = "#folderTree li:not(.unselectable) > .container";
 const THREAD_ROWS = "#threadTree tbody tr";
 
+// A page tab has no rows this file knows, so each control is a target. The list is DesertFox's clickable selector with the XUL controls of Thunderbird's pages added. Left out: `[tabindex]`, which in a chrome document marks whole panes and lists; `[onclick]` and `label[for]`, which sit on wrappers and labels whose own control already gets a label; `[role=menuitemcheckbox]` and `[role=menuitemradio]`, which live in closed menus; and `[contenteditable=""]`, which no Thunderbird page uses.
+const PAGE_CONTROLS = `${CONTROLS}, a[href], select:not([disabled]), textarea:not([disabled]), search-textbox, [contenteditable=true], summary, checkbox:not([disabled]), radio:not([disabled]), menulist:not([disabled]), richlistitem, [role=link], [role=tab], [role=checkbox], [role=switch], [role=radio], [role=option], [role=treeitem], [role=menuitem]`;
+const FIELDS = "input, select, textarea, search-textbox, [contenteditable=true]";
+
 const pick_control = (element: TargetElement): void => {
-    if (element.matches("input")) element.focus();
+    if (element.matches(FIELDS)) element.focus();
     else if (element.matches("tab")) element.closest("tabs")!.selectedItem = element;
     else element.click();
 };
@@ -71,3 +75,7 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
         ...(message ? controls_outside_rows(message) : []),
     ];
 }
+
+/** The targets of a tab that is not the mail tab: the controls of the window, which holds a calendar or tasks tab itself, then those of the tab's own page (settings, the address book, an `about:` page). `page` is null when the tab has no page the parent can read. */
+export const collect_page_targets = (main: TargetWindow, page: TargetWindow | null): PickTarget[] =>
+    [main, ...(page ? [page] : [])].flatMap((window) => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus()));

@@ -47,14 +47,14 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Do not evaluate strings. Snippets from the user's own config are the only exception.
 - Give the native host a fixed set of verbs. Never add a shell or eval verb.
 - Give the Experiment a fixed table of chrome verbs, each with typed args checked against its schema. Never add a verb that takes a free string to run, a script, or a URL. A new verb needs a reason in the commit message.
-- The chrome runtime follows the same admission rule as DesertFox `content.js`: code goes in only if it runs before the first key or decides what happens to a key, serves a key pressed in most windows (motions), is needed to load the other parts, or must work while the window changes state. Everything else goes in the background page or an on-demand bundle. The same rule applies to the body script bundle. The thread list, pane focus, command and page verbs live in `experiment/app.js`, which Thunderbird loads on the first call, and no verb module (`app_verbs.ts`, `view_verbs.ts`) may enter `experiment/keys.js`. Hint pick keys live in `experiment/hints.js`, which holds `sendEnter` and `pick` and nothing from the key runtime. The keys of every tab but the mail tab live in `experiment/pages.js`. The zoom verbs live in `experiment/zoom.js`. Compose keys live in `content/compose_keys.js`, which takes only Ctrl+E, Ctrl+O and `e` after Ctrl+O or Escape.
+- The chrome runtime follows the same admission rule as DesertFox `content.js`: code goes in only if it runs before the first key or decides what happens to a key, serves a key pressed in most windows (motions), is needed to load the other parts, or must work while the window changes state. Everything else goes in the background page or an on-demand bundle. The same rule applies to the body script bundle. The thread list, pane focus, command and page verbs live in `experiment/app.js`, which Thunderbird loads on the first call, and no verb module (`app_verbs.ts`, `view_verbs.ts`) may enter `experiment/keys.js`. Hint pick keys live in `experiment/hints.js`, which holds `sendEnter` and `pick` and nothing from the key runtime. `pick` labels the mail tab and the page tabs. The keys of every tab but the mail tab live in `experiment/pages.js`. The zoom verbs live in `experiment/zoom.js`. Compose keys live in `content/compose_keys.js`, which takes only Ctrl+E, Ctrl+O and `e` after Ctrl+O or Escape.
 - Each bundle has a size guard in `tools/build.mjs` and a ceiling. The build fails above a guard, and `test/build.test.ts` checks each guard against its ceiling. The raise history is in `docs/design.md`, "Bundle size guards". Guards and ceilings, in bytes:
   - `experiment/keys.js`: guard 23356, ceiling 40960 (`KEYS_MAX_BYTES`).
   - `experiment/overlay.js`: guard 27212, ceiling 40960 (`PARENT_MAX_BYTES`).
   - `experiment/app.js`: guard 8549, ceiling 12800 (`APP_MAX_BYTES`).
   - `content/message_display.js`: guard 18162, ceiling 24576 (`CONTENT_MAX_BYTES`).
-  - `experiment/hints.js`: guard 13050, ceiling 20480 (`HINTS_MAX_BYTES`).
-  - `experiment/pages.js`: guard 23312, ceiling 34816 (`PAGES_MAX_BYTES`).
+  - `experiment/hints.js`: guard 13562, ceiling 20480 (`HINTS_MAX_BYTES`).
+  - `experiment/pages.js`: guard 23824, ceiling 34816 (`PAGES_MAX_BYTES`).
   - `content/page_keys.js`: guard 21400, ceiling 32768 (`PAGE_KEYS_MAX_BYTES`).
   - `experiment/folderpane.js`: guard 5900, ceiling 10240 (`FOLDERPANE_MAX_BYTES`).
   - `experiment/zoom.js`: guard 3544, ceiling 6144 (`ZOOM_MAX_BYTES`).

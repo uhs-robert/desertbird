@@ -9,6 +9,7 @@ import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { MESSAGE_TAB_MODE, situation_of } from "./readable_focus.ts";
 import type { KeyTarget, WindowListener } from "./runtime.ts";
+import { HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 import type { KeysEvent, PagesInstallArgs } from "../shared/protocol.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
@@ -48,6 +49,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
         open_windows: open_main_windows,
         key_target_of: (window) => window.windowRoot ?? window,
         situation_of(window, event) {
+            if (window.document.documentElement?.hasAttribute(HINTS_LIVE_ATTRIBUTE)) return "pass";
             const tab = front_tab_of(window);
             return situation_of(window.document, tab && { mode: tab.mode.name, browser_is_remote: tab.browser?.isRemoteBrowser === true }, event);
         },

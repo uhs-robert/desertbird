@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collect_targets } from "../src/chrome/hint_targets.ts";
+import { collect_page_targets, collect_targets } from "../src/chrome/hint_targets.ts";
 import type { HintMailPane } from "../src/chrome/hint_targets.ts";
 
 const CONTROLS = "button:not([disabled]), toolbarbutton:not([disabled]), tab, [role=button], input:not([type=hidden]):not([disabled])";
@@ -19,7 +19,7 @@ interface FakeElement {
 
 const tabs = { selectedItem: null as unknown };
 
-// A window whose document answers each selector with the elements listed for it. Every shown element counts as the one on top at its centre.
+// A window whose document answers each selector with the elements listed for it. A key `page` answers the selector of a page tab, which starts with the mail one. Every shown element counts as the one on top at its centre.
 function fake_window(by_selector: Record<string, FakeElement[]>) {
     const decorate = (each: FakeElement) => {
         each.log = [];
@@ -28,7 +28,7 @@ function fake_window(by_selector: Record<string, FakeElement[]>) {
             contains: () => true,
             focus: () => each.log!.push("focus"),
             click: () => each.log!.push("click"),
-            matches: (selector: string) => selector === each.name.split(" ")[0],
+            matches: (selector: string) => selector.split(", ").includes(each.name.split(" ")[0]!),
             querySelector: (selector: string) => each.parts?.[selector] ?? null,
             closest: (selector: string) => (selector === "tabs" ? tabs : selector === "#folderTree, tbody" && each.inside_row ? each : null),
         });
@@ -37,7 +37,7 @@ function fake_window(by_selector: Record<string, FakeElement[]>) {
         innerHeight: 600,
         innerWidth: 800,
         getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }),
-        document: { querySelectorAll: (selector: string) => (by_selector[selector] ?? []).map(decorate), elementFromPoint: () => null },
+        document: { querySelectorAll: (selector: string) => (by_selector[selector] ?? (selector.startsWith(`${CONTROLS}, `) ? by_selector["page"] : undefined) ?? []).map(decorate), elementFromPoint: () => null },
     };
 }
 
@@ -117,4 +117,20 @@ test("a thread row in card view yanks its subject from the card subject element"
     document.querySelectorAll = (selector) => (selector === "#threadTree tbody tr" ? [row] : original(selector));
     const card = collect_targets(main as never, pane as unknown as HintMailPane).find((target) => name_of(target) === "tr card");
     assert.equal(card?.text, "Card subject");
+});
+
+test("a page tab labels the controls of the window and then of its page: a field takes the focus, a link and a check box a click", () => {
+    const main = fake_window({ page: [{ name: "toolbarbutton spaces", textContent: " Mail " }, { name: "button hidden", shown: false }] });
+    const page = fake_window({ page: [{ name: "a link", href: "about:support", textContent: "Support" }, { name: "textarea notes" }, { name: "checkbox option", textContent: " Wrap " }] });
+    const targets = collect_page_targets(main as never, page as never);
+    assert.deepEqual(targets.map((target) => [name_of(target), target.text, (target.window as unknown) === page]), [["toolbarbutton spaces", "Mail", false], ["a link", "about:support", true], ["textarea notes", "", true], ["checkbox option", "Wrap", true]]);
+    for (const target of targets) target.act();
+    assert.deepEqual(targets.map((target) => (target.element as unknown as FakeElement).log), [["click"], ["click"], ["focus"], ["click"]]);
+    targets[1]!.focus();
+    assert.deepEqual((targets[1]!.element as unknown as FakeElement).log, ["click", "focus"]);
+});
+
+test("a page tab with no page the parent can read labels the window alone", () => {
+    const main = fake_window({ page: [{ name: "button today" }] });
+    assert.deepEqual(collect_page_targets(main as never, null).map(name_of), ["button today"]);
 });

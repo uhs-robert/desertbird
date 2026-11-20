@@ -69,7 +69,7 @@ test("hints.pick labels a mail tab, takes the keys on the window root ahead of t
     const label_host: unknown[] = [];
     const shown = { top: 10, left: 10, width: 20, height: 10 };
     const button = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null };
-    const make_document = (matching: unknown[]) => ({ querySelectorAll: (selector: string) => (selector.startsWith("button") ? matching : []), elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => label_host.push("removed"), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: (child: unknown) => label_host.push(child) } });
+    const make_document = (matching: unknown[]) => ({ querySelectorAll: (selector: string) => (selector.startsWith("button") ? matching : []), elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => label_host.push("removed"), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: (child: unknown) => label_host.push(child), setAttribute() {}, removeAttribute() {} } });
     const window_like = (matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(matching) });
     const pane = { ...window_like([button]), ...listeners("pane"), messageBrowser: { contentWindow: null } };
     const main = { ...window_like([]), ...listeners("main"), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), document: { ...make_document([]), hasFocus: () => true, getElementById: () => ({ currentTabInfo: { mode: { name: "mail3PaneTab" }, chromeBrowser: { contentWindow: pane } } }) } };
@@ -86,6 +86,43 @@ test("hints.pick labels a mail tab, takes the keys on the window root ahead of t
         await assert.rejects(get_hints_api(context).hints.pick({ windowId: 8, colors }), StubExtensionError);
         shutdown();
         assert.ok(added.includes("root -keydown"), "a shutdown ends the labels and removes the listener");
+    } finally {
+        platform.restore();
+    }
+});
+
+test("hints.pick in a page tab labels the window and the tab's own page, and marks the window root while the labels show", async () => {
+    const added: string[] = [];
+    const listeners = (name: string) => ({ addEventListener: (type: string) => void added.push(`${name} ${type}`), removeEventListener: (type: string) => void added.push(`${name} -${type}`) });
+    const drawn_in: string[] = [];
+    const marks = new Set<string>();
+    const shown = { top: 10, left: 10, width: 20, height: 10 };
+    const control = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null };
+    const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove() {}, append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), setAttribute: (attribute: string) => void marks.add(attribute), removeAttribute: (attribute: string) => void marks.delete(attribute) } });
+    const window_like = (name: string, matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(name, matching), ...listeners(name) });
+    const page = window_like("page", [control, control]);
+    const tab: Record<string, unknown> = { mode: { name: "preferencesTab" }, browser: { contentDocument: page.document, contentWindow: page } };
+    const main = { ...window_like("main", [control]), windowRoot: listeners("root"), matchMedia: () => ({ matches: false }), document: { ...make_document("main", [control]), hasFocus: () => true, getElementById: () => ({ currentTabInfo: tab }) } };
+    const message_window = { ...window_like("message window", []), document: { ...make_document("message window", []), hasFocus: () => true, getElementById: () => null } };
+    const platform = stub_platform([main, message_window]);
+    try {
+        const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === main ? { id: 7 } : candidate === message_window ? { id: 9 } : null) }, messageManager: { convert: () => null } } };
+        const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
+        const { pick } = get_hints_api(context).hints;
+        assert.equal(await pick({ windowId: 7, colors }), 3);
+        assert.deepEqual(drawn_in, ["main", "page"]);
+        assert.ok(added.includes("root keydown") && added.includes("page scroll"), "the keys come from the window root and a scroll of the page ends the labels");
+        assert.deepEqual([...marks], ["data-desertbird-hints"], "the page keys see the marker and leave the keys to the labels");
+        shutdown();
+        assert.deepEqual([...marks], [], "the end of the labels removes the marker");
+        // A remote page: the parent cannot read its document, so only the window is labelled.
+        tab["browser"] = { isRemoteBrowser: true, contentDocument: null, contentWindow: page };
+        drawn_in.length = 0;
+        assert.equal(await pick({ windowId: 7, colors }), 1);
+        assert.deepEqual(drawn_in, ["main"]);
+        shutdown();
+        await assert.rejects(pick({ windowId: 9, colors }), /no tab in window 9/, "a message window has no tab to label");
     } finally {
         platform.restore();
     }

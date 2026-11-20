@@ -64,7 +64,7 @@ const UNDO_RETRY_DELAYS_MS = [500, 1000, 1500];
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
 // The record is derived from the user's keymap and the source hash, and an old record is rebuilt on read, so the bump moves no user data.
-const KEYMAP_RECORD_VERSION = 10;
+const KEYMAP_RECORD_VERSION = 11;
 
 interface KeymapRecord {
     record_version: number;

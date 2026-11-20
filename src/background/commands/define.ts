@@ -8,8 +8,8 @@ import type { HandlerScope, MessageApi } from "../handlers/message.ts";
 // `keeps_selection: true` marks a command that leaves its rows in the list (read state, star, junk, tag, copy). Visual mode then stays on after it, so the range can take a second command. Commands that remove or move rows end the mode, because their rows are gone.
 export type CommandDefinition = CommandInput & { bridge: boolean; repeatable?: false; keeps_selection?: true };
 
-/** What a tab must offer for a command to run in it, written in `needs` next to the Experiment verbs and permissions. `list` is the thread list. `message` is a shown message. `body` is the body script of a message document or an own page, which find and hints need. `tab` means any tab. A tab that cannot meet every one of them gets no key for the command, so the key reaches Thunderbird. */
-export const TAB_NEEDS = ["list", "message", "tab", "body"] as const;
+/** What a tab must offer for a command to run in it, written in `needs` next to the Experiment verbs and permissions. `list` is the thread list. `message` is a shown message. `body` is the body script of a message document or an own page, which find and hints need. `tab` means any tab. `page` is a tab whose page the chrome keys itself, with no body script: calendar, settings, the address book, `about:` pages. A tab that cannot meet every one of them gets no key for the command, so the key reaches Thunderbird. */
+export const TAB_NEEDS = ["list", "message", "tab", "body", "page"] as const;
 export type TabNeed = (typeof TAB_NEEDS)[number];
 
 const is_tab_need = (need: string): need is TabNeed => (TAB_NEEDS as readonly string[]).includes(need);
