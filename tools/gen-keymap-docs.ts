@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_KEYMAP, GROUP_NAMES, registry } from "../src/background/commands/index.ts";
-import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
+import { default_keymap_of, default_typing_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { render, type KeymapSection } from "./keymap_docs/render.ts";
 import { splice } from "./keymap_docs/splice.ts";
 
@@ -25,6 +25,7 @@ const sections: KeymapSection[] = [
   { title: "Message", about: "A message in a tab, a window or the message pane.", keymap: default_keymap_of("message") },
   { title: "Own pages", about: "The options page and the help page.", keymap: default_keymap_of("own") },
   { title: "Other tabs", about: "Calendar, tasks, chat, the address book, settings and `about:` pages.", keymap: default_keymap_of("page") },
+  { title: "Text fields", about: "A text field in a page tab or in the mail tab (the quick filter, the search box). Plain keys are text there. Alt+j and Alt+k also work in insert mode.", keymap: default_typing_keymap() },
 ];
 
 const current = readFileSync(doc_path, "utf8");

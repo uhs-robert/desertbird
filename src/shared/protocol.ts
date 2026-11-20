@@ -105,10 +105,10 @@ export interface KeysPending {
     root?: true;
 }
 
-/** The third thing `keys.onInvocation` carries: visual mode started or ended in a window. Only the key runtime knows it. Insert mode is not sent: the status bar label reads the focus itself. */
+/** The third thing `keys.onInvocation` carries: visual mode or manual insert mode (`i` in a page tab) started or ended in a window. Only the key runtimes know them. Insert from a focused text field is not sent: the status bar label reads the focus itself. */
 export interface KeysMode {
     command: "mode";
-    mode: "normal" | "visual";
+    mode: ModeName;
     windowId: number;
 }
 
@@ -141,7 +141,7 @@ export interface ModeLabelColors {
 /** What the status bar label of a window shows. `mode` is the mode the key runtime reports. The parent turns it into insert while a text field has the focus, and applies `indicator` to the result, which is why the setting travels with it. The parent maps mode and style to the text, and takes the colors from `colors`. */
 export interface OverlaySetModeLabelArgs {
     windowId: number;
-    mode: "normal" | "visual";
+    mode: ModeName;
     indicator: ModeIndicator;
     style: ModeLabelStyle;
     colors: ModeLabelColors;
@@ -210,6 +210,8 @@ export interface PagesInstallArgs {
     pageTree: KeymapTree;
     /** The keys of a message tab with the focus outside the body. The body script takes the keys while the body has the focus. */
     messageTree: KeymapTree;
+    /** The keys that run while a text field has the focus (in the mail tab too) or manual insert mode is on. */
+    typingTree: KeymapTree;
     /** Ids of the commands that open the overlay. The runtime holds plain keys after one fires, until the focus moves. */
     holdCommands: string[];
 }

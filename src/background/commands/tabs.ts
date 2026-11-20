@@ -56,4 +56,8 @@ export const tabs: CommandGroup = {
         "<C-c>": { id: "tab.close_mail", label: "Close tab" },
         "<A-q>": { id: "tab.close", label: "Close tab" },
     },
+    typing_keys: {
+        "<A-j>": { id: "tab.next", label: "Next tab" },
+        "<A-k>": { id: "tab.prev", label: "Previous tab" },
+    },
 };

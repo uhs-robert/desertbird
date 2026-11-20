@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 342 (Mail tab 146, Message 98, Own pages 50, Other tabs 48)
+bound: 347 (Mail tab 146, Message 98, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -538,6 +538,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `h` | `page.scroll_left` |
 | `l` | `page.scroll_right` |
 | `G` | `page.bottom` |
+| `i` | `mode.insert` |
 
 #### Go
 
@@ -597,5 +598,18 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `;f` | `hint --focus` |
 | `;c` | `hint` |
 | `;y` | `hint --yank` |
+
+### Text fields
+
+A text field in a page tab or in the mail tab (the quick filter, the search box). Plain keys are text there. Alt+j and Alt+k also work in insert mode.
+
+#### Single keys
+
+| Key | Command |
+| --- | --- |
+| `<A-j>` | `tab.next` |
+| `<A-k>` | `tab.prev` |
+| `<Escape>` | `mode.escape` |
+| `<C-[>` | `mode.escape` |
 
 <!-- END generated -->

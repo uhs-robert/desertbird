@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_is_open, menu_takes_key } from "../src/chrome/focus.ts";
+import { blur_innermost, body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_text_field, is_typing, menu_is_open, menu_takes_key } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
@@ -213,4 +213,25 @@ test("an open menupopup takes the access keys of its direct items, a panel takes
     const panel_list = { localName: "panel-list", hasAttribute: (name: string) => name === "open", contains: (node: unknown) => node === list };
     assert.equal(menu_takes_key(doc(panel_list), "j"), true);
     assert.equal(menu_takes_key(doc({ ...panel_list, hasAttribute: () => false }), "j"), null);
+});
+
+test("is_text_field is a text field and nothing else: not the overlay's browser, not a live message body", () => {
+    assert.equal(is_text_field({ target: element("input") }, document_of(null)), true);
+    const overlay = element("browser", { id: OVERLAY_BROWSER_ID });
+    assert.equal(is_text_field({ target: overlay }, document_of(overlay)), false);
+    assert.equal(is_text_field({ target: element("div") }, document_of(element("button"))), false);
+    const live_root = { hasAttribute: (name: string) => name === BODY_SCRIPT_LIVE_ATTRIBUTE };
+    const message_pane = element("browser", { id: "messagepane", contentDocument: { activeElement: null, body: element("body"), documentElement: live_root } });
+    const document = document_of(element("browser", { contentDocument: { activeElement: element("browser", { id: "messageBrowser", contentDocument: { activeElement: message_pane } }) } }));
+    assert.equal(is_typing({ target: element("div") }, document), true);
+    assert.equal(is_text_field({ target: element("div") }, document), false);
+});
+
+test("blur_innermost blurs the end of the focus chain, which is the input inside a shadow root", () => {
+    let blurred = "";
+    const input = element("input", { blur: () => void (blurred = "input") } as Partial<FocusNode>);
+    const host = element("search-textbox", { shadowRoot: { activeElement: input }, blur: () => void (blurred = "host") } as Partial<FocusNode>);
+    blur_innermost(document_of(host));
+    assert.equal(blurred, "input");
+    blur_innermost(document_of(null));
 });

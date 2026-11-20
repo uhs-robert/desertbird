@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compile_tab_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { compile_tab_keymap, compile_typing_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION, HINTS_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
 import { stub_platform } from "./chrome_stubs.ts";
 
@@ -24,7 +24,7 @@ test("the page keys pass every key while the window root carries the hint marker
         const pages = get_pages_api(context as never).pages;
         const ran: string[] = [];
         (pages.onInvocation as { subscribe(listener: (event: { command: string }) => void): void }).subscribe((event) => ran.push(event.command));
-        await pages.install({ pageTree: tree_of(compile_tab_keymap("page")) as never, messageTree: page_message_tree(tree_of(compile_tab_keymap("message")) as never), holdCommands: [] });
+        await pages.install({ pageTree: tree_of(compile_tab_keymap("page")) as never, messageTree: page_message_tree(tree_of(compile_tab_keymap("message")) as never), typingTree: tree_of(compile_typing_keymap()) as never, holdCommands: [] });
         const press = (key: string) => {
             const outcome = { cancelled: false };
             const event = { key, code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, target: body, preventDefault: () => void (outcome.cancelled = true), stopPropagation() {} };

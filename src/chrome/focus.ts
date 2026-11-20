@@ -100,11 +100,17 @@ export const in_text_field = (document: FocusDocument): boolean => is_typing_ele
 /** Whether the focus sits in the overlay's browser while its page is not ready. A key sent there reaches no page, so it must not reach Thunderbird's shortcuts either. */
 export const overlay_is_loading = (document: FocusDocument): boolean => innermost_focus(document)?.id === OVERLAY_LOADING_ID;
 
-/** A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside. */
-export function is_typing(event: KeyEventTargets, document: FocusDocument): boolean {
-    const candidates = [event.target, event.originalTarget, innermost_focus(document)];
-    return candidates.some((candidate) => is_typing_element(candidate as FocusNode | null)) || body_script_is_live(document);
-}
+// A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside.
+const typed_into = (event: KeyEventTargets, document: FocusDocument): boolean => [event.target, event.originalTarget, innermost_focus(document)].some((candidate) => is_typing_element(candidate as FocusNode | null));
+
+/** A key is typing when it goes to a text field, to the overlay's browser or to a message body that runs the body script. */
+export const is_typing = (event: KeyEventTargets, document: FocusDocument): boolean => typed_into(event, document) || body_script_is_live(document);
+
+/** Whether a key goes to a text field. Unlike `is_typing`, a message body that runs the body script does not count, since it has keys of its own, and neither does the overlay's browser, whose page takes its own keys. The page bundle uses it, and the key bundle does not carry it. */
+export const is_text_field = (event: KeyEventTargets, document: FocusDocument): boolean => innermost_focus(document)?.id !== OVERLAY_BROWSER_ID && typed_into(event, document);
+
+/** Takes the focus out of the element that has it. The innermost element is the one to blur: a `search-textbox` holds its input in a shadow root. */
+export const blur_innermost = (document: FocusDocument): void => (innermost_focus(document) as { blur?(): void } | null)?.blur?.();
 
 interface RestorableNode extends FocusNode {
     isConnected?: boolean;

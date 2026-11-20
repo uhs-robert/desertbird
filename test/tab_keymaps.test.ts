@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
-import { compile_tab_keymap, default_keymap_of, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 
 const root_of = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("page", user).compiled.modes.normal as TreeBranch;
 const own_root = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("own", user).compiled.modes.normal as TreeBranch;
@@ -165,4 +165,27 @@ test("a group need joins the capability needs of a command and does not replace 
     assert.ok(registry.get("folder.collapse")?.needs?.includes("app.paneFocus"));
     assert.deepEqual(tab_needs_of(registry.get("folder.collapse")!), ["list"], "a capability need is no tab need");
     assert.ok(registry.get("msg.reply")?.needs?.includes("message"));
+});
+
+const typing_root = (user?: Parameters<typeof compile_typing_keymap>[0]) => compile_typing_keymap(user).compiled.modes.normal as TreeBranch;
+
+test("the typing tree holds Escape, its Ctrl+[ alias and the Alt tab keys, and no plain key", () => {
+    const root = typing_root();
+    assert.deepEqual(Object.keys(root.children).sort(), ["<A-j>", "<A-k>", "<C-[>", "<Escape>"]);
+    assert.deepEqual(["<Escape>", "<C-[>", "<A-j>", "<A-k>"].map((key) => leaf_at(root, key)?.id), ["mode.escape", "mode.escape", "tab.next", "tab.prev"]);
+});
+
+test("a user key joins the typing tree only as one key for a command the layer names, and a null unbinds", () => {
+    const root = typing_root({ "<A-l>": { id: "tab.next" }, "<C-q>": { id: "tab.close" }, "<C-g><C-g>": { id: "mode.escape" }, "<A-k>": null });
+    assert.equal(leaf_at(root, "<A-l>")?.id, "tab.next");
+    assert.equal(leaf_at(root, "<C-q>"), undefined);
+    assert.equal(root.children["<C-g>"], undefined);
+    assert.equal(root.children["<A-k>"], undefined);
+    assert.equal(leaf_at(root, "<Escape>")?.id, "mode.escape");
+});
+
+test("i is bound in the page tree alone, so the own and message trees and the mail tab leave it", () => {
+    assert.equal(leaf_at(root_of(), "i")?.id, "mode.insert");
+    for (const root of [own_root(), message_root()]) assert.equal(leaf_at(root, "i"), undefined);
+    assert.equal(ids_under(root_of()).includes("mode.escape"), false, "the typing layer stays out of the normal trees");
 });

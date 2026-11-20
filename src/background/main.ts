@@ -5,7 +5,7 @@ import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { AppApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
-import { compile_tab_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
+import { compile_tab_keymap, compile_typing_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
 import { record_activation, tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -64,7 +64,7 @@ const UNDO_RETRY_DELAYS_MS = [500, 1000, 1500];
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
 // The record is derived from the user's keymap and the source hash, and an old record is rebuilt on read, so the bump moves no user data.
-const KEYMAP_RECORD_VERSION = 11;
+const KEYMAP_RECORD_VERSION = 12;
 
 interface KeymapRecord {
     record_version: number;
@@ -77,6 +77,8 @@ interface KeymapRecord {
     page_tree: KeymapTree;
     /** The keys of DesertBird's own pages (options, help): the page keys with find and hints. Their body script reads it from storage. */
     own_tree: KeymapTree;
+    /** The keys that run while a text field has the focus. The `pages` Experiment installs it, and it also serves the text fields of the mail tab. */
+    typing_tree: KeymapTree;
 }
 
 interface StorageChange {
@@ -136,7 +138,7 @@ async function hash_of(value: unknown): Promise<string> {
 
 function is_current_record(value: unknown, source_hash: string): value is KeymapRecord {
     const record = value as Partial<KeymapRecord> | null | undefined;
-    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION && record.own_tree?.version === COMPILED_KEYMAP_VERSION;
+    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION && record.own_tree?.version === COMPILED_KEYMAP_VERSION && record.typing_tree?.version === COMPILED_KEYMAP_VERSION;
 }
 
 function tree_of(result: CompileResult): KeymapTree {
@@ -149,7 +151,7 @@ function tree_of(result: CompileResult): KeymapTree {
 function compile_record(source_hash: string, config: Config): KeymapRecord {
     const mail = compile_effective_keymap(config.user_keymap, config.setting_overrides);
     // The message tree ends every mail sequence, the user's included, so it reads this mail tree. The source hash already covers the user's mail keys.
-    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_tab_keymap("message", config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_tab_keymap("page", config.user_keymap.normal)), own_tree: tree_of(compile_tab_keymap("own", config.user_keymap.normal, mail.compiled.modes.normal)) };
+    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_tab_keymap("message", config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_tab_keymap("page", config.user_keymap.normal)), own_tree: tree_of(compile_tab_keymap("own", config.user_keymap.normal, mail.compiled.modes.normal)), typing_tree: tree_of(compile_typing_keymap(config.user_keymap.normal)) };
 }
 
 // Registered before the listener below, so the store has dropped its copy by the time an install reads it.
@@ -163,7 +165,7 @@ let installed_tree_json: string | undefined;
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: keymap_of("message", config.user_keymap.normal), page: keymap_of("page", config.user_keymap.normal), own: keymap_of("own", config.user_keymap.normal), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: keymap_of("message", config.user_keymap.normal), page: keymap_of("page", config.user_keymap.normal), own: keymap_of("own", config.user_keymap.normal), typing: compile_typing_keymap(config.user_keymap.normal).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);
@@ -174,11 +176,11 @@ async function load_record(): Promise<KeymapRecord> {
 async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
-    const { tree, page_tree, message_tree } = await load_record();
-    const tree_json = JSON.stringify([tree, page_tree, message_tree]);
+    const { tree, page_tree, message_tree, typing_tree } = await load_record();
+    const tree_json = JSON.stringify([tree, page_tree, message_tree, typing_tree]);
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
-    await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), holdCommands: HOLD_COMMANDS });
+    await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
     installed_tree_json = tree_json;
     // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
     hud.close_which_key();

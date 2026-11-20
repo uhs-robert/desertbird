@@ -48,7 +48,7 @@ export const MAX_RETRY_MS = 60_000;
 // A port that stayed up this long was healthy, so its drop starts the backoff over.
 export const STABLE_MS = 10_000;
 
-const MODE_LABELS: Record<KeysMode["mode"], string> = { normal: "NORMAL", visual: "VISUAL" };
+const MODE_LABELS: Record<KeysMode["mode"], string> = { normal: "NORMAL", visual: "VISUAL", insert: "INSERT" };
 
 export const BRIDGE_OFF = { ok: false, message: "the bridge is off, set bridge to true" } as const;
 

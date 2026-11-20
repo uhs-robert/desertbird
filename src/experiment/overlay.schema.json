@@ -67,7 +67,7 @@
               },
               "mode": {
                 "type": "string",
-                "enum": ["normal", "visual"]
+                "enum": ["normal", "visual", "insert"]
               },
               "indicator": {
                 "type": "string",

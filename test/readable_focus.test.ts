@@ -28,12 +28,12 @@ test("a parent-process page the walk can enter is a page, also in a tab with a b
     assert.equal(situation_of(document_with(browser), { mode: "contentTab", browser_is_remote: false }, event()), "page");
 });
 
-test("a text field, wherever the event or the focus names it, is typing", () => {
-    assert.equal(situation_of(document_with({ localName: "input" }), READABLE_TAB, event()), "typing");
-    assert.equal(situation_of(document_with(null), READABLE_TAB, event({ localName: "textarea" })), "typing");
+test("a text field, wherever the event or the focus names it, is a field", () => {
+    assert.equal(situation_of(document_with({ localName: "input" }), READABLE_TAB, event()), "field");
+    assert.equal(situation_of(document_with(null), READABLE_TAB, event({ localName: "textarea" })), "field");
     const browser = { localName: "browser", contentDocument: { activeElement: { localName: "search-textbox" } } };
-    assert.equal(situation_of(document_with(browser), READABLE_TAB, event()), "typing");
-    assert.equal(situation_of(document_with({ localName: "div", isContentEditable: true }), READABLE_TAB, event()), "typing");
+    assert.equal(situation_of(document_with(browser), READABLE_TAB, event()), "field");
+    assert.equal(situation_of(document_with({ localName: "div", isContentEditable: true }), READABLE_TAB, event()), "field");
 });
 
 test("an open menu passes, before any other check", () => {
@@ -72,4 +72,22 @@ test("a message tab with the focus outside the body is a message, and a message 
     assert.equal(situation_of(document_with(null), tab, event()), "message");
     const body = { localName: "browser", id: "messagepane", contentDocument: { activeElement: null, documentElement: { hasAttribute: () => true } } };
     assert.equal(situation_of(document_with(body), tab, event()), "typing");
+});
+
+test("a text field of the mail tab is a field, and the rest of the mail tab passes", () => {
+    const mail: FrontTab = { mode: "mail3PaneTab", browser_is_remote: false };
+    assert.equal(situation_of(document_with({ localName: "search-textbox" }), mail, event()), "field");
+    assert.equal(situation_of(document_with({ localName: "button" }), mail, event()), "pass");
+    assert.equal(situation_of(document_with({ localName: "input" }, "open"), mail, event()), "pass", "an open menu comes first");
+});
+
+test("the overlay's browser and a message body that runs the body script are typing and no field", () => {
+    const overlay = { localName: "browser", id: "desertbird-overlay-browser", contentDocument: null };
+    assert.equal(situation_of(document_with(overlay), READABLE_TAB, event(overlay)), "typing");
+    const body = { localName: "body" };
+    const live = { hasAttribute: (name: string) => name === "data-desertbird-keys" };
+    const message_pane = { localName: "browser", id: "messagepane", contentDocument: { activeElement: null, body, documentElement: live } };
+    const message_browser = { localName: "browser", id: "messageBrowser", contentDocument: { activeElement: message_pane } };
+    const message_tab: FrontTab = { mode: "mailMessageTab", browser_is_remote: false };
+    assert.equal(situation_of(document_with({ localName: "browser", contentDocument: { activeElement: message_browser } }), message_tab, event()), "typing");
 });

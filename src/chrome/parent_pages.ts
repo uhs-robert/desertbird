@@ -1,6 +1,6 @@
 // The parent script of the `pages` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `pages`: `getAPI(context)` returns `get_pages_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { focus_chain, overlay_is_loading } from "./focus.ts";
+import { blur_innermost, focus_chain, overlay_is_loading } from "./focus.ts";
 import { run_scroll, scroll_axis_of, scroll_focus, scroll_target } from "./page_actions.ts";
 import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
@@ -54,6 +54,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             return situation_of(window.document, tab && { mode: tab.mode.name, browser_is_remote: tab.browser?.isRemoteBrowser === true }, event);
         },
         overlay_is_loading: (window) => overlay_is_loading(window.document),
+        blur_focused: (window) => blur_innermost(window.document),
         message_ids_of(window) {
             const tab = front_tab_of(window);
             const header = tab?.message ?? tab?.chromeBrowser?.contentWindow?.gMessage;
@@ -94,7 +95,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
 export function get_pages_api(context: ExtensionContext) {
     return {
         pages: {
-            install: guard("pages.install", ({ pageTree, messageTree, holdCommands }: PagesInstallArgs): void => ensure_runtime(context).install({ page: pageTree, message: messageTree }, holdCommands)),
+            install: guard("pages.install", ({ pageTree, messageTree, typingTree, holdCommands }: PagesInstallArgs): void => ensure_runtime(context).install({ page: pageTree, message: messageTree, typing: typingTree }, holdCommands)),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "pages.onInvocation",

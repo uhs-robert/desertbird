@@ -11,6 +11,7 @@ import { start_app } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
 import { run_popup_keys } from "./popup_checks.mjs";
+import { run_typing } from "./typing_checks.mjs";
 
 const e2e_dir = resolve(process.env.E2E_DIR ?? "/tmp/desertbird-e2e");
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
@@ -2568,6 +2569,7 @@ async function run_assertions(instance) {
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
   else if (instance.kind === "zoom") await (await import("./zoom_checks.mjs")).run_zoom(instance, { check, open_inbox });
   else await run_no_identity(instance);
+  if (instance.kind === "pages") await run_typing(instance, { check, shot: (name, line) => page_shot(instance, name, line), key_and_state, open_inbox });
 }
 
 let all_ok = true;
