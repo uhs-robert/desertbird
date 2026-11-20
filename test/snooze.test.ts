@@ -7,6 +7,7 @@ import { snooze_messages, wake_snoozed } from "../src/background/handlers/snooze
 import type { SnoozeApi, WakeApi, WakeTiming } from "../src/background/handlers/snooze.ts";
 import { CATCH_UP_ALARM, create_scheduler } from "../src/background/scheduler.ts";
 import { create_snooze_store } from "../src/background/snooze_store.ts";
+import type { SnoozeItem } from "../src/background/snooze_store.ts";
 import { create_router } from "../src/background/router.ts";
 import { fake_alarms, fake_api, fake_storage } from "./fake_api.ts";
 
@@ -23,7 +24,7 @@ interface StoredMessage {
 }
 
 /** A small mailbox that keeps what the real API does: a move gives the message a new id and puts it in the target folder. */
-function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: string[]; hang_create_in?: string[]; namespace_in?: string[]; create_delay_ms?: number; page_size?: number; empty_first_page?: boolean; no_inbox_in?: string[]; write_delay_ms?: number; inbox_lookup_failures?: number } = {}) {
+function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: string[]; hang_create_in?: string[]; namespace_in?: string[]; create_delay_ms?: number; page_size?: number; empty_first_page?: boolean; no_inbox_in?: string[]; write_delay_ms?: number; inbox_lookup_failures?: number; inbox_missing_lookups?: number; extra_folders?: MailFolder[] } = {}) {
     const storage = fake_storage({}, options.write_delay_ms ?? 0);
     const store = create_snooze_store({ storage: storage.api });
     const folders: (MailFolder & { isRoot?: boolean })[] = [
@@ -38,11 +39,13 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
         { id: "local-root", accountId: "local", path: "/", isRoot: true },
         { id: "local-inbox", accountId: "local", path: "/Inbox", specialUse: ["inbox"] },
     ];
+    folders.push(...(options.extra_folders ?? []));
     const messages: StoredMessage[] = [];
     const log: string[] = [];
     const notices: string[] = [];
     let next_id = 100;
     let inbox_lookup_failures = options.inbox_lookup_failures ?? 0;
+    let inbox_missing_lookups = options.inbox_missing_lookups ?? 0;
     const lists = new Map<string, MessageHeader[][]>();
     const header_of = (message: StoredMessage): MessageHeader => {
         const folder = folders.find((candidate) => candidate.id === message.folder_id)!;
@@ -87,6 +90,11 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
                 if (query.specialUse?.includes("inbox") && inbox_lookup_failures > 0) {
                     inbox_lookup_failures--;
                     throw new Error("the folder tree is not loaded yet");
+                }
+                // A startup gap: the folder tree answers with no Inbox yet.
+                if (query.specialUse?.includes("inbox") && inbox_missing_lookups > 0) {
+                    inbox_missing_lookups--;
+                    return [];
                 }
                 // The real API throws for a folder id it does not know.
                 if (query.folderId !== undefined && !folders.some((folder) => folder.id === query.folderId)) throw new Error(`Folder not found: ${query.folderId}`);
@@ -423,18 +431,42 @@ test("a gone Snoozed folder with no folder at either path keeps the item inside 
     assert.deepEqual(box.notices, []);
 });
 
-test("recovery finds a message waiting at the second Snoozed path", async () => {
-    const box = mailbox({ namespace_in: ["imap"] });
-    const message = box.add("<a@x>");
-    await snooze(box, [message.id]);
-    assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
-    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
-    await box.store.add(gone);
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
+/** An item whose stored folder id is stale, for a message that sits in a folder the test chose. */
+const stale_item = (): SnoozeItem => ({ header_message_id: "<a@x>", origin_account_id: "imap", folder_id: "deleted-folder", origin_folder_id: "imap-inbox", due_ms: tomorrow_8 });
+
+test("recovery finds a message waiting at the second Snoozed path, past an empty folder at the first", async () => {
+    const box = mailbox({ extra_folders: [{ id: "imap-stray", accountId: "imap", path: "/Snoozed" }, { id: "imap-ns-snoozed", accountId: "imap", path: "/INBOX/Snoozed" }] });
+    box.add("<a@x>", "imap-ns-snoozed");
+    await wake_snoozed(box.api, stale_item(), at(tomorrow_8));
     assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
-test("a wake whose Snoozed folder no longer exists drops the item with a notification and does not retry", async () => {
+test("recovery skips a folder with a special use that sits at the Snoozed path", async () => {
+    const box = mailbox({ extra_folders: [{ id: "imap-special-snoozed", accountId: "imap", path: "/Snoozed", specialUse: ["archives"] }] });
+    box.add("<a@x>", "imap-special-snoozed");
+    await assert.rejects(wake_snoozed(box.api, stale_item(), { now_ms: tomorrow_8 + MINUTE, started_ms: 0 }), /could not return yet/);
+    assert.deepEqual(box.where("<a@x>"), ["imap-special-snoozed"]);
+});
+
+test("an Inbox that is missing on one tick and present on the next lets the message return", async () => {
+    const box = mailbox({ inbox_missing_lookups: 1 });
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    const original_error = console.error;
+    console.error = () => {};
+    try {
+        await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, { now_ms: tomorrow_8 + MINUTE, started_ms: 0 }));
+    } finally {
+        console.error = original_error;
+    }
+    assert.equal((await box.store.list()).length, 1);
+    assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
+    await box.store.wake_due(tomorrow_8 + MINUTE, (found) => wake_snoozed(box.api, found, { now_ms: tomorrow_8 + 2 * MINUTE, started_ms: 0 }));
+    assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
+    assert.deepEqual(await box.store.list(), []);
+});
+
+test("a wake whose Snoozed folder no longer exists drops the item with a notification once the retry window has passed", async () => {
     const box = mailbox();
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
