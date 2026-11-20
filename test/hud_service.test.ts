@@ -25,11 +25,11 @@ function setup(overrides: Partial<Settings> = {}) {
             onClosed: { addListener: () => {}, removeListener: () => {} },
         },
         read_settings: async () => settings,
-        read_root: async (source) => (source === "main" ? sample_root() : source === "own" ? own_root() : message_root()),
+        read_root: async (source) => (source === "main" ? sample_root() : source === "own" || source === "page" ? own_root() : message_root()),
         send_changed: (window_id) => void log.push(`changed ${window_id}`),
         timers,
     });
-    const pending = (keys: string[], window_id = 1): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id });
+    const pending = (keys: string[], window_id = 1, extra: { source?: "page" | "message"; root?: true } = {}): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id, ...extra });
     const body_pending = (keys: string[], window_id = 1, source: "message" | "own" = "message"): Promise<void> => hud.on_body_pending(window_id, keys, source);
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
     const set_mode = (mode: KeysMode["mode"], window_id = 1): Promise<void> => hud.on_keys_event({ command: "mode", mode, windowId: window_id });
@@ -465,4 +465,19 @@ test("an empty prefix from a message document removes its panel", async () => {
     await body_pending([]);
     await settle();
     assert.deepEqual(log, ["mount hud@1", "unmount hud@1"]);
+});
+
+test("a pending report that names the page source lists the page tree, and a redraw reads it again", async () => {
+    const { timers, pending, state } = setup({ which_key_delay_ms: 300 });
+    await pending(["g"], 1, { source: "page" });
+    timers.advance(300);
+    await settle();
+    assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["y"]);
+});
+
+test("a root report shows the named tree at once, whatever the delay", async () => {
+    const { log, pending, state } = setup({ which_key_delay_ms: 0 });
+    await pending([], 1, { source: "message", root: true });
+    assert.deepEqual(log, ["mount hud@1"]);
+    assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["g"]);
 });

@@ -96,6 +96,10 @@ export interface KeysPending {
     command: "pending";
     keys: string[];
     windowId: number;
+    /** The tree the panel lists: a page tab names its own (`page`, or `message` in a message tab). A report without one is the mail tab's. */
+    source?: "page" | "message";
+    /** With no keys: show the root of the tree at once (`g ?`) and not end the panel. */
+    root?: true;
 }
 
 /** The third thing `keys.onInvocation` carries: visual mode started or ended in a window. Only the key runtime knows it. Insert mode is not sent: the status bar label reads the focus itself. */
