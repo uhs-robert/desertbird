@@ -54,6 +54,14 @@ export function is_strictly_inside(root: string, path: string): boolean {
   return from_root !== "" && !isAbsolute(from_root) && from_root.split(sep)[0] !== "..";
 }
 
+const UNIT_PREFIX = "desertbird-owner-test-";
+
+// The systemd unit of one window. The key holds the folder name and a hash of the full worktree path, so two worktrees never share a unit.
+export const unit_name = (key: string) => `${UNIT_PREFIX}${key}`;
+
+// A unit name this tool may stop: the prefix and the characters of a key, nothing else. systemctl takes glob patterns, so a `*` or a space must never get through.
+export const is_owner_unit = (name: string) => /^desertbird-owner-test-[A-Za-z0-9._-]+$/.test(name);
+
 // Where the apps keep their real profiles. Betterbird reads ~/.thunderbird too.
 export function real_profile_roots(home: string): string[] {
   return [".thunderbird", ".betterbird", join(".mozilla", "thunderbird"), join(".config", "thunderbird")].map((name) => join(home, name));

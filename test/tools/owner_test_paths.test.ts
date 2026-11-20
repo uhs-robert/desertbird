@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { default_roots, homes_to_guard, is_strictly_inside, is_unredirected, real_profile_roots, refusal_reason, window_paths, worktree_key } from "../../tools/owner_test/paths.ts";
+import { default_roots, is_owner_unit, unit_name, homes_to_guard, is_strictly_inside, is_unredirected, real_profile_roots, refusal_reason, window_paths, worktree_key } from "../../tools/owner_test/paths.ts";
 import { launch_argv, launch_env } from "../../tools/owner_test/launch.ts";
 
 const HOME = "/home/someone";
@@ -132,4 +132,12 @@ test("a window folder that is a symlink is refused by refusal_reason, so open ca
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
+});
+
+test("the unit name is unique per key and is the only kind of name the tool stops", () => {
+  const a = window_paths("/a/work", roots);
+  const b = window_paths("/b/work", roots);
+  assert.notEqual(unit_name(a.key), unit_name(b.key));
+  assert.equal(is_owner_unit(unit_name(a.key)), true);
+  for (const bad of ["*", "desertbird-owner-test-*", "desertbird-owner-test-a b", "sshd", "desertbird-owner-test-", "desertbird-owner-test-a.service\nsshd", "desertbird-owner-test-a[b]", "other-desertbird-owner-test-x", ""]) assert.equal(is_owner_unit(bad), false, JSON.stringify(bad));
 });

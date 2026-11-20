@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { read_state, remove_state, write_state, type WindowState } from "../../tools/owner_test/state.ts";
 
-const state: WindowState = { worktree: "/w", profile: "/p", log: "/l", stamp: "s", app: "betterbird", binary: "/usr/bin/betterbird", started: "t", unit: null, app_pid: 5, app_start_ticks: 9 };
+const state: WindowState = { worktree: "/w", profile: "/p", log: "/l", stamp: "s", addon_id: "id@x", app: "betterbird", binary: "/usr/bin/betterbird", started: "t", unit: null, app_pid: 5, app_start_ticks: 9 };
 
 function in_temp_dir(body: (dir: string) => void) {
   const dir = mkdtempSync(join(tmpdir(), "owner-test-state-"));

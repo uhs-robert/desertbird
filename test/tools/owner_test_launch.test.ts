@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { close_window } from "../../tools/owner_test/close.ts";
-import { addon_loaded_since, app_binary, find_app_by_profile, launch_argv, launch_env, real_close_deps, stamp_label, stamp_manifest, start_app } from "../../tools/owner_test/launch.ts";
+import { addon_loaded_since, app_binary, is_confirmed_stopped, stop_unit, systemd_run_args, unit_state, find_app_by_profile, launch_argv, launch_env, real_close_deps, stamp_label, stamp_manifest, start_app } from "../../tools/owner_test/launch.ts";
 import { flock_argv, LOCK_BUSY_EXIT } from "../../tools/owner_test/lock.ts";
 import { window_paths } from "../../tools/owner_test/paths.ts";
 import { is_same_process, read_start_ticks } from "../../tools/owner_test/process_guard.ts";
@@ -76,20 +76,22 @@ test("the lock refuses a second caller with the busy exit code", () => {
 });
 
 // A real process, no display: a stand-in app that ignores SIGTERM until told otherwise.
+// The detached path: OWNER_TEST_DETACHED keeps this test off the user manager.
 test("real lifecycle with a stand-in app: start, close while it runs, nothing left running or on disk", async () => {
   const base = mkdtempSync(join(tmpdir(), "owner-test-real-"));
   let pid = 0;
+  process.env.OWNER_TEST_DETACHED = "1";
   try {
     const paths = window_paths("/w/tree", { cache_home: join(base, "cache"), state_home: join(base, "state") });
     mkdirSync(paths.profile_dir, { recursive: true });
     const script = join(base, "fake_app.sh");
     writeFileSync(script, "#!/bin/sh\ntrap '' TERM\nwhile :; do sleep 0.1; done\n");
     chmodSync(script, 0o755);
-    const started = start_app(launch_argv(script, paths.profile_dir), launch_env(process.env, paths.home_dir), base, paths.log_file);
+    const started = start_app(launch_argv(script, paths.profile_dir), launch_env(process.env, paths.home_dir), base, paths.log_file, "desertbird-owner-test-x");
     pid = started.pid;
     const start_ticks = read_start_ticks(pid) ?? 0;
     assert.ok(pid > 1 && start_ticks > 0);
-    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", binary: script, started: "t", unit: null, app_pid: pid, app_start_ticks: start_ticks });
+    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", addon_id: "id@x", app: "betterbird", binary: script, started: "t", unit: null, app_pid: pid, app_start_ticks: start_ticks });
     assert.deepEqual(find_app_by_profile(paths.profile_dir), { pid, start_ticks });
     const result = await close_window(paths, { ...real_close_deps(), grace_ms: 400, kill_wait_ms: 3000 });
     assert.equal(result.closed, true, result.lines.join("\n"));
@@ -98,7 +100,27 @@ test("real lifecycle with a stand-in app: start, close while it runs, nothing le
     assert.equal(existsSync(paths.state_file), false);
     assert.ok(existsSync(base), "nothing outside the window folder was deleted");
   } finally {
+    delete process.env.OWNER_TEST_DETACHED;
     if (pid > 1) try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
     rmSync(base, { recursive: true, force: true });
   }
+});
+
+test("only a unit state that says down confirms a stop", () => {
+  for (const word of ["inactive", "failed", "inactive\n"]) assert.equal(is_confirmed_stopped(word), true, word);
+  for (const word of ["", "active", "activating", "deactivating", "reloading"]) assert.equal(is_confirmed_stopped(word), false, word);
+});
+
+test("a name that is not this tool's unit never reaches systemctl", () => {
+  for (const bad of ["*", "sshd", "desertbird-owner-test-*", "desertbird-owner-test-a b"]) {
+    assert.equal(stop_unit(bad), false, bad);
+    assert.equal(unit_state(bad), null, bad);
+  }
+});
+
+test("the unit command line names the unit, passes the environment one value at a time and runs the argv last", () => {
+  const args = systemd_run_args("desertbird-owner-test-k", ["/bin/app", "-profile", "/p", "-no-remote"], { HOME: "/h", WAYLAND_DISPLAY: "w" }, "/cwd", "/log");
+  assert.ok(args.includes("--unit=desertbird-owner-test-k") && args.includes("--collect"));
+  assert.ok(args.includes("--setenv=HOME=/h") && args.includes("--setenv=WAYLAND_DISPLAY=w"));
+  assert.deepEqual(args.slice(args.indexOf("--") + 1), ["/bin/app", "-profile", "/p", "-no-remote"]);
 });

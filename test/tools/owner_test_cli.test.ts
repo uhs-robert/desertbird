@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { find_app_by_profile, group_members } from "../../tools/owner_test/launch.ts";
-import { canonical_worktree, window_paths } from "../../tools/owner_test/paths.ts";
+import { canonical_worktree, unit_name, window_paths } from "../../tools/owner_test/paths.ts";
 
 const CLI = join(import.meta.dirname, "..", "..", "tools", "owner_test", "cli.ts");
 
@@ -64,7 +64,7 @@ wait
     chmodSync(file, 0o755);
     return file;
   };
-  const env = { PATH: process.env.PATH ?? "", HOME: join(base, "home"), XDG_CACHE_HOME: join(base, "cache"), XDG_STATE_HOME: join(base, "state"), WAYLAND_DISPLAY: "none" };
+  const env = { PATH: process.env.PATH ?? "", HOME: join(base, "home"), XDG_CACHE_HOME: join(base, "cache"), XDG_STATE_HOME: join(base, "state"), WAYLAND_DISPLAY: "none", OWNER_TEST_DETACHED: "1" };
   mkdirSync(env.HOME, { recursive: true });
   const real_worktree = canonical_worktree(worktree);
   const paths = window_paths(real_worktree, { cache_home: env.XDG_CACHE_HOME, state_home: env.XDG_STATE_HOME });
@@ -240,4 +240,37 @@ test("a folder that is not a DesertBird checkout is refused and no build runs in
     assert.match(result.out, /not a DesertBird checkout/);
     assert.equal(existsSync(join(other, "built")), false);
   } finally { await t.cleanup(); }
+});
+
+const has_user_systemd = spawnSync("systemd-run", ["--user", "--scope", "--quiet", "true"], { stdio: "ignore" }).status === 0;
+
+// The real unit path with a stand-in app: no display, but the real user manager. The unit and every process in it must be gone at the end.
+test("under systemd: the app runs in a unit, a failed leftover unit does not block open, close takes the escaped child down with the unit", { skip: !has_user_systemd }, async () => {
+  const t = setup();
+  const unit = unit_name(t.paths.key);
+  const user_env = { ...t.env, OWNER_TEST_DETACHED: "", XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR ?? "", DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS ?? "" };
+  const escaped = () => readdirSync("/proc").some((entry) => { try { return readFileSync(`/proc/${entry}/cmdline`, "utf8") === "sleep\x00301\x00"; } catch { return false; } });
+  const is_active = () => spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout.trim();
+  try {
+    spawnSync("systemd-run", ["--user", "--quiet", `--unit=${unit}`, "/bin/false"], { stdio: "ignore" });
+    const bb = t.app("bb", "setsid sleep 301 </dev/null >/dev/null 2>&1 &");
+    const opened = await t.run(["open", t.worktree, "--binary", bb], user_env);
+    assert.equal(opened.status, 0, opened.out);
+    assert.equal(is_active(), "active");
+    assert.equal(JSON.parse(readFileSync(t.paths.state_file, "utf8")).unit, unit);
+    const status = await t.run(["status", t.worktree], user_env);
+    assert.equal(status.status, 0, status.out);
+    assert.match(status.out, /unit: .*\(active\)/);
+    assert.equal(escaped(), true, "the escaped child runs");
+    const closed = await t.run(["close", t.worktree], user_env);
+    assert.equal(closed.status, 0, closed.out);
+    assert.notEqual(is_active(), "active");
+    assert.equal(escaped(), false, "the unit's cgroup took the escaped child down");
+    assert.equal(t.apps_running(), null);
+    assert.equal(existsSync(t.paths.window_dir), false);
+  } finally {
+    spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore" });
+    spawnSync("systemctl", ["--user", "reset-failed", unit], { stdio: "ignore" });
+    await t.cleanup();
+  }
 });

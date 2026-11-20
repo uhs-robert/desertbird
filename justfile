@@ -55,13 +55,19 @@ install_deps:
 settings-defaults checkout=env('DESERTFOX_DIR', ''):
     DESERTFOX_DIR={{quote(checkout)}} npm run --silent defaults:check
 
-# Open a visible Betterbird (or `--app thunderbird`) with a worktree's build in a throwaway profile. An agent runs it on the maintainer's display only for a hand check the maintainer asked for, and tests the tool only in a nested headless session.
+# Open a visible Betterbird (or Thunderbird with `--app thunderbird`) with a worktree's build in a throwaway profile. Each argument after the worktree is one `name value` setting hint, quoted, for example 'toast_ms 3000'. An agent runs it on the maintainer's display only for a hand check the maintainer asked for, and tests the tool only in a nested headless session.
+[positional-arguments]
 owner-test worktree="." *args:
-    node --no-warnings tools/owner_test/cli.ts open {{quote(worktree)}} {{args}}
+    node --no-warnings tools/owner_test/cli.ts open "$@"
 
 # Rebuild and restart the test window on the same profile.
+[positional-arguments]
 owner-test-reload worktree="." *args:
-    node --no-warnings tools/owner_test/cli.ts reload {{quote(worktree)}} {{args}}
+    node --no-warnings tools/owner_test/cli.ts reload "$@"
+
+# Report what is open and whether the loaded build matches.
+owner-test-status worktree=".":
+    node --no-warnings tools/owner_test/cli.ts status {{quote(worktree)}}
 
 # Stop the test window and delete its profile folder.
 owner-test-close worktree=".":

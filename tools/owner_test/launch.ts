@@ -1,10 +1,10 @@
 // What touches the machine: finding the app binary, building and stamping the xpi, the profile, starting the app and the real system calls close uses.
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CloseDeps } from "./close.ts";
-import type { WindowPaths } from "./paths.ts";
+import { is_owner_unit, type WindowPaths } from "./paths.ts";
 import { read_pgrp, read_start_ticks } from "./process_guard.ts";
 import { Refusal } from "./refusal.ts";
 
@@ -120,14 +120,53 @@ export function is_addon_loaded(profile_dir: string, addon_id: string): boolean 
   }
 }
 
-// A plain detached spawn. A later change adds a systemd unit in front of it and returns its name.
-export function start_app(argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string): { unit: string | null; pid: number } {
+// Only a state that says the unit is down confirms a stop. "inactive" is also what an unknown unit prints. Empty output (no systemctl, no user bus) and the running or transitional states ("active", "activating", "deactivating", "reloading") prove nothing, and close then keeps the folder and state.
+export function is_confirmed_stopped(is_active_output: string): boolean {
+  return ["inactive", "failed"].includes(is_active_output.trim());
+}
+
+// Stops the unit, clears a failed state (a failed unit of the same name would block the next start), and reports whether it is confirmed gone. A name that is not one of this tool's units is never passed to systemctl, which takes glob patterns.
+export function stop_unit(unit: string): boolean {
+  if (!is_owner_unit(unit)) return false;
+  spawnSync("systemctl", ["--user", "stop", unit], { stdio: "ignore", timeout: 30_000 });
+  spawnSync("systemctl", ["--user", "reset-failed", unit], { stdio: "ignore", timeout: 10_000 });
+  const state = unit_state(unit);
+  return state !== null && is_confirmed_stopped(state);
+}
+
+// The `is-active` word of a unit, or null when systemctl cannot say (no binary, no user bus).
+export function unit_state(unit: string): string | null {
+  if (!is_owner_unit(unit)) return null;
+  const result = spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8", timeout: 10_000 });
+  return result.error === undefined && result.stdout.trim() !== "" ? result.stdout.trim() : null;
+}
+
+// Environment values go to the unit one by one, because a user unit inherits nothing from this process.
+export function systemd_run_args(unit: string, argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string): string[] {
+  const setenv = Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === "string").map(([name, value]) => `--setenv=${name}=${value}`);
+  return ["--user", "--collect", "--quiet", `--unit=${unit}`, "-p", "MemoryMax=4G", "-p", "TimeoutStopSec=15", `--working-directory=${cwd}`, "-p", `StandardOutput=append:${log_file}`, "-p", `StandardError=append:${log_file}`, ...setenv, "--", ...argv];
+}
+
+function start_detached(argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string): { unit: null; pid: number } {
   const log_fd = openSync(log_file, "a");
   const child = spawn(argv[0] as string, argv.slice(1), { cwd, env, detached: true, stdio: ["ignore", log_fd, log_fd] });
   child.on("error", () => {});
   child.unref();
   closeSync(log_fd);
   return { unit: null, pid: child.pid ?? 0 };
+}
+
+// Through a systemd user unit when possible, so the app outlives the agent's own scope, has a memory cap, and stops as a whole cgroup. A plain detached spawn otherwise (no systemd-run, no user bus, or OWNER_TEST_DETACHED=1). The caller stops a stale unit of this name first.
+export function start_app(argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string, unit: string): { unit: string | null; pid: number } {
+  if (process.env.OWNER_TEST_DETACHED !== "1" && is_owner_unit(unit)) {
+    const run = spawnSync("systemd-run", systemd_run_args(unit, argv, env, cwd, log_file), { stdio: "ignore", timeout: 30_000 });
+    if (run.status === 0) {
+      const pid = Number(spawnSync("systemctl", ["--user", "show", "-p", "MainPID", "--value", unit], { encoding: "utf8", timeout: 10_000 }).stdout.trim());
+      return { unit, pid: Number.isInteger(pid) ? pid : 0 };
+    }
+    console.error("owner-test: systemd-run failed, so the window runs without a systemd unit and may end with this session.");
+  }
+  return start_detached(argv, env, cwd, log_file);
 }
 
 // True for the main process of an app run with this exact profile folder: its command line holds `-profile <dir>` and no `-contentproc` (child processes carry that).
@@ -181,8 +220,7 @@ export function real_close_deps(): CloseDeps {
     names_profile: (pid, profile) => pid_names_profile(pid, profile),
     sleep,
     find_app_by_profile: (profile) => find_app_by_profile(profile),
-    // No unit exists yet, so a state that names one is not ours to trust: not confirmed.
-    stop_unit: () => false,
+    stop_unit,
     remove_window_dir: (window_dir) => rmSync(window_dir, { recursive: true, force: true }),
     remove_stage_dir: (stage_dir) => rmSync(stage_dir, { recursive: true, force: true }),
   };

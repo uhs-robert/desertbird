@@ -1,4 +1,4 @@
-import { is_plain_stage, is_strictly_inside, is_unredirected, type WindowPaths } from "./paths.ts";
+import { is_plain_stage, is_strictly_inside, is_unredirected, unit_name, type WindowPaths } from "./paths.ts";
 import { read_state, remove_state } from "./state.ts";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,7 +16,7 @@ export type CloseDeps = {
   sleep: (ms: number) => Promise<void>;
   // The main process of an app started with exactly this profile folder, or null.
   find_app_by_profile: (profile: string) => RunningApp | null;
-  // Stops a systemd unit and says whether it is gone now. Called only for a state that names a unit.
+  // Stops a systemd unit, clears a failed one, and says whether it is confirmed gone. Always called with the unit derived from the worktree key, never a name from the state file.
   stop_unit: (unit: string) => boolean;
   remove_window_dir: (window_dir: string) => void;
   // Deletes a stage folder left by a build. Called only with the derived, plain stage folder of the window.
@@ -82,8 +82,9 @@ export async function stop_process(label: string, pid: number, start_ticks: numb
 }
 
 // A record belongs to the caller only when its worktree and profile are the ones the caller's key maps to. Two keys never share a profile: a record that names another one is refused whole.
-export function is_own_record(record: { worktree: string; profile: string }, paths: WindowPaths): boolean {
-  return resolve(record.worktree) === paths.worktree && resolve(record.profile) === paths.profile_dir;
+export function is_own_record(record: { worktree: string; profile: string; unit?: string | null }, paths: WindowPaths): boolean {
+  const unit_is_ours = record.unit === undefined || record.unit === null || record.unit === unit_name(paths.key);
+  return resolve(record.worktree) === paths.worktree && resolve(record.profile) === paths.profile_dir && unit_is_ours;
 }
 
 // Stops what the state records, then every main process that runs with this exact profile folder. The second look covers a state written before the spawn (pid 0), a lost state file and an app that outlived a crashed open. A process is never matched by name. The loop is bounded, so a lookup that keeps finding a process cannot spin.
@@ -98,6 +99,16 @@ export async function stop_app(recorded: RunningApp | null, paths: WindowPaths, 
 }
 
 // Deletes only paths.window_dir, which is derived from the caller's worktree, never from the state file. A bad or foreign state file therefore deletes nothing.
+// Stops the window's unit first, so forked children and processes that left the process group die with it, then whatever the checks by start ticks and profile still find (the detached fallback). The unit name comes from the key. Confirmation is required only when the state records a unit: with no systemd at all, nothing proves a stop and a detached window has no unit to prove.
+export async function stop_window(recorded: RunningApp | null, recorded_unit: string | null, paths: WindowPaths, deps: CloseDeps, lines: string[]): Promise<boolean> {
+  const confirmed = deps.stop_unit(unit_name(paths.key));
+  if (recorded_unit !== null && !confirmed) {
+    lines.push("the systemd unit is not confirmed stopped");
+    return false;
+  }
+  return stop_app(recorded, paths, deps, lines);
+}
+
 // A build that crashed leaves its stage folder. It is removed under the same checks as the window folder.
 function clear_stage(paths: WindowPaths, deps: CloseDeps, lines: string[]): void {
   if (!is_strictly_inside(paths.cache_root, paths.stage_dir) || !is_plain_stage(paths)) return void lines.push(`stage folder: ${paths.stage_dir} is not the plain folder derived under ${paths.cache_root}, left alone`);
@@ -111,6 +122,8 @@ export async function close_window(paths: WindowPaths, deps: CloseDeps, keep_sta
   let recorded: RunningApp | null = null;
   let unit: string | null = null;
   if (read.kind === "none") {
+    // A unit can outlive a lost state file, and a failed one would block the next start.
+    deps.stop_unit(unit_name(paths.key));
     // No state does not mean no app: a state file deleted by hand leaves one running on the profile.
     if (deps.find_app_by_profile(paths.profile_dir) === null) {
       if (!keep_stage) clear_stage(paths, deps, lines);
@@ -127,12 +140,8 @@ export async function close_window(paths: WindowPaths, deps: CloseDeps, keep_sta
     recorded = { pid: read.state.app_pid, start_ticks: read.state.app_start_ticks };
     unit = read.state.unit;
   }
-  if (unit !== null && !deps.stop_unit(unit)) {
-    lines.push("close is incomplete: the systemd unit is not confirmed stopped, so the folder and state are kept. Run close again.");
-    return { lines, closed: false, complete: false };
-  }
-  if (!(await stop_app(recorded, paths, deps, lines))) {
-    lines.push("close is incomplete: the app still runs, so the folder and state are kept. Run close again.");
+  if (!(await stop_window(recorded, unit, paths, deps, lines))) {
+    lines.push("close is incomplete: the app or its unit still runs, so the folder and state are kept. Run close again.");
     return { lines, closed: false, complete: false };
   }
   if (!is_strictly_inside(paths.cache_root, paths.window_dir) || !is_unredirected(paths)) {

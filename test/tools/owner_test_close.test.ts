@@ -36,7 +36,7 @@ function setup(): { base: string; paths: WindowPaths; state: WindowState; done: 
   const base = mkdtempSync(join(tmpdir(), "owner-test-close-"));
   const paths = window_paths("/w/tree", { cache_home: join(base, "cache"), state_home: join(base, "state") });
   mkdirSync(paths.profile_dir, { recursive: true });
-  const state: WindowState = { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", binary: "/usr/bin/betterbird", started: "t", unit: null, app_pid: 100, app_start_ticks: 7 };
+  const state: WindowState = { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", addon_id: "id@x", app: "betterbird", binary: "/usr/bin/betterbird", started: "t", unit: null, app_pid: 100, app_start_ticks: 7 };
   write_state(paths.state_file, state);
   return { base, paths, state, done: () => rmSync(base, { recursive: true, force: true }) };
 }
@@ -176,15 +176,27 @@ test("a window folder that is a symlink is left alone", async () => {
   } finally { done(); }
 });
 
+test("the unit stopped is always the one derived from the key, whatever a no-state or corrupt state says", async () => {
+  const { paths, done } = setup();
+  try {
+    for (const prepare of [() => rmSync(paths.state_file), () => writeFileSync(paths.state_file, "{ cut")]) {
+      prepare();
+      const fake = fake_machine();
+      await close_window(paths, fake.deps);
+      assert.deepEqual(fake.unit_stops, [`desertbird-owner-test-${paths.key}`]);
+    }
+  } finally { done(); }
+});
+
 test("a state that names a unit stops it first, and an unconfirmed stop keeps everything", async () => {
   const { paths, state, done } = setup();
   try {
-    write_state(paths.state_file, { ...state, unit: "owner-test-unit" });
+    write_state(paths.state_file, { ...state, unit: `desertbird-owner-test-${paths.key}` });
     const fake = fake_machine();
     const result = await close_window(paths, { ...fake.deps, stop_unit: () => false });
     assert.deepEqual([result.closed, result.complete, fake.removed], [false, false, []]);
     const confirmed = await close_window(paths, fake.deps);
-    assert.deepEqual([confirmed.closed, fake.unit_stops], [true, ["owner-test-unit"]]);
+    assert.deepEqual([confirmed.closed, fake.unit_stops], [true, [`desertbird-owner-test-${paths.key}`]]);
   } finally { done(); }
 });
 
@@ -265,7 +277,7 @@ test("a stage folder left by a crashed build is removed with the window, and onl
     const kept = fake_machine();
     await close_window(paths, kept.deps, true);
     assert.deepEqual(kept.removed, [paths.window_dir], "open keeps the stage it just built");
-    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", binary: "b", started: "t", unit: null, app_pid: 0, app_start_ticks: 0 });
+    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", addon_id: "id@x", app: "betterbird", binary: "b", started: "t", unit: null, app_pid: 0, app_start_ticks: 0 });
     const fake = fake_machine();
     await close_window(paths, fake.deps);
     assert.deepEqual(fake.removed, [`stage ${paths.stage_dir}`, paths.window_dir]);
