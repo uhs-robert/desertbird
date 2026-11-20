@@ -2,7 +2,7 @@
 
 The default keys of DesertBird, generated from the command table in `src/background/commands/`. Do not edit between the markers. Run `npm run docs:gen` after a change to a binding. `npm run check` fails when the tables are stale.
 
-Each tab kind has its own table, because a tab gets only the keys whose commands it can serve. A single key that is missing from a table reaches Thunderbird. In a message or own-page tab, a missing mail sequence such as `g f` or `m R` is consumed and does nothing, so it never runs its tail as a key of its own. Tables split by which-key group. A key has the group of its longest named prefix, so `g a` is under Go and `j` is under Single keys. A key you set in the options page or in the keys editor goes on top of these defaults.
+Each tab kind has its own table, because a tab gets only the keys whose commands it can serve. A single key that is missing from a table reaches Thunderbird. In a message or own-page tab, a missing mail sequence such as `m R` is consumed and does nothing, so it never runs its tail as a key of its own. Tables split by which-key group. A key has the group of its longest named prefix, so `g a` is under Go and `j` is under Single keys. A key you set in the options page or in the keys editor goes on top of these defaults.
 
 A command shows in the long form the command line takes. A note "(prompts)" means the binding sets a `prompt` for a param, so the command line asks for it.
 
