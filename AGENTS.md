@@ -82,10 +82,12 @@ Treat this repository as public.
 
 Run `npm ci` once. Add each new command here in the commit that adds it.
 
-- `npm run check`: lint, typecheck and test. Run it before every commit.
+- `just test`: `npm run check` in a scratch `TMPDIR`, under a systemd user scope with an 8 GB memory cap and a 900 s limit (a plain run with a notice when `systemd-run` is missing). It fails if the run leaves files in its scratch dir. Run it before every commit. `just` calls npm and npm never calls `just`, so CI, `.claude/pre-merge` and contributors without `just` use `npm run check`.
+- `just build`: `npm run build`. `just` with no argument lists the recipes. Both recipes install `node_modules` first (`npm ci`) when it is missing or older than `package-lock.json`.
+- `npm run check`: lint, typecheck and `npm run unit`. Run it before every commit if `just` is not installed.
 - `npm run lint`: typescript-eslint on `src/`: `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`, strict `no-unused-vars` (`_` prefix spares a name), `no-eval` and a ban on a silent `.catch`/`.then` handler (use a helper from `src/shared/swallow.ts`). Copied from DesertFox with three departures: `vendor/` is ignored in place of `web-ext-artifacts/`, the warn prefix is `desertbird:`, and the `tools/**/*.ts` glob stays but matches no file, because the tools here are `.mjs`.
 - `npm run typecheck`: `tsc --noEmit` over `src/`, `tools/` and `test/`.
-- `npm test`: `node --test` on `test/**/*.test.ts`.
+- `npm run unit`: `node --test` on `test/**/*.test.ts`. `npm test` runs `npm run check`.
 - `tools/vendor_desertfox.sh [--verify] <desertfox-checkout>`: write or check `vendor/desertfox/` against the pin.
 - `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `content/page_keys.js`, `content/compose_keys.js`, `experiment/keys.js`, `experiment/overlay.js`, `experiment/app.js`, `experiment/folderpane.js`, `experiment/hints.js`, `experiment/pages.js`, their schemas, `overlay/`, the vendored `vendor/marked/` and `vendor/turndown/` files as they are, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes its size budget.
 - `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, wlrctl, grim, zip, unzip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
@@ -100,3 +102,4 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - Write commit messages as Conventional Commits, with a body that explains why.
 - Work on a branch, never on `main`, and open a PR for each change.
 - CI: `.github/workflows/ci.yml` and `.claude/pre-merge` run `npm run check` and `npm run build`.
+- The `justfile` follows DesertFox's. Departures: `just` calls npm (DesertFox's npm scripts hold the checks and its `test` also runs host tests, which DesertBird lacks); `install_deps` compares `package-lock.json` with `node_modules/.package-lock.json` and runs `npm ci` (DesertFox pins web-ext through `jq`, which DesertBird does not use); the scratch prefix is `desertbird-test-run.*`; the scope has no `just` sub-run, only `npm run check`; no key-test, owner-test or docs recipes (DesertBird has none of those tools).
