@@ -124,14 +124,33 @@ export function on_escape_key(read_title: () => string, wait: (run: () => void, 
     else wait(() => (read_title() === before ? close() : undefined), ESCAPE_ANSWER_MS);
 }
 
-// The browser element fires the first name where Thunderbird has renamed the second. The command line page sets its title once its input has the focus, and its markup has none.
+// The browser element fires the first name where Thunderbird has renamed the second.
 const TITLE_EVENTS = ["pagetitlechanged", "DOMTitleChanged"];
 
-/** Gives the browser its final id when its page first has a title. The key runtime reads the final id as "the page takes the keys". */
-export function claim_id_when_page_ready(browser: { id: string; addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void }, final_id: string): void {
+/** How long the host waits for the ready title. It stays under the hold of the key runtime (1500 ms), so a page that never says it is ready still ends up a typing target before the hold ends and the line takes its keys. */
+export const READY_FAILSAFE_MS = 1400;
+
+interface ReadyBrowser {
+    id: string;
+    contentTitle?: string;
+    addEventListener(type: string, listener: () => void): void;
+    removeEventListener(type: string, listener: () => void): void;
+}
+
+/**
+ * Gives the browser its final id when the page sets `ready_title`, or after `READY_FAILSAFE_MS` when it never does (an event this Thunderbird names differently, a page that failed before it set the title). An empty title is the markup's own, and any other title is not the page's word, so neither counts.
+ */
+export function claim_id_when_page_ready(browser: ReadyBrowser, final_id: string, ready_title: string, wait: (run: () => void, ms: number) => void): void {
+    let claimed = false;
     const claim = () => {
+        if (claimed) return;
+        claimed = true;
         browser.id = final_id;
-        for (const type of TITLE_EVENTS) browser.removeEventListener(type, claim);
+        for (const type of TITLE_EVENTS) browser.removeEventListener(type, on_title);
     };
-    for (const type of TITLE_EVENTS) browser.addEventListener(type, claim);
+    const on_title = () => {
+        if (browser.contentTitle === ready_title) claim();
+    };
+    for (const type of TITLE_EVENTS) browser.addEventListener(type, on_title);
+    wait(claim, READY_FAILSAFE_MS);
 }

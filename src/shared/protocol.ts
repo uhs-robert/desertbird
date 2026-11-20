@@ -14,6 +14,8 @@ export interface KeymapTree {
 }
 
 /** The storage key of the record the background keeps: the compiled keymaps and the hash of the bindings they came from. The body script reads its tree from here. */
+/** The title the command line page sets once its input has the focus. The overlay host reads it as "ready", so the page and the host name it from here. */
+export const OVERLAY_READY_TITLE = "DesertBird command line";
 export const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
 
 /**

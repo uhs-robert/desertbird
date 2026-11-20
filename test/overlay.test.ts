@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ESCAPE_ANSWER_MS, claim_id_when_page_ready, create_overlay_host, on_escape_key } from "../src/chrome/overlay.ts";
+import { ESCAPE_ANSWER_MS, READY_FAILSAFE_MS, claim_id_when_page_ready, create_overlay_host, on_escape_key } from "../src/chrome/overlay.ts";
 
 class FakeWindow {
     tab_listeners = new Set<() => void>();
@@ -228,27 +228,55 @@ test("a page that answers Escape by changing its title keeps the overlay open", 
 
 function fake_browser() {
     const listeners = new Map<string, Set<() => void>>();
-    return {
+    const timers: (() => void)[] = [];
+    const browser = {
         id: "loading",
+        contentTitle: "",
         listeners,
+        timers,
+        wait: (run: () => void) => void timers.push(run),
         addEventListener: (type: string, listener: () => void) => void (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener),
         removeEventListener: (type: string, listener: () => void) => void listeners.get(type)?.delete(listener),
-        fire: (type: string) => void [...(listeners.get(type) ?? [])].forEach((listener) => listener()),
+        fire: (type: string, title: string) => void ((browser.contentTitle = title), [...(listeners.get(type) ?? [])].forEach((listener) => listener())),
     };
+    return browser;
 }
 
-test("the browser keeps its loading id until its page has a title, then takes the final id and drops its listeners", () => {
+test("the browser keeps its loading id until its page sets the ready title, then takes the final id and drops its listeners", () => {
     const browser = fake_browser();
-    claim_id_when_page_ready(browser, "final");
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
     assert.equal(browser.id, "loading");
-    browser.fire("pagetitlechanged");
+    browser.fire("pagetitlechanged", "Ready");
     assert.equal(browser.id, "final");
     assert.deepEqual([...browser.listeners.values()].map((set) => set.size), [0, 0]);
 });
 
+test("an empty title or another title does not claim the id", () => {
+    const browser = fake_browser();
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    browser.fire("pagetitlechanged", "");
+    browser.fire("pagetitlechanged", "about:blank");
+    assert.equal(browser.id, "loading");
+});
+
 test("the older title event name claims the id too", () => {
     const browser = fake_browser();
-    claim_id_when_page_ready(browser, "final");
-    browser.fire("DOMTitleChanged");
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    browser.fire("DOMTitleChanged", "Ready");
     assert.equal(browser.id, "final");
+});
+
+test("with no ready title the failsafe timer claims the id, once, and a later title changes nothing", () => {
+    const browser = fake_browser();
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    assert.equal(browser.timers.length, 1);
+    browser.timers[0]!();
+    assert.equal(browser.id, "final");
+    browser.id = "taken";
+    browser.timers[0]!();
+    assert.equal(browser.id, "taken");
+});
+
+test("the failsafe waits less than the hold of the key runtime", () => {
+    assert.ok(READY_FAILSAFE_MS < 1500);
 });

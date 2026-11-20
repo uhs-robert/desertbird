@@ -183,12 +183,13 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         const handler = (event: KeydownEvent) => (on_keydown(window, event), tell_visual(window));
         const reset_typing = () => {
             matcher?.reset();
+            hold_until = 0;
             visual_anchor = -1;
             tell_visual(window);
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
-        const stop_tab_listening = deps.on_tab_select(window, () => (reset_typing(), (hold_until = 0)));
-        // The same hazard with focus: `d`, an alt-tab away and back, then `d`. A blur leaves the hold: the overlay mount focuses its browser and blurs the window before its page loads.
+        const stop_tab_listening = deps.on_tab_select(window, reset_typing);
+        // The same hazard with focus: `d`, an alt-tab away and back, then `d`.
         const stop_blur_listening = deps.on_window_blur(window, reset_typing);
         hooked.set(window, { handler, stop_tab_listening, stop_blur_listening });
         window.addEventListener("keydown", handler, true);

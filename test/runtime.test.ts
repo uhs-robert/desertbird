@@ -705,18 +705,20 @@ test("once the overlay page is ready, its keys reach the line and the hold ends"
     assert.equal(window.selected, 1);
 });
 
-test("the hold timeout is the failsafe when the overlay page never becomes ready", () => {
+test("when the host claims the ready id on its own timer, the line takes the keys and the hold ends before it runs out", () => {
     const { windows, advance, runtime } = setup();
     runtime.install(tree(), ["cmdline.open"]);
     const window = windows[0]!;
     press(window, ":");
-    advance(1400);
+    advance(1350);
     assert.equal(press(window, "j", in_loading_overlay).cancelled, true);
+    // The host's failsafe timer (under the hold) gave the browser its typing id.
+    advance(50);
+    assert.equal(press(window, "a", in_ready_overlay).cancelled, false, "the line takes the key");
     assert.equal(window.selected, 0);
     advance(200);
-    // Past the timeout a still loading overlay is no typing target: the list takes its keys as it does with no overlay.
-    press(window, "j", in_loading_overlay);
-    assert.equal(window.selected, 1);
+    press(window, "j");
+    assert.equal(window.selected, 1, "the hold ended on the typing key");
 });
 
 test("an overlay that closes before its page is ready leaves the hold to run out", () => {
@@ -766,13 +768,13 @@ test("the hold ends after its timeout", () => {
     assert.equal(windows[0]!.selected, 1);
 });
 
-test("a window blur keeps the hold: the overlay mount blurs the window before its page loads", () => {
+test("a window blur ends the hold, which is why the host keeps the mount's own blur from reaching the runtime", () => {
     const { windows, runtime } = setup();
     runtime.install(tree(), ["cmdline.open"]);
     press(windows[0]!, ":");
     windows[0]!.blur();
-    assert.equal(press(windows[0]!, "j").cancelled, true);
-    assert.equal(windows[0]!.selected, 0);
+    press(windows[0]!, "j");
+    assert.equal(windows[0]!.selected, 1);
 });
 
 test("a tab change ends the hold", () => {

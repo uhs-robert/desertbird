@@ -6,15 +6,17 @@ import { capture_focus, in_text_field } from "./focus.ts";
 import { hook_page_focus } from "./page_focus.ts";
 import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
-import { claim_id_when_page_ready, create_overlay_host, on_escape_key } from "./overlay.ts";
+import { READY_FAILSAFE_MS, claim_id_when_page_ready, create_overlay_host, on_escape_key } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import type { KeydownEvent } from "./runtime.ts";
 import { front_about_3pane } from "./view.ts";
+import { OVERLAY_READY_TITLE } from "../shared/protocol.ts";
 import type { OverlayClosed, OverlayMountArgs, OverlaySetModeLabelArgs, OverlaySurface, OverlayUnmountArgs } from "../shared/protocol.ts";
 
 declare const ChromeUtils: { importESModule(url: string): Record<string, any> };
+declare const Services: { focus: { activeWindow: unknown } };
 
 const DARK_SCHEME = "(prefers-color-scheme: dark)";
 const XHTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
@@ -51,6 +53,7 @@ interface OverlayElement {
     style: { cssText: string };
     appendChild(child: unknown): void;
     removeEventListener(type: string, listener: () => void): void;
+    contentTitle?: string;
     remove(): void;
     focus(): void;
     setAttribute(name: string, value: string): void;
@@ -74,6 +77,16 @@ interface OverlayExtension {
     remoteType: string;
 }
 
+// The mount blurs the window while it moves the focus into the browser. The key runtimes read a blur as the window losing focus and end their hold, so the hold after `:` would end before the page is ready. The blur stops at the window root, above the runtimes' listeners, until the failsafe wait is over. A window that is no longer the active one (an alt-tab, a switch to another window) still reports its blur.
+function swallow_mount_blur(window: MainWindow, wait: (run: () => void, ms: number) => void): () => void {
+    const root = (window as MainWindow & { windowRoot?: MainWindow }).windowRoot ?? window;
+    const swallow = (event: { stopPropagation(): void }) => void (Services.focus.activeWindow === window && event.stopPropagation());
+    root.addEventListener("blur", swallow as never, true);
+    const stop = () => root.removeEventListener("blur", swallow as never, true);
+    wait(stop, READY_FAILSAFE_MS);
+    return stop;
+}
+
 // An extension page needs the browser attributes of an extension view, then a load through the extension's own principal. The load waits for the frame loader, which a remote browser creates after it joins the document.
 function create_overlay_element(window: MainWindow, extension: OverlayExtension, surface: OverlaySurface, window_id: number, click_through: boolean): () => void {
     const spec = SURFACES[surface];
@@ -82,9 +95,14 @@ function create_overlay_element(window: MainWindow, extension: OverlayExtension,
     box.id = spec.box_id;
     box.style.cssText = click_through ? `${spec.box_style} pointer-events: none;` : spec.box_style;
     const browser = document.createXULElement("browser");
-    // A browser that takes the keyboard answers to its keys only once its page has loaded: see `OVERLAY_LOADING_ID`.
+    // A browser that takes the keyboard answers to its keys only once its page is ready: see `OVERLAY_LOADING_ID`.
     browser.id = spec.takes_keyboard ? OVERLAY_LOADING_ID : spec.browser_id;
-    if (spec.takes_keyboard) claim_id_when_page_ready(browser, spec.browser_id);
+    const wait = (run: () => void, ms: number) => void (window as unknown as { setTimeout(run: () => void, ms: number): number }).setTimeout(run, ms);
+    let stop_swallowing_blur = () => {};
+    if (spec.takes_keyboard) {
+        claim_id_when_page_ready(browser, spec.browser_id, OVERLAY_READY_TITLE, wait);
+        stop_swallowing_blur = swallow_mount_blur(window, wait);
+    }
     browser.setAttribute("type", "content");
     browser.setAttribute("disableglobalhistory", "true");
     browser.setAttribute("messagemanagergroup", "webext-browsers");
@@ -112,7 +130,7 @@ function create_overlay_element(window: MainWindow, extension: OverlayExtension,
     document.documentElement.appendChild(box);
     // The focus moves now, not after the page loads: a key typed while the page loads goes to the overlay and not to the thread list.
     if (spec.takes_keyboard) browser.focus();
-    return () => box.remove();
+    return () => (box.remove(), stop_swallowing_blur());
 }
 
 interface StatusBarElement extends LabelElement {
