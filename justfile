@@ -55,7 +55,7 @@ install_deps:
 settings-defaults checkout=env('DESERTFOX_DIR', ''):
     DESERTFOX_DIR={{quote(checkout)}} npm run --silent defaults:check
 
-# Open a visible Betterbird (or `--app thunderbird`) with a worktree's build in a throwaway profile. Never run by an agent on the maintainer's display.
+# Open a visible Betterbird (or `--app thunderbird`) with a worktree's build in a throwaway profile. An agent runs it on the maintainer's display only for a hand check the maintainer asked for, and tests the tool only in a nested headless session.
 owner-test worktree="." *args:
     node --no-warnings tools/owner_test/cli.ts open {{quote(worktree)}} {{args}}
 

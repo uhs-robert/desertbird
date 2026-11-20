@@ -7,11 +7,11 @@ import { close_window, type CloseDeps, type RunningApp } from "../../tools/owner
 import { window_paths, type WindowPaths } from "../../tools/owner_test/paths.ts";
 import { read_state, write_state, type WindowState } from "../../tools/owner_test/state.ts";
 
-type Fake = { deps: CloseDeps; signals: string[]; removed: string[]; unit_stops: string[]; processes: Map<number, number>; found: RunningApp | null; on_signal: (pid: number, signal: string) => void };
+type Fake = { more: RunningApp[]; groups: Map<number, RunningApp[]>; foreign: Set<number>; deps: CloseDeps; signals: string[]; removed: string[]; unit_stops: string[]; processes: Map<number, number>; found: RunningApp | null; on_signal: (pid: number, signal: string) => void };
 
 // A fake machine: pid -> start ticks. SIGTERM removes the process unless `ignore_term` holds its pid.
 function fake_machine(ignore_term: number[] = [], survive_kill: number[] = []): Fake {
-  const fake: Fake = { signals: [], removed: [], unit_stops: [], processes: new Map(), found: null, on_signal: () => {}, deps: undefined as unknown as CloseDeps };
+  const fake: Fake = { more: [], groups: new Map(), foreign: new Set(), signals: [], removed: [], unit_stops: [], processes: new Map(), found: null, on_signal: () => {}, deps: undefined as unknown as CloseDeps };
   fake.deps = {
     read_start_ticks: (pid) => fake.processes.get(pid) ?? null,
     signal: (pid, signal) => {
@@ -19,8 +19,10 @@ function fake_machine(ignore_term: number[] = [], survive_kill: number[] = []): 
       fake.on_signal(pid, signal);
       if ((signal === "SIGKILL" && !survive_kill.includes(pid)) || (signal === "SIGTERM" && !ignore_term.includes(pid))) fake.processes.delete(pid);
     },
+    group_members: (pid) => fake.groups.get(pid) ?? [],
+    names_profile: (pid) => !fake.foreign.has(pid),
     sleep: async () => {},
-    find_app_by_profile: () => (fake.found !== null && fake.processes.get(fake.found.pid) === fake.found.start_ticks ? fake.found : null),
+    find_app_by_profile: () => [fake.found, ...fake.more].find((app): app is RunningApp => app !== null && fake.processes.get(app.pid) === app.start_ticks) ?? null,
     stop_unit: (unit) => (fake.unit_stops.push(unit), true),
     remove_window_dir: (dir) => fake.removed.push(dir),
     grace_ms: 300,
@@ -33,7 +35,7 @@ function setup(): { base: string; paths: WindowPaths; state: WindowState; done: 
   const base = mkdtempSync(join(tmpdir(), "owner-test-close-"));
   const paths = window_paths("/w/tree", { cache_home: join(base, "cache"), state_home: join(base, "state") });
   mkdirSync(paths.profile_dir, { recursive: true });
-  const state: WindowState = { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", started: "t", unit: null, app_pid: 100, app_start_ticks: 7 };
+  const state: WindowState = { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", binary: "/usr/bin/betterbird", started: "t", unit: null, app_pid: 100, app_start_ticks: 7 };
   write_state(paths.state_file, state);
   return { base, paths, state, done: () => rmSync(base, { recursive: true, force: true }) };
 }
@@ -182,5 +184,75 @@ test("a state that names a unit stops it first, and an unconfirmed stop keeps ev
     assert.deepEqual([result.closed, result.complete, fake.removed], [false, false, []]);
     const confirmed = await close_window(paths, fake.deps);
     assert.deepEqual([confirmed.closed, fake.unit_stops], [true, ["owner-test-unit"]]);
+  } finally { done(); }
+});
+
+test("a recorded pid whose command line does not name this profile is never signalled", async () => {
+  const { paths, done } = setup();
+  try {
+    const fake = fake_machine();
+    fake.processes.set(100, 7);
+    fake.foreign.add(100);
+    const result = await close_window(paths, fake.deps);
+    assert.deepEqual(fake.signals, []);
+    assert.match(result.lines.join("\n"), /does not run with this window's profile/);
+    assert.equal(result.closed, true, "the folder of this window is still cleaned");
+  } finally { done(); }
+});
+
+test("processes of the app's group that outlive the leader get SIGKILL, and only those listed", async () => {
+  const { paths, done } = setup();
+  try {
+    const fake = fake_machine();
+    fake.processes.set(100, 7);
+    fake.processes.set(101, 8);
+    fake.processes.set(102, 9);
+    fake.processes.set(500, 1);
+    fake.groups.set(100, [{ pid: 101, start_ticks: 8 }, { pid: 102, start_ticks: 9 }]);
+    // The members ignore SIGTERM because nobody sends it to them: only the leader is signalled first.
+    const result = await close_window(paths, fake.deps);
+    assert.deepEqual(fake.signals, ["SIGTERM 100", "SIGKILL 101", "SIGKILL 102"]);
+    assert.equal(fake.processes.has(500), true, "an unrelated process is untouched");
+    assert.equal(result.closed, true);
+  } finally { done(); }
+});
+
+test("a group member whose pid was reused (other ticks) is not signalled", async () => {
+  const { paths, done } = setup();
+  try {
+    const fake = fake_machine();
+    fake.processes.set(100, 7);
+    fake.processes.set(101, 99);
+    fake.groups.set(100, [{ pid: 101, start_ticks: 8 }]);
+    await close_window(paths, fake.deps);
+    assert.deepEqual(fake.signals, ["SIGTERM 100"]);
+  } finally { done(); }
+});
+
+test("every process found for the profile is stopped, not only the first", async () => {
+  const { paths, state, done } = setup();
+  try {
+    write_state(paths.state_file, { ...state, app_pid: 0, app_start_ticks: 0 });
+    const fake = fake_machine();
+    fake.processes.set(300, 55);
+    fake.processes.set(301, 56);
+    fake.found = { pid: 300, start_ticks: 55 };
+    fake.more = [{ pid: 301, start_ticks: 56 }];
+    const result = await close_window(paths, fake.deps);
+    assert.deepEqual(fake.signals, ["SIGTERM 300", "SIGTERM 301"]);
+    assert.equal(result.closed, true);
+  } finally { done(); }
+});
+
+test("with no state file, an app that still runs on the profile is stopped and the folder deleted", async () => {
+  const { paths, done } = setup();
+  try {
+    rmSync(paths.state_file);
+    const fake = fake_machine();
+    fake.processes.set(300, 55);
+    fake.found = { pid: 300, start_ticks: 55 };
+    const result = await close_window(paths, fake.deps);
+    assert.deepEqual(fake.signals, ["SIGTERM 300"]);
+    assert.deepEqual([result.closed, fake.removed], [true, [paths.window_dir]]);
   } finally { done(); }
 });

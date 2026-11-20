@@ -97,7 +97,7 @@ Run `npm ci` once. Add each new command here in the commit that adds it.
 - `npm run build`: typecheck, then `tools/build.mjs`. It writes `dist/` (`background.js`, `content/message_display.js`, `content/page_keys.js`, `content/compose_keys.js`, `experiment/keys.js`, `experiment/overlay.js`, `experiment/app.js`, `experiment/folderpane.js`, `experiment/hints.js`, `experiment/pages.js`, `experiment/zoom.js`, their schemas, `overlay/`, the vendored `vendor/marked/` and `vendor/turndown/` files as they are, `manifest.json`) and an unsigned `dist/desertbird.xpi`. It fails when a parent bundle passes its size budget.
 - `npm run e2e [-- thunderbird|betterbird] [--xpi dist/desertbird.xpi]`: headless end-to-end run. Needs labwc, wtype, wlrctl, grim, zip, unzip and a Thunderbird or Betterbird binary. See `tools/e2e/README.md`.
 - `node tools/e2e/measure_concurrent.mjs [thunderbird|betterbird] --xpi dist/desertbird.xpi [--counts 1,4]`: start 1 and then 4 apps at once (or the counts given) and record startup time and peak memory. See `tools/e2e/README.md`.
-- `just owner-test [worktree] [--app thunderbird]`, `just owner-test-reload [worktree]`, `just owner-test-close [worktree]`: open, reload and close a visible test window. Agents never run it on the maintainer's display. See `tools/owner_test/README.md`.
+- `just owner-test [worktree] [--app thunderbird]`, `just owner-test-reload [worktree]`, `just owner-test-close [worktree]`: open, reload and close a visible test window. An agent opens a window on the maintainer's display only for a hand check the maintainer asked for, and tests or debugs the tool itself only in a nested headless session, never on that display. See `tools/owner_test/README.md`.
 
 ## Planning
 

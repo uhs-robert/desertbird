@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { read_state, remove_state, write_state, type WindowState } from "../../tools/owner_test/state.ts";
 
-const state: WindowState = { worktree: "/w", profile: "/p", log: "/l", stamp: "s", app: "betterbird", started: "t", unit: null, app_pid: 5, app_start_ticks: 9 };
+const state: WindowState = { worktree: "/w", profile: "/p", log: "/l", stamp: "s", app: "betterbird", binary: "/usr/bin/betterbird", started: "t", unit: null, app_pid: 5, app_start_ticks: 9 };
 
 function in_temp_dir(body: (dir: string) => void) {
   const dir = mkdtempSync(join(tmpdir(), "owner-test-state-"));
@@ -40,7 +40,7 @@ test("a file cut off by a crash, or with a wrong field, reads as corrupt and nev
   in_temp_dir((dir) => {
     const file = join(dir, "k.json");
     const text = JSON.stringify(state);
-    for (const bad of [text.slice(0, 20), "", "null", JSON.stringify({ ...state, app_pid: "5" }), JSON.stringify({ ...state, profile: 3 }), JSON.stringify({ ...state, unit: 1 }), JSON.stringify({ ...state, app_start_ticks: 1.5 })]) {
+    for (const bad of [text.slice(0, 20), "", "null", JSON.stringify({ ...state, app_pid: "5" }), JSON.stringify({ ...state, profile: 3 }), JSON.stringify({ ...state, unit: 1 }), JSON.stringify({ ...state, app_start_ticks: 1.5 }), JSON.stringify({ ...state, binary: undefined })]) {
       writeFileSync(file, bad);
       assert.equal(read_state(file).kind, "corrupt", bad);
     }

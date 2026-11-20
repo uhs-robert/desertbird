@@ -89,7 +89,7 @@ test("real lifecycle with a stand-in app: start, close while it runs, nothing le
     pid = started.pid;
     const start_ticks = read_start_ticks(pid) ?? 0;
     assert.ok(pid > 1 && start_ticks > 0);
-    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", started: "t", unit: null, app_pid: pid, app_start_ticks: start_ticks });
+    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", binary: script, started: "t", unit: null, app_pid: pid, app_start_ticks: start_ticks });
     assert.deepEqual(find_app_by_profile(paths.profile_dir), { pid, start_ticks });
     const result = await close_window(paths, { ...real_close_deps(), grace_ms: 400, kill_wait_ms: 3000 });
     assert.equal(result.closed, true, result.lines.join("\n"));

@@ -8,6 +8,7 @@ export type WindowState = {
   log: string;
   stamp: string;
   app: string;
+  binary: string;
   started: string;
   unit: string | null;
   app_pid: number;
@@ -16,7 +17,7 @@ export type WindowState = {
 
 export type ReadState = { kind: "none" } | { kind: "corrupt"; reason: string } | { kind: "ok"; state: WindowState };
 
-const STRING_FIELDS = ["worktree", "profile", "log", "stamp", "app", "started"] as const;
+const STRING_FIELDS = ["worktree", "profile", "log", "stamp", "app", "binary", "started"] as const;
 const NUMBER_FIELDS = ["app_pid", "app_start_ticks"] as const;
 
 export function read_state(state_file: string): ReadState {

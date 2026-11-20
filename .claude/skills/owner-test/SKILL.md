@@ -7,7 +7,7 @@ description: Open a visible Betterbird or Thunderbird window with a worktree's b
 
 The window shows on the maintainer's desktop, with fixture mail in a throwaway profile. Each worktree has its own window and profile, so parallel agents do not collide. The tool never touches a real profile (`~/.thunderbird` and the like). See `tools/owner_test/README.md`.
 
-Agents never run the tool on the maintainer's display. Test the tool itself only inside a nested headless session (`tools/measure/session.mjs`), and make sure every process it starts exits.
+Run the tool on the maintainer's display only for a hand check the maintainer asked for. To test or debug the tool itself, use only a nested headless session (`tools/measure/session.mjs`), never the maintainer's display, and make sure every process it starts exits.
 
 1. Run `just owner-test <worktree>` once per test round. Add `--app thunderbird` for Thunderbird, which needs `tools/measure/fetch_thunderbird.sh` once. The default is Betterbird.
 2. If it prints `WRONG BUILD` or fails, stop and report. Do not hand over a window that shows another build.

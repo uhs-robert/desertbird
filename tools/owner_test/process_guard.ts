@@ -19,3 +19,15 @@ export function read_start_ticks(pid: number, proc_root = "/proc"): number | nul
 export function is_same_process(pid: number, start_ticks: number, proc_root = "/proc"): boolean {
   return start_ticks > 0 && read_start_ticks(pid, proc_root) === start_ticks;
 }
+
+// Field 5 of /proc/<pid>/stat is the process group. The app starts detached, so it leads its own group and its pgrp equals its pid.
+export function read_pgrp(pid: number, proc_root = "/proc"): number | null {
+  if (!Number.isInteger(pid) || pid <= 1) return null;
+  try {
+    const after_name = readFileSync(`${proc_root}/${pid}/stat`, "utf8");
+    const pgrp = Number(after_name.slice(after_name.lastIndexOf(")") + 2).split(" ")[2]);
+    return Number.isInteger(pgrp) ? pgrp : null;
+  } catch {
+    return null;
+  }
+}
