@@ -28,6 +28,21 @@
                   "type": "any"
                 }
               },
+              "typingTree": {
+                "type": "object",
+                "description": "The compiled typing keymap as data, loose for the reason of the other trees. Its keys run while a text field has the focus.",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "root": {
+                    "type": "any"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "any"
+                }
+              },
               "holdCommands": {
                 "type": "array",
                 "description": "Ids of the commands that open the overlay. After one fires, plain keys are dropped until the focus reaches a text field, the tab changes or 1.5 seconds pass.",

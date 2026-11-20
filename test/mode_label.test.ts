@@ -123,6 +123,13 @@ test("a first call puts one label at the start of the status bar, and later call
     assert.equal(windows.get(2)!.labels_in.length, 0, "another window is untouched");
 });
 
+test("manual insert mode, reported by a page tab, shows as insert with no field focused", () => {
+    const { windows, label } = setup();
+    label.set({ windowId: 1, mode: "insert", indicator: "always", style: "classic", colors: COLORS });
+    assert.equal(windows.get(1)!.labels_in[0]!.attributes["value"], "-- INSERT --");
+    assert.throws(() => label.set({ windowId: 1, mode: "replace" as never, indicator: "always", style: "classic", colors: COLORS }), /unknown mode/);
+});
+
 test("a style change restyles the same label", () => {
     const { windows, label } = setup();
     label.set({ windowId: 1, mode: "normal", indicator: "always", style: "classic", colors: COLORS });

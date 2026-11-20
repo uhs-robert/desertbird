@@ -3,6 +3,7 @@
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
 import type { Invocation, KeyBinding } from "../../../vendor/desertfox/invocation.ts";
+import { parse_sequence } from "../../../vendor/desertfox/keys/notation.ts";
 import { ANY_KEY } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, GROUP_NAMES, compile_bindings, compile_default_keymap, registry } from "./index.ts";
@@ -17,7 +18,7 @@ import type { KeymapTree } from "../../shared/protocol.ts";
 export const TAB_KINDS = {
     message: ["message", "tab", "body"],
     own: ["tab", "body"],
-    page: ["tab", "page"],
+    page: ["tab", "page", "typing"],
 } as const satisfies Record<string, readonly TabNeed[]>;
 
 export type TabKind = keyof typeof TAB_KINDS;
@@ -94,6 +95,21 @@ export function compile_tab_keymap(kind: TabKind, user: KeymapConfig["normal"] =
         close_shared_prefixes(result.compiled.modes.normal as TreeBranch);
     }
     return result;
+}
+
+const typing_keys = (): NonNullable<KeymapConfig["normal"]> => merged((group) => group.typing_keys);
+
+/** The default typing keys, for the help page and the keymap doc. */
+export const default_typing_keymap = (): KeymapConfig => ({ normal: typing_keys(), group_names: GROUP_NAMES });
+
+/**
+ * The tree of the keys that run while a text field has the focus. The user's keys join it only when they are one key and run a command the defaults already bind here, so a user key for `q` never closes the tab from a field, and `null` goes through to unbind. The runtime feeds it chords only, one at a time, so a sequence would never finish.
+ */
+export function compile_typing_keymap(user: KeymapConfig["normal"] = {}): CompileResult {
+    const defaults = typing_keys();
+    const typing_ids = new Set(Object.values(defaults).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []).map((invocation) => invocation.id)));
+    const kept = Object.entries(user ?? {}).filter(([keys, binding]) => binding === null || (parse_sequence(keys).tokens?.length === 1 && (Array.isArray(binding) ? binding : [binding]).every((invocation) => typing_ids.has(invocation.id))));
+    return compile_bindings({ normal: { ...defaults, ...Object.fromEntries(kept) }, group_names: GROUP_NAMES }, {}, { normal: defaults });
 }
 
 /** The ids of the background commands a key of a message document may run, by default or by a user key. The background runs a request of the body script only for these. */

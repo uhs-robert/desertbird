@@ -242,6 +242,15 @@ test("a mode change goes to the host only while the port is ready", async () => 
     assert.deepEqual(last().posted.at(-1), { verb: "mode", id: "visual", label: "VISUAL", private: false, tab_id: 7, window_id: 3 });
 });
 
+test("manual insert mode reaches the host as INSERT", async () => {
+    const { bridge, last, ready, state } = bridge_under_test();
+    await bridge.start();
+    await ready();
+    state.mode = { mode: "insert", window_id: 3, tab_id: 7 };
+    await bridge.mode_changed();
+    assert.deepEqual(last().posted.at(-1), { verb: "mode", id: "insert", label: "INSERT", private: false, tab_id: 7, window_id: 3 });
+});
+
 test("turning the setting on again connects at once", async () => {
     const { native, bridge, state } = bridge_under_test();
     await bridge.start();

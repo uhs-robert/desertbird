@@ -4,20 +4,25 @@ import { create_page_runtime } from "../src/chrome/page_runtime.ts";
 import type { PageDeps } from "../src/chrome/page_runtime.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "../src/chrome/runtime.ts";
 import type { Situation } from "../src/chrome/readable_focus.ts";
-import { compile_tab_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { compile_tab_keymap, compile_typing_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import type { KeysEvent, KeysInvocation, KeysPending } from "../src/shared/protocol.ts";
 
 class FakeWindow {
     key_listeners = new Set<(event: KeydownEvent) => void>();
+    bubble_listeners = new Set<(event: KeydownEvent) => void>();
+    /** Stands in for Thunderbird's own handlers, which run between the capture and the bubble listeners of the runtime. */
+    thunderbird_uses: ((event: KeydownEvent) => boolean) | null = null;
+    blurs = 0;
+    insert_window_ids: number[] = [];
     tab_listeners = new Set<() => void>();
     blur_listeners = new Set<() => void>();
     situation: Situation = "page";
     overlay_loading = false;
     /** The target the runtime listens on, a stand-in for the window root. */
     root: KeyTarget = {
-        addEventListener: (_type, listener) => void this.key_listeners.add(listener),
-        removeEventListener: (_type, listener) => void this.key_listeners.delete(listener),
+        addEventListener: (_type, listener, capture) => void (capture ? this.key_listeners : this.bubble_listeners).add(listener),
+        removeEventListener: (_type, listener, capture) => void (capture ? this.key_listeners : this.bubble_listeners).delete(listener),
     };
 }
 
@@ -37,11 +42,13 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
     };
     window.overlay_loading = (event.target as { id?: string }).id === "desertbird-overlay-loading";
     for (const listener of [...window.key_listeners]) listener(event);
+    if (window.thunderbird_uses?.(event)) event.defaultPrevented = true;
+    if (!result.stopped) for (const listener of [...window.bubble_listeners]) listener(event);
     return result;
 }
 
 const tree_of = (result: ReturnType<typeof compile_tab_keymap>) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(result.compiled.modes.normal)) as unknown });
-const tree = (user?: Parameters<typeof compile_tab_keymap>[1]) => ({ page: tree_of(compile_tab_keymap("page", user)), message: page_message_tree(tree_of(compile_tab_keymap("message", user)) as never) });
+const tree = (user?: Parameters<typeof compile_tab_keymap>[1]) => ({ page: tree_of(compile_tab_keymap("page", user)), message: page_message_tree(tree_of(compile_tab_keymap("message", user)) as never), typing: tree_of(compile_typing_keymap(user)) });
 
 function setup(window_count = 1) {
     const windows = Array.from({ length: window_count }, () => new FakeWindow());
@@ -61,6 +68,7 @@ function setup(window_count = 1) {
         key_target_of: (window) => window.root,
         situation_of: (window) => window.situation,
         overlay_is_loading: (window) => window.overlay_loading,
+        blur_focused: (window) => void window.blurs++,
         message_ids_of: () => [42],
         scroll: (_window, id, count) => (scrolls.push([id, count]), true),
         on_tab_select(window, listener) {
@@ -392,4 +400,231 @@ test("the page tree and the message tree keep separate half-typed sequences", ()
     assert.equal(scrolls.length, 0, "no gg out of three g in two tabs");
     press(window, "g");
     assert.deepEqual(scrolls.map(([id]) => id), ["page.top"]);
+});
+
+const modes = (events: KeysEvent[]) => events.filter((event) => event.command === "mode").map((event) => (event as { mode: string }).mode);
+
+test("Escape in a text field is left to Thunderbird first and blurs in the bubble phase, once", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "field";
+    const result = press(window, "Escape");
+    assert.deepEqual(result, { cancelled: false, stopped: false });
+    assert.equal(window.blurs, 1);
+    assert.deepEqual(invocations(), []);
+});
+
+test("Escape that Thunderbird used (quick filter clear, inline edit cancel) does not blur", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "field";
+    window.thunderbird_uses = (event) => event.key === "Escape";
+    press(window, "Escape");
+    assert.equal(window.blurs, 0);
+    window.thunderbird_uses = null;
+    press(window, "Escape");
+    assert.equal(window.blurs, 1, "the next Escape is not held back");
+});
+
+test("Ctrl+[ leaves a field as Escape does", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "field";
+    press(window, "[", { ctrlKey: true });
+    assert.equal(window.blurs, 1);
+    window.thunderbird_uses = () => true;
+    press(window, "[", { ctrlKey: true });
+    assert.equal(window.blurs, 1);
+});
+
+test("Escape outside a field and outside insert mode passes untouched and blurs nothing", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    assert.deepEqual(press(window, "Escape"), { cancelled: false, stopped: false });
+    assert.equal(window.blurs, 0);
+    assert.deepEqual(invocations(), []);
+});
+
+test("Alt+j and Alt+k in a field switch tab once each and stop the key, so no second handler runs", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "field";
+    assert.deepEqual(press(window, "j", { altKey: true }), { cancelled: true, stopped: true });
+    assert.deepEqual(press(window, "k", { altKey: true }), { cancelled: true, stopped: true });
+    assert.deepEqual(invocations().map((event) => [event.command, event.windowId, event.messageIds]), [["tab.next", 7, []], ["tab.prev", 7, []]]);
+    assert.equal(window.blurs, 0);
+});
+
+test("a plain key and any other chord typed in a field pass, and they end a half-typed sequence", () => {
+    const { windows, runtime, invocations, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "field";
+    for (const options of [{}, { ctrlKey: true }, { altKey: true }] as const) assert.equal(press(window, "q", options).cancelled, false);
+    for (const key of ["j", "g", "i"]) assert.equal(press(window, key).cancelled, false, key);
+    assert.deepEqual([invocations(), scrolls], [[], []]);
+    window.situation = "page";
+    press(window, "g");
+    window.situation = "field";
+    press(window, "x");
+    window.situation = "page";
+    press(window, "g");
+    assert.deepEqual(scrolls, [], "g, a field key, then g is not gg");
+});
+
+test("the typing keys never run for the overlay's browser or a live message body, which are typing and no field", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "typing";
+    assert.equal(press(window, "j", { altKey: true }).cancelled, false);
+    press(window, "Escape");
+    assert.equal(window.blurs, 0);
+    assert.deepEqual(invocations(), []);
+});
+
+test("an open menu comes first: Escape and Alt+j in a field of a popup are the popup's", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "pass";
+    press(window, "Escape");
+    press(window, "j", { altKey: true });
+    assert.equal(window.blurs, 0);
+    assert.deepEqual(invocations(), []);
+});
+
+test("i starts insert mode: the label hears it, plain keys pass to the page, and Escape ends it and blurs", () => {
+    const { windows, runtime, events, invocations, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    assert.equal(press(window, "i").cancelled, true);
+    assert.deepEqual(modes(events), ["insert"]);
+    for (const key of ["q", "j", "g", "i"]) assert.equal(press(window, key).cancelled, false, key);
+    assert.deepEqual([invocations(), scrolls], [[], []]);
+    assert.equal(press(window, "j", { altKey: true }).cancelled, true, "Alt+j still switches tab");
+    assert.equal(invocations().length, 1);
+    press(window, "Escape");
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+    assert.equal(window.blurs, 0, "no text field had the focus, so the focused element (a remote browser, say) keeps it");
+    press(window, "j");
+    assert.deepEqual(scrolls, [["page.scroll_down", undefined]]);
+});
+
+test("Escape in insert mode blurs only when the key was typed in a text field", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "i");
+    window.situation = "field";
+    press(window, "Escape");
+    assert.equal(window.blurs, 1);
+    press(window, "i");
+    window.situation = "remote";
+    press(window, "Escape");
+    assert.equal(window.blurs, 1);
+});
+
+test("a key typed in a field ends a half-typed sequence of the message tree too, so g, the find bar, then g is not gg", () => {
+    const { windows, runtime, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    press(window, "g");
+    window.situation = "field";
+    press(window, "x");
+    window.situation = "message";
+    press(window, "g");
+    assert.deepEqual(scrolls, []);
+    press(window, "g");
+    assert.equal(scrolls.length, 1, "a fresh g g still runs");
+});
+
+test("Escape that Thunderbird used keeps insert mode on", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "i");
+    window.thunderbird_uses = () => true;
+    press(window, "Escape");
+    assert.deepEqual(modes(events), ["insert"]);
+    assert.equal(press(window, "q").cancelled, false);
+});
+
+test("insert mode ends on a tab change and on a window blur, and says so", () => {
+    const { windows, runtime, events, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "i");
+    window.tab_listeners.forEach((listener) => listener());
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+    press(window, "j");
+    assert.equal(scrolls.length, 1);
+    press(window, "i");
+    window.blur_listeners.forEach((listener) => listener());
+    assert.deepEqual(modes(events), ["insert", "normal", "insert", "normal"]);
+    window.tab_listeners.forEach((listener) => listener());
+    assert.equal(modes(events).length, 4, "no second report when insert is already off");
+});
+
+test("insert mode is per window: it neither reaches the other window nor ends with its Escape", () => {
+    const { windows, runtime, events, scrolls } = setup(2);
+    runtime.install(tree());
+    const [first, second] = [windows[0]!, windows[1]!];
+    press(first, "i");
+    assert.equal(press(second, "j").cancelled, true, "the second window still scrolls");
+    assert.equal(scrolls.length, 1);
+    press(second, "Escape");
+    assert.deepEqual(modes(events), ["insert"]);
+    assert.equal(press(first, "q").cancelled, false, "the first window is still in insert mode");
+    second.tab_listeners.forEach((listener) => listener());
+    assert.equal(press(first, "q").cancelled, false);
+    press(first, "Escape");
+    assert.deepEqual(events.filter((event) => event.command === "mode").map((event) => [(event as { mode: string }).mode, event.windowId]), [["insert", 7], ["normal", 7]]);
+});
+
+test("a window that closes and a shutdown drop insert mode, so a window that opens later starts clean", () => {
+    const { windows, runtime, events, unload, load } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "i");
+    unload(window);
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+    load(window);
+    assert.equal(press(window, "j").cancelled, true);
+    press(window, "i");
+    runtime.shutdown();
+    runtime.install(tree());
+    assert.equal(press(window, "j").cancelled, true, "a fresh runtime has no insert flag");
+});
+
+test("i in a remote page, a message tab or a menu is not insert mode", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "remote";
+    assert.equal(press(window, "i").cancelled, false);
+    window.situation = "pass";
+    press(window, "i");
+    window.situation = "typing";
+    press(window, "i");
+    assert.deepEqual(modes(events), []);
+});
+
+test("Escape, Ctrl+[ and the Alt keys follow a user binding of the layer", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree({ "<A-l>": { id: "tab.next" }, "<Escape>": null }));
+    const window = windows[0]!;
+    window.situation = "field";
+    press(window, "l", { altKey: true });
+    press(window, "Escape");
+    assert.equal(invocations().length, 1);
+    assert.equal(window.blurs, 0, "Escape was unbound");
+    press(window, "[", { ctrlKey: true });
+    assert.equal(window.blurs, 1);
 });

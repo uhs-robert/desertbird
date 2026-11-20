@@ -5,6 +5,7 @@ import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 import { effective_keymap } from "../src/background/config/keymap.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
+import { default_typing_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { help_groups } from "../src/help/model.ts";
 
 const all_entries = (keymap = DEFAULT_KEYMAP) => help_groups(registry, keymap).flatMap((group) => group.entries);
@@ -113,4 +114,10 @@ test("a binding that runs several steps lists its key under each command it runs
     const entries = help_groups(registry, keymap).flatMap((group) => group.entries);
     assert.deepEqual(entries.find((entry) => entry.id === "msg.archive")?.keys, [{ keys: "Q", args: "", where: "" }]);
     assert.deepEqual(entries.find((entry) => entry.id === "motion.down")?.keys, [{ keys: "Q", args: "", where: "" }]);
+});
+
+test("the typing keys list under their commands, marked as working in a text field", () => {
+    const entries = help_groups(registry, DEFAULT_KEYMAP, {}, default_typing_keymap()).flatMap((group) => group.entries);
+    assert.deepEqual(entries.find((entry) => entry.id === "mode.escape")?.keys.map((key) => [key.keys, key.where]), [["<Escape>", "typing"], ["<C-[>", "typing"]]);
+    assert.ok(entries.find((entry) => entry.id === "tab.next")?.keys.some((key) => key.keys === "<A-j>" && key.where === "typing"));
 });

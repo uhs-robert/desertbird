@@ -1,6 +1,6 @@
 // The mode label at the start of a main window's status bar. It holds no Thunderbird global: the parent hands in `ModeLabelDeps`, so node tests drive every path with fakes.
 
-import { MODE_INDICATORS, MODE_LABEL_STYLES } from "../shared/protocol.ts";
+import { MODE_INDICATORS, MODE_LABEL_STYLES, MODE_NAMES } from "../shared/protocol.ts";
 import type { ModeIndicator, ModeLabelScheme, ModeLabelStyle, ModeName, OverlaySetModeLabelArgs } from "../shared/protocol.ts";
 
 export interface LabelElement {
@@ -22,7 +22,7 @@ export interface ModeLabelDeps<Window> {
     window_with_id(window_id: number): Window | null;
     open_windows(): Window[];
     status_bar_of(window: Window): StatusBarDocument;
-    /** Whether focus sits in a text field of the window, which is insert mode. The key runtime does not track insert, so the label reads the focus itself. */
+    /** Whether focus sits in a text field of the window, which is insert mode. Manual insert (`i`) comes in as the reported mode. */
     in_text_field(window: Window): boolean;
     /** Calls `listener` when the window finishes loading, and never for a window that has already loaded. A window that opens after the add-on started may not have its status bar yet when the label is first asked for. */
     on_loaded(window: Window, listener: () => void): void;
@@ -55,7 +55,7 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/;
 // The Experiment schema checks these values too. The check here keeps the label safe for a caller that skips the schema, such as a test.
 function checked(args: OverlaySetModeLabelArgs): void {
     if (typeof args.windowId !== "number" || !Number.isInteger(args.windowId) || args.windowId < 0) throw new Error("windowId must be a window id");
-    if (args.mode !== "normal" && args.mode !== "visual") throw new Error(`unknown mode ${String(args.mode)}`);
+    if (!(MODE_NAMES as readonly unknown[]).includes(args.mode)) throw new Error(`unknown mode ${String(args.mode)}`);
     if (!(MODE_INDICATORS as readonly unknown[]).includes(args.indicator)) throw new Error(`unknown indicator ${String(args.indicator)}`);
     if (!(MODE_LABEL_STYLES as readonly unknown[]).includes(args.style)) throw new Error(`unknown style ${String(args.style)}`);
     // The colors end up in an inline style, so a value that is not a hex color never reaches it.

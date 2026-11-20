@@ -12,6 +12,7 @@ import type { ListPort } from "./view.ts";
 export interface KeydownEvent extends KeyEventLike {
     target: unknown;
     originalTarget?: unknown;
+    defaultPrevented?: boolean;
     preventDefault(): void;
     stopPropagation(): void;
 }

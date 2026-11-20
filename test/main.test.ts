@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS } from "../src/background/commands/index.ts";
-import { keymap_of } from "../src/background/commands/tab_keymaps.ts";
+import { compile_typing_keymap, keymap_of } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 import { fake_native_messaging } from "./chrome_stubs.ts";
 
@@ -19,6 +19,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const installs: unknown[] = [];
     const page_installs: unknown[] = [];
     const message_installs: unknown[] = [];
+    const typing_installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
     const native = fake_native_messaging();
     let report_read: () => void = () => {};
@@ -47,7 +48,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
         compose: { onAfterSend: { addListener: (listener: (tab: { id?: number }, send_info: { error?: string }) => void) => void after_send_listeners.push(listener) } },
         keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
-        pages: { install: async (args: { pageTree: unknown; messageTree: unknown }) => void (page_installs.push(args.pageTree), message_installs.push(args.messageTree)), onInvocation: { addListener: () => {} } },
+        pages: { install: async (args: { pageTree: unknown; messageTree: unknown; typingTree: unknown }) => void (page_installs.push(args.pageTree), message_installs.push(args.messageTree), typing_installs.push(args.typingTree)), onInvocation: { addListener: () => {} } },
         runtime: {
             onMessage: { addListener: () => {} },
             connectNative: (application: string) => native.connectNative(application),
@@ -67,7 +68,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, page_installs, message_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, page_installs, message_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -96,7 +97,7 @@ test("a stored keymap compiled from other default bindings is rebuilt", async ()
 
 test("a storage change during a pending read wins: the tree read before the change is neither kept nor installed last", async () => {
     const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: keymap_of("message", {}), page: keymap_of("page", {}), own: keymap_of("own", {}), unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
-    const record = (marker: string) => ({ record_version: 11, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, own_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
+    const record = (marker: string) => ({ record_version: 12, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, own_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
     const { installs, external_write, first_read } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
     await start_background();
     await first_read;
@@ -125,6 +126,16 @@ test("the page tree is stored in the record and installed in the pages Experimen
     assert.doesNotMatch(JSON.stringify(installs), /page\.scroll_down/);
 });
 
+test("the typing tree is stored in the record and installed in the pages Experiment alone", async () => {
+    const { stored, installs, typing_installs } = stub_messenger();
+    await start_background();
+    await settle();
+    const record = stored["desertbird_compiled_keymap"] as { typing_tree: { root: unknown } };
+    assert.deepEqual(typing_installs, [record.typing_tree]);
+    assert.match(JSON.stringify(record.typing_tree.root), /mode\.escape/);
+    assert.doesNotMatch(JSON.stringify(installs), /mode\.escape/);
+});
+
 test("the pages Experiment gets the message tree without the find key", async () => {
     const { message_installs } = stub_messenger();
     await start_background();
@@ -150,7 +161,7 @@ test("a stored record of version 2, with no message tree, is rebuilt with one", 
     await start_background();
     await settle();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
-    assert.equal(record.record_version, 11);
+    assert.equal(record.record_version, 12);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
     assert.equal(installs.length, 1);
 });

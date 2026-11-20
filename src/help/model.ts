@@ -8,8 +8,8 @@ export interface HelpKey {
     keys: string;
     /** The args the binding sets, as readable text. Empty when it sets none. */
     args: string;
-    /** `message` for a key that works in a message document (the reading pane, a message tab or window), empty for the mail tab. */
-    where: "" | "message";
+    /** `message` for a key that works in a message document (the reading pane, a message tab or window), `typing` for a key that works in a text field, empty for the mail tab. */
+    where: "" | "message" | "typing";
 }
 
 export interface HelpEntry {
@@ -43,10 +43,11 @@ function keys_by_command(keymap: KeymapConfig, where: HelpKey["where"], into: Ma
 }
 
 /** Commands grouped by the part of the id before the dot, in id order, each with the keys the keymap binds to it. */
-export function help_groups(registry: Registry, keymap: KeymapConfig, message_keymap: KeymapConfig = {}): HelpGroup[] {
+export function help_groups(registry: Registry, keymap: KeymapConfig, message_keymap: KeymapConfig = {}, typing_keymap: KeymapConfig = {}): HelpGroup[] {
     const keys = new Map<string, HelpKey[]>();
     keys_by_command(keymap, "", keys);
     keys_by_command(message_keymap, "message", keys);
+    keys_by_command(typing_keymap, "typing", keys);
     const groups = new Map<string, HelpEntry[]>();
     for (const command of [...registry.list()].sort((left, right) => left.id.localeCompare(right.id))) {
         const name = command.id.split(".")[0] ?? command.id;

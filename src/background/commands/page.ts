@@ -14,6 +14,9 @@ export const page: CommandGroup = {
         "page.scroll_right": { runs_in: "chrome", bridge: false, label: "Scroll right", intent: "Scroll the page of the current tab to the right.", count: "repeat" },
         "page.top": { runs_in: "chrome", bridge: false, label: "Go to top", intent: "Scroll the page of the current tab to the top." },
         "page.bottom": { runs_in: "chrome", bridge: false, label: "Go to bottom", intent: "Scroll the page of the current tab to the bottom." },
+        "mode.insert": { runs_in: "chrome", bridge: false, needs: ["tab", "typing"], label: "Insert mode", intent: "Pass plain keys to the page until Escape." },
+        // Thunderbird sees Escape first, so a field that uses it (clearing the quick filter, cancelling an inline edit) keeps it and stays focused.
+        "mode.escape": { runs_in: "chrome", bridge: false, needs: ["tab", "typing"], label: "Leave insert mode", intent: "Leave insert mode and the text field." },
     }),
     normal_keys: {},
     page_keys: {
@@ -27,5 +30,10 @@ export const page: CommandGroup = {
         l: { id: "page.scroll_right" },
         gg: { id: "page.top" },
         G: { id: "page.bottom" },
+        i: { id: "mode.insert" },
+    },
+    typing_keys: {
+        "<Escape>": { id: "mode.escape" },
+        "<C-[>": { id: "mode.escape" },
     },
 };
