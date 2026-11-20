@@ -49,7 +49,6 @@ export function deepest_focus(document: { activeElement: FieldNode | null }): Fi
     return node;
 }
 
-const OFF: ActorState = { on: false, insert: false, page: {}, typing: {} };
 
 // The matcher's key for "any printable key" after a prefix.
 const ANY_KEY = "";
@@ -63,6 +62,7 @@ export class DesertBirdPageChild extends JSWindowActorChild {
     page: Skeleton = {};
     typing: Skeleton = {};
     typed: string[] = [];
+    counted = 0;
 
     actorCreated(): void {
         // Until the parent answers, the child takes no key: a key pressed that early goes to the page.
@@ -72,17 +72,22 @@ export class DesertBirdPageChild extends JSWindowActorChild {
     hello(): void {
         this.sendQuery("DesertBird:Hello").then(
             (state) => this.apply(state as ActorState),
-            () => this.apply(OFF),
+            () => (this.on = false),
         );
     }
 
     apply(state: ActorState): void {
         this.on = state.on === true;
         this.insert = state.insert === true;
-        this.page = state.page ?? {};
-        this.typing = state.typing ?? {};
-        // The page keys typed so far, as the parent's matcher walks them: a count, then the tokens of a prefix.
+        this.page = state.page;
+        this.typing = state.typing;
+        this.restart();
+    }
+
+    restart(): void {
+        // The page keys typed so far, as the parent's matcher walks them: a count, then the tokens of a prefix. `counted` says how many lead as count digits.
         this.typed = [];
+        this.counted = 0;
     }
 
     follow_leaf(leaf: Skeleton[string] | undefined): void {
@@ -93,24 +98,19 @@ export class DesertBirdPageChild extends JSWindowActorChild {
     walk_page(token: string): Verdict {
         // As the parent's matcher walks: a count at the start, a key of the branch the prefix reached, any printable key where that branch captures one, and Backspace to drop the last typed key. A key off the branch ends the sequence and gets one more try as a first key.
         const { typed } = this;
-        if (token === "<Backspace>" && typed.length) return (typed.pop(), "take");
-        // The count digits lead `typed`, and the prefix follows them. A digit of the prefix (`t 0`) comes after a key that is none.
-        const prefix_start = typed.findIndex((key) => !/^[0-9]$/.test(key));
+        if (token === "<Backspace>" && typed.length) return (typed.pop(), (this.counted = Math.min(this.counted, typed.length)), "take");
         let branch = this.page;
-        for (const key of prefix_start < 0 ? [] : typed.slice(prefix_start)) branch = branch[key] as Skeleton;
-        if (prefix_start < 0 && /^[0-9]$/.test(token) && (typed.length || (token !== "0" && !(token in branch)))) return (typed.push(token), "take");
+        for (const key of typed.slice(this.counted)) branch = branch[key] as Skeleton;
+        // A count stands only before the prefix and stops at six digits, the matcher's `MAX_COUNT_DIGITS`. A lone 0 starts none.
+        if (typed.length === this.counted && this.counted < 6 && /^[0-9]$/.test(token) && (this.counted || (token !== "0" && !(token in branch)))) return (typed.push(token), this.counted++, "take");
         const next = branch[token] ?? (token === "<Space>" || [...token].length === 1 ? branch[ANY_KEY] : undefined);
         if (next === undefined) {
-            this.typed = [];
+            this.restart();
             return typed.length ? (this.walk_page(token) === "take" ? "take" : "end") : "pass";
         }
         if (typeof next === "object") typed.push(token);
-        else ((this.typed = []), this.follow_leaf(next));
+        else (this.restart(), this.follow_leaf(next));
         return "take";
-    }
-
-    in_field(): boolean {
-        return this.document.designMode === "on" || takes_typing(deepest_focus(this.document));
     }
 
     send(event: ChildEvent, field: boolean, prevented: boolean): void {
@@ -130,7 +130,7 @@ export class DesertBirdPageChild extends JSWindowActorChild {
         if (token === null) return;
         // In insert mode a plain key is the page's at once.
         if (this.insert && !is_chord(token) && token !== "<Escape>") return;
-        const field = this.in_field();
+        const field = this.document.designMode === "on" || takes_typing(deepest_focus(this.document));
         if (token === "<Escape>") {
             // Escape stays the page's. Once the page's handlers ran, the parent learns whether one of them used it (a dialog closing), and only then leaves insert mode or the field.
             if (token in this.typing || token in this.page) {
@@ -140,13 +140,14 @@ export class DesertBirdPageChild extends JSWindowActorChild {
                     this.send(event, field, prevented);
                 });
             }
-            return void (this.typed = []);
+            return this.restart();
         }
         let verdict: Verdict = "pass";
         // Insert mode and a text field both take the typing keys. `field` alone goes to the parent, so Escape in insert mode leaves a focused link alone.
         if (this.insert || field) {
             // The parent's page matcher starts over on a key typed in a field, so the walk does too.
-            this.typed = [];
+            // A key typed in a field ends a half-typed sequence. A fresh hello makes the parent end its own (as for a new page) without the key, which is text.
+            if (this.typed.length) (this.restart(), this.hello());
             if (token in this.typing) (this.follow_leaf(this.typing[token]), (verdict = "take"));
         } else verdict = this.walk_page(token);
         if (verdict === "pass") return;

@@ -319,3 +319,28 @@ test("Blur blurs the deepest focused element, and Scroll runs only an id of the 
     page.receiveMessage({ name: "DesertBird:Scroll", data: { id: 42 } });
     assert.deepEqual(moves, [{ top: 120, behavior: "instant" }]);
 });
+
+test("a count stops at the matcher's six digits: a seventh 0 breaks it and reaches the page", () => {
+    const child = child_with({ ...ON, page: { j: "run" } });
+    assert.deepEqual(type_keys(child, [["1"], ["2"], ["3"], ["4"], ["5"], ["6"]]).map(([, cancelled]) => cancelled), [true, true, true, true, true, true]);
+    assert.deepEqual(type_keys(child, [["0"]]), [["0", false, true]]);
+    assert.deepEqual(type_keys(child, [["7"], ["j"]]), [["7", true, true], ["j", true, true]], "a seventh digit 1 to 9 starts a new count, as the matcher retries it");
+});
+
+test("a bound sequence that starts with a digit is a prefix and no count", () => {
+    const child = child_with({ ...ON, page: { "0": { x: "run" }, j: "run" } });
+    assert.deepEqual(type_keys(child, [["0"], ["x"]]), [["0", true, true], ["x", true, true]]);
+    assert.deepEqual(type_keys(child, [["5"], ["0"], ["x"]]).map(([, cancelled]) => cancelled), [true, true, false]);
+});
+
+test("a key typed in a field ends a half-typed sequence: the child says hello, so the parent ends its own, and sends no text", () => {
+    const child = child_with();
+    type_keys(child, [["g"]]);
+    child.document.activeElement = { localName: "input", type: "text" };
+    const before = keys_sent(child).length;
+    child.handleEvent(keydown("x"));
+    assert.deepEqual(child.queries, ["DesertBird:Hello"]);
+    assert.equal(keys_sent(child).length, before, "the typed letter is not sent");
+    child.document.activeElement = { localName: "body" };
+    assert.deepEqual(type_keys(child, [["?"]]), [["?", false, false]], "the walk is back at the root");
+});

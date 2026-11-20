@@ -728,10 +728,20 @@ test("a new page in the front tab ends insert mode, and a tab change pushes the 
     runtime.on_child_key(window, null);
     assert.deepEqual(modes(events), ["insert", "normal"]);
     runtime.on_child_key(window, null);
-    assert.deepEqual(window.pushed_insert, [true, false], "no push when insert mode is already off");
+    assert.deepEqual(modes(events), ["insert", "normal"], "no second report when insert mode is already off");
     runtime.on_child_key(window, child_key("i"));
     for (const listener of window.tab_listeners) listener();
-    assert.deepEqual(window.pushed_insert, [true, false, true, false]);
+    assert.deepEqual(window.pushed_insert, [true, false, false, true, false]);
+});
+
+test("a tab change or a window blur in normal mode still pushes to the children, so their half-typed walk starts over with the parent's", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("t"));
+    for (const listener of window.tab_listeners) listener();
+    for (const listener of window.blur_listeners) listener();
+    assert.deepEqual(window.pushed_insert, [false, false]);
 });
 
 test("a key of the child is dropped while the chrome passes every key (hint labels, an open menu)", () => {

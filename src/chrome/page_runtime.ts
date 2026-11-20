@@ -41,7 +41,7 @@ export interface ChildKey extends KeydownEvent {
 export interface ChildPort {
     /** Whether the child of the front tab's page is on and has the focus, so the chrome leaves every key of that page to it. */
     takes_keys(window: unknown): boolean;
-    /** Hands the insert flag of the window to its children. Called on each change. */
+    /** Hands the insert flag of the window to its children. Called on every set, so each reset of the sequence reaches them. */
     set_insert(window: unknown, on: boolean): void;
     /** Each answers false when the front tab's page has no child, so the chrome acts on its own documents. The parent's `scroll` and `blur_focused` ask these first. */
     scroll(window: unknown, id: string, count: number | undefined): boolean;
@@ -49,7 +49,7 @@ export interface ChildPort {
 }
 
 export interface PageRuntime {
-    /** Runs a key from the page actor's child as the front tab's own. Null tells that the front tab shows a new page, which ends insert mode, the half-typed sequence and its key list, as a tab change does. */
+    /** Runs a key from the page actor's child as the front tab's own. Null tells that the front tab's child said hello (a new page, or a key typed in the page's field), which ends insert mode, the half-typed sequence and its key list, as a tab change does. */
     on_child_key(window: unknown, key: ChildKey | null): void;
     install(trees: { page: { version: number; root: unknown }; message: { version: number; root: unknown }; typing: { version: number; root: unknown } }, hold_commands?: readonly string[]): void;
     shutdown(): void;
@@ -71,7 +71,9 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     // The windows in manual insert mode (`i`): plain keys go to the page, as in a text field. Memory only, and each window has its own.
     const insert = new Set<Window>();
     const set_insert = (window: Window, on: boolean) => {
-        if (insert.has(window) !== on) (deps.emit({ command: "mode", mode: on ? "insert" : "normal", windowId: deps.window_id_of(window) }), deps.child()?.set_insert(window, on));
+        if (insert.has(window) !== on) deps.emit({ command: "mode", mode: on ? "insert" : "normal", windowId: deps.window_id_of(window) });
+        // Pushed on every call, not only on a change: a tab change or a window blur ends the half-typed sequence, and the push starts the child's walk over too.
+        deps.child()?.set_insert(window, on);
         insert[on ? "add" : "delete"](window);
     };
     // The keys that run in a text field: `<Escape>` leaves it, `<A-j>` and `<A-k>` switch tab. Plain keys are never fed, since in a field they are text.
