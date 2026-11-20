@@ -398,7 +398,7 @@ test("keys that need the thread list send nothing from a message", async () => {
 // The message tree lacks these prefixes, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
 test("a list prefix swallows its next key in a message, so u and a after it run nothing", async () => {
     const { window, sent } = await started();
-    for (const prefix of ["]", "[", "F", "s", "z", "w", "M", "'"]) for (const key of ["u", "a"]) {
+    for (const prefix of ["]", "[", "F", "s", "w", "M", "'"]) for (const key of ["u", "a"]) {
         const before = sent.length;
         window.press(prefix);
         window.press(key);

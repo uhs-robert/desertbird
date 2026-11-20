@@ -759,6 +759,75 @@ async function scenario_reply_no_identity() {
   return { status: "beginReply returned and the app stayed up", compose_tab_id: compose_tab.id };
 }
 
+// Zoom per tab kind: what getBrowser() names, whether ZoomManager can set it, and whether the level stays across a message switch, a tab switch, a reopen and a navigation.
+async function scenario_zoom() {
+  const steps = [];
+  const step = async (label, where, work) => {
+    let value = null;
+    try {
+      if (work) await work();
+      await sleep(1500);
+      value = await messenger.probe.zoom_read(where);
+    } catch (error) {
+      value = { error: String(error) };
+    }
+    steps.push({ label, ...value });
+  };
+  const set = (label, where, level) => step(label, where, () => messenger.probe.zoom_set(where, level));
+  const presence = { tabs_getZoom: typeof messenger.tabs.getZoom, tabs_setZoom: typeof messenger.tabs.setZoom };
+  const { inbox, all } = await find_folders();
+  const tab_id = await show_folder(inbox);
+  const first = await by_header_id("inbox-s2@fixture.invalid");
+  const second = await by_header_id("inbox-s3@fixture.invalid");
+  await step("mail tab, no message", "main");
+  await step("mail tab, message s2", "main", () => messenger.mailTabs.setSelectedMessages(tab_id, [first.id]));
+  await set("mail tab, set 1.5", "main", 1.5);
+  await step("mail tab, other message s3", "main", () => messenger.mailTabs.setSelectedMessages(tab_id, [second.id]));
+  await step("mail tab, other folder html-0", "main", async () => {
+    await show_folder(all.find((folder) => folder.name === "Html"));
+    await messenger.mailTabs.setSelectedMessages(tab_id, [(await by_header_id("html-0@fixture.invalid")).id]);
+  });
+  const message_tab = await messenger.messageDisplay.open({ location: "tab", messageId: first.id, active: true });
+  await step("message tab s2, fresh", "main");
+  await set("message tab, set 1.3", "main", 1.3);
+  await step("message tab, after mail tab and back", "main", async () => { await messenger.tabs.update(tab_id, { active: true }); await sleep(800); await messenger.tabs.update(message_tab.id, { active: true }); });
+  await messenger.tabs.remove(message_tab.id);
+  const second_tab = await messenger.messageDisplay.open({ location: "tab", messageId: second.id, active: true });
+  await step("message tab s3, new tab", "main");
+  await messenger.tabs.remove(second_tab.id);
+  await step("mail tab after message tabs", "main", () => messenger.tabs.update(tab_id, { active: true }));
+  await step("mail tab, back in Inbox on s2", "main", async () => { await show_folder(inbox); await messenger.mailTabs.setSelectedMessages(tab_id, [first.id]); });
+  const window_one = await messenger.messageDisplay.open({ location: "window", messageId: first.id });
+  await step("message window s2, fresh", "message_window");
+  await set("message window, set 1.2", "message_window", 1.2);
+  await messenger.windows.remove(window_one.windowId);
+  const window_two = await messenger.messageDisplay.open({ location: "window", messageId: second.id });
+  await step("message window s3, new window", "message_window");
+  await messenger.windows.remove(window_two.windowId);
+  for (const kind of ["calendar", "tasks", "addressbook", "settings"]) {
+    await step(`${kind}, opened`, "main", () => messenger.probe.zoom_open(kind));
+    const [front] = await messenger.tabs.query({ active: true, currentWindow: true });
+    await set(`${kind}, set 1.4`, "main", 1.4);
+    await step(`${kind}, after mail tab and back`, "main", async () => { await messenger.tabs.update(tab_id, { active: true }); await sleep(800); await messenger.tabs.update(front.id, { active: true }); });
+    await messenger.tabs.remove(front.id).catch(() => {});
+  }
+  const own = await messenger.tabs.create({ url: "overlay.html" });
+  await step("own page, opened", "main");
+  await set("own page, set 1.4", "main", 1.4);
+  await step("own page, reloaded", "main", () => messenger.tabs.reload(own.id));
+  await messenger.tabs.remove(own.id);
+  const own_again = await messenger.tabs.create({ url: "overlay.html" });
+  await step("own page, new tab", "main");
+  await messenger.tabs.remove(own_again.id);
+  const web = await messenger.tabs.create({ url: `http://127.0.0.1:${CONFIG.port}/zoom_page_one` });
+  await step("web page, opened", "main");
+  await set("web page, set 1.4", "main", 1.4);
+  await step("web page, same host other path", "main", () => messenger.tabs.update(web.id, { url: `http://127.0.0.1:${CONFIG.port}/zoom_page_two` }));
+  await messenger.tabs.remove(web.id);
+  await step("mail tab at the end", "main", () => messenger.tabs.update(tab_id, { active: true }));
+  return { presence, steps };
+}
+
 async function start() {
   await log("background up");
   for (let attempt = 0; attempt < 300; attempt++) {
@@ -795,6 +864,7 @@ async function start() {
     reply_no_identity: scenario_reply_no_identity,
     tabs_remove: scenario_tabs_remove,
     tabs_remove_only_tab: scenario_tabs_remove_only_tab,
+    zoom: scenario_zoom,
   };
   for (const [name, scenario] of Object.entries(scenarios)) await record(name, scenario);
   await post("/done", {});

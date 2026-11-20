@@ -123,11 +123,11 @@ test("a key the tree leaves unbound passes, and so does a chord a mail key would
     const { windows, runtime, invocations } = setup();
     runtime.install(tree());
     const window = windows[0]!;
-    for (const key of ["x", "d", "o", "z"]) assert.equal(press(window, key).cancelled, false, key);
+    for (const key of ["x", "d", "o", "s"]) assert.equal(press(window, key).cancelled, false, key);
     assert.equal(press(window, "c", { ctrlKey: true }).cancelled, false);
     assert.equal(press(window, "x", { ctrlKey: true }).cancelled, false);
     press(window, "g");
-    assert.equal(press(window, "z").cancelled, false, "g then an unbound key");
+    assert.equal(press(window, "x").cancelled, false, "g then an unbound key");
     assert.deepEqual(invocations(), []);
 });
 

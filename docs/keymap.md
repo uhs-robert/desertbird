@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 269 (Mail tab 131, Message 79, Own pages 33, Other tabs 26)
+bound: 305 (Mail tab 140, Message 88, Own pages 42, Other tabs 35)
 
 ### Mail tab
 
@@ -189,6 +189,15 @@ The thread list and the folder pane.
 | `zb` | `view.reposition bottom` |
 | `zM` | `thread.fold_all --open=false` |
 | `zR` | `thread.fold_all --open` |
+| `zi` | `zoom.by 0.1` |
+| `z+` | `zoom.by 0.1` |
+| `zo` | `zoom.by -0.1` |
+| `z-` | `zoom.by -0.1` |
+| `zm` | `zoom.by 0.5` |
+| `zr` | `zoom.by -0.5` |
+| `z=` | `zoom 1` |
+| `zI` | `zoom 3` |
+| `zO` | `zoom 0.3` |
 
 #### Copy
 
@@ -354,6 +363,20 @@ A message in a tab, a window or the message pane.
 | `t0` | `tab 1` |
 | `tT` | `cmdline.open 'tab '` |
 
+#### Zoom and scroll
+
+| Key | Command |
+| --- | --- |
+| `zi` | `zoom.by 0.1` |
+| `z+` | `zoom.by 0.1` |
+| `zo` | `zoom.by -0.1` |
+| `z-` | `zoom.by -0.1` |
+| `zm` | `zoom.by 0.5` |
+| `zr` | `zoom.by -0.5` |
+| `z=` | `zoom 1` |
+| `zI` | `zoom 3` |
+| `zO` | `zoom 0.3` |
+
 #### Copy
 
 | Key | Command |
@@ -437,6 +460,20 @@ The options page and the help page.
 | `t0` | `tab 1` |
 | `tT` | `cmdline.open 'tab '` |
 
+#### Zoom and scroll
+
+| Key | Command |
+| --- | --- |
+| `zi` | `zoom.by 0.1` |
+| `z+` | `zoom.by 0.1` |
+| `zo` | `zoom.by -0.1` |
+| `z-` | `zoom.by -0.1` |
+| `zm` | `zoom.by 0.5` |
+| `zr` | `zoom.by -0.5` |
+| `z=` | `zoom 1` |
+| `zI` | `zoom 3` |
+| `zO` | `zoom 0.3` |
+
 #### Hints
 
 | Key | Command |
@@ -499,5 +536,19 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `tp` | `tab.prev` |
 | `t0` | `tab 1` |
 | `tT` | `cmdline.open 'tab '` |
+
+#### Zoom and scroll
+
+| Key | Command |
+| --- | --- |
+| `zi` | `zoom.by 0.1` |
+| `z+` | `zoom.by 0.1` |
+| `zo` | `zoom.by -0.1` |
+| `z-` | `zoom.by -0.1` |
+| `zm` | `zoom.by 0.5` |
+| `zr` | `zoom.by -0.5` |
+| `z=` | `zoom 1` |
+| `zI` | `zoom 3` |
+| `zO` | `zoom 0.3` |
 
 <!-- END generated -->

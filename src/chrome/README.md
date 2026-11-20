@@ -1,6 +1,6 @@
 # Chrome runtime
 
-The privileged part of the add-on. It runs inside the Thunderbird process as the parent scripts of the Experiment APIs. The `keys` script loads at startup, holds the key runtime and listens for keys in the main mail window. The other APIs (`app`, `folderpane`, `hints`, `overlay`, `pages`) each have a bundle of their own. The schema is [`../experiment/keys.schema.json`](../experiment/keys.schema.json). The call shapes are in [`../shared/protocol.ts`](../shared/protocol.ts).
+The privileged part of the add-on. It runs inside the Thunderbird process as the parent scripts of the Experiment APIs. The `keys` script loads at startup, holds the key runtime and listens for keys in the main mail window. The other APIs (`app`, `folderpane`, `hints`, `overlay`, `pages`, `zoom`) each have a bundle of their own. The schema is [`../experiment/keys.schema.json`](../experiment/keys.schema.json). The call shapes are in [`../shared/protocol.ts`](../shared/protocol.ts).
 
 | File | Role |
 | --- | --- |
@@ -23,13 +23,15 @@ The privileged part of the add-on. It runs inside the Thunderbird process as the
 | `motions.ts` | The fixed motion table: `motion.down`, `motion.up`, `motion.top`, `motion.bottom`. Pure functions over a `ViewPort` |
 | `parent_folderpane.ts` | The parent of the `folderpane` API, a bundle of its own that Thunderbird loads on the first call and not at startup. Its verb `fold` opens or closes the selected folder (`row`), every folder (`all`) or closes the selected folder or else its parent (`parent`), and answers false, doing nothing, unless the folder pane has the focus. `focused` reports that focus. Folder tree verbs belong here, not in `parent_keys.ts` |
 | `parent_app.ts` | The parent of the `app` API, a bundle of its own that Thunderbird loads on the first call and not at startup. It joins `view_verbs` and `app_verbs`. Neither file may enter `keys.js`: `test/build.test.ts` checks the inputs of that bundle |
+| `parent_zoom.ts` | The parent of the `zoom` API, a bundle of its own that Thunderbird loads on the first call. `get` and `set` read and set the zoom of the browser `getBrowser()` names in a main or message window, through the window's `ZoomManager`. Where there is none (calendar, tasks, a mail tab with no message) `get` answers null and `set` false |
 | `app_verbs.ts` | The verbs `paneFocus`, `appCommand` and `appOpenPage` of the `app` API. Each reads its target from a fixed table (pane focus targets, the one allowed command name with its controller, taken from the page that shows the message: the mail tab, a message tab or a message window, the three pages with their addresses), so no caller passes a function name or an address. `paneFocus` also takes `left` and `right`, counted from the pane `focused_pane` names, and refuses a collapsed pane or a message pane with no live body script |
 | `view.ts` | The thread list of `about:3pane` (`gDBView`, `threadTree`) behind a `ListPort`: the rows for the motions and the selected message ids for background commands. Also the check that the front tab is the mail tab, and `mail_pane_of`, which names a window by id and returns the `about:3pane` of its front mail tab (used by the `app`, `hints` and `folderpane` parents, never by the key script). `ListPort.select_range` sets a range for visual mode |
 | `view_verbs.ts` | The verbs `viewRows`, `viewThread`, `viewAllThreads` and `viewScroll` of the `app` API, which read and move the list for background commands. `viewRows` also returns the message flags word of each row, which the step commands read |
 
-Five files know Thunderbird's own markup, so a Thunderbird rename lands in one of them:
+These files know Thunderbird's own markup, so a Thunderbird rename lands in one of them:
 - `view.ts` and `view_verbs.ts`: `gDBView`, `getSelectedMsgHdrs`, `threadTree` and the tab mode `mail3PaneTab`.
 - `app_verbs.ts`: `folderTree` (`selectedRow`, `expandRow`, `collapseRow`), `paneLayout` (`folderPaneVisible`, `messagePaneVisible`), `messageBrowser`, `commandController`, `DefaultController`, `openAddonsMgr`, `openContentTab` and `browsingContext.topChromeWindow`.
+- `parent_zoom.ts`: `getBrowser()`, `ZoomManager` (`getZoomForBrowser`, `setZoomForBrowser`) and the window type `mail:messageWindow`.
 - `focus.ts`: the element ids `folderTree`, `messageBrowser` and `messagepane`, the element names `search-textbox` and `menulist`, and the popup `state`.
 - `platform.ts` and `parent_keys.ts`: `#tabmail`, the `messenger.xhtml` URL and the window type `mail:3pane`. `parent_keys.ts` also reads `folderTree` (`rowCount`, `selectedIndex`) for the motions in the folder pane.
 

@@ -52,11 +52,14 @@ test("the page tree reads the same command table: the keys that gain a place are
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
     for (const id of ids_under(root_of())) assert.deepEqual(registry.get(id)?.needs?.filter((need) => (TAB_NEEDS as readonly string[]).includes(need)), ["tab"], id);
-    for (const token of ["m", "d", "s", "F", "y", ";", "]", "[", "z", "o", "a", "r", "R", "f", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
+    for (const token of ["m", "d", "s", "F", "y", ";", "]", "[", "o", "a", "r", "R", "f", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
     assert.deepEqual(Object.keys(tabs_group.children).sort(), ["0", "T", "n", "p"]);
     assert.equal(root_of().children["w"], undefined);
+    const zoom_group = root_of().children["z"] as TreeBranch;
+    assert.equal(zoom_group.label, "Zoom and scroll");
+    assert.deepEqual(Object.keys(zoom_group.children).sort(), ["+", "-", "=", "I", "O", "i", "m", "o", "r"]);
 });
 
 test("every command names a tab need, so a new command cannot leak into a tab by forgetting one", () => {

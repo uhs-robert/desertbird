@@ -29,6 +29,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
     page: { runs_in: "chrome", ids: ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom"] },
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
+    zoom: { runs_in: "background", ids: ["zoom.by", "zoom.set"] },
 };
 
 test("every group file has a table row and each row has a group", () => {

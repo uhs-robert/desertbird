@@ -1,0 +1,39 @@
+[
+  {
+    "namespace": "zoom",
+    "description": "Zoom verbs on the browser a window shows: the message pane, or the page of the front tab. The script loads when the first verb is called.",
+    "functions": [
+      {
+        "name": "get",
+        "type": "function",
+        "async": true,
+        "description": "Answers the zoom level of the window's browser, 1 for 100%, or null when the front tab has nothing to zoom (calendar, tasks, a mail tab with no message).",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" }
+            }
+          }
+        ]
+      },
+      {
+        "name": "set",
+        "type": "function",
+        "async": true,
+        "description": "Sets the zoom level of the window's browser. Answers false, with nothing done, when the front tab has nothing to zoom.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" },
+              "level": { "type": "number", "minimum": 0.3, "maximum": 5 }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

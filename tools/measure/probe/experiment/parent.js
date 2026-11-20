@@ -143,6 +143,31 @@ var probe = class extends ExtensionAPI {
       browser.fixupAndLoadURIString(extension.baseURI.resolve("overlay.html"), { triggeringPrincipal: extension.principal });
     }
 
+    // Zoom: what getBrowser() returns for each tab kind, and what ZoomManager reads and writes through it.
+    const zoom_window = (where) => (where === "message_window" ? Services.wm.getMostRecentWindow("mail:messageWindow") : main_windows()[0]);
+    const describe_zoom_browser = (win, browser) => browser ? { tag: browser.localName, id: browser.id, uri: browser.currentURI?.spec ?? "", remote: !!browser.isRemoteBrowser, full_zoom: browser.fullZoom, zoom_manager: win.ZoomManager ? win.ZoomManager.getZoomForBrowser(browser) : null } : null;
+    function zoom_describe(where) {
+      const win = zoom_window(where);
+      if (!win) return { error: "no window" };
+      const tabmail = win.document.getElementById("tabmail");
+      const tab = tabmail?.currentTabInfo;
+      let get_browser = null;
+      let get_browser_error = null;
+      try { get_browser = win.getBrowser?.() ?? null; } catch (error) { get_browser_error = String(error); }
+      const zm = win.ZoomManager;
+      return {
+        tab_mode: tab?.mode?.name ?? null,
+        has_get_browser: typeof win.getBrowser === "function",
+        get_browser: describe_zoom_browser(win, get_browser),
+        get_browser_error,
+        selected_tab_browser: tabmail?.getBrowserForSelectedTab ? describe_zoom_browser(win, tabmail.getBrowserForSelectedTab()) : null,
+        tab_browser: describe_zoom_browser(win, tab?.browser),
+        tab_chrome_browser: describe_zoom_browser(win, tab?.chromeBrowser),
+        zoom_manager: zm ? { min: zm.MIN, max: zm.MAX, values: zm.zoomValues, use_full_zoom: zm.useFullZoom } : null,
+        site_specific: Services.prefs.getBoolPref("browser.zoom.siteSpecific", false),
+      };
+    }
+
     const BOX_CSS = "position: fixed; left: 360px; width: 700px; bottom: 100px; height: 90px; z-index: 100000; border: 3px solid red; background: white;";
 
     const api = {
@@ -306,6 +331,21 @@ var probe = class extends ExtensionAPI {
             messagepane: describe_browser(three.messageBrowser.contentWindow?.document.getElementById("messagepane")),
             overlay_browser: state.overlay ? describe_browser(state.overlay.querySelector?.("browser")) : null,
           };
+        },
+        async zoom_open(kind) {
+          const win = main_windows()[0];
+          const tabmail = win.document.getElementById("tabmail");
+          if (kind === "calendar") tabmail.openTab("calendar");
+          else if (kind === "tasks") tabmail.openTab("tasks");
+          else if (kind === "addressbook") win.toAddressBook();
+          else win.openPreferencesTab();
+          return tabmail.currentTabInfo?.mode?.name ?? null;
+        },
+        async zoom_read(where) { return zoom_describe(where); },
+        async zoom_set(where, level) {
+          const win = zoom_window(where);
+          win.ZoomManager.setZoomForBrowser(win.getBrowser(), level);
+          return zoom_describe(where);
         },
         async noop() {},
         async console_tail() { return console_lines.splice(0); },
