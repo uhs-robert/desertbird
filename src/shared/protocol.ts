@@ -14,8 +14,6 @@ export interface KeymapTree {
 }
 
 /** The storage key of the record the background keeps: the compiled keymaps and the hash of the bindings they came from. The body script reads its tree from here. */
-/** The title the command line page sets once its input has the focus. The overlay host reads it as "ready", so the page and the host name it from here. */
-export const OVERLAY_READY_TITLE = "DesertBird command line";
 export const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
 
 /**
@@ -158,10 +156,15 @@ export interface OverlayUnmountArgs {
     surface: OverlaySurface;
 }
 
+/** The title the command line page sets once its input has the focus. The overlay host reads it as "ready", so the page and the host name it from here. */
+export const OVERLAY_READY_TITLE = "DesertBird command line";
+
 /** Payload of the `overlay.onClosed` event: a surface left a window without an `unmount` call, because the front tab changed or the window closed. */
 export interface OverlayClosed {
     windowId: number;
     surface: OverlaySurface;
+    /** Set when the host closed the surface because its page was not ready in time. Absent for the other ways out. */
+    reason?: "not_ready";
 }
 
 /** The Experiment namespaces and their verbs. A new verb needs a reason in the commit message. */

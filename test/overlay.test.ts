@@ -9,6 +9,8 @@ class FakeWindow {
     boxes: string[] = [];
     /** What has the focus when a surface mounts, or null for nothing that can be given back. */
     held_focus: string | null = null;
+    /** The `on_not_ready` callback of each mount, in order. */
+    not_ready: (() => void)[] = [];
 }
 
 function setup() {
@@ -16,7 +18,8 @@ function setup() {
     const log: string[] = [];
     const host = create_overlay_host<FakeWindow>({
         window_with_id: (window_id) => windows.get(window_id) ?? null,
-        create(window, surface, window_id) {
+        create(window, surface, window_id, _click_through, on_not_ready) {
+            window.not_ready.push(on_not_ready);
             const box = `${surface}@${window_id}`;
             window.boxes.push(box);
             log.push(`create ${box}`);
@@ -42,7 +45,7 @@ function setup() {
             window.escape_listeners.add(listener);
             return () => void window.escape_listeners.delete(listener);
         },
-        emit_closed: (window_id, surface) => void log.push(surface === "cmdline" ? `closed ${window_id}` : `closed ${surface} ${window_id}`),
+        emit_closed: (window_id, surface, reason) => void log.push(surface === "cmdline" ? `closed ${window_id}${reason ? ` ${reason}` : ""}` : `closed ${surface} ${window_id}`),
     });
     return { windows, log, host };
 }
@@ -244,7 +247,7 @@ function fake_browser() {
 
 test("the browser keeps its loading id until its page sets the ready title, then takes the final id and drops its listeners", () => {
     const browser = fake_browser();
-    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait, () => {});
     assert.equal(browser.id, "loading");
     browser.fire("pagetitlechanged", "Ready");
     assert.equal(browser.id, "final");
@@ -253,7 +256,7 @@ test("the browser keeps its loading id until its page sets the ready title, then
 
 test("an empty title or another title does not claim the id", () => {
     const browser = fake_browser();
-    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait, () => {});
     browser.fire("pagetitlechanged", "");
     browser.fire("pagetitlechanged", "about:blank");
     assert.equal(browser.id, "loading");
@@ -261,22 +264,61 @@ test("an empty title or another title does not claim the id", () => {
 
 test("the older title event name claims the id too", () => {
     const browser = fake_browser();
-    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait, () => {});
     browser.fire("DOMTitleChanged", "Ready");
     assert.equal(browser.id, "final");
 });
 
-test("with no ready title the failsafe timer claims the id, once, and a later title changes nothing", () => {
+test("a page that is not ready in time never gets the typing id: the caller is told, and the listeners go", () => {
     const browser = fake_browser();
-    claim_id_when_page_ready(browser, "final", "Ready", browser.wait);
+    let told = 0;
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait, () => void told++);
     assert.equal(browser.timers.length, 1);
     browser.timers[0]!();
-    assert.equal(browser.id, "final");
-    browser.id = "taken";
-    browser.timers[0]!();
-    assert.equal(browser.id, "taken");
+    assert.equal(browser.id, "loading");
+    assert.equal(told, 1);
+    assert.deepEqual([...browser.listeners.values()].map((set) => set.size), [0, 0]);
 });
 
-test("the failsafe waits less than the hold of the key runtime", () => {
+test("a page that is ready before the timer is not reported when the timer runs", () => {
+    const browser = fake_browser();
+    let told = 0;
+    claim_id_when_page_ready(browser, "final", "Ready", browser.wait, () => void told++);
+    browser.fire("pagetitlechanged", "Ready");
+    browser.timers[0]!();
+    assert.equal(told, 0);
+    assert.equal(browser.id, "final");
+});
+
+test("the wait for the ready title is under the hold of the key runtime", () => {
     assert.ok(READY_FAILSAFE_MS < 1500);
+});
+
+test("an overlay whose page is not ready in time is removed, the focus goes back, and the background hears why", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "cmdline" });
+    windows.get(1)!.held_focus = "thread list";
+    windows.get(1)!.not_ready[0]!();
+    assert.deepEqual(log.slice(-3), ["remove cmdline@1", "focus list of 1", "closed 1 not_ready"]);
+    assert.equal(windows.get(1)!.escape_listeners.size, 0);
+});
+
+test("the not ready callback of an overlay that is already gone does nothing", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "cmdline" });
+    host.unmount({ windowId: 1, surface: "cmdline" });
+    const before = log.length;
+    windows.get(1)!.not_ready[0]!();
+    assert.equal(log.length, before);
+});
+
+test("a second mount's late callback does not close the first mount's replacement", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "cmdline" });
+    host.mount({ windowId: 1, surface: "cmdline" });
+    const before = log.length;
+    windows.get(1)!.not_ready[0]!();
+    assert.equal(log.length, before);
+    windows.get(1)!.not_ready[1]!();
+    assert.ok(log.includes("closed 1 not_ready"));
 });

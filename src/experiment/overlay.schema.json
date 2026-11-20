@@ -121,6 +121,10 @@
               },
               "surface": {
                 "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "optional": true
               }
             }
           }

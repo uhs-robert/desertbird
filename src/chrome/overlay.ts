@@ -6,8 +6,8 @@ import type { OverlayMountArgs, OverlaySurface, OverlayUnmountArgs } from "../sh
 export interface OverlayDeps<Window> {
     /** The main window the MailExtension window id names, or null. */
     window_with_id(window_id: number): Window | null;
-    /** Puts the surface in the window and gives it the focus. Returns the way to remove it. */
-    create(window: Window, surface: OverlaySurface, window_id: number, click_through: boolean): () => void;
+    /** Puts the surface in the window and gives it the focus. Returns the way to remove it. `on_not_ready` runs when a surface that takes the keyboard has not said it is ready in time. */
+    create(window: Window, surface: OverlaySurface, window_id: number, click_through: boolean, on_not_ready: () => void): () => void;
     /** Focuses the thread list of the front tab. Does nothing when that tab is not the mail tab. */
     focus_thread_list(window: Window): void;
     /** Notes what has the focus now. The returned function gives it back and answers false when that element is gone or cannot take the focus, so the host falls back to the thread list. */
@@ -18,7 +18,7 @@ export interface OverlayDeps<Window> {
     on_window_unload(window: Window, listener: () => void): () => void;
     /** Calls `listener` when an Escape key needs the host to close the overlay: the page has no title, or did not answer in time (see `on_escape_key`). Returns the way to stop listening. */
     on_escape(window: Window, listener: () => void): () => void;
-    emit_closed(window_id: number, surface: OverlaySurface): void;
+    emit_closed(window_id: number, surface: OverlaySurface, reason?: "not_ready"): void;
 }
 
 export interface OverlayHost {
@@ -59,14 +59,14 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
     }
 
     // The surface left on its own. The focus moves only when the window lives on and the surface held the keyboard. After a tab change the captured element sits in the hidden tab, so the focus goes to the new front tab's thread list instead.
-    function close_by_itself(window: Window, entry: Mounted, why: "window_closed" | "tab_changed" | "escape"): void {
+    function close_by_itself(window: Window, entry: Mounted, why: "window_closed" | "tab_changed" | "escape" | "not_ready"): void {
         if (mounted.get(window)?.get(entry.surface) !== entry) return;
         take_down(window, entry);
         if (takes_keyboard(entry.surface)) {
-            if (why === "escape") entry.restore_focus();
+            if (why === "escape" || why === "not_ready") entry.restore_focus();
             if (why === "tab_changed") deps.focus_thread_list(window);
         }
-        deps.emit_closed(entry.window_id, entry.surface);
+        deps.emit_closed(entry.window_id, entry.surface, why === "not_ready" ? why : undefined);
     }
 
     return {
@@ -81,7 +81,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             const surface = args.surface;
             // Read before the mount moves the focus to the surface.
             const give_back = takes_keyboard(surface) ? deps.capture_focus(window) : () => true;
-            const remove = deps.create(window, surface, window_id, args.clickThrough === true);
+            const remove = deps.create(window, surface, window_id, args.clickThrough === true, () => close_by_itself(window, entry, "not_ready"));
             const restore_focus = () => {
                 if (!give_back()) deps.focus_thread_list(window);
             };
@@ -127,7 +127,7 @@ export function on_escape_key(read_title: () => string, wait: (run: () => void, 
 // The browser element fires the first name where Thunderbird has renamed the second.
 const TITLE_EVENTS = ["pagetitlechanged", "DOMTitleChanged"];
 
-/** How long the host waits for the ready title. It stays under the hold of the key runtime (1500 ms), so a page that never says it is ready still ends up a typing target before the hold ends and the line takes its keys. */
+/** How long the host waits for the ready title before it closes the overlay. It is under the hold of the key runtime (1500 ms), so the hold never outlives the line it guards. */
 export const READY_FAILSAFE_MS = 1400;
 
 interface ReadyBrowser {
@@ -138,19 +138,20 @@ interface ReadyBrowser {
 }
 
 /**
- * Gives the browser its final id when the page sets `ready_title`, or after `READY_FAILSAFE_MS` when it never does (an event this Thunderbird names differently, a page that failed before it set the title). An empty title is the markup's own, and any other title is not the page's word, so neither counts.
+ * Gives the browser its final id when the page sets `ready_title`. An empty title is the markup's own, and any other title is not the page's word, so neither counts. A page that has not said so after `READY_FAILSAFE_MS` (an event this Thunderbird names differently, a page that failed before it set the title) never becomes a typing target: `on_not_ready` runs and the caller closes the overlay.
  */
-export function claim_id_when_page_ready(browser: ReadyBrowser, final_id: string, ready_title: string, wait: (run: () => void, ms: number) => void): void {
+export function claim_id_when_page_ready(browser: ReadyBrowser, final_id: string, ready_title: string, wait: (run: () => void, ms: number) => void, on_not_ready: () => void): void {
     let claimed = false;
-    const claim = () => {
-        if (claimed) return;
+    const on_title = () => {
+        if (claimed || browser.contentTitle !== ready_title) return;
         claimed = true;
         browser.id = final_id;
         for (const type of TITLE_EVENTS) browser.removeEventListener(type, on_title);
     };
-    const on_title = () => {
-        if (browser.contentTitle === ready_title) claim();
-    };
     for (const type of TITLE_EVENTS) browser.addEventListener(type, on_title);
-    wait(claim, READY_FAILSAFE_MS);
+    wait(() => {
+        if (claimed) return;
+        for (const type of TITLE_EVENTS) browser.removeEventListener(type, on_title);
+        on_not_ready();
+    }, READY_FAILSAFE_MS);
 }
