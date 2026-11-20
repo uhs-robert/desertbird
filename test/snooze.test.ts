@@ -33,6 +33,7 @@ function mailbox(options: { cannot_create_in?: string[]; create_fails_in?: strin
         { id: "imap-other", accountId: "imap", path: "/Other" },
         { id: "other-inbox", accountId: "other", path: "/INBOX", specialUse: ["inbox"] },
         { id: "other-misc", accountId: "other", path: "/Misc" },
+        { id: "imap-starred", accountId: "imap", path: "/[Gmail]/Starred", specialUse: ["flagged"] },
         { id: "imap-archive", accountId: "imap", path: "/Archive", specialUse: ["archives"] },
         { id: "local-root", accountId: "local", path: "/", isRoot: true },
         { id: "local-inbox", accountId: "local", path: "/Inbox", specialUse: ["inbox"] },
@@ -266,10 +267,11 @@ test("a gone Snoozed folder leaves a Gmail label copy in the same account alone"
     const message = box.add("<a@x>");
     await snooze(box, [message.id]);
     box.add("<a@x>", "imap-other");
+    box.add("<a@x>", "imap-starred");
     const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
     await box.store.add(gone);
     await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
-    assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "imap-other"]);
+    assert.deepEqual(box.where("<a@x>").sort(), ["imap-inbox", "imap-other", "imap-starred"]);
 });
 
 test("a message that shows up in the Snoozed folder after a missed tick still returns", async () => {
@@ -388,14 +390,48 @@ test("a repeat of a wake that already moved the message only marks it unread and
     assert.equal(box.messages[0]?.read, false);
 });
 
-test("an account with no Inbox leaves the message in Snoozed and notifies, even when it came from another folder", async () => {
+test("an account with no Inbox keeps the item and retries, then drops it with a notice, and the message stays in Snoozed", async () => {
     const box = mailbox({ no_inbox_in: ["imap"] });
     const message = box.add("<a@x>", "imap-other");
     await snooze(box, [message.id]);
     box.notices.length = 0;
-    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
+    const original_error = console.error;
+    console.error = () => {};
+    try {
+        await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, { now_ms: tomorrow_8 + MINUTE, started_ms: 0 }));
+    } finally {
+        console.error = original_error;
+    }
+    assert.equal((await box.store.list()).length, 1);
+    assert.deepEqual(box.notices, []);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, { now_ms: tomorrow_8 + 60 * MINUTE, started_ms: 0 }));
+    assert.deepEqual(await box.store.list(), []);
     assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
     assert.match(box.notices[0]!, /no Inbox/);
+});
+
+test("a gone Snoozed folder with no folder at either path keeps the item inside the retry window and moves nothing", async () => {
+    const box = mailbox();
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    // The origin account "other" has no Snoozed folder at either path, and Local Folders has none.
+    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder", origin_account_id: "other" };
+    box.log.length = 0;
+    box.notices.length = 0;
+    await assert.rejects(wake_snoozed(box.api, gone, { now_ms: tomorrow_8 + MINUTE, started_ms: 0 }), /could not return yet/);
+    assert.deepEqual(box.log, []);
+    assert.deepEqual(box.notices, []);
+});
+
+test("recovery finds a message waiting at the second Snoozed path", async () => {
+    const box = mailbox({ namespace_in: ["imap"] });
+    const message = box.add("<a@x>");
+    await snooze(box, [message.id]);
+    assert.deepEqual(box.where("<a@x>"), ["imap-Snoozed"]);
+    const gone = { ...(await box.store.list())[0]!, folder_id: "deleted-folder" };
+    await box.store.add(gone);
+    await box.store.wake_due(tomorrow_8, (found) => wake_snoozed(box.api, found, at(tomorrow_8)));
+    assert.deepEqual(box.where("<a@x>"), ["imap-inbox"]);
 });
 
 test("a wake whose Snoozed folder no longer exists drops the item with a notification and does not retry", async () => {

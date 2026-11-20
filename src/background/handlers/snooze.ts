@@ -166,19 +166,29 @@ async function waiting_copies(api: WakeApi, item: SnoozeItem, folder_still_there
     const local_ids = (await api.accounts.list()).filter((account) => account.type === LOCAL_ACCOUNT_TYPE).map((account) => account.id);
     const found: MessageHeader[] = [];
     for (const account_id of new Set([item.origin_account_id, ...local_ids])) {
-        const folder = await existing_snoozed(api, account_id);
-        if (folder !== undefined) found.push(...(await query_all(api, item.header_message_id, folder.id)));
+        // Both paths, not the first match: a stray folder at one path must not hide the one at the other. A folder with a special use (Archives, a Gmail Starred view) is never a Snoozed folder.
+        for (const path of SNOOZED_PATHS) {
+            for (const folder of await api.folders.query({ accountId: account_id, path })) {
+                if (folder.specialUse === undefined || folder.specialUse.length === 0) found.push(...(await query_all(api, item.header_message_id, folder.id)));
+            }
+        }
     }
     return found;
 }
 
-// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message has nowhere to wait or nowhere to return to, or stayed missing for `MISSING_MESSAGE_GIVE_UP_MS` past its due time. The notice names the subject only when `notice_show_subject` is on, since the notice can reach the desktop.
+/** The message cannot return yet. The item stays and the next tick retries, until the give-up time passes. Then the item is dropped with a notice. */
+async function retry_or_drop(api: WakeApi, item: SnoozeItem, timing: WakeTiming, notice: string): Promise<void> {
+    if (timing.now_ms - item.due_ms < MISSING_MESSAGE_GIVE_UP_MS || !past_start_grace(timing.started_ms, timing.now_ms)) throw new Error("A snoozed message could not return yet. Trying again at the next tick.");
+    await notify_refusal(api, notice);
+}
+
+// Runs at each tick for an item that came due. It is safe to repeat: it finds the message wherever the last try left it. A thrown error keeps the item for the next tick. An item is dropped, with a notice, only when the message could not return (it is not found, or the account has no Inbox) for `MISSING_MESSAGE_GIVE_UP_MS` past its due time. The notice names the subject only when `notice_show_subject` is on, since the notice can reach the desktop.
 export async function wake_snoozed(api: WakeApi, item: SnoozeItem, timing: WakeTiming): Promise<void> {
     const snoozed_folder_still_there = (await folder_by_id(api, item.folder_id)) !== undefined;
     // Always the Inbox of the origin account. The recorded origin folder can be a Gmail label view, which is no place to return to.
     const [destination] = await api.folders.query({ accountId: item.origin_account_id, specialUse: ["inbox"] });
     if (destination === undefined) {
-        await notify_refusal(api, "A snoozed message did not return, because its account has no Inbox. It stays in the Snoozed folder.");
+        await retry_or_drop(api, item, timing, "A snoozed message did not return, because its account has no Inbox. It stays where it is.");
         return;
     }
     // Every copy moves: two messages with one Message-ID share one item.
@@ -187,8 +197,7 @@ export async function wake_snoozed(api: WakeApi, item: SnoozeItem, timing: WakeT
     // The move gives the message a new id, so the unread mark needs a fresh lookup.
     const returned = await query_all(api, item.header_message_id, destination.id);
     if (returned.length === 0) {
-        if (timing.now_ms - item.due_ms < MISSING_MESSAGE_GIVE_UP_MS || !past_start_grace(timing.started_ms, timing.now_ms)) throw new Error("A snoozed message is in neither its Snoozed folder nor its Inbox yet. Trying again at the next tick.");
-        await notify_refusal(api, snoozed_folder_still_there ? "A snoozed message is no longer in the Snoozed folder, so it did not return." : "A snoozed message could not be found to return.");
+        await retry_or_drop(api, item, timing, snoozed_folder_still_there ? "A snoozed message is no longer in the Snoozed folder, so it did not return." : "A snoozed message could not be found to return.");
         return;
     }
     for (const message of returned) await api.messages.update(message.id, { read: false });
