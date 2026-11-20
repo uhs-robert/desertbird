@@ -9,7 +9,10 @@ const SHIFT_F10 = ["-M", "shift", "-k", "F10", "-m", "shift"];
 // The app menu (hamburger) button at the e2e window size.
 const APP_MENU_BUTTON = [1218, 21];
 
-const same_pixels = async (instance, name, other) => (await instance.shot_region(name, "0,0 1280x720", "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
+// Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10.
+const MARK_SUBMENU_REGION = "900,260 190x260";
+
+const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
 
 export async function run_popup_keys(instance, { check, shot, key_and_state, first_selected }) {
   const app = instance.app;
@@ -26,10 +29,10 @@ export async function run_popup_keys(instance, { check, shot, key_and_state, fir
   let state = await key_and_state(instance, ["j"], 1200);
   check(app, kind, "context menu open by keyboard: j marks nothing as junk and moves nothing", untouched(state), detail(state));
   // `k` is the access key of Mark in this menu, so it still reaches the menu and opens the submenu.
-  await instance.shot_region("popup_menu_before_k", "0,0 1280x720", "ppm");
+  await instance.shot_region("popup_menu_before_k", MARK_SUBMENU_REGION, "ppm");
   await instance.press(["k"]);
   await sleep(900);
-  check(app, kind, "context menu open: its access key k still reaches the menu", !(await same_pixels(instance, "popup_menu_after_k", "popup_menu_before_k")));
+  check(app, kind, "context menu open: its access key k still reaches the menu and opens the Mark submenu", !(await same_pixels(instance, "popup_menu_after_k", "popup_menu_before_k")));
   await shot("popup_context_menu_access_key", "thread context menu with Mark opened by k");
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
@@ -41,6 +44,10 @@ export async function run_popup_keys(instance, { check, shot, key_and_state, fir
   await shot("popup_app_menu_open", "app menu opened by a click");
   state = await key_and_state(instance, ["j"], 1200);
   check(app, kind, "app menu open by mouse: j marks nothing as junk and moves nothing", untouched(state), detail(state));
+  // `a` (archive) and `n` (next unread) are Thunderbird shortcuts and access keys of items inside the app menu's hidden views. The menu takes neither.
+  const folders_before = JSON.stringify(state.folders);
+  for (const key of ["a", "n"]) state = await key_and_state(instance, [key], 1200);
+  check(app, kind, "app menu open by mouse: a and n archive nothing and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_before, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_before}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
   state = await key_and_state(instance, ["j"], 1200);

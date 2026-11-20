@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_access_keys, menu_is_open } from "../src/chrome/focus.ts";
+import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_is_open, menu_takes_key } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
@@ -187,21 +187,30 @@ test("the overlay's browser is a typing target by its final id and not by its lo
     assert.equal(is_typing({ target: browser(OVERLAY_LOADING_ID) }, document_of(browser(OVERLAY_LOADING_ID))), false);
 });
 
-test("the access keys of the open popups, in the light tree and in a shadow root", () => {
-    const item = (key: string) => ({ getAttribute: () => key });
-    const popup = (state: string, keys: string[], extra: object = {}) => ({ state, querySelectorAll: (selectors: string) => (selectors === "[accesskey]" ? keys.map(item) : []), ...extra });
+test("an open menupopup takes the access keys of its direct items, a panel takes keys only with the focus inside it", () => {
     const list = element("tbody");
-    const scope = (nodes: object[]) => ({ querySelectorAll: (selectors: string) => (selectors === "*" ? nodes : nodes.filter((node) => "state" in node || "hasAttribute" in node)) });
-    const doc = (nodes: object[]) => ({ activeElement: list, querySelectorAll: scope(nodes).querySelectorAll as never });
-    assert.deepEqual(menu_access_keys(doc([popup("open", ["A", "t"]), popup("closed", ["z"])])), ["a", "t"]);
-    assert.deepEqual(menu_access_keys(doc([popup("open", [])])), []);
-    assert.equal(menu_access_keys(doc([popup("closed", ["z"])])), null);
-    assert.equal(menu_access_keys(doc([])), null);
-    // A popup that exists only inside a shadow root, found through its host.
-    const host = { shadowRoot: scope([popup("showing", ["q"])]) };
-    assert.deepEqual(menu_access_keys(doc([host])), ["q"]);
-    assert.equal(menu_is_open(doc([host])), true);
-    // A panel-list has no state: its open attribute tells.
-    const panel_list = { hasAttribute: (name: string) => name === "open", querySelectorAll: () => [item("x")] };
-    assert.deepEqual(menu_access_keys(doc([panel_list])), ["x"]);
+    const item = (key: string, owner: () => unknown, attributes: string[] = []) => ({ getAttribute: () => key, hasAttribute: (name: string) => attributes.includes(name), closest: owner });
+    const popup = (local_name: string, state: string, make_items: (self: object) => object[], contains: (node: unknown) => boolean = () => false) => {
+        const self: Record<string, unknown> = { localName: local_name, state, contains };
+        self.querySelectorAll = () => make_items(self);
+        return self;
+    };
+    const doc = (...popups: object[]) => ({ activeElement: list, querySelectorAll: () => popups as never });
+    const menu = popup("menupopup", "open", (self) => [item("K", () => self), item("h", () => self, ["hidden"]), item("s", () => ({}))]);
+    assert.equal(menu_takes_key(doc(menu), "k"), true);
+    assert.equal(menu_takes_key(doc(menu), "j"), false);
+    // A hidden item and an item of a closed nested popup are not items of the open popup.
+    assert.equal(menu_takes_key(doc(menu), "h"), false);
+    assert.equal(menu_takes_key(doc(menu), "s"), false);
+    assert.equal(menu_takes_key(doc(popup("menupopup", "closed", (self) => [item("k", () => self)])), "k"), null);
+    assert.equal(menu_takes_key(doc(), "k"), null);
+    // The app menu: its hidden panel views hold access keys, and none of them counts.
+    const app_menu = popup("panel", "open", (self) => [item("n", () => self), item("a", () => ({}))]);
+    for (const key of ["n", "a", "j"]) assert.equal(menu_takes_key(doc(app_menu), key), false, key);
+    const focused_panel = popup("panel", "showing", () => [], (node) => node === list);
+    assert.equal(menu_takes_key(doc(focused_panel), "j"), true);
+    // A panel-list has no state and carries `open`.
+    const panel_list = { localName: "panel-list", hasAttribute: (name: string) => name === "open", contains: (node: unknown) => node === list };
+    assert.equal(menu_takes_key(doc(panel_list), "j"), true);
+    assert.equal(menu_takes_key(doc({ ...panel_list, hasAttribute: () => false }), "j"), null);
 });

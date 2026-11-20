@@ -1,6 +1,6 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { focused_pane, in_reading_pane, is_typing, menu_access_keys, overlay_is_loading } from "./focus.ts";
+import { focused_pane, in_reading_pane, is_typing, menu_takes_key, overlay_is_loading } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
@@ -41,7 +41,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             return tree ? { row_count: () => tree.rowCount, selected_index: () => tree.selectedIndex, select: (index) => void (tree.selectedIndex = index) } : null;
         },
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
-        menu_access_keys: (window: MainWindow) => menu_access_keys(window.document),
+        menu_takes_key: (window: MainWindow, key: string) => menu_takes_key(window.document, key),
         overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
         on_tab_select(window, listener) {

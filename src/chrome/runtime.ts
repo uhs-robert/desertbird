@@ -39,8 +39,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     folder_port_of(window: Window): ViewPort | null;
     /** Whether the key is meant for someone else: a text field, or a message body that runs the body script. The event target is not enough: see `focus.ts`. */
     is_typing_target(window: Window, event: KeydownEvent): boolean;
-    /** The access keys of the items in the open menus and panels, lower case, or null when none is open. Plain keys then belong to the menu: those in the list pass to it and the rest are swallowed. */
-    menu_access_keys(window: Window): string[] | null;
+    /** Whether an open menu or panel takes the plain key, or null when none is open. Plain keys then belong to the menu: one it takes passes to it and the rest are swallowed. */
+    menu_takes_key(window: Window, key: string): boolean | null;
     /** Whether the focus sits in the overlay's browser while its page is not ready. Plain keys are dropped then, whatever the hold timer says. */
     overlay_is_loading(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
@@ -145,16 +145,16 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         }
         if (deps.tab_kind_of(window)) return matcher.reset();
         const typing = deps.is_typing_target(window, event);
-        const menu_keys = typing ? null : deps.menu_access_keys(window);
+        const menu_takes = typing ? null : deps.menu_takes_key(window, token);
         // The thread list is the target unless the key goes to a text field or an open menu.
-        const port = typing || menu_keys ? null : deps.list_port_of(window);
+        const port = typing || menu_takes !== null ? null : deps.list_port_of(window);
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
             visual_anchor = -1;
             pend(window, []);
             // A menu opened by a click leaves the focus in the list, so Thunderbird's single-key shortcuts (`j` marks junk) would act under the menu.
-            if (is_plain_printable(token) && (port || (menu_keys && !menu_keys.includes(token.toLowerCase())))) {
+            if (is_plain_printable(token) && (port || menu_takes === false)) {
                 event.preventDefault();
                 event.stopPropagation();
             }

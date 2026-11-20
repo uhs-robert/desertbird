@@ -24,7 +24,7 @@ class FakeWindow implements KeyTarget {
     body_script_live = false;
     /** The focus sits in the overlay's browser and its page is not ready. */
     overlay_loading = false;
-    /** The access keys of the open menu items, or null with no menu open. */
+    /** The keys the open menu takes, or null with no menu open. */
     menu_keys: string[] | null = null;
     has_focus = true;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
@@ -147,7 +147,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
         folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
         is_typing_target: (window, event) => is_typing_element(event.target as { localName: string }) || window.body_script_live,
-        menu_access_keys: (window) => window.menu_keys,
+        menu_takes_key: (window, key) => window.menu_keys && window.menu_keys.includes(key.toLowerCase()),
         overlay_is_loading: (window) => window.overlay_loading,
         in_reading_pane: (window) => window.in_reading_pane,
         on_tab_select: (window, listener) => {
