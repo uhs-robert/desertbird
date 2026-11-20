@@ -1,6 +1,5 @@
 // The hud in the background: the which-key panel and the toasts of each main window, and the mode label of its status bar. The page draws the panel and the toasts. The label is drawn by the Experiment, which this side tells what to show. This side decides what shows and when, and mounts the page while something shows.
 
-import { warn_and_go } from "../../shared/swallow.ts";
 import type { Settings } from "../config/settings.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { HudRequest, HudState, KeysEvent, KeysMode, OverlayApi } from "../../shared/protocol.ts";
@@ -157,10 +156,11 @@ export function create_hud_service(deps: HudDeps): HudService {
         const hud = hud_of(window_id);
         const settings = await deps.read_settings();
         const keys = hud.which_key_keys;
-        const root = keys === null ? undefined : await deps.read_root(hud.which_key_source);
-        const panel = keys === null || root === undefined ? null : which_key_panel(root, keys, settings);
-        const which_key = keys === null || root === undefined || panel === null ? null : with_stored_marks(panel, root, keys, await deps.read_marks().catch(warn_and_go("hud.marks", {})));
-        return { which_key, toasts: hud.toasts.list(), lifted: hud.lifted };
+        const base = { toasts: hud.toasts.list(), lifted: hud.lifted };
+        if (keys === null) return { which_key: null, ...base };
+        const root = await deps.read_root(hud.which_key_source);
+        const panel = which_key_panel(root, keys, settings);
+        return { which_key: panel === null ? null : await with_stored_marks(panel, root, keys, deps.read_marks), ...base };
     }
 
     function read_request(message: unknown): HudRequest | undefined {
