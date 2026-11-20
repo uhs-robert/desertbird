@@ -131,6 +131,9 @@ async function key_and_state(instance, args, wait = 700) {
   return wait_for_state(instance, wait);
 }
 
+// The same wait for a description object { what, until, ...options }, such as `tab_count_is(1)`.
+const wait_on = (instance, wait) => wait_state(instance, wait.what, wait.until, wait);
+
 // Restarts the app and records a check that the process changed, so a skipped restart fails the run.
 async function restart_app(instance, app, kind, label) {
   const pid_before = instance.app_pid();
@@ -1826,6 +1829,10 @@ async function run_view_settings(instance, check_in) {
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
 const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
+const tab_count_is = (count) => ({ what: `the main window to hold ${count} tabs`, until: (state) => main_window_tabs(state).length === count, show: (state) => `tabs ${main_window_tabs(state).length}` });
+const tab_active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active ${active_index(state)}` });
+// The new tab is the last one. A tab that reports no status counts as loaded.
+const last_tab_loaded = (count) => ({ what: `tab ${count} to open and finish loading`, until: (state) => main_window_tabs(state).length === count && main_window_tabs(state).at(-1).raw?.status !== "loading", show: (state) => `tabs ${main_window_tabs(state).length}, last ${main_window_tabs(state).at(-1)?.raw?.status}`, timeout_ms: 15000 });
 
 // One screenshot with its report line. The shot rule: the worker reads every one.
 async function page_shot(instance, name, line) {
@@ -1847,8 +1854,8 @@ async function run_own_pages(instance) {
   const before = await tab_count();
   const open_page = async (page) => {
     const reply = await instance.ask("open_own_page", 20000, { page });
-    await sleep(2500);
-    check(app, kind, `the ${page} page opens in a tab`, (await tab_count()) === before + 1, `reply ${JSON.stringify(reply)}`);
+    const opened = await wait_on(instance, last_tab_loaded(before + 1));
+    check(app, kind, `the ${page} page opens in a tab`, main_window_tabs(opened).length === before + 1, `reply ${JSON.stringify(reply)}`);
   };
   // A page nobody clicked yet: its first keys must work, so j scrolls it and q closes it.
   for (const page of ["options", "help"]) {
@@ -1858,7 +1865,7 @@ async function run_own_pages(instance) {
     for (let count = 0; count < 5; count++) await instance.press(["j"]);
     await sleep(500);
     check(app, kind, `j scrolls the ${page} page with no click first`, (await hud_pixels(instance, `${app}_${page}_unclicked_after`, page_region)) !== page_before);
-    const closed = await key_and_state(instance, ["q"], 2000);
+    const closed = await key_and_state(instance, ["q"], tab_count_is(before));
     check(app, kind, `q closes the ${page} page with no click first`, main_window_tabs(closed).length === before, `tabs ${main_window_tabs(closed).length}, expected ${before}`);
     if (main_window_tabs(closed).length !== before) await instance.ask("remove_tab", 20000, { index: before });
   }
@@ -1867,7 +1874,7 @@ async function run_own_pages(instance) {
     // A click on empty page area puts the focus in the page document, as a user's first click does.
     await instance.click(1150, 450);
     await sleep(500);
-    const closed = await key_and_state(instance, ["q"], 2000);
+    const closed = await key_and_state(instance, ["q"], tab_count_is(before));
     check(app, kind, `q closes the ${page} page`, main_window_tabs(closed).length === before, `tabs ${main_window_tabs(closed).length}, expected ${before}`);
   }
   // `/` sends the find to the page through tabs.sendMessage. A refusal shows a toast in the strip below the page, so the strip staying unchanged and the selection on screen show the page took the find.
@@ -1890,7 +1897,7 @@ async function run_own_pages(instance) {
   await shot("options_find", "options page after / and Key bindings: the heading is selected");
   check(app, kind, "/ finds text on the options page with no refusal toast", (await hud_pixels(instance, `${app}_own_find_after`)) === strip_before_find);
   await instance.ask("remove_tab", 20000, { index: before });
-  await sleep(1000);
+  await wait_on(instance, tab_count_is(before));
   // A click on the first setting, a text input.
   await open_page("options");
   await instance.click(590, 250);
@@ -1899,16 +1906,16 @@ async function run_own_pages(instance) {
   const typed = await key_and_state(instance, ["q"], 1500);
   check(app, kind, "q in an options input does not close the tab", main_window_tabs(typed).length === before + 1, `tabs ${main_window_tabs(typed).length}`);
   // Step 0 of the page keys: a keydown aimed at a remote page reaches the main-window listener. Alt+q closes the options tab with an input focused, and the page itself cannot have done it.
-  const chord_closed = await key_and_state(instance, ["-M", "alt", "q", "-m", "alt"], 2000);
+  const chord_closed = await key_and_state(instance, ["-M", "alt", "q", "-m", "alt"], tab_count_is(before));
   check(app, kind, "Alt+q closes a remote page tab, input focused", main_window_tabs(chord_closed).length === before, `tabs ${main_window_tabs(chord_closed).length}, expected ${before}`);
   await instance.ask("select_tab", 20000, { index: 0 });
-  await sleep(500);
+  await wait_on(instance, tab_active_is(0));
   // The readable tabs take q, : and g? through the main-window runtime. Each opens by its Thunderbird shortcut.
   // The address book focuses its search field, which keeps q as text, so a click on the folder list or the grid first puts the focus in the tab as a user's click does. g ? shows the root key list, and the next key removes it.
   for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
     await open();
-    await sleep(3000);
-    check(app, kind, `the ${name} tab opens`, (await tab_count()) === before + 1, `tabs ${await tab_count()}`);
+    const opened = await wait_on(instance, last_tab_loaded(before + 1));
+    check(app, kind, `the ${name} tab opens`, main_window_tabs(opened).length === before + 1, `tabs ${main_window_tabs(opened).length}`);
     await instance.click(...click_at);
     await sleep(500);
     await shot(`${name.replace(" ", "_")}_tab`, `${name} tab before the keys`);
@@ -1926,7 +1933,7 @@ async function run_own_pages(instance) {
     await sleep(1500);
     await shot(`${name.replace(" ", "_")}_cmdline`, `${name} tab after the colon key: the command line shows`);
     await close_command_line(instance);
-    const closed_here = await key_and_state(instance, ["q"], 2000);
+    const closed_here = await key_and_state(instance, ["q"], tab_count_is(before));
     check(app, kind, `q closes the ${name} tab`, main_window_tabs(closed_here).length === before, `tabs ${main_window_tabs(closed_here).length}, expected ${before}`);
   }
 }
@@ -2137,11 +2144,11 @@ async function run_no_identity(instance) {
   const shot = async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
   const opened = await open_inbox(instance, 6);
   check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
-  await key_and_state(instance, ["g"]);
-  let state = await key_and_state(instance, ["g"]);
+  await instance.press(["g"]);
+  let state = await key_and_state(instance, ["g"], { what: "g g to select the first row", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed[0], show: (current) => `selected ${first_selected(current)}` });
   check(app, kind, "g g selects the first row", first_selected(state) !== null);
   // One message, so the refusal is the identity one and not the "select one message" one.
-  await key_and_state(instance, ["G"]);
+  await key_and_state(instance, ["G"], { what: "G to select the last row", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed.at(-1) });
   const refused_r = await toast_cycle(instance, `${app}_r`, ["r"]);
   state = refused_r.state;
   check(app, kind, "r with no identity shows the refusal as a toast", refused_r.shown, `selected ${state.selected.length}`);
@@ -2151,9 +2158,8 @@ async function run_no_identity(instance) {
   // Forward and new refuse the same way. Unguarded, forward hangs with no window and new opens a window that cannot send, so the missing window is the proof for new.
   // The headless session logs the libnotify warning for the first notification only, so these two checks cannot see the refusal itself. The unit tests do.
   for (const [name, keys] of [["g F", ["g", "F"]], ["c", ["c"]]]) {
-    for (const key of keys.slice(0, -1)) await instance.press([key]);
-    state = await key_and_state(instance, [keys.at(-1)], 4000);
-    check(app, kind, `${name} with no identity opens no compose window`, !state.windows.some((window) => window.type === "messageCompose"), `selected ${state.selected.length}`);
+    for (const key of keys) await instance.press([key]);
+    await expect_absent(instance, `${name} with no identity opens no compose window`, (current) => (current.windows.some((window) => window.type === "messageCompose") ? `selected ${current.selected.length}` : null), { margin_ms: 4000, in_list: true });
     check(app, kind, `${name} with no identity does not crash the app`, instance.exited() === null);
   }
   await shot("refusal", "mail window after r with no identity; the refusal notification should show");
@@ -2166,7 +2172,7 @@ async function run_mail_account(instance) {
   const app = instance.app;
   const kind = "mail_account";
   const compose_identity = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.identity_id)?.identity_id ?? null;
-  await sleep(2000);
+  await wait_on(instance, mail_window_ready);
   await instance.press(["-k", "F6"]);
   const cases = [
     ["Local Folders message", "inbox-s2@fixture.invalid", [["r"], "r", "id2"], [["g", "F"], "g F", "id2"]],
@@ -2176,12 +2182,12 @@ async function run_mail_account(instance) {
   for (const [label, header_id, ...keys] of cases) {
     for (const [presses, name, expected] of keys) {
       await instance.ask(`select:${header_id}`, 30000);
-      await sleep(1000);
+      const selected = selects(header_id);
+      await wait_on(instance, selected);
       for (const key of presses.slice(0, -1)) await instance.press([key]);
-      const state = await key_and_state(instance, [presses.at(-1)], 7000);
+      const state = await key_and_state(instance, [presses.at(-1)], compose_opens((tab) => Boolean(tab.identity_id)));
       check(app, kind, `${name} on a ${label} composes from identity ${expected}`, compose_identity(state) === expected, `compose identity ${compose_identity(state)}, selected ${state.selected.map((message) => message.header_id)}`);
-      await instance.ask("close_compose");
-      await sleep(1500);
+      await close_compose(instance);
     }
   }
   check(app, kind, "the app survived", instance.exited() === null);
@@ -2235,6 +2241,24 @@ function install_editor_host(work_dir, kind) {
 const COMPOSE_EDITOR_HTML_KINDS = { compose_editor_html: "below", compose_editor_html_top: "above" };
 
 // The image a stored draft gives back: a draft with a data image Thunderbird embeds is saved and opened again, and a NOTE records the `src` of each image. The external editor keeps only the image sources its allowlist names.
+// The compose helpers below share these. A reply to inbox-s2 is loaded once its subject, its quote and its signature are in.
+const compose_tab_of = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+const reply_is_loaded = (tab) => Boolean(tab.subject) && tab.is_plain !== null && (tab.body ?? "").includes("Body of inbox-s2.") && (tab.body ?? "").includes("E2E signature line");
+// The mail window has the focus and a mail tab, so F6 reaches the thread list.
+const mail_window_ready = { what: "the mail window to have a mail tab and the focus", until: (state) => state.mail_tab !== null && state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 10000 };
+const selects_inbox_s2 = selects("inbox-s2@fixture.invalid");
+
+// Puts the focus in the thread list, selects inbox-s2 and presses `r`. Returns the state once the reply has loaded.
+async function reply_to_inbox_s2(instance, { focus_list = false } = {}) {
+  if (focus_list) {
+    await wait_on(instance, mail_window_ready);
+    await instance.press(["-k", "F6"]);
+  }
+  await instance.ask("select:inbox-s2@fixture.invalid", 30000);
+  await wait_on(instance, selects_inbox_s2);
+  return key_and_state(instance, ["r"], compose_opens(reply_is_loaded));
+}
+
 async function note_draft_image(instance) {
   const image = `<img src="data:image/png;filename=pixel.png;base64,${PIXEL_PNG_BASE64}" alt="pixel">`;
   const reopened = await instance.ask("draft_round_trip", 30000, { body: `<html><body><p>Image draft.</p>${image}</body></html>` });
@@ -2246,7 +2270,7 @@ async function note_draft_image(instance) {
 async function run_compose_editor_html(instance) {
   const app = instance.app;
   const kind = instance.kind;
-  const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+  const compose_tab = compose_tab_of;
   if (!existsSync(DESERTFOX_HOST)) {
     note(app, kind, "external editor not run", `no DesertFox host at ${DESERTFOX_HOST}; set E2E_DESERTFOX_HOST`);
     return;
@@ -2256,15 +2280,11 @@ async function run_compose_editor_html(instance) {
     check(app, kind, `${label}: no event handler, script URL or live tag from the Markdown`, !/onerror|javascript:|<b>kept/i.test(html) && html.includes("&lt;b&gt;kept as text&lt;/b&gt;"), `html ${JSON.stringify(html)}`);
   };
   const edit_in = async (label) => {
-    const state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], 6000);
+    const state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], compose_opens((tab) => (tab.html ?? "").includes("<strong>Edited</strong>")));
     report.shots.push({ app, kind, path: await instance.shot(`${app}_${kind}_${label}`), name: `${kind}_${label}`, line: `HTML compose window after Ctrl+E (${label})` });
     return compose_tab(state)?.html ?? "";
   };
-  await sleep(2000);
-  await instance.press(["-k", "F6"]);
-  await instance.ask("select:inbox-s2@fixture.invalid", 30000);
-  await sleep(1000);
-  let state = await key_and_state(instance, ["r"], 4000);
+  let state = await reply_to_inbox_s2(instance, { focus_list: true });
   const reply_before = compose_tab(state)?.html ?? "";
   check(app, kind, "r opens an HTML reply", compose_tab(state)?.is_plain === false, `isPlainText ${compose_tab(state)?.is_plain}`);
   note(app, kind, "HTML reply body before the editor", JSON.stringify(reply_before));
@@ -2279,8 +2299,7 @@ async function run_compose_editor_html(instance) {
   const at_quote_end = reply_after.indexOf("</blockquote>");
   const placed = COMPOSE_EDITOR_HTML_KINDS[kind] === "below" ? at_text > at_quote_end && at_text < at_signature : at_text < at_quote && at_text < at_signature;
   check(app, kind, `reply: the text sits ${COMPOSE_EDITOR_HTML_KINDS[kind]} the quote where Thunderbird put the cursor`, at_text >= 0 && placed, `text at ${at_text}, quote at ${at_quote}, signature at ${at_signature}`);
-  await instance.ask("close_compose");
-  await sleep(1500);
+  await close_compose(instance);
   if (COMPOSE_EDITOR_HTML_KINDS[kind] === "below") await note_draft_image(instance);
   state = await instance.ask("state");
   check(app, kind, "the app survived the HTML editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
@@ -2289,50 +2308,43 @@ async function run_compose_editor_html(instance) {
 async function run_compose_editor(instance) {
   const app = instance.app;
   const kind = instance.kind;
-  const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+  const compose_tab = compose_tab_of;
   if (!existsSync(DESERTFOX_HOST)) {
     note(app, kind, "external editor not run", `no DesertFox host at ${DESERTFOX_HOST}; set E2E_DESERTFOX_HOST`);
     return;
   }
-  await sleep(2000);
-  await instance.press(["-k", "F6"]);
-  await instance.ask("select:inbox-s2@fixture.invalid", 30000);
-  await sleep(1000);
   // A reply puts the focus in the body, where the compose script listens.
-  let state = await key_and_state(instance, ["r"], 4000);
+  let state = await reply_to_inbox_s2(instance, { focus_list: true });
   const before = compose_tab(state)?.body ?? "";
   check(app, kind, "r opens a plain-text reply for the editor", compose_tab(state)?.is_plain === true && !before.includes(EDITED_TEXT), `isPlainText ${compose_tab(state)?.is_plain}, body ${JSON.stringify(before)}`);
-  state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], 6000);
+  const body_of = (state) => compose_tab(state)?.body ?? "";
+  // The editor runs outside the app and writes its text into the body, so the body is the sign that it finished.
+  const editor_wrote_text = compose_opens((tab) => (tab.body ?? "").trim() === EDITED_TEXT);
+  state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], editor_wrote_text);
   const after = compose_tab(state)?.body ?? "";
   check(app, kind, "Ctrl+E runs the editor through desertbird_host and writes its text into the body", after.trim() === EDITED_TEXT, `body ${JSON.stringify(after)}`);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_after_ctrl_e`), name: "after_ctrl_e", line: "compose window with the text of the fake editor" });
-  await instance.ask("close_compose");
-  await sleep(1500);
+  await close_compose(instance);
 
   // Normal mode. Each entry into the body is a fresh reply, so the fake editor's text shows only when `e` ran it.
-  const reply_again = async () => {
-    await instance.ask("select:inbox-s2@fixture.invalid", 30000);
-    await sleep(1000);
-    return key_and_state(instance, ["r"], 4000);
-  };
-  const body_of = (state) => compose_tab(state)?.body ?? "";
+  const reply_again = () => reply_to_inbox_s2(instance);
   state = await reply_again();
   const plain_body = body_of(state);
-  state = await key_and_state(instance, ["e"], 1500);
+  state = await key_and_state(instance, ["e"], compose_opens((tab) => (tab.body ?? "").length > plain_body.length));
   check(app, kind, "e in insert mode types an e and runs no editor", body_of(state) === `e${plain_body}` || body_of(state).length === plain_body.length + 1, `body ${JSON.stringify(body_of(state))}`);
   await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_normal_label`), name: "normal_label", line: "compose window after Ctrl+O, label reads NORMAL" });
-  state = await key_and_state(instance, ["x"], 1500);
+  const body_before_x = body_of(state);
+  state = await key_and_state(instance, ["x"], compose_opens((tab) => (tab.body ?? "").length > body_before_x.length));
   check(app, kind, "Ctrl+O then a key other than e passes that key to the body", body_of(state).includes("x") && !body_of(state).includes(EDITED_TEXT), `body ${JSON.stringify(body_of(state))}`);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_insert_label`), name: "insert_label", line: "compose window back in insert mode, label reads INSERT" });
   await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
-  state = await key_and_state(instance, ["e"], 6000);
+  state = await key_and_state(instance, ["e"], editor_wrote_text);
   check(app, kind, "Ctrl+O then e runs the editor and writes its text into the body", body_of(state).trim() === EDITED_TEXT, `body ${JSON.stringify(body_of(state))}`);
-  await instance.ask("close_compose");
-  await sleep(1500);
+  await close_compose(instance);
   state = await reply_again();
   await instance.press(["-k", "Escape"]);
-  state = await key_and_state(instance, ["e"], 6000);
+  state = await key_and_state(instance, ["e"], editor_wrote_text);
   check(app, kind, "Escape then e runs the editor and keeps the compose window open", body_of(state).trim() === EDITED_TEXT, `body ${JSON.stringify(body_of(state))}`);
 
   // The label must not reach the body or a saved draft.
@@ -2344,8 +2356,7 @@ async function run_compose_editor(instance) {
   await sleep(500);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_unfocused_label`), name: "unfocused_label", line: "compose window with focus out of the body, no label" });
   check(app, kind, "the mode label is in neither the body nor the saved draft", !label_pattern.test(compose_tab(state)?.html ?? "") && !label_pattern.test(body_of(state)) && !label_pattern.test(draft.raw ?? "") && (draft.raw ?? "").includes(EDITED_TEXT), `draft ${JSON.stringify((draft.raw ?? "").slice(-300))}`);
-  await instance.ask("close_compose");
-  await sleep(1500);
+  await close_compose(instance);
   state = await instance.ask("state");
   check(app, kind, "the app survived the external editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
 }
@@ -2353,14 +2364,14 @@ async function run_compose_editor(instance) {
 async function run_quick_replies(instance) {
   const app = instance.app;
   const kind = instance.kind;
-  const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
-  await sleep(2000);
+  const compose_tab = compose_tab_of;
+  await wait_on(instance, mail_window_ready);
   await instance.press(["-k", "F6"]);
   await instance.ask("select:inbox-s2@fixture.invalid", 30000);
-  await sleep(1000);
+  await wait_on(instance, selects_inbox_s2);
   await instance.press(["g"]);
   await instance.press(["r"]);
-  let state = await key_and_state(instance, ["1"], 7000);
+  let state = await key_and_state(instance, ["1"], compose_opens((tab) => reply_is_loaded(tab) && tab.body.includes("Quick reply one.")));
   const tab = compose_tab(state);
   const body = tab?.body ?? "";
   const at_text = body.indexOf("Quick reply one.");
@@ -2378,8 +2389,7 @@ async function run_quick_replies(instance) {
   const label_free = !/-- (INSERT|NORMAL) --/.test(quick_draft.raw ?? "") && (kind !== "quick_reply_html" || /<\/body>\s*<\/html>/.test(quick_draft.raw ?? ""));
   check(app, kind, "the mode label leaves no text and no element in the saved draft", /Quick reply one/.test(quick_draft.raw ?? "") && label_free, `draft ${JSON.stringify((quick_draft.raw ?? "").slice(-200))}`);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_after_gr1_${kind}`), name: `after_gr1_${kind}`, line: "compose window with the quick reply above the quote" });
-  await instance.ask("close_compose");
-  await sleep(1500);
+  await close_compose(instance);
   const refused_slot = await toast_cycle(instance, `${app}_gr2_${kind}`, ["2"], ["g", "r"]);
   check(app, kind, "g r 2 on an empty slot opens no compose window", !refused_slot.state.windows.some((window) => window.type === "messageCompose"));
   check(app, kind, "g r 2 on an empty slot shows the refusal as a toast", refused_slot.shown, "the toast strip differs while the toast shows");
@@ -2392,6 +2402,13 @@ const LINE_STEP_PX = 40;
 const READING_FOLDER_MESSAGES = ["reading-plain", "reading-html", "reading-remote", "reading-sandbox"];
 const body_state = (state) => state.body ?? { live: false, scroll_y: -1, scroll_height: 0, inner_height: 0, selection: "" };
 const near = (value, expected) => Math.abs(value - expected) <= 2;
+// The body report follows a scroll after 100 ms, so a wait on the scroll position ends once the key's scroll has settled and not on a read halfway.
+const scroll_is = (what, until) => ({ what, until: (state) => until(body_state(state)), show: (state) => `scrollY ${body_state(state).scroll_y}` });
+const scrolls_near = (position) => scroll_is(`the body to scroll to ${position}`, (body) => near(body.scroll_y, position));
+// A message document has reported once the helper holds a report that came after `since`, or one whose text names the message and shows the body script live.
+const body_reports = (id, since) => ({ what: `the document of ${id} to report`, until: (state) => (state.body?.received ?? 0) >= since || (state.body?.live === true && (state.body.text_start ?? "").includes(` of ${id}.`)), show: (state) => `body ${state.body?.href}`, timeout_ms: 10000 });
+const flag_is = (id, flagged) => ({ what: `${id} to become ${flagged ? "flagged" : "unflagged"}`, until: (state) => Object.entries(state.flags).some(([flagged_id, flags]) => flagged_id === id && flags.flagged) === flagged, show: (state) => `flagged ${JSON.stringify(Object.entries(state.flags).filter(([, flags]) => flags.flagged).map(([flagged_id]) => flagged_id))}` });
+const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 10000 });
 
 async function run_message_scripts(instance) {
   const app = instance.app;
@@ -2402,10 +2419,10 @@ async function run_message_scripts(instance) {
 
   // Shows the message in the pane and puts focus in its body: the helper selects it, one F6 from the thread list reaches the body.
   const show_in_pane = async (id) => {
+    const since = Date.now();
     await instance.ask(`select:${id}@fixture.invalid`, 30000);
-    await sleep(2500);
+    await wait_on(instance, body_reports(id, since));
     await instance.press(["-k", "F6"]);
-    await sleep(1500);
     return instance.ask("state");
   };
   // Runs the scroll keys in the document that has focus. `where` names it in each check.
@@ -2416,69 +2433,65 @@ async function run_message_scripts(instance) {
     note(app, kind, `${where}: body document`, `live ${start.live}, top frame ${start.is_top}, scrollHeight ${start.scroll_height}, innerHeight ${start.inner_height}, ${start.href}`);
     check(app, kind, `${where}: the body script marked the document live`, start.live === true, JSON.stringify(start));
     check(app, kind, `${where}: the message is taller than a screen`, start.scroll_height > 3 * start.inner_height, `scrollHeight ${start.scroll_height}, innerHeight ${start.inner_height}`);
-    const keys = async (args, wait = 800) => body_state(await key_and_state(instance, args, wait));
-    let body = await keys(["j"]);
+    const keys = async (args, wait) => body_state(await key_and_state(instance, args, wait));
+    let body = await keys(["j"], scrolls_near(LINE_STEP_PX));
     check(app, kind, `${where}: j scrolls one line`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
     if (measure_only) return;
     await instance.press(["5"]);
-    body = await keys(["j"]);
+    body = await keys(["j"], scrolls_near(6 * LINE_STEP_PX));
     check(app, kind, `${where}: 5j scrolls five lines`, near(body.scroll_y, 6 * LINE_STEP_PX), `scrollY ${body.scroll_y}`);
-    body = await keys(["k"]);
+    body = await keys(["k"], scrolls_near(5 * LINE_STEP_PX));
     check(app, kind, `${where}: k scrolls one line back`, near(body.scroll_y, 5 * LINE_STEP_PX), `scrollY ${body.scroll_y}`);
     const before_half = body.scroll_y;
-    body = await keys(["-M", "ctrl", "d", "-m", "ctrl"]);
+    body = await keys(["-M", "ctrl", "d", "-m", "ctrl"], scroll_is("Ctrl+d to scroll half a page", (current) => near(current.scroll_y - before_half, current.inner_height / 2)));
     check(app, kind, `${where}: Ctrl+d scrolls half a page`, near(body.scroll_y - before_half, body.inner_height / 2), `scrollY ${before_half} then ${body.scroll_y}, innerHeight ${body.inner_height}`);
-    body = await keys(["-M", "ctrl", "u", "-m", "ctrl"]);
+    body = await keys(["-M", "ctrl", "u", "-m", "ctrl"], scrolls_near(before_half));
     check(app, kind, `${where}: Ctrl+u scrolls half a page back`, near(body.scroll_y, before_half), `scrollY ${body.scroll_y}, expected ${before_half}`);
-    await instance.press(["G"]);
-    await sleep(800);
-    body = body_state(await instance.ask("state"));
+    body = await keys(["G"], scroll_is("G to scroll to the bottom", (current) => near(current.scroll_y, current.scroll_height - current.inner_height)));
     check(app, kind, `${where}: G scrolls to the bottom`, near(body.scroll_y, body.scroll_height - body.inner_height), `scrollY ${body.scroll_y}, scrollHeight ${body.scroll_height}, innerHeight ${body.inner_height}`);
     await shot(`${where.replaceAll(" ", "_")}_bottom`, `${where} after G`);
     await instance.press(["g"]);
-    body = await keys(["g"]);
+    body = await keys(["g"], scroll_is("g g to scroll to the top", (current) => current.scroll_y === 0));
     check(app, kind, `${where}: g g scrolls to the top`, body.scroll_y === 0, `scrollY ${body.scroll_y}`);
     if (!escape) return;
     // A count then Escape ends the count, so the next j is one line.
     await instance.press(["7"]);
     await instance.press(["-k", "Escape"]);
-    body = await keys(["j"]);
+    body = await keys(["j"], scrolls_near(LINE_STEP_PX));
     check(app, kind, `${where}: Escape drops a pending count`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
-    await key_and_state(instance, ["g"]);
-    await key_and_state(instance, ["g"]);
+    await instance.press(["g"]);
+    await keys(["g"], scrolls_near(0));
   };
 
   // `refocus_body` is for the reading pane, where the line returns the focus to the thread list and not to the message: the run then notes whether n moves, and presses F6 to put the focus in the body.
   const find_checks = async (where, { refocus_body = false } = {}) => {
-    const body_after = async (args, wait = 1200) => body_state(await key_and_state(instance, args, wait));
+    const body_after = async (args, wait) => body_state(await key_and_state(instance, args, wait));
     await instance.press(["/"]);
     await sleep(1500);
     await shot(`${where.replaceAll(" ", "_")}_find_line`, `${where} with the command line open, find typed in`);
     await instance.press(["marker"]);
-    await sleep(400);
-    await instance.press(["-k", "Return"]);
-    await sleep(2000);
-    let body = body_state(await instance.ask("state"));
+    let body = await body_after(["-k", "Return"], scroll_is("find to select the first marker and scroll to it", (current) => current.selection === "marker" && current.scroll_y > current.inner_height));
     const first = body.scroll_y;
     check(app, kind, `${where}: find selects the first match and scrolls to it`, body.selection === "marker" && first > body.inner_height, `selection ${JSON.stringify(body.selection)}, scrollY ${first}, innerHeight ${body.inner_height}`);
     if (refocus_body) {
-      body = await body_after(["n"]);
+      // Whether n moves here is a measurement with no expected answer, so the wait stays fixed.
+      body = await body_after(["n"], 1200);
       note(app, kind, `${where}: n right after the line closed`, `${body.scroll_y === first ? "did not move" : "moved"}: scrollY ${first} then ${body.scroll_y}`);
       await instance.press(["-k", "F6"]);
       await sleep(800);
     }
-    body = await body_after(["n"]);
+    body = await body_after(["n"], scroll_is("n to scroll to the second marker", (current) => current.selection === "marker" && current.scroll_y > first));
     const second = body.scroll_y;
     check(app, kind, `${where}: n goes to the next match`, body.selection === "marker" && second > first, `scrollY ${first} then ${second}`);
-    body = await body_after(["n"]);
+    body = await body_after(["n"], scrolls_near(first));
     check(app, kind, `${where}: n wraps from the last match to the first`, near(body.scroll_y, first), `scrollY ${body.scroll_y}, first match at ${first}`);
-    body = await body_after(["N"]);
+    body = await body_after(["N"], scrolls_near(second));
     check(app, kind, `${where}: N wraps from the first match to the last`, near(body.scroll_y, second), `scrollY ${body.scroll_y}, last match at ${second}`);
-    body = await body_after(["N"]);
+    body = await body_after(["N"], scrolls_near(first));
     check(app, kind, `${where}: N goes back to the first match`, near(body.scroll_y, first), `scrollY ${body.scroll_y}, first match at ${first}`);
     await shot(`${where.replaceAll(" ", "_")}_found`, `${where} with the match selected`);
-    await key_and_state(instance, ["g"]);
-    await key_and_state(instance, ["g"]);
+    await instance.press(["g"]);
+    await key_and_state(instance, ["g"], scrolls_near(0));
   };
 
   // The reading pane. j in the body scrolls and moves no row, r opens no compose window, and the list keeps its keys once focus returns.
@@ -2498,27 +2511,26 @@ async function run_message_scripts(instance) {
   await find_checks("pane plain text", { refocus_body: true });
   state = await instance.ask("state");
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
-  await sleep(800);
-  state = await key_and_state(instance, ["j"]);
+  state = await key_and_state(instance, ["j"], { what: "j to move the list selection off the shown message", until: (current) => first_selected(current) !== pane_message && first_selected(current) !== null, show: (current) => `selected ${first_selected(current)}` });
   check(app, kind, "pane: after focus returns to the list, j moves the list again", first_selected(state) !== pane_message && first_selected(state) !== null, `selected ${first_selected(state)}`);
 
   // The body script takes every key while the message pane has the focus, so g e and g f there ask the background to move the focus. Native Down tells which pane has it.
   state = await show_in_pane("reading-plain");
   await instance.press(["g"]);
-  state = await key_and_state(instance, ["e"], 1500);
-  const list_row = first_selected(state);
-  state = await key_and_state(instance, ["-k", "Down"], 1200);
+  await instance.press(["e"]);
+  const list_row = first_selected(await instance.ask("state"));
+  state = await key_and_state(instance, ["-k", "Down"], { what: "Down to move the list selection", until: (current) => first_selected(current) !== list_row && first_selected(current) !== null, show: (current) => `selected ${first_selected(current)}` });
   check(app, kind, "pane: g e in the message body focuses the thread list, so Down moves the selection", first_selected(state) !== list_row && first_selected(state) !== null, `selected ${list_row} then ${first_selected(state)}`);
   state = await show_in_pane("reading-plain");
   const folder_before = state.mail_tab?.folder;
   await instance.press(["g"]);
-  await key_and_state(instance, ["f"], 1500);
-  state = await key_and_state(instance, ["-k", "Down"], 1200);
+  await instance.press(["f"]);
+  state = await key_and_state(instance, ["-k", "Down"], { what: "Down to move the folder selection", until: (current) => current.mail_tab?.folder !== folder_before, show: (current) => `folder ${current.mail_tab?.folder}` });
   check(app, kind, "pane: g f in the message body focuses the folder pane, so Down moves the folder", state.mail_tab?.folder !== folder_before, `folder ${folder_before} then ${state.mail_tab?.folder}`);
-  await key_and_state(instance, ["-k", "Up"], 1200);
+  await key_and_state(instance, ["-k", "Up"], { what: "Up to move the folder selection back", until: (current) => current.mail_tab?.folder === folder_before, show: (current) => `folder ${current.mail_tab?.folder}` });
   // The checks below press F6 from the list, so put the focus back there.
   await instance.press(["g"]);
-  await key_and_state(instance, ["e"], 1200);
+  await instance.press(["e"]);
 
   // HTML mail, remote content and a sandboxed frame. The measurement the design asked for: does the script run there?
   for (const id of READING_FOLDER_MESSAGES.slice(1)) {
@@ -2526,7 +2538,6 @@ async function run_message_scripts(instance) {
     await shot(`pane_${id}`, `reading pane with ${id}, body focused`);
     await scroll_keys(`pane ${id}`, { measure_only: true });
     await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
-    await sleep(600);
   }
 
   // Hints: f labels the link on screen, the typed label opens it in one step (the Experiment sends a trusted Enter), and the link target at the bottom of the mail scrolls into view.
@@ -2542,15 +2553,13 @@ async function run_message_scripts(instance) {
   const message_colors = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_labels_raw`, "0,0 1280x720", "ppm"));
   const default_theme = message_theme(DEFAULT_THEME);
   check(app, kind, "hints: the message label is drawn in the theme color and not the fallback yellow", (message_colors.has(default_theme.dark.primary) || message_colors.has(default_theme.light.primary)) && !message_colors.has("#ffd33d"), `dark ${default_theme.dark.primary} ${message_colors.get(default_theme.dark.primary) ?? 0} px, light ${default_theme.light.primary} ${message_colors.get(default_theme.light.primary) ?? 0} px`);
-  await instance.press(["a"]);
-  await sleep(1500);
-  hint_body = body_state(await instance.ask("state"));
+  hint_body = body_state(await key_and_state(instance, ["a"], scroll_is("f a to scroll the page to the link target", (current) => current.scroll_y > 2 * current.inner_height)));
   check(app, kind, "hints: f then a opens the link in one step, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
   // An external link whose text names another address. The pick sends a trusted Enter, so Thunderbird's own click handling runs and warns about such a link. The shot hint_external_pick shows the Link Mismatch dialog when it works, and the pane stays on the message. A script click skips the warning (see the probe below).
   const href_before = hint_body.href;
   const windows_before = (await instance.ask("state")).windows.length;
   await instance.press(["g"]);
-  await key_and_state(instance, ["g"], 800);
+  await key_and_state(instance, ["g"], scrolls_near(0));
   await instance.press(["f"]);
   await sleep(800);
   await shot("hint_labels_two", "reading pane with two hint labels, one on each link");
@@ -2572,50 +2581,48 @@ async function run_message_scripts(instance) {
   await instance.press(["-k", "Escape"]);
   await sleep(800);
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
-  await sleep(600);
 
   // The mail keys run on the shown message while the body has the focus. m s flags it, and q hands the focus back to the thread list.
   const plain_id = "reading-plain@fixture.invalid";
   // wtype drops the second key of a pair typed in one call, so m and s go in two presses.
-  const flag_keys = async () => {
+  const flag_keys = async (id, flagged) => {
     await instance.press(["m"]);
-    await sleep(200);
-    return key_and_state(instance, ["s"], 2000);
+    return key_and_state(instance, ["s"], flag_is(id, flagged));
   };
   const flagged_ids = (snapshot) => Object.entries(snapshot.flags).filter(([, flags]) => flags.flagged).map(([id]) => id);
   await show_in_pane("reading-plain");
-  state = await flag_keys();
+  state = await flag_keys(plain_id, true);
   check(app, kind, "pane: m s flags the shown message", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
-  await flag_keys();
+  await flag_keys(plain_id, false);
   const tabs_in_pane = main_window_tabs(state).length;
   state = await key_and_state(instance, ["q"], 1500);
   check(app, kind, "pane: q closes no tab", main_window_tabs(state).length === tabs_in_pane, `tabs ${main_window_tabs(state).length}`);
   const selected_before_j = first_selected(state);
-  state = await key_and_state(instance, ["j"], 1500);
+  state = await key_and_state(instance, ["j"], { what: "j to move the list selection", until: (current) => first_selected(current) !== selected_before_j && first_selected(current) !== null, show: (current) => `selected ${first_selected(current)}` });
   check(app, kind, "pane: after q the thread list has the focus, so j moves the selection", first_selected(state) !== selected_before_j, `selected ${selected_before_j} then ${first_selected(state)}`);
   await instance.press(["g"]);
-  await key_and_state(instance, ["e"], 1200);
+  await instance.press(["e"]);
 
   // A message tab: the message opens in a new tab and the keys go to it.
   await show_in_pane("reading-plain");
+  const tab_requested = Date.now();
   await instance.ask("open_message_tab");
-  await sleep(4000);
-  state = await instance.ask("state");
+  state = await wait_on(instance, { ...body_reports("reading-plain", tab_requested), until: (current) => main_window_tabs(current).some((tab) => tab.type === "messageDisplay") && (current.body?.received ?? 0) >= tab_requested });
   check(app, kind, "a message tab opened", main_window_tabs(state).some((tab) => tab.type === "messageDisplay"), JSON.stringify(main_window_tabs(state).map((tab) => tab.type)));
   await shot("message_tab", "message in its own tab");
   await scroll_keys("message tab");
   await find_checks("message tab");
   // The tab shows reading-plain while the list selects another message, so a key that read the list would flag the wrong one.
   await instance.ask("select_tab", 20000, { index: 0 });
-  await sleep(1000);
+  await wait_on(instance, tab_active_is(0));
   await instance.ask("select:reading-html@fixture.invalid", 30000);
-  await sleep(1500);
+  await wait_on(instance, selects("reading-html@fixture.invalid"));
   await instance.ask("select_tab", 20000, { index: 1 });
-  await sleep(1500);
-  state = await flag_keys();
+  await wait_on(instance, tab_active_is(1));
+  state = await flag_keys(plain_id, true);
   check(app, kind, "message tab: m s flags the message of the tab, not the list selection", flagged_ids(state).includes(plain_id) && !flagged_ids(state).includes("reading-html@fixture.invalid"), `flagged ${JSON.stringify(flagged_ids(state))}`);
   // u in the tab undoes the star it just set. g C opens the conversation of the displayed message: it needs the message in Thunderbird's search index, so the result is a note.
-  state = await key_and_state(instance, ["u"], 3000);
+  state = await key_and_state(instance, ["u"], flag_is(plain_id, false));
   check(app, kind, "message tab: u undoes the star", !flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   const tabs_before_conversation = main_window_tabs(state).length;
   await instance.press(["g"]);
@@ -2625,32 +2632,31 @@ async function run_message_scripts(instance) {
   if (main_window_tabs(state).length > tabs_before_conversation) {
     // The conversation tab opened after the message tab. Close it so the tab count below stays one.
     await instance.ask("select_tab", 20000, { index: tabs_before_conversation });
-    await sleep(1000);
-    await instance.press(["q"]);
-    await sleep(1500);
+    await wait_on(instance, tab_active_is(tabs_before_conversation));
+    await key_and_state(instance, ["q"], tab_count_is(tabs_before_conversation));
   }
   await instance.ask("select_tab", 20000, { index: 1 });
-  await sleep(1000);
-  state = await key_and_state(instance, ["K"], 1500);
+  await wait_on(instance, tab_active_is(1));
+  state = await key_and_state(instance, ["K"], tab_active_is(0));
   check(app, kind, "message tab: K switches to the mail tab", active_index(state) === 0, `active ${active_index(state)}`);
   await instance.ask("select_tab", 20000, { index: 1 });
-  await sleep(1000);
+  await wait_on(instance, tab_active_is(1));
   await instance.press(["t"]);
-  state = await key_and_state(instance, ["0"], 1500);
+  state = await key_and_state(instance, ["0"], tab_active_is(0));
   check(app, kind, "message tab: t 0 goes to the first tab", active_index(state) === 0, `active ${active_index(state)}`);
   await instance.ask("select_tab", 20000, { index: 1 });
-  await sleep(1500);
-  state = await key_and_state(instance, ["q"], 1500);
+  await wait_on(instance, tab_active_is(1));
+  state = await key_and_state(instance, ["q"], tab_count_is(1));
   check(app, kind, "message tab: q closes the tab", main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
   await instance.ask("reset_tabs");
-  await sleep(1500);
+  await wait_on(instance, { ...tab_count_is(1), until: (current) => main_window_tabs(current).length === 1 && active_index(current) === 0 });
 
   // A message window.
   await instance.ask("select:reading-plain@fixture.invalid", 30000);
-  await sleep(1500);
+  await wait_on(instance, selects("reading-plain@fixture.invalid"));
+  const window_requested = Date.now();
   await instance.ask("open_message_window");
-  await sleep(4000);
-  state = await instance.ask("state");
+  state = await wait_on(instance, { ...window_of_type("messageDisplay", true), until: (current) => current.windows.some((window) => window.type === "messageDisplay") && (current.body?.received ?? 0) >= window_requested, what: "a message window to open and its document to report" });
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
@@ -2659,17 +2665,17 @@ async function run_message_scripts(instance) {
   await sleep(1500);
   await shot("message_window_slash", "message window after / (a notification, no command line)");
   const before_refusal = body_state(await instance.ask("state")).scroll_y;
-  const after_refusal = body_state(await key_and_state(instance, ["j"], 1000)).scroll_y;
+  const after_refusal = body_state(await key_and_state(instance, ["j"], scroll_is("j to scroll the message window one line", (current) => near(current.scroll_y - before_refusal, LINE_STEP_PX)))).scroll_y;
   check(app, kind, "message window: / opens no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
-  state = await flag_keys();
+  state = await flag_keys(plain_id, true);
   check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
-  await flag_keys();
+  await flag_keys(plain_id, false);
   state = await key_and_state(instance, ["J"], 1500);
   check(app, kind, "message window: J changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
-  state = await key_and_state(instance, ["q"], 2500);
+  state = await key_and_state(instance, ["q"], window_of_type("messageDisplay", false));
   check(app, kind, "message window: q closes the window", !state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await instance.ask("close_message_windows");
-  await sleep(1500);
+  await wait_on(instance, window_of_type("messageDisplay", false));
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
