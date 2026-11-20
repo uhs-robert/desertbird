@@ -22,6 +22,10 @@ export type LifecycleDeps = {
   wait_for_start: (state: WindowState, addon_id: string) => Promise<boolean>;
   installed_stamp: (profile_dir: string, addon_id: string) => string | null;
   binary_exists: (binary: string) => boolean;
+  // The binary an app gets with no override.
+  default_binary: (app: App) => string;
+  // Throws a Refusal when the folder is not a DesertBird checkout, before any build runs in it.
+  check_worktree: (worktree: string) => void;
   log_tail: (log_file: string) => string;
   // Throws a Refusal when there is no display to open a window on.
   check_display: () => void;
@@ -42,8 +46,8 @@ function check_paths(paths: WindowPaths, deps: LifecycleDeps): void {
   if (reason !== null) fail(`refusing: ${reason}`);
 }
 
-async function close_and_say(paths: WindowPaths, deps: LifecycleDeps): Promise<boolean> {
-  const result = await close_window(paths, deps.close);
+async function close_and_say(paths: WindowPaths, deps: LifecycleDeps, keep_stage = false): Promise<boolean> {
+  const result = await close_window(paths, deps.close, keep_stage);
   for (const line of result.lines) deps.say(line);
   return result.complete;
 }
@@ -65,6 +69,7 @@ export async function open_window(request: Request, app: App, binary: string, de
   const { worktree, paths } = request;
   check_paths(paths, deps);
   deps.check_display();
+  deps.check_worktree(worktree);
   if (!deps.binary_exists(binary)) fail(`no ${app} binary at ${binary}. Thunderbird comes from tools/measure/fetch_thunderbird.sh.`);
   let stamp: string;
   try {
@@ -75,7 +80,7 @@ export async function open_window(request: Request, app: App, binary: string, de
   }
   try {
     // A second open on this worktree replaces its window. This also stops an app that runs on the profile with no state file, before the profile is wiped under it.
-    if (!(await close_and_say(paths, deps))) fail("the old window of this worktree is not closed, so no new one is opened over its profile. Fix that first, then run again.");
+    if (!(await close_and_say(paths, deps, true))) fail("the old window of this worktree is not closed, so no new one is opened over its profile. Fix that first, then run again.");
     mkdirSync(paths.window_dir, { recursive: true, mode: 0o700 });
     const state: WindowState = { worktree, profile: paths.profile_dir, log: paths.log_file, stamp, app, binary, started: new Date().toISOString(), unit: null, app_pid: 0, app_start_ticks: 0 };
     write_state(paths.state_file, state);
@@ -83,17 +88,17 @@ export async function open_window(request: Request, app: App, binary: string, de
     try {
       addon_id = await deps.build_profile(paths);
     } catch (error) {
-      await close_and_say(paths, deps);
+      await close_and_say(paths, deps, true);
       throw error;
     }
     launch(state, paths, deps);
     if (state.app_pid === 0) {
-      await close_and_say(paths, deps);
+      await close_and_say(paths, deps, true);
       fail("the spawn returned no process id, so no window started. Run again.");
     }
     if (!(await deps.wait_for_start(state, addon_id))) {
       const tail = deps.log_tail(paths.log_file);
-      await close_and_say(paths, deps);
+      await close_and_say(paths, deps, true);
       fail(`${app} did not start with the add-on loaded. Last lines of its log:\n${tail}`);
     }
     if (deps.installed_stamp(paths.profile_dir, addon_id) !== stamp) fail(`WRONG BUILD: the add-on file in the profile does not carry the stamp ${stamp}. The window is still open. Close it with: just owner-test-close ${worktree}`);
@@ -104,16 +109,20 @@ export async function open_window(request: Request, app: App, binary: string, de
 }
 
 // Reload keeps the app the window was opened with. An explicit --app that differs is refused: a profile written by one app must not be started by the other.
-export async function reload_window(request: Request, requested_app: string | undefined, deps: LifecycleDeps): Promise<void> {
+export async function reload_window(request: Request, requested_app: string | undefined, requested_binary: string | undefined, deps: LifecycleDeps): Promise<void> {
   const { worktree, paths } = request;
   check_paths(paths, deps);
   deps.check_display();
+  deps.check_worktree(worktree);
   const read = read_state(paths.state_file);
   if (read.kind !== "ok") fail(read.kind === "none" ? "no test window is open for this worktree. Run just owner-test first." : `the state file is unreadable: ${read.reason}`);
   const state = read.state;
   if (!is_own_record(state, paths)) fail(`the state file names another worktree or profile (${state.worktree}). Nothing was changed.`);
   if (!APPS.some((name) => name === state.app)) fail(`the state file names an unknown app (${state.app}). Close the window and open a new one.`);
   if (requested_app !== undefined && requested_app !== state.app) fail(`this window was opened with ${state.app}, so it cannot be reloaded as ${requested_app}. Close it and open a new one with --app ${requested_app}.`);
+  // The binary is the app's default, or one the maintainer named at open. A state file alone never picks a program to run: a binary that is not the default must be named again with --binary, and must match the state.
+  if (requested_binary !== undefined && requested_binary !== state.binary) fail(`this window was opened with the binary ${state.binary}, so it cannot be reloaded with ${requested_binary}.`);
+  if (state.binary !== deps.default_binary(state.app as App) && requested_binary === undefined) fail(`this window was opened with the binary ${state.binary}, which is not the default for ${state.app}. Pass it again: --binary ${state.binary}`);
   if (!deps.binary_exists(state.binary)) fail(`no ${state.app} binary at ${state.binary}.`);
   try {
     // The build runs first, so a failed build leaves the open window alone.

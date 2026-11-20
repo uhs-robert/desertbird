@@ -4,12 +4,27 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { find_app_by_profile } from "../../tools/owner_test/launch.ts";
+import { find_app_by_profile, group_members } from "../../tools/owner_test/launch.ts";
 import { canonical_worktree, window_paths } from "../../tools/owner_test/paths.ts";
 
 const CLI = join(import.meta.dirname, "..", "..", "tools", "owner_test", "cli.ts");
 
 type Run = { status: number; out: string };
+
+// Safety net: a test that fails or times out must not leave a stand-in app or a temp folder. Every setup registers here, and the process exit or a kill signal sweeps whatever is left.
+const live = new Set<{ base: string; profile_dir: string }>();
+function sweep(): void {
+  for (const item of live) {
+    for (let found = find_app_by_profile(item.profile_dir); found !== null; found = find_app_by_profile(item.profile_dir)) {
+      for (const member of group_members(found.pid)) try { process.kill(member.pid, "SIGKILL"); } catch { /* gone */ }
+      try { process.kill(found.pid, "SIGKILL"); } catch { /* gone */ }
+    }
+    rmSync(item.base, { recursive: true, force: true });
+  }
+  live.clear();
+}
+process.on("exit", sweep);
+for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { sweep(); process.exit(1); });
 
 // The cli as a real subprocess, in a temp world: its own HOME, cache and state folders, a git worktree whose build script writes a tiny xpi, and stand-in apps (shell scripts). No display and no real app are used.
 function setup() {
@@ -54,10 +69,12 @@ wait
   const real_worktree = canonical_worktree(worktree);
   const paths = window_paths(real_worktree, { cache_home: env.XDG_CACHE_HOME, state_home: env.XDG_STATE_HOME });
   const run = (args: string[], extra: Record<string, string> = {}): Promise<Run> =>
-    new Promise((done) => execFile("node", ["--no-warnings", CLI, ...args], { env: { ...env, ...extra }, cwd: worktree, timeout: 90_000 }, (error, stdout, stderr) => done({ status: error === null ? 0 : (error as { code?: number }).code ?? 1, out: stdout + stderr })));
+    new Promise((done) => execFile("node", ["--no-warnings", CLI, ...args], { env: { ...env, ...extra }, cwd: worktree, timeout: 90_000, killSignal: "SIGKILL" }, (error, stdout, stderr) => done({ status: error === null ? 0 : (error as { code?: number }).code ?? 1, out: stdout + stderr })));
+  const item = { base, profile_dir: paths.profile_dir };
+  live.add(item);
   const cleanup = async () => {
     await run(["close", worktree]);
-    rmSync(base, { recursive: true, force: true });
+    sweep();
   };
   return { base, worktree, env, paths, app, run, cleanup, apps_running: () => find_app_by_profile(paths.profile_dir) };
 }
@@ -73,7 +90,12 @@ test("open, reload and close with a stand-in app: reload keeps the app of the wi
     assert.match(readFileSync(t.paths.log_file, "utf8"), /app tb/);
     const first = t.apps_running();
     assert.ok(first !== null);
-    const reloaded = await t.run(["reload", t.worktree]);
+    const bare = await t.run(["reload", t.worktree]);
+    assert.equal(bare.status, 1, "a non-default binary must be named again");
+    assert.match(bare.out, /--binary/);
+    const mismatch = await t.run(["reload", t.worktree, "--binary", bb]);
+    assert.equal(mismatch.status, 1);
+    const reloaded = await t.run(["reload", t.worktree, "--binary", tb]);
     assert.equal(reloaded.status, 0, reloaded.out);
     const log = readFileSync(t.paths.log_file, "utf8");
     assert.equal(log.match(/app tb/g)?.length, 2, "the same app started again");
@@ -81,11 +103,10 @@ test("open, reload and close with a stand-in app: reload keeps the app of the wi
     const second = t.apps_running();
     assert.ok(second !== null && second.pid !== first.pid, "a new process runs and the old one is gone");
     assert.equal(existsSync(`/proc/${first.pid}`), false);
-    const refused = await t.run(["reload", t.worktree, "--app", "betterbird"]);
+    const refused = await t.run(["reload", t.worktree, "--app", "betterbird", "--binary", tb]);
     assert.equal(refused.status, 1);
     assert.match(refused.out, /opened with thunderbird/);
     assert.ok(t.apps_running() !== null, "a refused reload leaves the window running");
-    void bb;
     const closed = await t.run(["close", t.worktree]);
     assert.equal(closed.status, 0, closed.out);
     assert.equal(t.apps_running(), null);
@@ -187,5 +208,36 @@ test("a close during an open waits for it and then closes the window the open ma
     assert.equal(closing.status, 0, closing.out);
     assert.equal(t.apps_running(), null);
     assert.equal(existsSync(t.paths.window_dir), false);
+  } finally { await t.cleanup(); }
+});
+
+test("XDG_STATE_HOME inside a real profile folder, or relative, is refused before the lock creates any file", async () => {
+  const t = setup();
+  try {
+    const real_profiles = join(t.env.HOME, ".thunderbird");
+    mkdirSync(join(real_profiles, "z.default"), { recursive: true });
+    const before_cwd = readdirSync(t.worktree).sort();
+    for (const [value, pattern] of [[join(real_profiles, "state"), /real profile folder/], ["relative/state", /not an absolute path/], ["", /not an absolute path/]] as const) {
+      for (const action of ["open", "reload", "close"]) {
+        const result = await t.run([action, t.worktree, "--binary", t.app("bb")], { XDG_STATE_HOME: value });
+        assert.equal(result.status, 1, `${action} ${value}`);
+        assert.match(result.out, pattern);
+      }
+    }
+    assert.deepEqual(readdirSync(real_profiles), ["z.default"], "nothing was created in the real profile folder");
+    assert.deepEqual(readdirSync(t.worktree).sort(), before_cwd, "nothing was created in the working folder");
+  } finally { await t.cleanup(); }
+});
+
+test("a folder that is not a DesertBird checkout is refused and no build runs in it", async () => {
+  const t = setup();
+  try {
+    const other = join(t.base, "other");
+    mkdirSync(other);
+    writeFileSync(join(other, "package.json"), JSON.stringify({ scripts: { build: "touch built" } }));
+    const result = await t.run(["open", other, "--binary", t.app("bb")]);
+    assert.equal(result.status, 1);
+    assert.match(result.out, /not a DesertBird checkout/);
+    assert.equal(existsSync(join(other, "built")), false);
   } finally { await t.cleanup(); }
 });

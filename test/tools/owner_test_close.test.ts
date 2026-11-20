@@ -25,6 +25,7 @@ function fake_machine(ignore_term: number[] = [], survive_kill: number[] = []): 
     find_app_by_profile: () => [fake.found, ...fake.more].find((app): app is RunningApp => app !== null && fake.processes.get(app.pid) === app.start_ticks) ?? null,
     stop_unit: (unit) => (fake.unit_stops.push(unit), true),
     remove_window_dir: (dir) => fake.removed.push(dir),
+    remove_stage_dir: (dir) => fake.removed.push(`stage ${dir}`),
     grace_ms: 300,
     kill_wait_ms: 300,
   };
@@ -254,5 +255,19 @@ test("with no state file, an app that still runs on the profile is stopped and t
     const result = await close_window(paths, fake.deps);
     assert.deepEqual(fake.signals, ["SIGTERM 300"]);
     assert.deepEqual([result.closed, fake.removed], [true, [paths.window_dir]]);
+  } finally { done(); }
+});
+
+test("a stage folder left by a crashed build is removed with the window, and only when open does not need it", async () => {
+  const { paths, done } = setup();
+  try {
+    mkdirSync(paths.stage_dir, { recursive: true });
+    const kept = fake_machine();
+    await close_window(paths, kept.deps, true);
+    assert.deepEqual(kept.removed, [paths.window_dir], "open keeps the stage it just built");
+    write_state(paths.state_file, { worktree: paths.worktree, profile: paths.profile_dir, log: paths.log_file, stamp: "s", app: "betterbird", binary: "b", started: "t", unit: null, app_pid: 0, app_start_ticks: 0 });
+    const fake = fake_machine();
+    await close_window(paths, fake.deps);
+    assert.deepEqual(fake.removed, [`stage ${paths.stage_dir}`, paths.window_dir]);
   } finally { done(); }
 });

@@ -184,5 +184,6 @@ export function real_close_deps(): CloseDeps {
     // No unit exists yet, so a state that names one is not ours to trust: not confirmed.
     stop_unit: () => false,
     remove_window_dir: (window_dir) => rmSync(window_dir, { recursive: true, force: true }),
+    remove_stage_dir: (stage_dir) => rmSync(stage_dir, { recursive: true, force: true }),
   };
 }

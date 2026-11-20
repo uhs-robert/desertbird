@@ -5,9 +5,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
-import { APPS, app_binary, build_owner_profile, build_stamped_xpi, check_display, install_staged_xpi, installed_stamp, is_addon_loaded, launch_argv, launch_env, real_close_deps, remove_stage, sleep, start_app, type App } from "./launch.ts";
+import { APPS, app_binary, build_owner_profile, build_stamped_xpi, check_display, check_worktree, install_staged_xpi, installed_stamp, is_addon_loaded, launch_argv, launch_env, real_close_deps, remove_stage, sleep, start_app, type App } from "./launch.ts";
 import { close_action, open_window, reload_window, tail_of, type LifecycleDeps } from "./lifecycle.ts";
-import { canonical_worktree, default_roots, homes_to_guard, window_paths } from "./paths.ts";
+import { canonical_worktree, default_roots, homes_to_guard, refusal_reason, window_paths } from "./paths.ts";
 import { is_same_process } from "./process_guard.ts";
 import { flock_argv, LOCK_BUSY_EXIT, LOCK_HELD_ENV } from "./lock.ts";
 import { Refusal } from "./refusal.ts";
@@ -42,6 +42,8 @@ const real_deps = (homes: string[]): LifecycleDeps => ({
   wait_for_start,
   installed_stamp,
   binary_exists: (binary) => existsSync(binary),
+  default_binary: (app) => app_binary(app, process.env, undefined),
+  check_worktree,
   log_tail: tail_of,
   check_display: () => check_display(process.env),
   env: process.env,
@@ -71,6 +73,9 @@ try {
   const homes = homes_to_guard(homedir());
   if (homes.length === 0) fail("refusing: HOME is empty or not an absolute path");
   const paths = window_paths(worktree, default_roots(process.env, homedir()));
+  // Before the lock: taking it creates a file under the state folder, so the folders must be checked first.
+  const unsafe = refusal_reason(paths, homes);
+  if (unsafe !== null) fail(`refusing: ${unsafe}`);
   if (process.env[LOCK_HELD_ENV] !== "1") rerun_under_lock(paths.lock_file);
   const deps = real_deps(homes);
   const request = { worktree, paths };
@@ -78,7 +83,7 @@ try {
     const app = (requested_app ?? "betterbird") as App;
     await open_window(request, app, app_binary(app, process.env, values.binary), deps);
   } else if (action === "reload") {
-    await reload_window(request, requested_app, deps);
+    await reload_window(request, requested_app, values.binary, deps);
   } else {
     process.exitCode = (await close_action(request, deps)) ? 0 : 1;
   }

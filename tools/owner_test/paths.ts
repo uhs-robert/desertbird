@@ -92,8 +92,16 @@ export function refusal_reason(paths: WindowPaths, homes: string[]): string | nu
   }
   if (!is_strictly_inside(paths.cache_root, paths.window_dir) || basename(paths.window_dir) !== paths.key) return `${paths.window_dir} is not the folder derived for this worktree under ${paths.cache_root}`;
   if (paths.profile_dir !== join(paths.window_dir, "profile")) return `${paths.profile_dir} is not the profile folder of ${paths.window_dir}`;
+  if (!is_plain_stage(paths)) return `${paths.stage_dir} is a symlink or sits behind one, so it is not the plain folder derived under ${paths.cache_root}`;
   if (!is_unredirected(paths)) return `${paths.window_dir} is a symlink or sits behind one, so it is not the plain folder derived under ${paths.cache_root}`;
   return null;
+}
+
+// The stage folder is deleted by close, so it gets the same test: its real path must be its own path below the real cache root.
+export function is_plain_stage(paths: WindowPaths): boolean {
+  if (!existsSync(paths.stage_dir)) return true;
+  if (!existsSync(paths.cache_root)) return false;
+  return realpathSync(paths.stage_dir) === join(realpathSync(paths.cache_root), basename(paths.stage_dir));
 }
 
 // A window folder that is a symlink, or sits behind one, would send a delete somewhere else. The folder is safe only when its real path is its own path below the real cache root.

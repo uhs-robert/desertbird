@@ -1,5 +1,6 @@
-import { is_strictly_inside, is_unredirected, type WindowPaths } from "./paths.ts";
+import { is_plain_stage, is_strictly_inside, is_unredirected, type WindowPaths } from "./paths.ts";
 import { read_state, remove_state } from "./state.ts";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 export type RunningApp = { pid: number; start_ticks: number };
@@ -18,6 +19,8 @@ export type CloseDeps = {
   // Stops a systemd unit and says whether it is gone now. Called only for a state that names a unit.
   stop_unit: (unit: string) => boolean;
   remove_window_dir: (window_dir: string) => void;
+  // Deletes a stage folder left by a build. Called only with the derived, plain stage folder of the window.
+  remove_stage_dir: (stage_dir: string) => void;
   grace_ms?: number;
   // How long to wait for the process to be gone after SIGKILL.
   kill_wait_ms?: number;
@@ -95,14 +98,24 @@ export async function stop_app(recorded: RunningApp | null, paths: WindowPaths, 
 }
 
 // Deletes only paths.window_dir, which is derived from the caller's worktree, never from the state file. A bad or foreign state file therefore deletes nothing.
-export async function close_window(paths: WindowPaths, deps: CloseDeps): Promise<CloseResult> {
+// A build that crashed leaves its stage folder. It is removed under the same checks as the window folder.
+function clear_stage(paths: WindowPaths, deps: CloseDeps, lines: string[]): void {
+  if (!is_strictly_inside(paths.cache_root, paths.stage_dir) || !is_plain_stage(paths)) return void lines.push(`stage folder: ${paths.stage_dir} is not the plain folder derived under ${paths.cache_root}, left alone`);
+  if (existsSync(paths.stage_dir)) deps.remove_stage_dir(paths.stage_dir);
+}
+
+// `keep_stage` is for open, which closes the old window after it has built the next one into the stage folder.
+export async function close_window(paths: WindowPaths, deps: CloseDeps, keep_stage = false): Promise<CloseResult> {
   const read = read_state(paths.state_file);
   const lines: string[] = [];
   let recorded: RunningApp | null = null;
   let unit: string | null = null;
   if (read.kind === "none") {
     // No state does not mean no app: a state file deleted by hand leaves one running on the profile.
-    if (deps.find_app_by_profile(paths.profile_dir) === null) return { lines: ["nothing open"], closed: false, complete: true };
+    if (deps.find_app_by_profile(paths.profile_dir) === null) {
+      if (!keep_stage) clear_stage(paths, deps, lines);
+      return { lines: ["nothing open", ...lines], closed: false, complete: true };
+    }
     lines.push("no state file, but an app runs with this profile");
   }
   if (read.kind === "corrupt") {
@@ -126,6 +139,7 @@ export async function close_window(paths: WindowPaths, deps: CloseDeps): Promise
     lines.push(`folder: ${paths.window_dir} is not the plain folder derived under ${paths.cache_root}, left alone`);
     return { lines, closed: false, complete: false };
   }
+  if (!keep_stage) clear_stage(paths, deps, lines);
   deps.remove_window_dir(paths.window_dir);
   lines.push(`folder: deleted ${paths.window_dir}`);
   remove_state(paths.state_file);
