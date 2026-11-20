@@ -46,3 +46,7 @@ install_deps:
     if [ ! -d node_modules ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
         npm ci --no-audit --no-fund
     fi
+
+# Compare the setting defaults with the DesertFox table at the pin. The checkout is the argument or DESERTFOX_DIR, and the check skips with a warning when neither is set.
+settings-defaults checkout=env('DESERTFOX_DIR', ''):
+    DESERTFOX_DIR={{quote(checkout)}} npm run --silent defaults:check

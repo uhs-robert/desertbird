@@ -12,6 +12,7 @@ The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.
 
 - `tools/vendor_desertfox.sh <desertfox-checkout>` writes the pinned files, applies `local_edits.patch` and rewrites the table below.
 - `tools/vendor_desertfox.sh --verify <desertfox-checkout>` diffs this folder against the pin plus the patch. It reads the checkout with `git show`, never its working tree.
+- `npm run defaults:check [<desertfox-checkout>]` compares the setting defaults with the table at the pin (see Setting defaults). It skips with a warning when no checkout is given and `DESERTFOX_DIR` is unset.
 - `npm test` runs `test/vendor.test.ts`. It re-hashes each file against the table and fails on a change that has no new row, or an edit with no entry below.
 
 ## Local edits
@@ -46,6 +47,16 @@ All edits live in `local_edits.patch`. They widen the Firefox-only values of `co
 - The setting kind `choice_list` in `src/background/config/settings.ts` (a list whose every item is one of `choices`) is the twin of the upstream kind `enum_list`, under a name DesertBird chose. The `statusbar_widgets` setting uses it, with the names `folder` and `position` where upstream has `url`, `scroll` and `tabs`.
 - `MODES` already holds `normal`, `insert`, `visual` and `cmdline`. Narrowing it breaks `bundles.ts` and `command.ts`, which name the other DesertFox modes, so the list stays as it is.
 
+## Setting defaults
+
+`default_settings.ts` is a stub: the defaults of the settings DesertBird carries, with the DesertFox values. `tools/check_default_settings.ts` keeps it honest. It loads the table at the pin and fails when the stub or `SETTING_DEFAULTS` (the defaults DesertBird runs with) differs from it. Three lists in that file record the allowed differences, each with its reason:
+
+- `DESERTBIRD_ONLY`: settings DesertBird has and DesertFox has not.
+- `DEFAULT_OVERRIDES`: shared names with a deliberate DesertBird default. Today that is `statusbar_widgets`, since the widgets differ.
+- `WEB_ONLY_REASONS`: DesertFox settings with a default that DesertBird does not carry, grouped by why. A new DesertFox setting must go on this list or into the stub.
+
+The check reads the pin only. After a re-vendor to a newer pin, run it and fix what it reports.
+
 ## Not copied
 
 `keys/prune_tree.ts`, `keys/firefox_shortcut.ts`, `keys/index.ts`, `registry/builtin.ts` (DesertBird writes its own registry), `registry/index.ts`, the binding and file files of the command line (`parse_binding`, `commands_file`) and every DesertFox test. The rest of the DesertFox command line page (`src/cmdline/`) is Firefox specific: its row sources read tabs, bookmarks and history. DesertBird writes its own completer in `src/background/cmdline/` on top of `completion/tokenize.ts` and `score.ts`.
@@ -63,7 +74,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `completion/keys.ts` | edited | `27f261518e06be50406f7519b2310dbb8aefec28a1271d8abc54ec3ed9b21600` | `5844a5c177682bacb0966aa17064e7211739d3ff7ba0e6ef1207afde1021b4ff` |
 | `completion/tokenize.ts` | edited | `6f2b789a3f91222a2a2b681ee42cd45609c919eea15b47daf3c6b06a9665d3a2` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `782044001ffb548804beac17fbae8f01eafa4c800181b555729418a27cb7f41e` |
-| `default_settings.ts` | stub | `-` | `eca9d79725e87c58fba673060fcd28eff23b601e840b5da0bbb84aab1fb3ec9f` |
+| `default_settings.ts` | stub | `-` | `137e4588c24adef136c9b9b725fd2befcfafc449c7c074fc0e10376d7009078d` |
 | `find_match.ts` | edited | `67f4bd84db09a3d924dd436b261f6fee0f644156dad2a0bf5b6f95394165712d` | `f320289d274b638326562913c43ad2c9a83087df77de5952b4ab486fd2c8e31a` |
 | `history_cursor.ts` | copy | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` |
 | `invocation.ts` | copy | `9866e98bfa321db619ef51dc59cda1d65e7d35f04e43bf27c7e69ac582f0916b` | `9866e98bfa321db619ef51dc59cda1d65e7d35f04e43bf27c7e69ac582f0916b` |

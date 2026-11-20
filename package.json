@@ -12,7 +12,8 @@
     "unit": "node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\"",
     "test": "npm run --silent check",
     "e2e": "node tools/e2e/run.mjs",
-    "check": "npm run --silent lint && npm run --silent typecheck && npm run --silent unit"
+    "defaults:check": "node tools/check_default_settings.ts",
+    "check": "npm run --silent lint && npm run --silent typecheck && npm run --silent unit && npm run --silent defaults:check"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.1",
