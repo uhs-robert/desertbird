@@ -43,7 +43,7 @@ export async function run_typing(instance, { check, shot, key_and_state, open_in
   await instance.press(ALT("j"));
   await sleep(1000);
   const after_alt_j = await active_index();
-  check(app, kind, "Alt+j in the settings search field switches tab exactly once", after_alt_j !== settings_index && (await tabs_of()).length === before + 1, `tab ${settings_index} then ${after_alt_j}, tabs ${(await tabs_of()).length}`);
+  check(app, kind, "Alt+j in the settings search field switches tab exactly once", after_alt_j === (settings_index + 1) % (before + 1) && (await tabs_of()).length === before + 1, `tab ${settings_index} then ${after_alt_j}, expected ${(settings_index + 1) % (before + 1)}, tabs ${(await tabs_of()).length}`);
   await instance.press(ALT("k"));
   await sleep(1000);
   check(app, kind, "Alt+k in the field of the tab it came from switches back", (await active_index()) === settings_index, `active ${await active_index()}, expected ${settings_index}`);
@@ -65,7 +65,7 @@ export async function run_typing(instance, { check, shot, key_and_state, open_in
   check(app, kind, "after i, q closes no tab", (normal_window(typed)?.tabs ?? []).length === before + 1, `tabs ${(normal_window(typed)?.tabs ?? []).length}`);
   await instance.press(ALT("j"));
   await sleep(1000);
-  check(app, kind, "Alt+j still switches tab in insert mode", (await active_index()) !== before, `active ${await active_index()}`);
+  check(app, kind, "Alt+j still switches tab in insert mode", (await active_index()) === (before + 1) % (before + 1), `active ${await active_index()}, expected 0`);
   await instance.press(ALT("k"));
   await sleep(1000);
   await instance.press(["-k", "Escape"]);
