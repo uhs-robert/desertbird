@@ -66,8 +66,10 @@ function note(app, kind, name, detail) {
 async function open_inbox(instance, folder_row_tabs = 7, { expanded = false } = {}) {
   for (let count = 0; count < folder_row_tabs; count++) await instance.press(["-k", "Tab"]);
   if (!expanded) await instance.press(["-k", "Right"]);
+  const folder_before = (await instance.ask("state")).mail_tab?.folder;
   await instance.press(["-k", "Down"]);
-  const opened = (await wait_state(instance, "the Inbox to show after Down", (state) => state.mail_tab?.folder === "/Inbox", { soft: true, timeout_ms: 3000 })).mail_tab?.folder;
+  // After a restart the app shows the folder it showed last, and Down from it can land on another folder than the Inbox, so the wait ends on any change. A read can come with no mail tab while the window switches, so that read does not count.
+  const opened = (await wait_state(instance, "the folder to change after Down", (state) => Boolean(state.mail_tab) && (state.mail_tab.folder === "/Inbox" || state.mail_tab.folder !== folder_before), { soft: true, timeout_ms: 3000 })).mail_tab?.folder;
   // The status bar keeps "Done" for a few seconds after a folder loads, and the first pixel reads of later checks include it. That has no helper state, so this wait stays fixed.
   await sleep(1500);
   await instance.press(["-k", "F6"]);
@@ -98,23 +100,23 @@ async function wait_for(instance, what, read, until, { timeout_ms = 5000, step_m
 }
 const wait_state = (instance, what, until, options) => wait_for(instance, what, () => instance.ask("state"), until, options);
 
-// A key with no binding, whose only job is to be the last key pressed before a state read. It is unbound and not printable, so the key handler lets it through and a text field or menu ignores it.
-// It ends a half-typed sequence or count, so a caller presses it after its own prefix is done.
-const BARRIER_KEY = "F13";
-
-// DesertBird has no key-event feed, so the barrier is a key followed by helper state round trips. A round trip enters the background page's event loop behind everything the keys already queued there. It shows that keys pressed before it were delivered and that their synchronous work is done. It does not wait for an async effect (an archive, a window opening): wait for those by their state. `rounds` is the number of state reads. Two is the default, so a slow background command has one more turn to show.
-async function barrier(instance, { rounds = 2 } = {}) {
-  await instance.press(["-k", BARRIER_KEY]);
-  let state;
-  for (let round = 0; round < rounds; round++) state = await instance.ask("state");
-  return state;
+// The barrier is an observed key: w m flips the message pane, the helper reads the flip, and a second w m flips it back. Escape first ends a half-typed sequence or count, as in the startup probe. It needs the focus in the thread list.
+// The flip proves that the keys before it reached the key runtime. Each key's background command runs on its own, so the flip does not prove that a longer command pressed before it has finished: a fold makes four Experiment calls, the flip two. The two flips and their reads give such a command time, and `measure_barrier` checks that on the fold path.
+async function barrier(instance) {
+  const pane_start = (await instance.ask("state")).mail_tab?.message_pane_visible;
+  const pane_is = (visible) => ({ what: `the barrier w m to ${visible ? "show" : "hide"} the message pane`, until: (state) => state.mail_tab?.message_pane_visible === visible, show: (state) => `message pane visible ${state.mail_tab?.message_pane_visible}` });
+  for (const key of ["Escape", "w"]) await instance.press(["-k", key]);
+  await key_and_state(instance, ["m"], pane_is(!pane_start));
+  await instance.press(["w"]);
+  return key_and_state(instance, ["m"], pane_is(pane_start));
 }
 
-// Records a check that nothing happened. `found` reads the state after the barrier and returns what appeared, or null. A key that never arrived also leaves nothing, so the caller needs an earlier proof that its keys work.
-async function expect_absent(instance, name, found) {
-  const state = await barrier(instance);
+// Records a check that nothing happened. A refused or unbound key has no completion signal, so the check waits `margin_ms`, the fixed wait it had before the polled waits, then reads the state through the barrier where the thread list has the focus (`in_list`). `found` returns what appeared, or null. A key that never arrived also leaves nothing, so the caller needs an earlier proof that its keys work.
+async function expect_absent(instance, name, found, { margin_ms, in_list }) {
+  await sleep(margin_ms);
+  const state = in_list ? await barrier(instance) : await instance.ask("state");
   const appeared = found(state);
-  check(instance.app, instance.kind ?? "default", name, appeared === null, appeared === null ? "nothing changed before the barrier" : appeared);
+  check(instance.app, instance.kind ?? "default", name, appeared === null, appeared ?? "");
   return state;
 }
 
@@ -146,8 +148,9 @@ const flag_becomes = (id, name, value) => ({ what: `${name} of ${id} to become $
 // A compose window opens late: the subject and the quote arrive after the window, and Thunderbird can take many seconds.
 const compose_opens = (tab_is_ready) => ({ what: "a compose window with its content", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some(tab_is_ready)), timeout_ms: 15000 });
 
-// Waits until the status bar text area is as blank as a stretch of the same bar beside it, which is when "Loading Message..." is gone. The message pane has no helper state for a load in progress: the body script reports 1.5 s after a document loads, and a report from the document before can arrive in that gap.
-async function wait_status_idle(instance) {
+// Waits until the message a key just selected has loaded and the status bar is blank again. The pane has no helper state for a load in progress, but the helper's body script reports 1.5 s after a document loads. So the wait first takes a report from another document than `body_before` (the report read before the key) and newer than it, and only then compares the status bar text area with a blank stretch of the same bar. Before the load, that bar can be blank too, before "Loading Message..." shows.
+async function wait_message_loaded(instance, body_before) {
+  await wait_state(instance, "the selected message to load and report its body", (state) => state.body !== null && state.body.href !== body_before?.href && state.body.received > (body_before?.received ?? 0), { timeout_ms: 8000, soft: true });
   const text_area = "200,698 140x20";
   const blank_area = "700,698 140x20";
   return wait_for(instance, "the status bar to stop showing a load", async () => (await hud_pixels(instance, `${instance.app}_status_text`, text_area)) === (await hud_pixels(instance, `${instance.app}_status_blank`, blank_area)), (idle) => idle, { timeout_ms: 8000, soft: true });
@@ -164,25 +167,32 @@ async function wait_for_clipboard(instance, what) {
   return (await wait_for(instance, what, () => instance.ask("read_clipboard"), (reply) => (reply.text ?? "").trim() !== "")).text ?? "";
 }
 
-// The barrier is the proof that every earlier key was delivered, so it gets its own check: a j before it must have moved the selection by the time one state round trip returns. A miss means the barrier is too weak for the negative checks that rely on it.
-async function measure_barrier(instance, rows) {
-  const presses = 8;
+// A collapsed thread root selects its whole thread and an open one selects only itself, so the selection count shows a fold of the selected root.
+const thread_shows = (open) => ({ what: `the selected thread to ${open ? "open" : "close"}`, until: (state) => (open ? state.selected.length === 1 : state.selected.length > 1), show: (state) => `${state.selected.length} selected` });
+
+// The barrier's own check, on the fold path, whose background command is longer than the flip: a fold pressed before the barrier must have landed when the barrier returns. A miss means the barrier is too weak for the negative checks that rely on it.
+async function measure_barrier(instance) {
+  const folds = 8;
   await instance.press(["g"]);
-  await key_and_state(instance, ["g"], selects(rows[0]));
-  let moved = 0;
-  for (let press = 1; press <= presses; press++) {
-    await instance.press(["j"]);
-    if (first_selected(await barrier(instance, { rounds: 1 })) === rows[press]) moved++;
+  await key_and_state(instance, ["g"], { ...selects(COLLAPSED_ROWS[0]), until: (state) => first_selected(state) === COLLAPSED_ROWS[0] && thread_shows(false).until(state) });
+  let landed = 0;
+  for (let fold = 0; fold < folds; fold++) {
+    const opens = fold % 2 === 0;
+    await instance.press([opens ? "l" : "h"]);
+    if (thread_shows(opens).until(await barrier(instance))) landed++;
   }
-  check(instance.app, instance.kind ?? "default", "a j pressed before the barrier has moved the selection when one state round trip returns", moved === presses, `${moved} of ${presses} presses had acted`);
+  check(instance.app, instance.kind ?? "default", "an l or h fold pressed before the barrier has landed when the barrier returns", landed === folds, `${landed} of ${folds} folds had landed`);
 }
 
-// Thread keys on the fixture Inbox, whose ten threads of four open collapsed. Each key reads its result from the selection, since the fold state has no helper query.
-// A key that only folds or scrolls has no state to wait for. It is pressed with no wait, and the next key that moves the selection waits for its result, since keys reach the window in order.
+// Thread keys on the fixture Inbox, whose ten threads of four open collapsed. Each key reads its result from the selection: a motion from the selected row, a fold from the selection count (`thread_shows`).
+// A fold goes through the background page to the window, while j and k move in the window itself, so a later motion can pass an earlier fold. Each fold is awaited on its own for that reason.
 async function run_threads(instance, { app, kind, shot }) {
+  await measure_barrier(instance);
   const press_keys = async (sequence) => { for (const key of sequence) await instance.press([key]); };
-  // A fold goes through the background page to the window, while j and k move in the window itself, so a later motion can pass an earlier fold. The barrier lets the fold land first.
-  const folds = async (sequence) => { await press_keys(sequence); await barrier(instance); };
+  const folds = async (sequence, open) => {
+    await press_keys(sequence.slice(0, -1));
+    await key_and_state(instance, [sequence.at(-1)], { ...thread_shows(open), what: `${sequence.join(" ")} to ${open ? "open" : "close"} the selected thread` });
+  };
   const reaches = async (sequence, wanted_id) => {
     await press_keys(sequence.slice(0, -1));
     return first_selected(await key_and_state(instance, [sequence.at(-1)], { ...selects(wanted_id), what: `${sequence.join(" ")} to select ${wanted_id}` }));
@@ -190,21 +200,23 @@ async function run_threads(instance, { app, kind, shot }) {
   const id_of = (thread, position) => `inbox-t${thread}-m${position}@fixture.invalid`;
   const expect = (name, got, want) => check(app, kind, name, got === want, `selected ${got}, expected ${want}`);
   await reaches(["g", "g"], id_of(0, 0));
-  await folds(["l"]);
+  await folds(["l"], true);
   expect("l opens the collapsed thread and j then enters it", await reaches(["j"], id_of(0, 1)), id_of(0, 1));
   expect("h on a reply selects its thread root", await reaches(["h"], id_of(0, 0)), id_of(0, 0));
-  await folds(["h"]);
+  await folds(["h"], false);
   expect("h on a root closes the thread, so j skips its replies", await reaches(["j"], id_of(1, 0)), id_of(1, 0));
   expect("] t goes to the next thread root", await reaches(["]", "t"], id_of(2, 0)), id_of(2, 0));
   expect("[ t from a root goes to the root before", await reaches(["[", "t"], id_of(1, 0)), id_of(1, 0));
-  await folds(["l"]);
+  await folds(["l"], true);
   // Which reply j lands on is not the check here, only that it is a reply of thread 1.
   await key_and_state(instance, ["j"], { what: "j to enter thread 1", until: (state) => /^inbox-t1-m[1-3]@/.test(first_selected(state) ?? ""), show: (state) => `selected ${first_selected(state)}` });
   expect("[ t from a reply goes to its own root", await reaches(["[", "t"], id_of(1, 0)), id_of(1, 0));
-  await folds(["h", "z", "R"]);
+  await folds(["h"], false);
+  await folds(["z", "R"], true);
   await reaches(["g", "g"], id_of(0, 0));
   expect("z R opens every thread", await reaches(["j"], id_of(0, 1)), id_of(0, 1));
-  await folds(["z", "M"]);
+  // The selected reply's thread closes, so its root is selected with the whole thread.
+  await folds(["z", "M"], false);
   await reaches(["g", "g"], id_of(0, 0));
   expect("z M closes every thread", await reaches(["j"], id_of(1, 0)), id_of(1, 0));
   await reaches(["G"], COLLAPSED_ROWS.at(-1));
@@ -216,8 +228,8 @@ async function run_threads(instance, { app, kind, shot }) {
     await reaches(["g", "g"], COLLAPSED_ROWS[0]);
     await reaches(down, COLLAPSED_ROWS[Number(down.slice(0, -1).join(""))]);
     await press_keys(sequence);
-    // The scroll is a chrome call with no state, so the barrier is the pause before the screenshot.
-    await barrier(instance);
+    // The scroll has no state, and the barrier would show the message pane and move the rows, so this wait stays fixed.
+    await sleep(1500);
     await shot(`z_${name}`, `${down.slice(0, -1).join("")} rows down, then z ${sequence[1]}: the current row sits at the ${name} of the thread list`);
   }
   await press_keys(["w"]);
@@ -275,6 +287,7 @@ async function run_default(instance) {
   const app = instance.app;
   const kind = "default";
   const shot = async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
+  Object.assign(wait_stats, { count: 0, ms: 0, timeouts: 0 });
 
   const opened = await open_inbox(instance);
   if (process.env.E2E_ONLY === "steps") return run_steps(instance, { app, kind, shot: async () => "" });
@@ -325,27 +338,24 @@ async function run_default(instance) {
   await instance.press(["5"]);
   state = await key_and_state(instance, ["j"], selects(rows[5]));
   check(app, kind, "5j moves five rows", first_selected(state) === rows[5], `selected ${first_selected(state)}, expected ${rows[5]}`);
-  await measure_barrier(instance, rows);
   await timed(instance, "threads", () => run_threads(instance, { app, kind, shot }));
-  state = await barrier(instance);
-  check(app, kind, "no message is junk after the motions", Object.values(state.flags).every((flags) => !flags.junk));
+  await expect_absent(instance, "no message is junk after the motions", (now) => (Object.values(now.flags).some((flags) => flags.junk) ? "a message is junk" : null), { margin_ms: 1500, in_list: true });
 
   // s, x and 1 must change nothing: same selection, folders and flags. The m key leads the message state keys now, so a lone m followed by a break key stands in for it: the stray m is dropped. x is unbound in every default tree (a archives, so it cannot stand here).
   const before = await instance.ask("state");
   for (const key of ["s", "m", "x", "1"]) await instance.press([key]);
-  const after = await barrier(instance);
-  check(app, kind, "s, m x and 1 do nothing", same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows), "selection, folders, read, flagged, junk, tags and windows compared");
+  // The barrier's Escape ends the count 1, so its w m runs once.
+  await expect_absent(instance, "s, m x and 1 do nothing", (after) => (same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows) ? null : "the selection, folders, flags or windows changed"), { margin_ms: 1200, in_list: true });
 
   // With the thread list's context menu open (Shift+F10), keys belong to the menu: j moves nothing and k is the menu's access key for Mark.
   const before_menu = first_selected(await instance.ask("state"));
   await instance.press(["-M", "shift", "-k", "F10", "-m", "shift"]);
   // The open menu is chrome and has no helper state, so this wait stays fixed.
   await sleep(1000);
-  await instance.press(["j"]);
-  state = await barrier(instance);
+  // The open menu swallows the barrier's w and m, and its Escape would close the menu, so these waits stay fixed.
+  state = await key_and_state(instance, ["j"], 700);
   const after_menu_j = first_selected(state);
-  await instance.press(["k"]);
-  state = await barrier(instance);
+  state = await key_and_state(instance, ["k"], 700);
   await shot("menu_access_key", "thread context menu open with its Mark submenu opened by k");
   check(app, kind, "with the context menu open, j and k act on the menu, not the list", after_menu_j === before_menu && first_selected(state) === before_menu, `selected ${before_menu}, after j ${after_menu_j}, after k ${first_selected(state)}`);
   await instance.press(["-k", "Escape"]);
@@ -356,13 +366,14 @@ async function run_default(instance) {
 
   // Typing in the quick filter passes through.
   await instance.press(CTRL_SHIFT("k"));
-  // Focus in the quick filter has no helper state. The barrier keeps the typed text from racing the focus change.
-  await barrier(instance);
+  // Focus in the quick filter has no helper state, and the barrier's keys would type into it, so this wait stays fixed.
+  await sleep(800);
   const filtered = await key_and_state(instance, ["Single 1"], { what: "the quick filter to narrow the list", until: (now) => now.listed.length > 0 && now.listed.length < start.listed.length });
   check(app, kind, "typing in the quick filter passes through", filtered.listed.length > 0 && filtered.listed.length < start.listed.length, `listed ${filtered.listed.length} of ${start.listed.length} after typing "Single 1"`);
   await shot("quick_filter", "quick filter holds the typed text and the list is narrowed");
-  const bound = await key_and_state(instance, ["a"], { what: "the quick filter to take the a and list nothing", until: (now) => now.listed.length === 0 });
-  check(app, kind, "a typed into the quick filter archives nothing", same(bound.folders["/Inbox"], before.folders["/Inbox"]) && bound.listed.length === 0, `listed ${bound.listed.length}, Inbox ${bound.folders["/Inbox"]?.length}`);
+  await key_and_state(instance, ["a"], { what: "the quick filter to take the a and list nothing", until: (now) => now.listed.length === 0 });
+  // The list empties before an archive could land, so the check keeps its fixed margin after that.
+  await expect_absent(instance, "a typed into the quick filter archives nothing", (now) => (same(now.folders["/Inbox"], before.folders["/Inbox"]) && now.listed.length === 0 ? null : `listed ${now.listed.length}, Inbox ${now.folders["/Inbox"]?.length}`), { margin_ms: 1500, in_list: false });
   // Escape clears the filter text, and Escape in an empty filter returns focus to the thread list (measured on both apps).
   await instance.press(["-k", "Escape"]);
   const cleared = await wait_state(instance, "Escape to clear the quick filter", (now) => now.listed.length === start.listed.length, { soft: true });
@@ -510,22 +521,24 @@ async function run_default(instance) {
   const pane_message = first_selected(state);
   check(app, kind, "the list has focus and a message shows before the reading pane check", pane_list_focus && pane_message === live_rows().at(-2), `g g reached the top: ${pane_list_focus}, selected ${pane_message}`);
   await instance.press(["-k", "F6"]);
-  // The focus move has no helper state, so the barrier is the pause before the screenshot.
-  await barrier(instance);
+  // The focus in the message body has no helper state, and the body takes no barrier keys, so the waits here stay fixed.
+  await sleep(500);
   await shot("reading_pane_focus", "message body has focus after one F6 from the list");
   const junk_before = Object.values((await instance.ask("state")).flags).filter((flags) => flags.junk).length;
+  const body_before = (await instance.ask("state")).body;
   await instance.press(["j"]);
-  state = await barrier(instance);
-  const junked = Object.entries(state.flags).filter(([, flags]) => flags.junk).map(([id]) => id);
-  check(app, kind, "j with focus in the message body neither junks nor moves the selection", junked.length === junk_before && first_selected(state) === pane_message, `message ${pane_message}, selected after ${first_selected(state)}, junk flags ${junk_before} then ${junked.length}`);
+  await expect_absent(instance, "j with focus in the message body neither junks nor moves the selection", (now) => {
+    const junk_after = Object.values(now.flags).filter((flags) => flags.junk).length;
+    return junk_after === junk_before && first_selected(now) === pane_message ? null : `message ${pane_message}, selected after ${first_selected(now)}, junk flags ${junk_before} then ${junk_after}`;
+  }, { margin_ms: 2500, in_list: false });
   await shot("after_reading_pane_j", "state after j with focus in the message body");
   // Shift+F6 goes back one pane. j then moves one row, which proves the j above ran one pane after the list, in the message body.
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
-  await barrier(instance);
+  await sleep(500);
   state = await key_and_state(instance, ["j"], selects(live_rows().at(-1)));
   check(app, kind, "Shift+F6 from the body returns to the list, where j moves one row", first_selected(state) === live_rows().at(-1), `selected ${first_selected(state)}, expected ${live_rows().at(-1)}`);
   // The message pane of the row just selected is still loading, which the status bar shows as "Loading Message...". run_tabs compares the bottom strip against a baseline it takes first, so the load has to end.
-  await wait_status_idle(instance);
+  await wait_message_loaded(instance, body_before);
   await timed(instance, "tabs", () => run_tabs(instance, { check, note, shot, key_and_state }));
 
   // <C-l> on a collapsed thread root (several messages) refuses and opens no tab. On one message it opens a tab.
@@ -536,8 +549,8 @@ async function run_default(instance) {
   const log_offset = instance.app_log().length;
   await instance.press(["-k", "Control_L"]);
   await instance.press(["-M", "ctrl", "l", "-m", "ctrl"]);
-  state = await barrier(instance);
-  check(app, kind, "C-l on a collapsed thread root opens no tab", state.displayed.length > 1 && tab_count(state) === tabs_before, `displayed ${state.displayed.length}, tabs ${tabs_before} then ${tab_count(state)}`);
+  // A tab that C-l opened late would also pass the wait of the next C-l check, so this one keeps its fixed margin.
+  await expect_absent(instance, "C-l on a collapsed thread root opens no tab", (now) => (now.displayed.length > 1 && tab_count(now) === tabs_before ? null : `displayed ${now.displayed.length}, tabs ${tabs_before} then ${tab_count(now)}`), { margin_ms: 1500, in_list: true });
   note(app, kind, "C-l refusal", `libnotify warning in the log after the key: ${/libnotify/.test(instance.app_log().slice(log_offset))}`);
   // run_tabs trashed rows off the end, so `gone` no longer names the last row: G is done once the selection has left the top.
   await key_and_state(instance, ["G"], { what: "G to leave the first row", until: (now) => first_selected(now) !== rows[0] && first_selected(now) !== null });
@@ -545,7 +558,8 @@ async function run_default(instance) {
   await instance.press(["-M", "ctrl", "l", "-m", "ctrl"]);
   state = await wait_state(instance, "C-l to open the message in a tab", (now) => tab_count(now) === tabs_before + 1);
   check(app, kind, "C-l on one message opens it in a tab", tab_count(state) === tabs_before + 1, `tabs ${tabs_before} then ${tab_count(state)}`);
-  await barrier(instance);
+  // The new tab draws after it counts, and a message tab takes no barrier keys, so this pause before the screenshot stays fixed.
+  await sleep(1000);
   await shot("after_ctrl_l", "a message tab after C-l");
   // Close the message tab again, so the view checks that follow act on the mail tab.
   await instance.press(["-k", "Control_L"]);
