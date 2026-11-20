@@ -1375,9 +1375,7 @@ async function run_cmdline_launch(instance, { app, kind, shot }) {
   await shot("cmdline_launch", "the command line right after : j a typed with no pause and a message selected: the line is open and empty");
   const after = await instance.ask("state");
   check(app, kind, "with a message selected, : then j a typed with no pause moves nothing and archives nothing", selection_of(after) === selection_of(before) && JSON.stringify(after.folders) === JSON.stringify(before.folders), `selected ${selection_of(before)} then ${selection_of(after)}, mail changed: ${JSON.stringify(after.folders) !== JSON.stringify(before.folders)}`);
-  // Keys typed before the page is ready are dropped, not replayed into the line.
-  check(app, kind, "keys typed before the page was ready were dropped: the list did not change and no mail changed", selection_of(after) === selection_of(before) && JSON.stringify(after.folders) === JSON.stringify(before.folders), `selected ${selection_of(after)}`);
-  // The line takes keys now: a typed command runs, which only the line can do.
+  // The check above shows the keys typed before ready were dropped, not replayed into the line. The line takes keys now: a typed command runs, which only the line can do.
   const order = before.mail_tab?.sort_order === "ascending" ? "descending" : "ascending";
   await instance.press([`sort --date --${order}`]);
   await sleep(500);

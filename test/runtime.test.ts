@@ -705,20 +705,20 @@ test("once the overlay page is ready, its keys reach the line and the hold ends"
     assert.equal(window.selected, 1);
 });
 
-test("when the host claims the ready id on its own timer, the line takes the keys and the hold ends before it runs out", () => {
+test("a page that is never ready is never a typing target: keys stay dropped until the host closes the overlay and the hold runs out", () => {
     const { windows, advance, runtime } = setup();
     runtime.install(tree(), ["cmdline.open"]);
     const window = windows[0]!;
     press(window, ":");
     advance(1350);
     assert.equal(press(window, "j", in_loading_overlay).cancelled, true);
-    // The host's failsafe timer (under the hold) gave the browser its typing id.
+    // The host closes the overlay at 1400 ms and the focus is back on the list.
     advance(50);
-    assert.equal(press(window, "a", in_ready_overlay).cancelled, false, "the line takes the key");
+    assert.equal(press(window, "a").cancelled, true);
     assert.equal(window.selected, 0);
     advance(200);
     press(window, "j");
-    assert.equal(window.selected, 1, "the hold ended on the typing key");
+    assert.equal(window.selected, 1, "the hold ran out");
 });
 
 test("an overlay that closes before its page is ready leaves the hold to run out", () => {

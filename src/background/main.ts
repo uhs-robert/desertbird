@@ -331,7 +331,14 @@ const body_requests = create_body_requests({ registry, api: messenger, allowed: 
 // The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
 messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? compose_requests(message, sender) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
-messenger.overlay?.onClosed.addListener(({ windowId, surface }) => (surface === "cmdline" ? (confirm.surface_gone(windowId), cmdline.end(windowId), hud.set_lifted(windowId, false)) : hud.forget(windowId)));
+messenger.overlay?.onClosed.addListener(({ windowId, surface, reason }) => {
+    if (surface !== "cmdline") return hud.forget(windowId);
+    confirm.surface_gone(windowId);
+    cmdline.end(windowId);
+    hud.set_lifted(windowId, false);
+    // The host closed a line whose page never said it was ready. Say so, or the colon would seem to do nothing.
+    if (reason === "not_ready") notify_refusal({ ...messenger, toasts: hud }, "The command line did not start. Press : to try again.", windowId).catch(console.error);
+});
 
 start_jump_history(messenger);
 
