@@ -23,6 +23,9 @@ export const KEYMAP_STORAGE_KEY = "desertbird_compiled_keymap";
  */
 export const BODY_SCRIPT_LIVE_ATTRIBUTE = "data-desertbird-keys";
 
+/** Set on the main window's root element while a hint pick of the `hints` Experiment shows labels. The page keys of `pages.js` listen on the same window root ahead of the pick, and they pass every key while it is set. A marker and not a call, because the two bundles share no state. */
+export const HINTS_LIVE_ATTRIBUTE = "data-desertbird-hints";
+
 /** The storage key of the settings the user changed. The body script reads its scroll step from here. */
 export const SETTINGS_STORAGE_KEY = "desertbird_settings";
 /** The command line history: a list of lines, oldest first. The background writes it and the command line page reads it. */
@@ -348,7 +351,7 @@ export interface HintLabelColors {
     light: HintLabelScheme;
 }
 
-/** Labels the targets of the front mail tab of the window. The answer is how many it labelled, and with none no hint mode starts. The typed label, Escape and the end of the labels are the parent's own, so no further call is needed. */
+/** Labels the targets of the front tab of the window: the mail tab, or the window and the readable page of any other tab. The answer is how many it labelled, and with none no hint mode starts. The typed label, Escape and the end of the labels are the parent's own, so no further call is needed. */
 export interface HintsPickArgs {
     windowId: number;
     colors: HintLabelColors;

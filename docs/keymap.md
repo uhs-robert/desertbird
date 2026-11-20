@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 337 (Mail tab 146, Message 98, Own pages 50, Other tabs 43)
+bound: 342 (Mail tab 146, Message 98, Own pages 50, Other tabs 48)
 
 ### Mail tab
 
@@ -528,6 +528,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
+| `f` | `hint` |
 | `j` | `page.scroll_down` |
 | `k` | `page.scroll_up` |
 | `<C-d>` | `page.half_down` |
@@ -587,5 +588,14 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `z=` | `zoom 1` |
 | `zI` | `zoom 3` |
 | `zO` | `zoom 0.3` |
+
+#### Hints
+
+| Key | Command |
+| --- | --- |
+| `;;` | `cmdline.open 'hint '` |
+| `;f` | `hint --focus` |
+| `;c` | `hint` |
+| `;y` | `hint --yank` |
 
 <!-- END generated -->

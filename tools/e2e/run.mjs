@@ -2562,7 +2562,7 @@ async function run_assertions(instance) {
   else if (instance.kind === "mail_account") await run_mail_account(instance);
   else if (instance.kind === "quick_reply_plain" || instance.kind === "quick_reply_html") await run_quick_replies(instance);
   else if (instance.kind === "own_pages") await run_own_pages(instance);
-  else if (instance.kind === "pages") await run_pages(instance, { check, note, shot: (name, line) => page_shot(instance, name, line), key_and_state, hud_pixels, open_inbox, close_command_line, key_list_region: KEY_LIST_REGION });
+  else if (instance.kind === "pages") for (const run of [...(process.env.E2E_ONLY === "page_hints" ? [] : [run_pages]), (await import("./page_hints_checks.mjs")).run_page_hints]) await run(instance, { check, note, shot: (name, line) => page_shot(instance, name, line), key_and_state, hud_pixels, open_inbox, close_command_line, key_list_region: KEY_LIST_REGION });
   else if (instance.kind === "compose_editor") await run_compose_editor(instance);
   else if (instance.kind in COMPOSE_EDITOR_HTML_KINDS) await run_compose_editor_html(instance);
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
