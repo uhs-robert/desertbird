@@ -141,8 +141,8 @@ export function unit_state(unit: string): string | null {
   return result.error === undefined && result.stdout.trim() !== "" ? result.stdout.trim() : null;
 }
 
-// systemd expands `$VAR` and `%` specifiers in the words of a command line. A profile path with a literal `$` or `%` must reach the app as it is.
-const escape_for_systemd = (word: string) => word.replaceAll("$", "$$$$").replaceAll("%", "%%");
+// systemd-run expands `$VAR` in the words of a command line but not `%` specifiers (measured on systemd 262). A profile path with a literal `$` must reach the app as it is.
+const escape_for_systemd = (word: string) => word.replaceAll("$", "$$$$");
 
 // A user unit inherits the user manager's environment (the real DISPLAY, the session bus, desktop variables), and `--setenv` only adds to it. So the app runs through `env -i NAME=value ... <binary>`: env execs the app, which keeps the pid of the unit's main process, and the app gets exactly the filtered environment and nothing else.
 export function systemd_run_args(unit: string, argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string): string[] {
@@ -160,10 +160,18 @@ function start_detached(argv: string[], env: NodeJS.ProcessEnv, cwd: string, log
   return { unit: null, pid: child.pid ?? 0 };
 }
 
+// True when there is no systemd user manager to ask: no systemctl, or no connection to the user bus. Any answer from the manager, even a degraded one, means it exists.
+export function user_manager_absent(): boolean {
+  const result = spawnSync("systemctl", ["--user", "is-system-running"], { encoding: "utf8", timeout: 10_000 });
+  if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") return true;
+  return result.stdout.trim() === "" && /Failed to connect|No medium found|No such file or directory/.test(result.stderr);
+}
+
 // Through a systemd user unit when possible, so the app outlives the agent's own scope, has a memory cap, and stops as a whole cgroup. A plain detached spawn otherwise (no systemd-run, no user bus, or OWNER_TEST_DETACHED=1). The caller stops a stale unit of this name first.
 export function start_app(argv: string[], env: NodeJS.ProcessEnv, cwd: string, log_file: string, unit: string): { unit: string | null; pid: number } {
   if (process.env.OWNER_TEST_DETACHED !== "1" && is_owner_unit(unit)) {
     const run = spawnSync("systemd-run", systemd_run_args(unit, argv, env, cwd, log_file), { stdio: "ignore", timeout: 30_000 });
+    const systemd_run_missing = (run.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
     if (run.status === 0) {
       const pid = Number(spawnSync("systemctl", ["--user", "show", "-p", "MainPID", "--value", unit], { encoding: "utf8", timeout: 10_000 }).stdout.trim());
       return { unit, pid: Number.isInteger(pid) ? pid : 0 };
@@ -175,7 +183,12 @@ export function start_app(argv: string[], env: NodeJS.ProcessEnv, cwd: string, l
       console.error(`owner-test: systemd-run failed and the unit ${unit} is still ${left}, so no second app is started. Run close.`);
       return { unit, pid: 0 };
     }
-    console.error("owner-test: systemd-run failed, so the window runs without a systemd unit and may end with this session.");
+    // An unknown state is unsafe: the unit may still start. Only a systemd that is established as absent allows the fallback.
+    if (left === null && !systemd_run_missing && !user_manager_absent()) {
+      console.error(`owner-test: systemd-run failed and the state of the unit ${unit} cannot be read, so no second app is started. Run close.`);
+      return { unit, pid: 0 };
+    }
+    console.error("owner-test: no systemd user manager, so the window runs without a systemd unit and may end with this session.");
   }
   return start_detached(argv, env, cwd, log_file);
 }

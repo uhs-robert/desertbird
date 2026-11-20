@@ -251,7 +251,7 @@ const has_user_systemd = spawnSync("systemd-run", ["--user", "--scope", "--quiet
 // The real unit path with a stand-in app: no display, but the real user manager. The unit and every process in it must be gone at the end.
 test("under systemd: the app runs in a unit, a failed leftover unit does not block open, close takes the escaped child down with the unit", { skip: !has_user_systemd }, async () => {
   // A literal dollar sign in the cache path: systemd would expand it in the command line if it were not escaped.
-  const t = setup("cache-$HOME");
+  const t = setup("cache-$HOME-50%");
   const unit = unit_name(t.paths.key);
   const user_env = { ...t.env, OWNER_TEST_DETACHED: "", XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR ?? "", DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS ?? "" };
   const is_active = () => spawnSync("systemctl", ["--user", "is-active", unit], { encoding: "utf8" }).stdout.trim();

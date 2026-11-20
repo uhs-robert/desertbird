@@ -135,19 +135,20 @@ test("the filtered environment is exactly what the app gets: no DISPLAY or DBUS 
   assert.equal(without.some((word) => word.startsWith("DISPLAY=")), false);
 });
 
-test("a literal dollar or percent sign in a word reaches the app as it is, since systemd would expand it", () => {
+test("a literal dollar sign in a word reaches the app as it is, since systemd-run expands it; a percent sign needs no escape", () => {
   const args = systemd_run_args("desertbird-owner-test-k", ["/bin/app", "-profile", "/tmp/cache-${LANG}/50%/p"], { HOME: "/h$X" }, "/cwd", "/log");
   const words = args.slice(args.indexOf("--") + 1);
-  assert.ok(words.includes("/tmp/cache-$${LANG}/50%%/p") && words.includes("HOME=/h$$X"));
+  assert.ok(words.includes("/tmp/cache-$${LANG}/50%/p") && words.includes("HOME=/h$$X"));
 });
 
 // Stubs for systemd-run and systemctl in a PATH of their own, so the failure paths run with no real unit.
-function with_stub_systemd(is_active: string, body: (dir: string) => void) {
+function with_stub_systemd(is_active: string, body: (dir: string) => void, systemctl_failure?: string) {
   const dir = mkdtempSync(join(tmpdir(), "owner-test-stub-"));
   const saved_path = process.env.PATH;
   try {
     writeFileSync(join(dir, "systemd-run"), "#!/bin/sh\nexit 1\n");
-    writeFileSync(join(dir, "systemctl"), `#!/bin/sh\n[ "$2" = is-active ] && echo ${is_active}\nexit 0\n`);
+    // With a failure text, systemctl prints nothing on stdout and exits 1, as when the bus is unreachable.
+    writeFileSync(join(dir, "systemctl"), systemctl_failure === undefined ? `#!/bin/sh\n[ "$2" = is-active ] && echo ${is_active}\nexit 0\n` : `#!/bin/sh\necho "${systemctl_failure}" >&2\nexit 1\n`);
     writeFileSync(join(dir, "app"), `#!/bin/sh\necho started > "${join(dir, "marker")}"\n`);
     for (const name of ["systemd-run", "systemctl", "app"]) chmodSync(join(dir, name), 0o755);
     process.env.PATH = `${dir}:${saved_path}`;
@@ -164,6 +165,30 @@ test("a failed systemd-run whose unit is still active starts no second app", () 
     assert.deepEqual(started, { unit: "desertbird-owner-test-k", pid: 0 });
     assert.equal(existsSync(join(dir, "marker")), false);
   });
+});
+
+test("a failed systemd-run whose unit state cannot be read, with a user manager that may exist, starts no second app", () => {
+  with_stub_systemd("", (dir) => {
+    const started = start_app([join(dir, "app")], { PATH: process.env.PATH }, dir, join(dir, "log"), "desertbird-owner-test-k");
+    assert.equal(started.pid, 0);
+    assert.equal(existsSync(join(dir, "marker")), false);
+  }, "Connection timed out");
+});
+
+test("a failed systemd-run with no user manager at all falls back to the detached start", () => {
+  const saved = process.env.OWNER_TEST_DETACHED;
+  delete process.env.OWNER_TEST_DETACHED;
+  try {
+    with_stub_systemd("", (dir) => {
+      const started = start_app([join(dir, "app")], { PATH: process.env.PATH }, dir, join(dir, "log"), "desertbird-owner-test-k");
+      assert.equal(started.unit, null);
+      assert.ok(started.pid > 1);
+      for (let tries = 0; tries < 50 && !existsSync(join(dir, "marker")); tries++) spawnSync("sleep", ["0.1"]);
+      assert.equal(existsSync(join(dir, "marker")), true);
+    }, "Failed to connect to bus: No medium found");
+  } finally {
+    if (saved !== undefined) process.env.OWNER_TEST_DETACHED = saved;
+  }
 });
 
 test("a failed systemd-run with no unit left falls back to the detached start", () => {

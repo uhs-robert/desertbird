@@ -10,7 +10,6 @@ export function check_hint(hint: string): HintCheck {
   if (!match) return { ok: false, error: `hint "${hint}" must look like "name value"` };
   const [, name = "", value = ""] = match;
   if (!is_setting_name(name)) return { ok: false, error: `hint "${hint}": no setting named ${name}. Settings: ${Object.keys(SETTING_KINDS).join(", ")}` };
-  if (value.trim() === "") return { ok: false, error: `hint "${hint}": give a value` };
   const parsed = parse_setting_text(name, value);
   return "error" in parsed ? { ok: false, error: `hint "${hint}": ${parsed.error}` } : { ok: true, name, value };
 }
