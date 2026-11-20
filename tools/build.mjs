@@ -39,6 +39,10 @@ const APP_CEILING_BYTES = 12800;
 const FOLDERPANE_MAX_BYTES = 5900;
 const FOLDERPANE_CEILING_BYTES = 10240;
 
+// `experiment/zoom.js`, loaded on the first zoom call.
+const ZOOM_MAX_BYTES = 3544;
+const ZOOM_CEILING_BYTES = 6144;
+
 // `content/message_display.js`, the body script that runs in every message document.
 const CONTENT_MAX_BYTES = 18162;
 const CONTENT_CEILING_BYTES = 24576;
@@ -85,6 +89,7 @@ const PARENTS = [
     { name: "pages", entry: "src/chrome/parent_pages.ts", max_bytes: PAGES_MAX_BYTES },
     { name: "app", entry: "src/chrome/parent_app.ts", max_bytes: APP_MAX_BYTES },
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
+    { name: "zoom", entry: "src/chrome/parent_zoom.ts", max_bytes: ZOOM_MAX_BYTES },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,

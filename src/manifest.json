@@ -60,6 +60,14 @@
                 "script": "experiment/pages.js"
             }
         },
+        "zoom": {
+            "schema": "experiment/zoom.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["zoom"]],
+                "script": "experiment/zoom.js"
+            }
+        },
         "hints": {
             "schema": "experiment/hints.schema.json",
             "parent": {

@@ -560,3 +560,11 @@ Measured on Thunderbird 153.7.0 headless, with the Thunderbird theme (Compact Da
 | the same in the background page | the OS |
 
 So a surface in the window needs no setting to pick dark or light: it asks its own `prefers-color-scheme`. The background page cannot choose, so it sends both sets and the window side picks. `#status-bar` reads `rgb(39, 39, 42)` under a dark theme and `rgb(250, 250, 250)` under a light one, with the OS set either way.
+
+## Zoom per tab kind
+
+Measured on Thunderbird 153.7.0esr and Betterbird 153.7.0esr-bb13 with the `zoom` job of `tools/measure/` (`ONLY=zoom`). Both answer the same.
+
+- `messenger.tabs.getZoom` and `tabs.setZoom` do not exist. `window.ZoomManager` exists in the main window and the message window, with MIN 0.2, MAX 5 and full zoom.
+- `window.getBrowser()` names the browser Thunderbird zooms: `#messagepane` in the mail tab (when a message shows), a message tab and a message window, and the tab's own browser in the address book, settings and content tabs (own pages and web pages). It is null in calendar, tasks and a mail tab with no message, where `ZoomManager.setZoomForBrowser` throws.
+- The zoom stays on the browser. The message pane of the mail tab keeps it on another message, another folder and after other tabs; a new message tab or window starts at 100%. The address book and settings keep it across a tab switch. A content tab keeps it on reload and on another path of the same host; a new tab of the same page starts at 100%.

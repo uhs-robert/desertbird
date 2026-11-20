@@ -181,6 +181,8 @@ export const EXPERIMENT_VERBS = {
     folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
     // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
     app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: [] },
+    // Loaded on first use, like `folderpane`.
+    zoom: { functions: ["get", "set"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -274,6 +276,22 @@ export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
     focused(args: FolderpaneFocusedArgs): Promise<boolean>;
     viewRowCount(args: FolderpaneViewRowCountArgs): Promise<number>;
+}
+
+export interface ZoomGetArgs {
+    windowId: number;
+}
+
+/** `level` is 1 for 100%, from 0.3 to 5. */
+export interface ZoomSetArgs {
+    windowId: number;
+    level: number;
+}
+
+/** The `browser.zoom` API: the zoom of the message pane or the page a main or message window shows. Its script loads when the first call is made. `get` answers null and `set` answers false when the front tab has nothing to zoom. */
+export interface ZoomApi {
+    get(args: ZoomGetArgs): Promise<number | null>;
+    set(args: ZoomSetArgs): Promise<boolean>;
 }
 
 export type Pane = "folders" | "threads" | "message";

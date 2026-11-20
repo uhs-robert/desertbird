@@ -52,6 +52,7 @@ This list is the whole privileged surface. Each verb takes typed args and is che
 - `app.open_page {page}`: built as `app.appOpenPage`. One key of a fixed table (`addons`, `themes`, `config`), never a URL. The counterpart of the DesertFox host verb `open_firefox_page`.
 - `hints.sendEnter {windowId}`: built, in its own bundle. A trusted Enter key press (the key is fixed, no text) in the window, for the link a hint pick in a message focused. A script `click()` skips Thunderbird's check for a link that lies about its address, so the body script asks for a real key instead.
 - `hints.pick {windowId, colors, action?}`: built, in the same bundle. Labels the buttons, tabs, fields, folder rows and message rows of the front mail tab, each label drawn in its own chrome document (the window, `about:3pane` and `about:message`) in a closed shadow root, and holds the keys until a label is typed in full or the labels end. The one verb covers collecting, narrowing and acting, because the key sink must sit in the same bundle as the labels: a hint letter is also a command key (`a`, `d`), and a round trip to the background per key would let it run. The `action` argument (`focus`, `activate`, `yank`; absent is `activate`) says what the typed label does. A yank writes the text with `nsIClipboardHelper` in the parent, inside the key event, so no round trip to the background sits between the key and the clipboard. The parent reads the text from the page and the call never carries any. The message and compose content scripts hold their own hints.
+- `zoom.get {windowId}` and `zoom.set {windowId, level}`: built, in the on-demand `zoom` API. They read and set the zoom of the browser the window's `getBrowser()` names, through Thunderbird's own `ZoomManager`: the message pane in the mail tab, a message tab and a message window, and the page of the address book, settings and content tabs. `get` answers null and `set` false where there is none (calendar, tasks, a mail tab with no message). `level` is a number from 0.3 to 5, checked by the schema.
 - `overlay.mount` and `overlay.unmount`: the extension page that draws the command line, which-key and toasts in the chrome window.
 - `overlay.setModeLabel`: the mode label at the start of the status bar. The args are a window id, three enums (the mode, the `mode_indicator` setting and the `mode_indicator_style` setting) and the label colors as `#rrggbb` for both color schemes. The parent owns the text and picks the scheme Thunderbird shows in the window. The Experiment draws it because a page cannot sit inside the status bar. It reads the focus itself for insert mode, since the key runtime does not track insert.
 
@@ -195,6 +196,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/overlay.js` | 27212 | 40960 |
 | `experiment/app.js` | 8549 | 12800 |
 | `experiment/folderpane.js` | 5900 | 10240 |
+| `experiment/zoom.js` | 3544 | 6144 |
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
 | `experiment/pages.js` | 22800 | 34816 |
@@ -248,6 +250,18 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 ### Folder pane bundle
 
 `experiment/folderpane.js` is the Experiment API `folderpane`. It holds the verbs that read or change the folder tree. Thunderbird loads an Experiment script on the first call to its API, so these verbs cost the startup script nothing. Its first measured size was 4891 bytes. That plus 20 percent made 5869, rounded up to 5900. It has had no raise.
+
+### Zoom bundle
+
+`experiment/zoom.js` is the Experiment API `zoom`, loaded on the first zoom key. No key waits on it in the key runtime, so the admission rule keeps it out of `keys.js`. Its first measured size was 3032 bytes. The guard is that plus one 512-byte step, 3544, with a ceiling of 6144 (1.5 times the guard, rounded up to 1024). It has had no raise.
+
+The zoom keys run in the mail tab, message documents, own pages and the page tabs. Web pages get them with the page actor, which runs only the close chord there today. They start from DesertFox `src/commands/zoom.ts`: the same `zoom.by {delta}` and `zoom.set {level}` (`:zoom`), the same steps (`z i`, `z +`, `z o`, `z -` by 0.1, `z m`, `z r` by 0.5, `z =` to 1, `z I` to 3, `z O` to 0.3) and the same clamp to 0.3 .. 5. Departures, each with its reason:
+
+- An Experiment where DesertFox calls `tabs.getZoom` and `tabs.setZoom`. Thunderbird has neither (measured), and the message pane of the mail tab is no tab.
+- `z M` and `z R` stay the thread folds of the mail tab, so the half step has the lower-case keys only.
+- A count multiplies the step in one change (`3 z i` is +0.3), where DesertFox runs the command once per count. The result is the same, with one round trip.
+- A step that the clamp would turn the other way does nothing: Thunderbird's own Ctrl+minus reaches 20%, below the floor, where `z o` would zoom in. Firefox stops at 30%, so DesertFox never meets it.
+- No zoom memory per site. Thunderbird keeps the zoom on the browser: the message pane keeps it across messages and folders, and a new message tab or window starts at 100%.
 
 ### Body script bundle
 

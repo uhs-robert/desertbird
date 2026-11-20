@@ -395,7 +395,7 @@ test("keys that need the thread list send nothing from a message", async () => {
     assert.deepEqual(sent, []);
 });
 
-// The message tree lacks these prefixes, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
+// The message tree lacks these prefixes, or has `z` only for the zoom keys, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
 test("a list prefix swallows its next key in a message, so u and a after it run nothing", async () => {
     const { window, sent } = await started();
     for (const prefix of ["]", "[", "F", "s", "z", "w", "M", "'"]) for (const key of ["u", "a"]) {
@@ -405,8 +405,11 @@ test("a list prefix swallows its next key in a message, so u and a after it run 
         assert.equal(sent.length, before, `${prefix} ${key}`);
     }
     assert.deepEqual(sent, []);
+    window.press("z");
+    window.press("i");
+    assert.deepEqual(sent, [invoked("zoom.by", { delta: 0.1 })]);
     window.press("u");
-    assert.deepEqual(sent, [invoked("msg.undo")]);
+    assert.deepEqual(sent, [invoked("zoom.by", { delta: 0.1 }), invoked("msg.undo")]);
 });
 
 // A mail sequence that the message tree lacks must complete and run nothing. Broken partway, the matcher retries the rest from the root, where `a` archives and `; y` copies a link.
