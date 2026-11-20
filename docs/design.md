@@ -226,7 +226,7 @@ The first measured size of `keys.js` as its own bundle was 15003 bytes. That plu
 - Backspace in an open which-key (the back step in `matcher_for_tree`, clause: decides what happens to a key) made it 27441 (449 over main's 26992). The guard rose by one 512-byte step to 27512. The body bundles grew by 449 and stay under their guard.
 - The keys of the other tabs moved to `experiment/pages.js` (the branch on the tab kind, the list of page commands and the three-way tab check) and took it from 27451 on main to 26625 (826 under). The guard fell to that measured size rounded up to 26700. The room freed is not a reserve: growth fails the build.
 - Dropping plain keys while the focus sits in the overlay browser before its page is ready (a key could reach the thread list after the hold timer ran out; clause: decides what happens to a key) made it 26987 (362 over main's 26625). The guard rose by one 512-byte step to 27212, under the 40960 ceiling.
-- Swallowing plain keys while a menu is open, except the access keys of its items, made it 22942 (98 over the guard of 22844, which the app bundle split had set). It decides what happens to a key, which the admission rule allows. The guard rose by one 512-byte step to 23356.
+- Swallowing a plain key while a popup is open, unless the popup takes it (the access keys of an open `menupopup`, any key for a `panel` with the focus in it), made it 22931 (87 over the guard of 22844, which the app bundle split had set). It decides what happens to a key, which the admission rule allows. The guard rose by one 512-byte step to 23356.
 
 ### Backspace in an open which-key
 
