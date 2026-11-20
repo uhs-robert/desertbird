@@ -2568,6 +2568,7 @@ async function run_assertions(instance) {
   else if (instance.kind in COMPOSE_EDITOR_HTML_KINDS) await run_compose_editor_html(instance);
   else if (instance.kind in MODE_LABEL_KINDS) await run_mode_label_kind(instance);
   else if (instance.kind === "zoom") await (await import("./zoom_checks.mjs")).run_zoom(instance, { check, open_inbox });
+  else if (instance.kind === "web") await (await import("./web_checks.mjs")).run_web(instance, { check, note, shot: (name, line) => page_shot(instance, name, line), open_inbox, restart: restart_app });
   else await run_no_identity(instance);
   if (instance.kind === "pages") await run_typing(instance, { check, shot: (name, line) => page_shot(instance, name, line), key_and_state, open_inbox });
 }

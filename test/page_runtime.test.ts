@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_page_runtime } from "../src/chrome/page_runtime.ts";
-import type { PageDeps } from "../src/chrome/page_runtime.ts";
+import type { ChildKey, PageDeps } from "../src/chrome/page_runtime.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "../src/chrome/runtime.ts";
 import type { Situation } from "../src/chrome/readable_focus.ts";
 import { compile_tab_keymap, compile_typing_keymap, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
@@ -19,6 +19,9 @@ class FakeWindow {
     blur_listeners = new Set<() => void>();
     situation: Situation = "page";
     overlay_loading = false;
+    /** Whether the page actor's child of the front tab takes the keys. */
+    child_takes = false;
+    pushed_insert: boolean[] = [];
     /** The target the runtime listens on, a stand-in for the window root. */
     root: KeyTarget = {
         addEventListener: (_type, listener, capture) => void (capture ? this.key_listeners : this.bubble_listeners).add(listener),
@@ -69,6 +72,12 @@ function setup(window_count = 1) {
         situation_of: (window) => window.situation,
         overlay_is_loading: (window) => window.overlay_loading,
         blur_focused: (window) => void window.blurs++,
+        child: () => ({
+            takes_keys: (window) => (window as FakeWindow).child_takes,
+            set_insert: (window, on) => void (window as FakeWindow).pushed_insert.push(on),
+            scroll: () => false,
+            blur: () => false,
+        }),
         message_ids_of: () => [42],
         scroll: (_window, id, count) => (scrolls.push([id, count]), true),
         on_tab_select(window, listener) {
@@ -627,4 +636,120 @@ test("Escape, Ctrl+[ and the Alt keys follow a user binding of the layer", () =>
     assert.equal(window.blurs, 0, "Escape was unbound");
     press(window, "[", { ctrlKey: true });
     assert.equal(window.blurs, 1);
+});
+
+/** A key as the page actor's parent hands it on: the child already cancelled it, so the event cancels nothing. */
+function child_key(key: string, options: Partial<ChildKey> = {}): ChildKey {
+    return { key, code: "", ctrlKey: false, altKey: false, metaKey: false, shiftKey: key.length === 1 && key !== key.toLowerCase(), field: false, target: null, preventDefault() {}, stopPropagation() {}, ...options };
+}
+
+test("a key of the page actor's child runs as the front tab's own: j scrolls, q closes, gg spans two keys", () => {
+    const { windows, runtime, scrolls, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "remote";
+    runtime.on_child_key(window, child_key("j"));
+    runtime.on_child_key(window, child_key("g"));
+    runtime.on_child_key(window, child_key("g"));
+    runtime.on_child_key(window, child_key("q"));
+    assert.deepEqual(scrolls.map(([id]) => id), ["page.scroll_down", "page.top"]);
+    assert.deepEqual(invocations().map((event) => event.command), ["tab.close"]);
+});
+
+test("the chrome leaves a page whose child takes the keys alone: no cancel and no reset between the child's keys", () => {
+    const { windows, runtime, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "remote";
+    window.child_takes = true;
+    // The chrome sees each key before the child's message arrives.
+    assert.equal(press(window, "g").cancelled, false);
+    runtime.on_child_key(window, child_key("g"));
+    assert.equal(press(window, "g").cancelled, false);
+    runtime.on_child_key(window, child_key("g"));
+    assert.equal(press(window, "w", { ctrlKey: true }).cancelled, false, "a chord the keymap binds is the child's too");
+    assert.deepEqual(scrolls.map(([id]) => id), ["page.top"]);
+});
+
+test("a remote page whose child does not take the keys (a frame, a page the actor does not match) keeps the close-only rule", () => {
+    const { windows, runtime, scrolls, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "remote";
+    assert.equal(press(window, "j").cancelled, false);
+    assert.equal(press(window, "d", { ctrlKey: true }).cancelled, false);
+    press(window, "q", { altKey: true });
+    assert.deepEqual(scrolls, []);
+    assert.deepEqual(invocations().map((event) => event.command), ["tab.close"]);
+});
+
+test("in a field of the page, only the typing keys run from the child", () => {
+    const { windows, runtime, scrolls, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("j", { field: true }));
+    runtime.on_child_key(window, child_key("j", { field: true, altKey: true }));
+    assert.deepEqual(scrolls, []);
+    assert.deepEqual(invocations().map((event) => event.command), ["tab.next"]);
+});
+
+test("Escape from the child blurs the page's field only when the page did not use it", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("Escape", { field: true, defaultPrevented: true }));
+    assert.equal(window.blurs, 0);
+    runtime.on_child_key(window, child_key("Escape", { field: true }));
+    assert.equal(window.blurs, 1);
+    runtime.on_child_key(window, child_key("Escape"));
+    assert.equal(window.blurs, 1, "outside a field and outside insert mode Escape blurs nothing");
+});
+
+test("i from the child starts insert mode and pushes it to the children, and Escape ends it and pushes again", () => {
+    const { windows, runtime, events, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("i"));
+    assert.deepEqual(window.pushed_insert, [true]);
+    // A stale child that still sends j finds insert mode on: the key runs no scroll.
+    runtime.on_child_key(window, child_key("j"));
+    assert.deepEqual(scrolls, []);
+    runtime.on_child_key(window, child_key("Escape"));
+    assert.deepEqual(window.pushed_insert, [true, false]);
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+    assert.equal(window.blurs, 0, "no field had the focus");
+});
+
+test("a new page in the front tab ends insert mode, and a tab change pushes the end to the children", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    runtime.on_child_key(window, child_key("i"));
+    runtime.on_child_key(window, null);
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+    runtime.on_child_key(window, null);
+    assert.deepEqual(window.pushed_insert, [true, false], "no push when insert mode is already off");
+    runtime.on_child_key(window, child_key("i"));
+    for (const listener of window.tab_listeners) listener();
+    assert.deepEqual(window.pushed_insert, [true, false, true, false]);
+});
+
+test("a key of the child is dropped while the chrome passes every key (hint labels, an open menu)", () => {
+    const { windows, runtime, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "pass";
+    runtime.on_child_key(window, child_key("j"));
+    assert.deepEqual(scrolls, []);
+});
+
+test("a key of the child for a window the runtime never hooked, or after shutdown, does nothing and throws nothing", () => {
+    const { runtime, scrolls } = setup();
+    const stranger = new FakeWindow();
+    runtime.on_child_key(stranger, child_key("j"));
+    runtime.install(tree());
+    runtime.shutdown();
+    runtime.on_child_key(stranger, child_key("j"));
+    runtime.on_child_key(stranger, child_key("Escape"));
+    assert.deepEqual(scrolls, []);
 });
