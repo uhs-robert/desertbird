@@ -32,7 +32,7 @@ const INSIDE_A_ROW = "#folderTree, tbody";
 const FOLDER_ROWS = "#folderTree li:not(.unselectable) > .container";
 const THREAD_ROWS = "#threadTree tbody tr";
 
-// A page tab has no rows this file knows, so each control is a target. The list is DesertFox's clickable selector with the XUL controls of Thunderbird's pages added. Its `[tabindex]` catch-all is left out: in a chrome document it marks whole panes and lists.
+// A page tab has no rows this file knows, so each control is a target. The list is DesertFox's clickable selector with the XUL controls of Thunderbird's pages added. Left out: `[tabindex]`, which in a chrome document marks whole panes and lists; `[onclick]` and `label[for]`, which sit on wrappers and labels whose own control already gets a label; `[role=menuitemcheckbox]` and `[role=menuitemradio]`, which live in closed menus; and `[contenteditable=""]`, which no Thunderbird page uses.
 const PAGE_CONTROLS = `${CONTROLS}, a[href], select:not([disabled]), textarea:not([disabled]), search-textbox, [contenteditable=true], summary, checkbox:not([disabled]), radio:not([disabled]), menulist:not([disabled]), richlistitem, [role=link], [role=tab], [role=checkbox], [role=switch], [role=radio], [role=option], [role=treeitem], [role=menuitem]`;
 const FIELDS = "input, select, textarea, search-textbox, [contenteditable=true]";
 

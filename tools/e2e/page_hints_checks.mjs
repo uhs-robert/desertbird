@@ -9,6 +9,8 @@ const WHOLE_WINDOW = "0,0 1264x720";
 const MAIL_TAB_LABEL = { thunderbird: "al", betterbird: "al" };
 // The page keys drop plain keys for 1.5 s after `f`. A key typed later meets the page keys, and only the marker of the pick keeps it from running there.
 const PAST_THE_HOLD_MS = 2500;
+// The first pick loads the hints bundle, which can take seconds on a cold app.
+const WARM_UP_CAP_MS = 8000;
 
 export async function run_page_hints(instance, { check, note, shot, key_and_state, hud_pixels }) {
   const app = instance.app;
@@ -21,19 +23,51 @@ export async function run_page_hints(instance, { check, note, shot, key_and_stat
   async function hint_tab({ name, open, leave_field = null, page_pick = null, region = WHOLE_WINDOW }) {
     const slug = name.replace(/\W+/g, "_");
     const pixels = (step) => hud_pixels(instance, `${app}_hints_${slug}_${step}`, region);
-    await open();
-    await sleep(3000);
-    if ((await tabs_of()).length !== before + 1) return check(app, kind, `hints: the ${name} tab opens`, false, `tabs ${(await tabs_of()).length}`);
-    if (leave_field) {
-      await leave_field();
-      await sleep(800);
+    async function open_tab() {
+      await open();
+      await sleep(3000);
+      if ((await tabs_of()).length !== before + 1) return false;
+      if (leave_field) {
+        await leave_field();
+        await sleep(800);
+      }
+      return true;
     }
-    // One round of labels first: the first pick loads the bundle, and a click above leaves a hover mark that the labels end. The reference is taken after it.
-    await instance.press(["f"]);
-    await sleep(2000);
-    await instance.press(["-k", "Escape"]);
-    await sleep(800);
-    const plain = await pixels("plain");
+    // One round of labels first: the first pick loads the bundle, and a click above leaves a hover mark that the labels end. The reference is taken once the labels show and are gone again. A tab that never shows them takes no keys at all, which a click-opened Betterbird calendar sometimes does with no `f` either, so the tab is opened once more.
+    async function warm_up() {
+      const unlabelled = await pixels("warm_before");
+      await instance.press(["f"]);
+      // Two equal reads in a row: the labels are drawn in full, not a frame on the way.
+      const labelled = await poll_pixels((now, last) => now !== unlabelled && now === last);
+      if (labelled === null) return null;
+      await instance.press(["-k", "Escape"]);
+      const unlabelled_again = await poll_pixels((now, last) => now !== labelled && now === last);
+      // The page keys drop plain keys for 1.5 s after `f`, so the next `f` waits that out.
+      await sleep(PAST_THE_HOLD_MS);
+      return unlabelled_again;
+    }
+    const poll_pixels = async (done) => {
+      let last = null;
+      for (const began = Date.now(); Date.now() - began < WARM_UP_CAP_MS; await sleep(250)) {
+        const now = await pixels("warm");
+        if (done(now, last)) return now;
+        last = now;
+      }
+      return null;
+    };
+    if (!(await open_tab())) return check(app, kind, `hints: the ${name} tab opens`, false, `tabs ${(await tabs_of()).length}`);
+    let plain = await warm_up();
+    if (plain === null) {
+      note(app, kind, `hints: the ${name} tab showed no labels on its first f, opened again`, "the keys did not reach the tab");
+      await instance.ask("remove_tab", 20000, { index: before });
+      await sleep(1000);
+      if (await open_tab()) plain = await warm_up();
+    }
+    if (plain === null) {
+      check(app, kind, `hints: f labels the ${name} tab after it was opened twice`, false);
+      if ((await tabs_of()).length > before) await instance.ask("remove_tab", 20000, { index: before });
+      return instance.ask("select_tab", 20000, { index: 0 });
+    }
 
     await instance.press(["f"]);
     await sleep(1000);
