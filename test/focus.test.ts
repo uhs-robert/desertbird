@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blur_innermost, body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_text_field, is_typing, menu_is_open, menu_takes_key } from "../src/chrome/focus.ts";
+import { blur_text_field, body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_text_field, is_typing, menu_is_open, menu_takes_key } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
 import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
@@ -227,11 +227,18 @@ test("is_text_field is a text field and nothing else: not the overlay's browser,
     assert.equal(is_text_field({ target: element("div") }, document), false);
 });
 
-test("blur_innermost blurs the end of the focus chain, which is the input inside a shadow root", () => {
+test("blur_text_field blurs the end of the focus chain, which is the input inside a shadow root", () => {
     let blurred = "";
     const input = element("input", { blur: () => void (blurred = "input") } as Partial<FocusNode>);
     const host = element("search-textbox", { shadowRoot: { activeElement: input }, blur: () => void (blurred = "host") } as Partial<FocusNode>);
-    blur_innermost(document_of(host));
+    blur_text_field(document_of(host));
     assert.equal(blurred, "input");
-    blur_innermost(document_of(null));
+    blur_text_field(document_of(null));
+});
+
+test("blur_text_field leaves the focus alone once it has left the text field, as Escape in an empty quick filter moves it to the thread list", () => {
+    let blurred = false;
+    const thread_tree = element("tree-view", { blur: () => void (blurred = true) } as Partial<FocusNode>);
+    blur_text_field(document_of(element("browser", { contentDocument: { activeElement: thread_tree } })));
+    assert.equal(blurred, false);
 });
