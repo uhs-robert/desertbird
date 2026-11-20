@@ -193,7 +193,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | --- | --- | --- |
 | `experiment/keys.js` | 22844 | 40960 |
 | `experiment/overlay.js` | 27212 | 40960 |
-| `experiment/app.js` | 8549 | 12288 |
+| `experiment/app.js` | 8549 | 12800 |
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `content/message_display.js` | 18162 | 24576 |
 | `experiment/hints.js` | 13050 | 20480 |
@@ -243,7 +243,7 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 
 ### App bundle
 
-`experiment/app.js` is the Experiment API `app`. It holds the thread list verbs (`viewRows`, `viewThread`, `viewAllThreads`, `viewScroll`) and the pane focus, command and page verbs (`paneFocus`, `appCommand`, `appOpenPage`). They had grown `keys.js` by about 6 KB of its 9 KB rise since the first guard, and the admission rule keeps them out: no key waits on them. Thunderbird loads the script on the first call, so the first verb after startup waits for one load, and the verbs that follow do not. Moving them took `keys.js` from 26987 on main to 22332 (4655 under) and gave `app.js` 8037 bytes. `keys.js` took its own guard, `KEYS_MAX_BYTES`, at its measured size plus one 512-byte step: 22844. `overlay.js` keeps `PARENT_MAX_BYTES` (27212), which `keys.js` shared until now. The `app.js` guard is its first measured size plus one 512-byte step: 8549, with a ceiling of 12288. `test/build.test.ts` fails when `app_verbs.ts`, `view_verbs.ts` or `parent_app.ts` enter the `keys.js` inputs, so a verb cannot grow the key script again without a test failing first.
+`experiment/app.js` is the Experiment API `app`. It holds the thread list verbs (`viewRows`, `viewThread`, `viewAllThreads`, `viewScroll`) and the pane focus, command and page verbs (`paneFocus`, `appCommand`, `appOpenPage`). They had grown `keys.js` by about 6 KB of its 9 KB rise since the first guard, and the admission rule keeps them out: no key waits on them. Thunderbird loads the script on the first call, so the first verb after startup waits for one load, and the verbs that follow do not. Moving them took `keys.js` from 26987 on main to 22332 (4655 under) and gave `app.js` 8037 bytes. `keys.js` took its own guard, `KEYS_MAX_BYTES`, at its measured size plus one 512-byte step: 22844. `overlay.js` keeps `PARENT_MAX_BYTES` (27212), which `keys.js` shared until now. The `app.js` guard is its first measured size plus one 512-byte step: 8549, with a ceiling of 12800. `test/build.test.ts` fails when `app_verbs.ts`, `view_verbs.ts` or `parent_app.ts` enter the `keys.js` inputs, so a verb cannot grow the key script again without a test failing first.
 
 ### Folder pane bundle
 
