@@ -15,7 +15,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     snooze: { runs_in: "background", ids: ["msg.snooze"] },
     tabs: { runs_in: "background", ids: ["tab.next", "tab.prev", "tab.switch", "tab.close", "tab.close_mail"] },
     cmdline: { runs_in: "background", ids: ["cmdline.open"] },
-    reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message"], background_ids: ["search.message"] },
+    reading: { runs_in: "message", ids: ["message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.page_down", "message.page_up", "message.scroll_left", "message.scroll_right", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message"], background_ids: ["search.message"] },
     folders: { runs_in: "background", ids: ["folder.open", "folder.collapse", "mark.set", "mark.jump", "jump.back", "jump.forward"] },
     unsubscribe: { runs_in: "background", ids: ["msg.unsubscribe"] },
     attachments: { runs_in: "background", ids: ["msg.save_attachments"] },
@@ -27,7 +27,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     hints: { runs_in: "background", ids: ["hint.window"] },
     help: { runs_in: "background", ids: ["help.open", "options.open", "help.whichkey"] },
     search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
-    page: { runs_in: "chrome", ids: ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom"] },
+    page: { runs_in: "chrome", ids: ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.page_down", "page.page_up", "page.scroll_left", "page.scroll_right", "page.top", "page.bottom"] },
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
     zoom: { runs_in: "background", ids: ["zoom.by", "zoom.set"] },
 };
@@ -189,7 +189,7 @@ test("the reading keys bind in the message keymap only, so j and k keep scrollin
     assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
     const message = default_keymap_of("message").normal ?? {};
     const ids = (keys: string) => (message[keys] && !Array.isArray(message[keys]) ? message[keys].id : undefined);
-    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" };
+    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", "<C-f>": "message.page_down", "<C-b>": "message.page_up", h: "message.scroll_left", l: "message.scroll_right", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" };
     for (const [keys, id] of Object.entries(reading_ids)) assert.equal(ids(keys), id, keys);
     assert.deepEqual((message["/"] as { args: unknown }).args, { text: "find " });
     assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");
@@ -213,7 +213,7 @@ test("the bridge: true set is the audited one", () => {
         "motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle",
         "filter.set", "search.threads", "sort.set", "pane.toggle",
         "tab.next", "tab.prev", "tab.switch",
-        "message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message",
+        "message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.page_down", "message.page_up", "message.scroll_left", "message.scroll_right", "message.top", "message.bottom", "message.find_next", "message.find_prev", "hint.pick", "search.message",
         "folder.open", "folder.collapse", "mark.jump", "jump.back", "jump.forward",
         "motion.left", "motion.right", "step.thread_root", "view.reposition", "view.half_page", "thread.fold_all",
         "step.unread", "step.starred", "step.attachment",

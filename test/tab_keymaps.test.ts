@@ -28,6 +28,7 @@ test("the default page tree holds the reading keys, the tab keys, the command li
         ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom", "tab.close", "tab.close", "cmdline.open", "help.whichkey", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.switch", "cmdline.open", undefined, undefined, "app.open_page", "app.open_page", "app.open_page"],
     );
     assert.deepEqual(leaf_at(root, "g", "p", "c")?.args, { page: "config" });
+    assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["page.scroll_left", "page.scroll_right", "page.page_down", "page.page_up"]);
 });
 
 test("the page tree has one mail key (new message) and no close chord that must copy and cut", () => {
@@ -73,7 +74,9 @@ test("the message tree has the mail keys that need a message, the reading keys a
     const root = message_root();
     assert.deepEqual(["a", "j", "/", "f", "H"].map((key) => leaf_at(root, key)?.id), ["msg.archive", "message.scroll_down", "cmdline.open", "hint.pick", "pane.focus"]);
     assert.deepEqual(leaf_at(root, "/")?.args, { text: "find " });
-    for (const keys of [["m", "R"], ["F", "t"], ["F", "f"], ["s", "s"], [";", ";"], ["<C-x>"], ["<C-c>"], ["o"], ["s", "d"], ["]", "u"], ["z", "z"], ["."], ["?"], ["v"], ["h"], ["l"]]) assert.equal(leaf_at(root, ...keys)?.id, undefined, keys.join(" "));
+    for (const keys of [["m", "R"], ["F", "t"], ["F", "f"], ["s", "s"], [";", ";"], ["<C-x>"], ["<C-c>"], ["o"], ["s", "d"], ["]", "u"], ["z", "z"], ["."], ["?"], ["v"]]) assert.equal(leaf_at(root, ...keys)?.id, undefined, keys.join(" "));
+    // `h` and `l` fold a thread in the mail tab and scroll sideways here, where no list exists.
+    assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["message.scroll_left", "message.scroll_right", "message.page_down", "message.page_up"]);
 });
 
 test("the own page tree is the page tree plus find and hints, with the reading keys of the body script", () => {

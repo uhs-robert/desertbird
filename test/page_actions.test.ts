@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { run_scroll, scroll_focus, scroll_target } from "../src/chrome/page_actions.ts";
+import { run_scroll, scroll_axis_of, scroll_focus, scroll_target } from "../src/chrome/page_actions.ts";
 import type { ScrollNode } from "../src/chrome/page_actions.ts";
 
 interface Fake extends ScrollNode {
@@ -16,7 +16,7 @@ function node(options: { scroll_height?: number; client_height?: number; overflo
         parentElement: options.parent ?? null,
         getRootNode: () => ({ host: options.host ?? null }),
         ownerDocument: { scrollingElement: options.scrolling_element ?? null, defaultView: { getComputedStyle: () => ({ overflowY: options.overflow ?? "visible" }) } },
-        scrollBy: (move) => void calls.push(`by ${move.top}`),
+        scrollBy: (move) => void calls.push(move.left === undefined ? `by ${move.top}` : `by left ${move.left}`),
         scrollTo: (move) => void calls.push(`to ${move.top}`),
     };
     return fake;
@@ -109,6 +109,25 @@ test("each page action scrolls the target by its own amount, with a count", () =
     run_scroll("page.top", target, undefined);
     run_scroll("page.bottom", target, undefined);
     assert.deepEqual(target.calls, ["by 120", "by -40", "by 400", "by -200", "to 0", "to 1000"]);
+});
+
+test("page down and up move by the height of the target, h and l by 50 pixels, each times the count", () => {
+    const target = node({ scroll_height: 1000, client_height: 400 });
+    run_scroll("page.page_down", target, 2);
+    run_scroll("page.page_up", target, undefined);
+    run_scroll("page.scroll_left", target, undefined);
+    run_scroll("page.scroll_right", target, 3);
+    run_scroll("message.scroll_left", target, 2);
+    assert.deepEqual(target.calls, ["by 800", "by -400", "by left -50", "by left 150", "by left -100"]);
+});
+
+test("a sideways id looks for a target that overflows in width, and the others for one that overflows in height", () => {
+    assert.deepEqual(["page.scroll_left", "message.scroll_right", "page.page_down", "message.half_page_up"].map(scroll_axis_of), ["x", "x", "y", "y"]);
+    const wide = { ...node({ overflow: "auto" }), scrollWidth: 900, clientWidth: 300, ownerDocument: { defaultView: { getComputedStyle: () => ({ overflowY: "visible", overflowX: "auto" }) } } };
+    const tall = node({ scroll_height: 900, client_height: 300, overflow: "auto" });
+    const doc = { scrollingElement: node(), querySelectorAll: () => [tall, wide] };
+    assert.equal(scroll_target(undefined, doc, undefined, "x"), wide);
+    assert.equal(scroll_target(undefined, doc), tall);
 });
 
 test("a message id runs the same action, and a zero count counts as one", () => {

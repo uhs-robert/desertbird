@@ -17,7 +17,7 @@ test("every motion has a chrome command in the registry", () => {
 
 test("every page command in the registry has a reading action, and so has each scroll of a message", () => {
     const page_ids = registry.list().filter((command) => command.id.startsWith("page.")).map((command) => command.id);
-    assert.equal(page_ids.length, 6);
-    for (const id of [...page_ids, "message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.top", "message.bottom"]) assert.equal(run_scroll(id, null, 1), true, id);
+    assert.equal(page_ids.length, 10);
+    for (const id of [...page_ids, "message.scroll_down", "message.scroll_up", "message.half_page_down", "message.half_page_up", "message.page_down", "message.page_up", "message.scroll_left", "message.scroll_right", "message.top", "message.bottom"]) assert.equal(run_scroll(id, null, 1), true, id);
     assert.equal(run_scroll("motion.down", null, 1), false);
 });
