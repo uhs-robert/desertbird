@@ -6,7 +6,7 @@ import type { HudRequest, HudState, KeysEvent, KeysMode, OverlayApi } from "../.
 import { mode_label_colors, resolve_theme } from "../theme/palette.ts";
 import { create_toasts } from "./toasts.ts";
 import type { Timers, Toasts } from "./toasts.ts";
-import { may_open_by_itself, which_key_panel } from "./which_key.ts";
+import { may_open_by_itself, which_key_panel, with_stored_marks } from "./which_key.ts";
 
 export type WhichKeySource = "main" | "message" | "own" | "page";
 
@@ -17,6 +17,8 @@ export interface HudDeps {
     read_settings(): Promise<Settings>;
     /** The root of the keys a panel lists: the mail window keys, or the keys of a message document. */
     read_root(source: WhichKeySource): Promise<TreeBranch>;
+    /** The stored folder marks by slot, for the rows under `M` and `'`. A failed read leaves the capture row. */
+    read_marks(): Promise<Record<string, { path: string }>>;
     /** Tells the hud page of the window to ask for its state again. */
     send_changed(window_id: number): void;
     timers: Timers;
@@ -154,8 +156,11 @@ export function create_hud_service(deps: HudDeps): HudService {
         const hud = hud_of(window_id);
         const settings = await deps.read_settings();
         const keys = hud.which_key_keys;
-        const which_key = keys === null ? null : which_key_panel(await deps.read_root(hud.which_key_source), keys, settings);
-        return { which_key, toasts: hud.toasts.list(), lifted: hud.lifted };
+        const base = { toasts: hud.toasts.list(), lifted: hud.lifted };
+        if (keys === null) return { which_key: null, ...base };
+        const root = await deps.read_root(hud.which_key_source);
+        const panel = which_key_panel(root, keys, settings);
+        return { which_key: panel === null ? null : await with_stored_marks(panel, root, keys, deps.read_marks), ...base };
     }
 
     function read_request(message: unknown): HudRequest | undefined {

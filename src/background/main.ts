@@ -33,6 +33,7 @@ import { create_router } from "./router.ts";
 import { fire_followup, open_followup_anchor, past_start_grace } from "./handlers/followup.ts";
 import type { FollowupOpenApi } from "./handlers/followup.ts";
 import { wake_snoozed } from "./handlers/snooze.ts";
+import { read_folder_state } from "./handlers/folder_state.ts";
 import { create_scheduler } from "./scheduler.ts";
 import type { SchedulerApi } from "./scheduler.ts";
 import { create_quick_reply_store } from "./quick_reply_store.ts";
@@ -220,6 +221,7 @@ const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
     read_root: async (source) => (await load_record())[TREE_OF_SOURCE[source]].root as TreeBranch,
+    read_marks: async () => (await read_folder_state(messenger)).marks,
     send_changed: (windowId) => void best_effort(messenger.runtime.sendMessage({ type: "hud.changed", windowId })),
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
 });
