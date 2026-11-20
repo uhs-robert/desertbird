@@ -5,6 +5,10 @@ default:
 build: install_deps
     npm run --silent build
 
+# Regenerate the binding tables in docs/keymap.md from the default keymaps.
+docs-gen: install_deps
+    npm run --silent docs:gen
+
 # Lint, typecheck and run the unit tests (`npm run check`) in a scratch TMPDIR, under a memory cap and a time limit when systemd is available.
 test: install_deps
     #!/usr/bin/env bash
