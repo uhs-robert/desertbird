@@ -66,12 +66,11 @@ function note(app, kind, name, detail) {
 async function open_inbox(instance, folder_row_tabs = 7, { expanded = false } = {}) {
   for (let count = 0; count < folder_row_tabs; count++) await instance.press(["-k", "Tab"]);
   if (!expanded) await instance.press(["-k", "Right"]);
-  const folder_before = (await instance.ask("state")).mail_tab?.folder;
   await instance.press(["-k", "Down"]);
-  // After a restart the app shows the folder it showed last, and Down from it can land on another folder than the Inbox, so the wait ends on any change. A read can come with no mail tab while the window switches, so that read does not count.
-  const opened = (await wait_state(instance, "the folder to change after Down", (state) => Boolean(state.mail_tab) && (state.mail_tab.folder === "/Inbox" || state.mail_tab.folder !== folder_before), { soft: true, timeout_ms: 3000 })).mail_tab?.folder;
-  // The status bar keeps "Done" for a few seconds after a folder loads, and the first pixel reads of later checks include it. That has no helper state, so this wait stays fixed.
+  // The status bar keeps "Done" for a few seconds after a folder loads, and the first pixel reads of later checks include it. That has no helper state, so this wait stays fixed, and the folder is read after it.
+  // Polling for the Inbox is no faster: after the reminder restart Thunderbird shows another folder, Down does not reach the Inbox, and a poll would wait out its ceiling every run.
   await sleep(1500);
+  const opened = (await instance.ask("state")).mail_tab?.folder;
   await instance.press(["-k", "F6"]);
   return opened;
 }
@@ -137,6 +136,12 @@ async function restart_app(instance, app, kind, label) {
   const pid_after = instance.app_pid();
   const alive = instance.exited() === null;
   check(app, kind, `the app really restarted for the ${label}`, alive && pid_after !== pid_before, `pid ${pid_before} then ${pid_after}, exited ${JSON.stringify(instance.exited())}`);
+  // The restart ends the app with SIGTERM, and the app can keep the hidden pane of a barrier's first flip in the profile. The checks after a restart expect the pane shown.
+  if ((await instance.ask("state")).mail_tab?.message_pane_visible === false) {
+    note(app, kind, `message pane after the restart for the ${label}`, "hidden, shown again with w m");
+    for (const key of ["Escape", "w"]) await instance.press(["-k", key]);
+    await key_and_state(instance, ["m"], { what: "w m to show the message pane after the restart", until: (state) => state.mail_tab?.message_pane_visible === true });
+  }
 }
 
 const first_selected = (state) => state.selected[0]?.header_id ?? null;
