@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { body_script_is_live, capture_focus, focused_pane, in_reading_pane, innermost_focus, is_typing, menu_is_open } from "../src/chrome/focus.ts";
 import type { FocusNode } from "../src/chrome/focus.ts";
-import { OVERLAY_BROWSER_ID } from "../src/chrome/overlay_id.ts";
+import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "../src/chrome/overlay_id.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../src/shared/protocol.ts";
 
 const element = (localName: string, extra: Partial<FocusNode> = {}): FocusNode => ({ localName, ...extra });
@@ -179,4 +179,10 @@ test("an element of the mail with the id folderTree stays in the reading pane", 
     assert.equal(focused_pane(document), 2);
     assert.equal(focused_pane({ activeElement: { localName: "browser", contentDocument: { activeElement: { localName: "ul", id: "folderTree" } } } }), 0);
     assert.equal(focused_pane({ activeElement: { localName: "browser", contentDocument: { activeElement: { localName: "tbody" } } } }), 1);
+});
+
+test("the overlay's browser is a typing target by its final id and not by its loading id", () => {
+    const browser = (id: string) => element("browser", { id });
+    assert.equal(is_typing({ target: browser(OVERLAY_BROWSER_ID) }, document_of(null)), true);
+    assert.equal(is_typing({ target: browser(OVERLAY_LOADING_ID) }, document_of(browser(OVERLAY_LOADING_ID))), false);
 });

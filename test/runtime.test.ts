@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { is_typing_element } from "../src/chrome/focus.ts";
+import { OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "../src/chrome/overlay_id.ts";
 import { create_runtime } from "../src/chrome/runtime.ts";
 import type { KeydownEvent, KeyTarget, RuntimeDeps, WindowListener } from "../src/chrome/runtime.ts";
 import { compile_default_keymap } from "../src/background/commands/index.ts";
@@ -139,7 +141,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         tab_kind_of: (window) => (window.in_mail_tab ? 0 : 1),
         list_port_of: (window) => (window.in_mail_tab ? (list_port_of ?? ((inner) => inner.port()))(window) : null),
         folder_port_of: ({ folder }) => folder && { row_count: () => folder.rows, selected_index: () => folder.selected, select: (index) => void (folder.selected = index) },
-        is_typing_target: (window, event) => (event.target as { localName: string }).localName === "input" || window.body_script_live,
+        is_typing_target: (window, event) => is_typing_element(event.target as { localName: string }) || window.body_script_live,
         menu_is_open: (window) => window.menu_open,
         in_reading_pane: (window) => window.in_reading_pane,
         on_tab_select: (window, listener) => {
@@ -674,6 +676,84 @@ test("after a hold command, plain keys are dropped until the focus reaches a tex
     assert.equal(windows[0]!.selected, 1);
 });
 
+// The mount focuses the overlay's browser about 3 ms after the colon, before its page exists. The browser has the loading id until the page is ready, and an unloaded page eats no key, so the key would reach Thunderbird's own shortcuts.
+const in_loading_overlay = { target: { localName: "browser", id: OVERLAY_LOADING_ID } };
+const in_ready_overlay = { target: { localName: "browser", id: OVERLAY_BROWSER_ID } };
+
+test("keys typed while the overlay browser has the focus and its page is not ready are dropped, and the hold stays", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    const dropped = ["j", "x", "j"].map((key) => press(window, key, in_loading_overlay));
+    assert.deepEqual(dropped.map((result) => result.cancelled), [true, true, true]);
+    assert.equal(window.selected, 0);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+});
+
+test("once the overlay page is ready, its keys reach the line and the hold ends", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    press(window, "j", in_loading_overlay);
+    assert.equal(press(window, "j", in_ready_overlay).cancelled, false, "the line takes the key");
+    assert.equal(window.selected, 0);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+    // The hold is over: with the focus back on the list, a key runs.
+    press(window, "j");
+    assert.equal(window.selected, 1);
+});
+
+test("the hold timeout is the failsafe when the overlay page never becomes ready", () => {
+    const { windows, advance, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    advance(1400);
+    assert.equal(press(window, "j", in_loading_overlay).cancelled, true);
+    assert.equal(window.selected, 0);
+    advance(200);
+    // Past the timeout a still loading overlay is no typing target: the list takes its keys as it does with no overlay.
+    press(window, "j", in_loading_overlay);
+    assert.equal(window.selected, 1);
+});
+
+test("an overlay that closes before its page is ready leaves the hold to run out", () => {
+    const { windows, advance, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    press(window, "j", in_loading_overlay);
+    // The overlay closes and the list has the focus again.
+    assert.equal(press(window, "j").cancelled, true);
+    assert.equal(window.selected, 0);
+    advance(1600);
+    press(window, "j");
+    assert.equal(window.selected, 1);
+});
+
+test("a second colon while the first overlay is still loading restarts the hold for the second", () => {
+    const { windows, emitted, advance, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    advance(1000);
+    // The focus is in the loading overlay, so the colon is a dropped plain key: it opens nothing.
+    assert.equal(press(window, ":", in_loading_overlay).cancelled, true);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+    // The mount replaced the first overlay and the focus went back to the list, then a colon from there opens a second one.
+    advance(600);
+    press(window, ":");
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open", "cmdline.open"]);
+    advance(1400);
+    assert.equal(press(window, "j", in_loading_overlay).cancelled, true, "the second hold runs from the second colon");
+    assert.equal(window.selected, 0);
+    press(window, "j", in_ready_overlay);
+    press(window, "j");
+    assert.equal(window.selected, 1);
+});
+
 test("the hold ends after its timeout", () => {
     const { windows, advance, runtime } = setup();
     runtime.install(tree(), ["cmdline.open"]);
@@ -684,6 +764,15 @@ test("the hold ends after its timeout", () => {
     advance(200);
     press(windows[0]!, "j");
     assert.equal(windows[0]!.selected, 1);
+});
+
+test("a window blur keeps the hold: the overlay mount blurs the window before its page loads", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    press(windows[0]!, ":");
+    windows[0]!.blur();
+    assert.equal(press(windows[0]!, "j").cancelled, true);
+    assert.equal(windows[0]!.selected, 0);
 });
 
 test("a tab change ends the hold", () => {

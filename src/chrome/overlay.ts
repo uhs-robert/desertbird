@@ -123,3 +123,15 @@ export function on_escape_key(read_title: () => string, wait: (run: () => void, 
     if (before === "") close();
     else wait(() => (read_title() === before ? close() : undefined), ESCAPE_ANSWER_MS);
 }
+
+// The browser element fires the first name where Thunderbird has renamed the second. The command line page sets its title once its input has the focus, and its markup has none.
+const TITLE_EVENTS = ["pagetitlechanged", "DOMTitleChanged"];
+
+/** Gives the browser its final id when its page first has a title. The key runtime reads the final id as "the page takes the keys". */
+export function claim_id_when_page_ready(browser: { id: string; addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void }, final_id: string): void {
+    const claim = () => {
+        browser.id = final_id;
+        for (const type of TITLE_EVENTS) browser.removeEventListener(type, claim);
+    };
+    for (const type of TITLE_EVENTS) browser.addEventListener(type, claim);
+}

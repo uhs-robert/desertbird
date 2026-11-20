@@ -214,9 +214,9 @@ test("a chord is not held", () => {
     assert.deepEqual(invocations().map((event) => event.command), ["cmdline.open", "tab.close"]);
 });
 
-test("a tab change or a window blur drops a half-typed sequence and a hold", () => {
+test("a tab change or a window blur drops a half-typed sequence, and a tab change drops a hold", () => {
     const resets: ((window: FakeWindow) => void)[] = [(window) => window.tab_listeners.forEach((listener) => listener()), (window) => window.blur_listeners.forEach((listener) => listener())];
-    for (const reset of resets) {
+    for (const [index, reset] of resets.entries()) {
         const { windows, runtime, scrolls, invocations } = setup();
         runtime.install(tree(), ["cmdline.open"]);
         const window = windows[0]!;
@@ -227,7 +227,8 @@ test("a tab change or a window blur drops a half-typed sequence and a hold", () 
         press(window, ":");
         reset(window);
         press(window, "q");
-        assert.deepEqual(invocations().map((event) => event.command), ["cmdline.open", "tab.close"]);
+        // The overlay mount blurs the window while the hold runs, so only a tab change ends the hold.
+        assert.deepEqual(invocations().map((event) => event.command), index === 0 ? ["cmdline.open", "tab.close"] : ["cmdline.open"]);
     }
 });
 
