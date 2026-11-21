@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
+import { run_pane_moves } from "./panes_checks.mjs";
 import { run_popup_keys } from "./popup_checks.mjs";
 import { run_typing } from "./typing_checks.mjs";
 
@@ -910,7 +911,7 @@ async function run_panes(instance, { app, kind, shot }) {
   state = await keys(["j"], folder_lands_on("/Inbox"));
   check(app, kind, "the folder pane keeps the focus after the motions, so j reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
 
-  // z M, z R and H fold folders. Native Down tells the tree state: with the account row closed it finds no row below, with it open it reaches the Inbox.
+  // z M, z R and h fold folders. Native Down tells the tree state: with the account row closed it finds no row below, with it open it reaches the Inbox.
   await keys(["g", "g"], folder_lands_on(account_folder));
   await keys(["z", "M"]);
   await shot("panes_zM", "every folder closed by z M");
@@ -921,16 +922,9 @@ async function run_panes(instance, { app, kind, shot }) {
   state = await down(folder_lands_on("/Inbox"));
   check(app, kind, "z R in the folder pane opens every folder, so Down reaches the Inbox", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
   await keys(["g", "g"], folder_lands_on(account_folder));
-  await keys(["H"]);
+  await keys(["h"]);
   state = await down();
-  check(app, kind, "H on an open folder closes it, so Down stays on it", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
-  await keys(["z", "R"]);
-  await keys(["g", "g"], folder_lands_on(account_folder));
-  await keys(["j"], folder_lands_on("/Inbox"));
-  state = await keys(["H"], folder_lands_on(account_folder));
-  check(app, kind, "H on a child of an open folder closes the parent and selects it", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
-  state = await down();
-  check(app, kind, "after H on the child the parent stays closed, so Down stays on it", folder_of(state) === account_folder, `folder ${folder_of(state)}`);
+  check(app, kind, "h on an open folder closes it, so Down stays on it", folder_of(state) === account_folder, `folder ${account_folder} then ${folder_of(state)}`);
   await keys(["z", "R"]);
   await keys(["g", "g"], folder_lands_on(account_folder));
   await keys(["j"], folder_lands_on("/Inbox"));
@@ -948,7 +942,7 @@ async function run_panes(instance, { app, kind, shot }) {
   await shot("panes_ctrl_d_u", "the selection after <C-d> then <C-u>");
   await keys(["H"]);
 
-  // The pane chords name a pane. Native Down tells which pane has the focus: it moves the folder or the list selection, and in the message it moves no row.
+  // The chords move the focus one pane left or right. Native Down tells which pane has the focus: it moves the folder or the list selection, and in the message it moves no row.
   const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
   const list_moved = async (name, row_before) => {
     const after = first_selected(await down(leaves_row(row_before)));
@@ -960,7 +954,7 @@ async function run_panes(instance, { app, kind, shot }) {
   state = await down(folder_leaves("/Inbox"));
   check(app, kind, "H in the thread list focuses the folder pane: Down moves the folder", ![null, "/Inbox"].includes(folder_of(state)), `folder ${folder_of(state)}`);
   await up(folder_lands_on("/Inbox"));
-  await list_moved("A-h in the folder pane focuses the thread list: Down moves the selection", first_selected(await press_state(ALT("h"))));
+  await list_moved("A-l in the folder pane focuses the thread list: Down moves the selection", first_selected(await press_state(ALT("l"))));
   // The message pane takes the focus only with one message shown: the Inbox threads open collapsed and show a summary, so each entry starts on the second last row, a single message. Down in the message moves no row, which proves A-l reached it.
   const enter_message = async () => {
     await keys(["G"], at_bottom);
@@ -974,13 +968,14 @@ async function run_panes(instance, { app, kind, shot }) {
   // The body script takes the keys in the message, so the chords are bound there too.
   await list_moved("A-h in the message pane focuses the thread list: Down moves the selection", first_selected(await press_state(ALT("h"), 1500)));
   entered = await enter_message();
-  await keys(["L"], 1500);
+  await keys(["H"], 1500);
   state = await down(leaves_row(entered.row));
-  check(app, kind, "L in the message pane focuses the thread list: Down moves the selection", entered.in_message && first_selected(state) !== entered.row, `in the message ${entered.in_message}, selected ${entered.row} then ${first_selected(state)}`);
+  check(app, kind, "H in the message pane focuses the thread list, the pane to its left: Down moves the selection", entered.in_message && first_selected(state) !== entered.row, `in the message ${entered.in_message}, selected ${entered.row} then ${first_selected(state)}`);
   entered = await enter_message();
   await keys(["H"], 1500);
+  await keys(["H"], 1500);
   state = await down(folder_leaves("/Inbox"));
-  check(app, kind, "H in the message pane focuses the folder pane: Down moves the folder", entered.in_message && ![null, "/Inbox"].includes(folder_of(state)), `in the message ${entered.in_message}, folder ${folder_of(state)}`);
+  check(app, kind, "a second H from the message pane reaches the folder pane: Down moves the folder", entered.in_message && ![null, "/Inbox"].includes(folder_of(state)), `in the message ${entered.in_message}, folder ${folder_of(state)}`);
   await up(folder_lands_on("/Inbox"));
   await keys(["L"]);
 
@@ -991,13 +986,13 @@ async function run_panes(instance, { app, kind, shot }) {
   let list_row = first_selected(await keys(["H"], 1500));
   state = await down(leaves_row(list_row));
   check(app, kind, "H with the folder pane hidden leaves the focus in the thread list", folder_pane_hidden && first_selected(state) !== list_row && folder_of(state) === "/Inbox", `hidden ${folder_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
-  await shot("panes_hidden_folder_H", "H with the folder pane hidden: a toast refuses it");
+  await shot("panes_hidden_folder_H", "H with the folder pane hidden: the focus stays");
   await keys(["w", "f"], pane_is("folder", true));
   await keys(["g", "g"], at_top);
   state = await keys(["w", "m"], pane_is("message", false));
   const message_pane_hidden = state.mail_tab?.message_pane_visible === false;
   list_row = first_selected(await press_state(ALT("l"), 1500));
-  await shot("panes_hidden_message_alt_l", "A-l with the message pane hidden: a toast refuses it");
+  await shot("panes_hidden_message_alt_l", "A-l with the message pane hidden: the focus stays");
   state = await down(leaves_row(list_row));
   check(app, kind, "A-l with the message pane hidden leaves the focus in the thread list", message_pane_hidden && first_selected(state) !== list_row, `hidden ${message_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
   await keys(["w", "m"], pane_is("message", true));
@@ -1130,6 +1125,7 @@ async function run_panes(instance, { app, kind, shot }) {
   const inbox_after_delete = messages_in_inbox(state);
   await instance.press(["u"]);
   await expect_absent(instance, "with the stack empty, u leaves a native Delete to Thunderbird and changes no mail", (current) => (deleted && !in_folder(current, victim, "/Inbox") && messages_in_inbox(current) === inbox_after_delete ? null : `${victim} out of the Inbox after Delete ${deleted}, in the Inbox after u ${in_folder(current, victim, "/Inbox")}, Inbox ${inbox_after_delete} then ${messages_in_inbox(current)}`), { margin_ms: 4000, in_list: true });
+  await run_pane_moves(instance, { check, note, shot, key_and_state, open_inbox, wait_state, wait_for_state, expect_absent });
 }
 
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.

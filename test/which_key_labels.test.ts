@@ -55,8 +55,8 @@ test("the rows carry the short labels", () => {
     assert.deepEqual(rows_of(mail_root, ["'"]), { "<key>": "Jump to mark" });
     assert.deepEqual(rows_of(mail_root, [";"]), { ";": "Hint command line", f: "Focus target", c: "Click target", y: "Copy target" });
     assert.deepEqual(rows_of(message_root, [";"]), { f: "Focus link", c: "Click link", y: "Copy link" });
-    assert.equal(rows_of(mail_root, [])["H"], "Collapse folder or go to folders");
-    assert.equal(rows_of(message_root, [])["H"], "Focus folder pane");
+    assert.equal(rows_of(mail_root, [])["H"], "Pane left");
+    assert.equal(rows_of(message_root, [])["H"], "Pane left");
     assert.equal(rows_of(message_root, [])["/"], "Find in message");
 });
 

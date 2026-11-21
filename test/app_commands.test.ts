@@ -35,9 +35,10 @@ test("the app keys bind their commands and add no warning, and u undoes", () => 
     assert.deepEqual(normal["gC"], { id: "thread.open_conversation", label: "Open conversation" });
     for (const [keys, page, label] of [["gpa", "addons", "Add-ons"], ["gpt", "themes", "Themes"], ["gpc", "config", "Config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page }, label }, keys);
     for (const keys of ["gx", "gT", "gc"]) assert.equal(normal[keys], undefined, keys);
-    for (const [keys, pane, label] of [["gf", "folders", "Folder pane"], ["ge", "threads", "Thread list"], ["gm", "message", "Message pane"], ["<A-h>", "threads", "Focus thread list"], ["L", "threads", "Focus thread list"], ["<A-l>", "message", "Focus message pane"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane }, label }, keys);
-    assert.deepEqual(normal["H"], { id: "folder.collapse", label: "Collapse folder or go to folders" });
-    for (const [keys, id] of [["wh", "pane.left"], ["wl", "pane.right"]] as const) assert.deepEqual(normal[keys], { id, label: id === "pane.left" ? "Pane left" : "Pane right" }, keys);
+    for (const [keys, pane, label] of [["gf", "folders", "Folder pane"], ["ge", "threads", "Thread list"], ["gm", "message", "Message pane"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane }, label }, keys);
+    assert.ok(registry.get("folder.collapse"), "the command stays in the registry");
+    assert.equal(Object.values(normal).some((binding) => (binding as { id?: string })?.id === "folder.collapse"), false, "folder.collapse has no default key");
+    for (const [keys, id] of [["wh", "pane.left"], ["wl", "pane.right"], ["H", "pane.left"], ["<A-h>", "pane.left"], ["L", "pane.right"], ["<A-l>", "pane.right"]] as const) assert.deepEqual(normal[keys], { id, label: id === "pane.left" ? "Pane left" : "Pane right" }, keys);
     assert.deepEqual(compile_default_keymap().warnings ?? [], []);
 });
 
@@ -67,7 +68,7 @@ test("a command Thunderbird has disabled is refused with a message", async () =>
 
 test("the pane chords bind in the message document too, so focus can leave the message by them", () => {
     const message = default_keymap_of("message").normal ?? {};
-    for (const [keys, pane, label] of [["H", "folders", "Focus folder pane"], ["<A-h>", "threads", "Focus thread list"], ["L", "threads", "Focus thread list"], ["<A-l>", "message", "Focus message pane"]] as const) assert.deepEqual(message[keys], { id: "pane.focus", args: { pane }, label }, keys);
+    for (const [keys, id] of [["H", "pane.left"], ["<A-h>", "pane.left"], ["L", "pane.right"], ["<A-l>", "pane.right"]] as const) assert.equal((message[keys] as { id?: string })?.id, id, keys);
 });
 
 test("the pane commands only move the focus, so the bridge may run them", () => {
@@ -88,7 +89,7 @@ test("pane.focus on a hidden pane or an empty message pane is refused with a mes
     assert.deepEqual(fake.calls, ["paneFocus folders", "notify That pane is hidden or shows no message."]);
 });
 
-test("H collapses in the folder pane and focuses the folder pane from any other", async () => {
+test("folder.collapse collapses in the folder pane and focuses the folder pane from any other", async () => {
     const calls: string[] = [];
     let in_folder_pane = true;
     const api = {
@@ -102,7 +103,7 @@ test("H collapses in the folder pane and focuses the folder pane from any other"
     assert.deepEqual(calls, ["fold parent", "fold parent", "paneFocus folders"]);
 });
 
-test("H still focuses the folder pane when the folder script fails to load or is absent", async () => {
+test("folder.collapse still focuses the folder pane when the folder script fails to load or is absent", async () => {
     for (const folderpane of [{ fold: async () => Promise.reject(new Error("the folder script did not load")) }, undefined]) {
         const calls: string[] = [];
         const api = { app: { paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), true) }, folderpane } as unknown as RouterApi;

@@ -193,7 +193,7 @@ test("the reading keys bind in the message keymap only, so j and k keep scrollin
     assert.deepEqual(GROUPS["reading"]!.normal_keys, {});
     const message = default_keymap_of("message").normal ?? {};
     const ids = (keys: string) => (message[keys] && !Array.isArray(message[keys]) ? message[keys].id : undefined);
-    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", "<C-f>": "message.page_down", "<C-b>": "message.page_up", h: "message.scroll_left", l: "message.scroll_right", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.focus", "<A-h>": "pane.focus", L: "pane.focus", "<A-l>": "pane.focus" };
+    const reading_ids = { j: "message.scroll_down", k: "message.scroll_up", "<C-d>": "message.half_page_down", "<C-u>": "message.half_page_up", "<C-f>": "message.page_down", "<C-b>": "message.page_up", h: "message.scroll_left", l: "message.scroll_right", gg: "message.top", G: "message.bottom", "/": "cmdline.open", n: "message.find_next", N: "message.find_prev", f: "hint.pick", gf: "pane.focus", ge: "pane.focus", H: "pane.left", "<A-h>": "pane.left", L: "pane.right", "<A-l>": "pane.right" };
     for (const [keys, id] of Object.entries(reading_ids)) assert.equal(ids(keys), id, keys);
     assert.deepEqual((message["/"] as { args: unknown }).args, { text: "find " });
     assert.equal((DEFAULT_KEYMAP.normal?.["j"] as { id: string }).id, "motion.down");
