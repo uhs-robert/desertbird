@@ -1,4 +1,4 @@
-// Moves the border of the focused pane in `about:3pane`, and puts the panes back to their default sizes. It reads where the panes and splitters sit on screen, so it needs no table per layout: a splitter belongs to a pane when it touches the pane on the axis of the move (within 2 pixels).
+// Moves the border of the focused pane in `about:3pane`, and puts the panes back to their default sizes. It reads where the panes and splitters sit on screen, so it needs no table per layout: a splitter belongs to a pane when it touches the pane on the axis of the move. A splitter is 5 pixels thick and takes 1 pixel of layout, so it overlaps the pane next to its own by 4 pixels, which the gap of up to 5 allows.
 
 import type { PaneResizeDirection } from "../shared/protocol.ts";
 
@@ -55,7 +55,7 @@ export function move_border(about_3pane: ResizePane, pane: number, direction: Ex
         .map((id) => about_3pane.paneLayout[id as keyof typeof STORE_IDS])
         .filter((each) => {
             const box = each.getBoundingClientRect();
-            const touches = Math.abs(box[lo] - pane_box[hi]) < 2 || Math.abs(box[hi] - pane_box[lo]) < 2;
+            const touches = Math.abs(box[lo] - pane_box[hi]) < 6 || Math.abs(box[hi] - pane_box[lo]) < 6;
             return !each.isCollapsed && !each.isDisabled && each.resizeDirection === (horizontal ? "horizontal" : "vertical") && touches && box[across_lo] < pane_box[across_hi] && box[across_hi] > pane_box[across_lo];
         });
     const splitter = borders.find((each) => each.getBoundingClientRect()[lo] > pane_box[lo]) ?? borders[0];

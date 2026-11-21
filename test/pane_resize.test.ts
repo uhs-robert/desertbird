@@ -68,9 +68,11 @@ interface Options {
     focus?: (typeof PANE_ORDER)[number];
     collapsed?: "folderPane" | "messagePane" | null;
     disabled_folder?: boolean;
+    /** A splitter is 5 pixels thick and takes 1 pixel of layout, so it overlaps the pane next to its own by 4 pixels. */
+    real_edges?: boolean;
 }
 
-function mail_window({ layout = "classic", focus = "threads", collapsed = null, disabled_folder = false }: Options = {}) {
+function mail_window({ layout = "classic", focus = "threads", collapsed = null, disabled_folder = false, real_edges = false }: Options = {}) {
     const spec = LAYOUTS[layout];
     const boxes = Object.fromEntries(Object.entries(spec.boxes).map(([id, box]) => [id, { ...box }]));
     const elements = Object.fromEntries(Object.keys(boxes).map((id) => [id, { getBoundingClientRect: () => (collapsed === id ? rect(0, 0, 0, 0) : boxes[id]!) }]));
@@ -87,6 +89,13 @@ function mail_window({ layout = "classic", focus = "threads", collapsed = null, 
     };
     const splitter_of = (id: string, name: "folder" | "message") => {
         const entry = spec.splitters[name];
+        const box = { ...entry.box };
+        if (real_edges) {
+            const along_x = entry.direction === "horizontal";
+            const [lo, hi] = along_x ? (["left", "right"] as const) : (["top", "bottom"] as const);
+            if (spec.boxes[entry.resizes]![lo] >= box[hi]) box[lo] -= 4;
+            else box[hi] += 4;
+        }
         const splitter = {
             id,
             resizeDirection: entry.direction,
@@ -112,7 +121,7 @@ function mail_window({ layout = "classic", focus = "threads", collapsed = null, 
                 sizes.push(`${name} height ${value}`);
             },
             getAttribute: (attribute: string) => entry.attributes[attribute] ?? null,
-            getBoundingClientRect: () => entry.box,
+            getBoundingClientRect: () => box,
             dispatchEvent: (event: unknown) => (events.push(`${name} ${(event as { type: string }).type}`), true),
         };
         return splitter;
@@ -194,11 +203,13 @@ const CELLS: [Layout, NonNullable<Options["focus"]>, PaneResizeDirection, string
     ["horizontal", "message", "up", ["message height 420"]],
 ];
 
-test("each key moves the border of the focused pane by direction, in each layout", async () => {
-    for (const [layout, focus, direction, sizes] of CELLS) {
-        const result = await press({ layout, focus }, direction);
-        assert.equal(result.answer, true, `${layout} ${focus} ${direction}`);
-        assert.deepEqual(result.sizes, sizes, `${layout} ${focus} ${direction}`);
+test("each key moves the border of the focused pane by direction, in each layout, with splitters that overlap their neighbor as they do on screen", async () => {
+    for (const real_edges of [false, true]) {
+        for (const [layout, focus, direction, sizes] of CELLS) {
+            const result = await press({ layout, focus, real_edges }, direction);
+            assert.equal(result.answer, true, `${layout} ${focus} ${direction} ${real_edges}`);
+            assert.deepEqual(result.sizes, sizes, `${layout} ${focus} ${direction} ${real_edges}`);
+        }
     }
 });
 
@@ -212,10 +223,10 @@ test("a count multiplies the step", async () => {
 });
 
 test("an axis with no border for the pane refuses and changes nothing", async () => {
-    for (const [layout, focus, direction] of [["classic", "folders", "down"], ["widethread", "threads", "left"], ["widethread", "threads", "right"], ["wide", "message", "left"], ["stacked", "message", "up"], ["vertical", "threads", "down"], ["vertical", "message", "up"], ["horizontal", "folders", "right"], ["horizontal", "message", "left"]] as const) {
-        const result = await press({ layout, focus }, direction);
-        assert.equal(result.answer, false, `${layout} ${focus} ${direction}`);
-        assert.deepEqual([result.sizes, result.events], [[], []], `${layout} ${focus} ${direction}`);
+    for (const real_edges of [false, true]) for (const [layout, focus, direction] of [["classic", "folders", "down"], ["widethread", "threads", "left"], ["widethread", "threads", "right"], ["wide", "message", "left"], ["stacked", "message", "up"], ["vertical", "threads", "down"], ["vertical", "message", "up"], ["horizontal", "folders", "right"], ["horizontal", "message", "left"]] as const) {
+        const result = await press({ layout, focus, real_edges }, direction);
+        assert.equal(result.answer, false, `${layout} ${focus} ${direction} ${real_edges}`);
+        assert.deepEqual([result.sizes, result.events], [[], []], `${layout} ${focus} ${direction} ${real_edges}`);
     }
 });
 
