@@ -150,6 +150,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         const token = event_to_token(event);
         if (token === null) return;
+        // A key in another window ends the mode before any early return below.
+        if (resize_window && resize_window !== window) resize_window = null;
         // The overlay's browser has the focus before its page can take a key, and the hold timer can run out first. Plain keys are dropped for as long as that lasts.
         if (is_plain_printable(token) && deps.overlay_is_loading(window)) return swallow(event);
         // The hold ends when the focus is in a text field, which the overlay's browser counts as.
@@ -160,8 +162,6 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
                 return;
             }
         }
-        // A key in another window ends the mode before any early return below.
-        if (resize_window && resize_window !== window) resize_window = null;
         if (deps.tab_kind_of(window)) return matcher.reset();
         const typing = deps.is_typing_target(window, event);
         const menu_takes = typing ? null : deps.menu_takes_key(window, token);

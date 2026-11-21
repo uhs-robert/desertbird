@@ -1505,6 +1505,18 @@ test("a text field inside the reading pane ends the mode, while the body script 
     assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 1]]);
 });
 
+test("a plain key in another window ends the mode even while that window's overlay is loading", () => {
+    const loading = setup();
+    loading.runtime.install(tree());
+    const second = new FakeWindow();
+    loading.windows.push(second);
+    loading.load(second);
+    enter_resize(loading.windows[0]!);
+    second.overlay_loading = true;
+    press(second, "j");
+    assert.deepEqual(loading.modes, ["resize", "normal"]);
+});
+
 test("a key in another window whose front tab is not the mail tab ends the mode", () => {
     const { windows, modes, mode_windows, load, runtime } = setup();
     runtime.install(tree());

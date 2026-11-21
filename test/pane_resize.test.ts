@@ -70,9 +70,11 @@ interface Options {
     disabled_folder?: boolean;
     /** A splitter is 5 pixels thick and takes 1 pixel of layout, so it overlaps the pane next to its own by 4 pixels. */
     real_edges?: boolean;
+    /** Whether the fake grid holds a request to the minimum. Thunderbird's grid takes a negative request as invalid, so a test of the request itself turns this off. */
+    clamp?: boolean;
 }
 
-function mail_window({ layout = "classic", focus = "threads", collapsed = null, disabled_folder = false, real_edges = false }: Options = {}) {
+function mail_window({ layout = "classic", focus = "threads", collapsed = null, disabled_folder = false, real_edges = false, clamp = true }: Options = {}) {
     const spec = LAYOUTS[layout];
     const boxes = Object.fromEntries(Object.entries(spec.boxes).map(([id, box]) => [id, { ...box }]));
     const elements = Object.fromEntries(Object.keys(boxes).map((id) => [id, { getBoundingClientRect: () => (collapsed === id ? rect(0, 0, 0, 0) : boxes[id]!) }]));
@@ -85,7 +87,7 @@ function mail_window({ layout = "classic", focus = "threads", collapsed = null, 
         const pane = boxes[resizes]!;
         const threads = boxes["threadPane"]!;
         const spare = threads[hi] - threads[lo] - 100;
-        pane[hi] = pane[lo] + Math.max(100, Math.min(asked, pane[hi] - pane[lo] + spare));
+        pane[hi] = pane[lo] + (clamp ? Math.max(100, Math.min(asked, pane[hi] - pane[lo] + spare)) : asked);
     };
     const splitter_of = (id: string, name: "folder" | "message") => {
         const entry = spec.splitters[name];
@@ -228,6 +230,11 @@ test("an axis with no border for the pane refuses and changes nothing", async ()
         assert.equal(result.answer, false, `${layout} ${focus} ${direction} ${real_edges}`);
         assert.deepEqual([result.sizes, result.events], [[], []], `${layout} ${focus} ${direction} ${real_edges}`);
     }
+});
+
+test("a count larger than the pane never writes a negative size", async () => {
+    const result = await press({ focus: "folders", clamp: false }, "left", 20);
+    assert.deepEqual(result.sizes, ["folder width 0"]);
 });
 
 test("a pane stops at the grid minimum and stores that size, so a key never collapses it", async () => {

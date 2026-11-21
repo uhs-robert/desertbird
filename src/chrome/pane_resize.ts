@@ -64,7 +64,7 @@ export function move_border(about_3pane: ResizePane, pane: number, direction: Ex
     // Moving toward the end of the axis grows the element before the splitter and shrinks the one after it.
     const grows = box[lo] < splitter.getBoundingClientRect()[lo] === (direction === "right" || direction === "down");
     const property = horizontal ? "width" : "height";
-    splitter[property] = box[hi] - box[lo] + (grows ? steps : -steps) * STEP_PX;
+    splitter[property] = Math.max(0, box[hi] - box[lo] + (grows ? steps : -steps) * STEP_PX);
     // The grid may give the pane less than asked, so the stored size is the one it took, as after a drag.
     const taken = splitter.resizeElement!.getBoundingClientRect();
     splitter[property] = Math.round(taken[hi] - taken[lo]);
