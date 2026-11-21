@@ -67,7 +67,7 @@
               },
               "mode": {
                 "type": "string",
-                "enum": ["normal", "visual", "insert"]
+                "enum": ["normal", "visual", "insert", "resize"]
               },
               "indicator": {
                 "type": "string",
@@ -87,6 +87,7 @@
                       "normal": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
                       "visual": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
                       "insert": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "resize": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
                       "on_badge": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
                     }
                   },
@@ -96,6 +97,7 @@
                       "normal": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
                       "visual": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
                       "insert": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+                      "resize": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
                       "on_badge": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
                     }
                   }

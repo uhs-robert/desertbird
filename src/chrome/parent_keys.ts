@@ -44,6 +44,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         menu_takes_key: (window: MainWindow, key: string) => menu_takes_key(window.document, key),
         overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
+        layout_of: (window: MainWindow) => front_about_3pane<About3PaneLike & { document: { body: { className: string } } }>(tabmail_of(window))?.document.body.className ?? "",
         on_tab_select(window, listener) {
             // On the window and not on the tab strip: at startup the strip does not exist yet when the window is hooked (measured), and a capture listener on the window sees the event from any element below it.
             window.addEventListener("TabSelect", listener, true);

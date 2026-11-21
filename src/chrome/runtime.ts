@@ -1,6 +1,6 @@
 // Key handling in the main mail window. It holds no Thunderbird global: the parent hands in a `RuntimeDeps`, so node tests drive every path with fakes.
 
-import type { JsonValue, KeysEvent } from "../shared/protocol.ts";
+import type { JsonValue, KeysEvent, ModeName, PaneResizeDirection } from "../shared/protocol.ts";
 import type { TreeLeaf } from "../../vendor/desertfox/prefix_tree.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import type { KeyEventLike } from "../../vendor/desertfox/keys/token.ts";
@@ -46,6 +46,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     overlay_is_loading(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
+    /** A string that changes when the pane layout changes. Resize mode ends when it does. */
+    layout_of(window: Window): string;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
@@ -66,6 +68,11 @@ const HOLD_MS = 1500;
 
 const KEY_LIST = "help.whichkey";
 
+// Thunderbird binds single keys, so a key the runtime takes stops here.
+const swallow = (event: KeydownEvent): void => void (event.preventDefault(), event.stopPropagation());
+
+const RESIZE_KEYS: Record<string, PaneResizeDirection> = { h: "left", l: "right", j: "down", k: "up", "=": "reset" };
+
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
     const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
@@ -82,15 +89,22 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         was = keys.length;
     };
 
-    // The window the background last heard visual mode start in, or null. The anchor is shared by all windows, so another window can end the mode, and the end goes to the window that heard the start. Only a change is sent.
-    let visual_told: Window | null = null;
-    const tell_visual = (w: Window) => {
-        const on = visual_anchor >= 0;
-        if (on === (visual_told !== null)) return;
-        const told = visual_told ?? w;
-        visual_told = on ? w : null;
-        deps.emit({ command: "mode", mode: on ? "visual" : "normal", windowId: deps.window_id_of(told) });
+    // The mode the background last heard and the window it heard it in. The anchor and the resize flag are shared by all windows, so another window can end a mode, and the end goes to the window that heard the start. Only a change is sent.
+    let told_mode: ModeName = "normal";
+    let told_window: Window | null = null;
+    const tell_mode = (w: Window) => {
+        const mode: ModeName = resize_window ? "resize" : visual_anchor >= 0 ? "visual" : "normal";
+        if (mode === told_mode) return;
+        const told = told_window ?? w;
+        told_mode = mode;
+        told_window = mode === "normal" ? null : w;
+        deps.emit({ command: "mode", mode, windowId: deps.window_id_of(told) });
     };
+
+    // Resize mode: the window it runs in, or null. It takes the plain keys of the window until Escape or Enter, a tab change, a window blur, a text field or menu, another window, or a new layout ends it. `resize_layout` is the layout it started in, and `resize_count` the digits typed since the last move.
+    let resize_window: Window | null = null;
+    let resize_layout = "";
+    let resize_count = 0;
 
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command that removes or moves rows ends it too, so `a` or `d` acts on the range once. One that leaves the rows (`m r`, `m s`) keeps it.
     let visual_anchor = -1;
@@ -108,6 +122,12 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count?: number): void | null {
         if (leaf.steps[0]?.invocation.id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
+        if (leaf.steps[0]?.invocation.id === "pane.resize_mode") {
+            if (resize_window) return;
+            if (visual_anchor >= 0) end_visual(port);
+            [resize_window, resize_layout, resize_count] = [window, deps.layout_of(window), 0];
+            return;
+        }
         if (leaf.steps[0]?.invocation.id === "visual.toggle") return visual_anchor < 0 ? void ((visual_end = visual_anchor = port.selected_index()), (visual_marks = port.marks(visual_anchor, visual_anchor))) : end_visual(port);
         if (leaf.steps[0]?.invocation.id !== KEY_LIST) last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         for (const step of leaf.steps) {
@@ -134,19 +154,30 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         const token = event_to_token(event);
         if (token === null) return;
         // The overlay's browser has the focus before its page can take a key, and the hold timer can run out first. Plain keys are dropped for as long as that lasts.
-        if (is_plain_printable(token) && deps.overlay_is_loading(window)) return void (event.preventDefault(), event.stopPropagation());
+        if (is_plain_printable(token) && deps.overlay_is_loading(window)) return swallow(event);
         // The hold ends when the focus is in a text field, which the overlay's browser counts as.
         if (hold_until > deps.now()) {
             if (deps.is_typing_target(window, event)) hold_until = 0;
             else if (is_plain_printable(token)) {
-                event.preventDefault();
-                event.stopPropagation();
+                swallow(event);
                 return;
             }
         }
         if (deps.tab_kind_of(window)) return matcher.reset();
         const typing = deps.is_typing_target(window, event);
         const menu_takes = typing ? null : deps.menu_takes_key(window, token);
+        if (resize_window && (resize_window !== window || (typing && !deps.in_reading_pane(window)) || menu_takes !== null || deps.layout_of(window) !== resize_layout)) resize_window = null;
+        // A chord is no resize key, so it runs as in normal mode and the mode stays: `<A-l>` moves the focus to the message pane and the mode follows it.
+        if (resize_window && (is_plain_printable(token) || token === "<Escape>" || token === "<Enter>")) {
+            swallow(event);
+            const direction = RESIZE_KEYS[token];
+            if (/^\d$/.test(token)) resize_count = (resize_count * 10 + Number(token)) % 1000;
+            else if (direction) {
+                deps.emit({ command: "pane.resize", args: { direction }, count: resize_count || 1, windowId: deps.window_id_of(window), messageIds: [] });
+                resize_count = 0;
+            } else if (!is_plain_printable(token)) resize_window = null;
+            return;
+        }
         // The thread list is the target unless the key goes to a text field or an open menu.
         const port = typing || menu_takes !== null ? null : deps.list_port_of(window);
         // A key that leaves the list ends a half-typed sequence. Otherwise `d`, a trip to the quick filter, then `d` would trash.
@@ -156,8 +187,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             pend(window, []);
             // A menu opened by a click leaves the focus in the list, so Thunderbird's single-key shortcuts (`j` marks junk) would act under the menu.
             if (is_plain_printable(token) && (port || menu_takes === false)) {
-                event.preventDefault();
-                event.stopPropagation();
+                swallow(event);
             }
             return;
         }
@@ -167,8 +197,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             matcher.reset();
             pend(window, []);
             end_visual(port);
-            event.preventDefault();
-            event.stopPropagation();
+            swallow(event);
             return;
         }
         if (sequence_window !== window) matcher.reset();
@@ -177,19 +206,19 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         pend(window, result.kind_ === "pending" ? result.typed_ : []);
         if (result.kind_ === "no_match" && !is_plain_printable(token)) return;
         // Thunderbird binds single keys such as `j` and `a`, so the key stops here whether or not it matched.
-        event.preventDefault();
-        event.stopPropagation();
+        swallow(event);
         if (result.kind_ === "match") run_leaf(result.leaf, port, window, result.count);
     }
 
     function hook(window: Window): void {
         if (hooked.has(window)) return;
-        const handler = (event: KeydownEvent) => (on_keydown(window, event), tell_visual(window));
+        const handler = (event: KeydownEvent) => (on_keydown(window, event), tell_mode(window));
         const reset_typing = () => {
             matcher?.reset();
             hold_until = 0;
             visual_anchor = -1;
-            tell_visual(window);
+            resize_window = null;
+            tell_mode(window);
         };
         // A click on the tab bar sends no key, so no key handler can end the sequence. `d`, a click away and back, then `d` would trash.
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);
@@ -207,6 +236,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         entry.stop_blur_listening();
         hooked.delete(window);
         if (sequence_window === window) sequence_window = null;
+        // The window is gone, so nothing is left to tell.
+        if (resize_window === window) (resize_window = null), (told_mode = "normal"), (told_window = null);
     }
 
     return {
@@ -225,6 +256,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             listening = false;
             matcher = null;
             visual_anchor = -1;
+            resize_window = null;
             hold_until = 0;
             sequence_window = null;
         },

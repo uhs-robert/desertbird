@@ -63,7 +63,7 @@ Add-on to host:
 { "verb": "mode", "id": "visual", "label": "VISUAL", "private": false, "tab_id": 7, "window_id": 3 }
 ```
 
-A `commands` row has `id` and `label`, and `name`, `aliases`, `intent`, `params` and `count` when the command has them. `mode` goes out after `ready`, on each mode change the key runtime reports, and when a main window takes the focus. It names the last focused main window and its active tab. Thunderbird has no private windows, so `private` is always `false`.
+A `commands` row has `id` and `label`, and `name`, `aliases`, `intent`, `params` and `count` when the command has them. `mode` goes out after `ready` (its `id` is `normal`, `visual`, `insert` or `resize`), on each mode change the key runtime reports, and when a main window takes the focus. It names the last focused main window and its active tab. Thunderbird has no private windows, so `private` is always `false`.
 
 ## Reads
 

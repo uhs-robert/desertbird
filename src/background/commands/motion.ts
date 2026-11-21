@@ -1,7 +1,7 @@
 import { needing } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
-// Motions run in the chrome runtime from its fixed motion table, so they carry no handler here. `repeat.last` and `visual.toggle` are handled in the runtime itself, because they read what the runtime last ran and the mode it holds.
+// Motions run in the chrome runtime from its fixed motion table, so they carry no handler here. `repeat.last`, `visual.toggle` and `pane.resize_mode` are handled in the runtime itself, because they read what the runtime last ran and the mode it holds.
 export const motion: CommandGroup = {
     commands: needing("list", {
         "motion.down": { runs_in: "chrome", bridge: true, label: "Move down", intent: "Select the next row in the message list.", count: "repeat" },
@@ -9,6 +9,7 @@ export const motion: CommandGroup = {
         "motion.top": { runs_in: "chrome", bridge: true, label: "Go to first row", intent: "Select the first row in the message list." },
         "repeat.last": { runs_in: "chrome", bridge: true, label: "Repeat", intent: "Run the last motion or command again. A count replaces the count it ran with. A move to a typed folder, a snooze and an undo are never repeated.", count: "repeat" },
         "visual.toggle": { runs_in: "chrome", bridge: true, label: "Select a range of rows", intent: "Start or end visual mode. While it is on, a motion extends the selection from the row where it started, and a command such as archive or delete acts on the range and ends the mode. Escape also ends it." },
+        "pane.resize_mode": { runs_in: "chrome", bridge: false, label: "Resize panes", intent: "Start the resize mode. In it, `h`, `l`, `j` and `k` move the border of the focused pane left, right, down and up, a count multiplies the step, `=` resets the sizes, and Escape or Enter ends the mode." },
         "motion.bottom": { runs_in: "chrome", bridge: true, label: "Go to last row", intent: "Select the last row in the message list." },
     }),
     normal_keys: {
@@ -18,5 +19,6 @@ export const motion: CommandGroup = {
         G: { id: "motion.bottom" },
         ".": { id: "repeat.last" },
         v: { id: "visual.toggle", label: "Select range" },
+        wr: { id: "pane.resize_mode", label: "Resize mode" },
     },
 };

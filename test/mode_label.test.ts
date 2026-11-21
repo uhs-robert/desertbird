@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { create_mode_label, label_look, label_shows } from "../src/chrome/mode_label.ts";
 import type { LabelElement, StatusBarDocument } from "../src/chrome/mode_label.ts";
 
-const DARK = { normal: "#aaaa11", visual: "#bb6622", insert: "#cc3333", on_badge: "#111111" };
-const LIGHT = { normal: "#555500", visual: "#663300", insert: "#770000", on_badge: "#eeeeee" };
+const DARK = { normal: "#aaaa11", visual: "#bb6622", insert: "#cc3333", resize: "#33aacc", on_badge: "#111111" };
+const LIGHT = { normal: "#555500", visual: "#663300", insert: "#770000", resize: "#005577", on_badge: "#eeeeee" };
 const COLORS = { dark: DARK, light: LIGHT };
 
 class FakeLabel implements LabelElement {
@@ -83,11 +83,12 @@ test("the label text is the mode in each style", () => {
     assert.equal(label_look("normal", "classic", DARK).text, "-- NORMAL --");
     assert.equal(label_look("visual", "classic", DARK).text, "-- VISUAL --");
     assert.equal(label_look("insert", "badge", DARK).text, "INSERT");
+    assert.equal(label_look("resize", "classic", DARK).text, "-- RESIZE --");
 });
 
 test("each mode has its own color, and the badge fills with it while classic colors the text", () => {
-    const colors = (["normal", "visual", "insert"] as const).map((mode) => label_look(mode, "classic", DARK).css.match(/color: (#[0-9a-f]{6})/)?.[1]);
-    assert.deepEqual(colors, [DARK.normal, DARK.visual, DARK.insert]);
+    const colors = (["normal", "visual", "insert", "resize"] as const).map((mode) => label_look(mode, "classic", DARK).css.match(/color: (#[0-9a-f]{6})/)?.[1]);
+    assert.deepEqual(colors, [DARK.normal, DARK.visual, DARK.insert, DARK.resize]);
     const badge = label_look("visual", "badge", DARK).css;
     assert.match(badge, new RegExp(`background-color: ${DARK.visual}`));
     assert.match(badge, new RegExp(`; color: ${DARK.on_badge};`));

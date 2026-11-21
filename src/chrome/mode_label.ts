@@ -60,7 +60,7 @@ function checked(args: OverlaySetModeLabelArgs): void {
     if (!(MODE_LABEL_STYLES as readonly unknown[]).includes(args.style)) throw new Error(`unknown style ${String(args.style)}`);
     // The colors end up in an inline style, so a value that is not a hex color never reaches it.
     for (const scheme of [args.colors?.dark, args.colors?.light]) {
-        for (const key of ["normal", "visual", "insert", "on_badge"] as const) if (!HEX_COLOR.test(String(scheme?.[key]))) throw new Error(`the ${key} color must be #rrggbb`);
+        for (const key of ["normal", "visual", "insert", "resize", "on_badge"] as const) if (!HEX_COLOR.test(String(scheme?.[key]))) throw new Error(`the ${key} color must be #rrggbb`);
     }
 }
 

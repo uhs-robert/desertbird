@@ -105,7 +105,7 @@ export interface KeysPending {
     root?: true;
 }
 
-/** The third thing `keys.onInvocation` carries: visual mode or manual insert mode (`i` in a page tab) started or ended in a window. Only the key runtimes know them. Insert from a focused text field is not sent: the status bar label reads the focus itself. */
+/** The third thing `keys.onInvocation` carries: visual mode, resize mode (`w r`) or manual insert mode (`i` in a page tab) started or ended in a window. Only the key runtimes know them. Insert from a focused text field is not sent: the status bar label reads the focus itself. */
 export interface KeysMode {
     command: "mode";
     mode: ModeName;
@@ -114,7 +114,7 @@ export interface KeysMode {
 
 export type KeysEvent = KeysInvocation | KeysPending | KeysMode;
 
-export const MODE_NAMES = ["normal", "visual", "insert"] as const;
+export const MODE_NAMES = ["normal", "visual", "insert", "resize"] as const;
 export type ModeName = (typeof MODE_NAMES)[number];
 
 export const MODE_INDICATORS = ["always", "not_normal", "off"] as const;
@@ -129,6 +129,7 @@ export interface ModeLabelScheme {
     normal: string;
     visual: string;
     insert: string;
+    resize: string;
     on_badge: string;
 }
 

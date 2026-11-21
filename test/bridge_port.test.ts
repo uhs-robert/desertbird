@@ -240,6 +240,9 @@ test("a mode change goes to the host only while the port is ready", async () => 
     state.mode = { mode: "visual", window_id: 3, tab_id: 7 };
     await bridge.mode_changed();
     assert.deepEqual(last().posted.at(-1), { verb: "mode", id: "visual", label: "VISUAL", private: false, tab_id: 7, window_id: 3 });
+    state.mode = { mode: "resize", window_id: 3, tab_id: 7 };
+    await bridge.mode_changed();
+    assert.deepEqual(last().posted.at(-1), { verb: "mode", id: "resize", label: "RESIZE", private: false, tab_id: 7, window_id: 3 });
 });
 
 test("manual insert mode reaches the host as INSERT", async () => {

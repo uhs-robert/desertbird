@@ -27,6 +27,8 @@ class FakeWindow implements KeyTarget {
     /** The keys the open menu takes, or null with no menu open. */
     menu_keys: string[] | null = null;
     has_focus = true;
+    /** The layout string `layout_of` reads. */
+    layout = "layout-classic";
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
     selected = 0;
     rows = 10;
@@ -115,7 +117,9 @@ const tree = () => ({
             ":": leaf("cmdline.open", "background"),
             ".": leaf("repeat.last", "chrome"),
             v: leaf("visual.toggle", "chrome"),
+            w: { kind: "branch", children: { r: leaf("pane.resize_mode", "chrome") } },
             r: leaf("msg.read", "background"),
+            "=": leaf("msg.sort", "background"),
             s: keeps_selection("msg.flag"),
             D: unrepeatable("msg.delete"),
             g: { kind: "branch", children: { g: leaf("motion.top", "chrome") } },
@@ -150,6 +154,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         menu_takes_key: (window, key) => window.menu_keys && window.menu_keys.includes(key.toLowerCase()),
         overlay_is_loading: (window) => window.overlay_loading,
         in_reading_pane: (window) => window.in_reading_pane,
+        layout_of: (window) => window.layout,
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
             return () => void window.tab_listeners.delete(listener);
@@ -1283,4 +1288,193 @@ test("Backspace with no sequence goes to Thunderbird", () => {
     const window = windows[0]!;
     assert.equal(press(window, "Backspace").cancelled, false);
     assert.deepEqual(pending.map((event) => event.keys).filter((keys) => keys.length > 0), []);
+});
+
+// Resize mode. `w r` starts it, and in it h l j k and = emit `pane.resize` and every other plain key is swallowed.
+const enter_resize = (window: FakeWindow) => (press(window, "w"), press(window, "r"));
+const resizes = (emitted: KeysInvocation[]) => emitted.filter((event) => (event.command as string) === "pane.resize").map((event) => [event.args, event.count]);
+
+test("w r starts resize mode, which is told once, and h l j k = emit pane.resize with the direction", () => {
+    const { windows, emitted, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    assert.deepEqual(modes, ["resize"]);
+    for (const key of ["h", "l", "j", "k", "="]) assert.equal(press(window, key).cancelled, true, key);
+    assert.deepEqual(resizes(emitted), [[{ direction: "left" }, 1], [{ direction: "right" }, 1], [{ direction: "down" }, 1], [{ direction: "up" }, 1], [{ direction: "reset" }, 1]]);
+    assert.equal(window.selected, 0, "j did not move the list");
+    assert.deepEqual(modes, ["resize"], "no second report while it stays on");
+});
+
+test("a count typed in the mode applies to the next move only", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    for (const key of ["1", "2", "l", "l", "0", "h", "3", "0", "k"]) press(window, key);
+    assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 12], [{ direction: "right" }, 1], [{ direction: "left" }, 1], [{ direction: "up" }, 30]]);
+    for (const key of ["1", "2", "3", "4", "j"]) press(window, key);
+    assert.equal(resizes(emitted).at(-1)![1], 234, "a count keeps its last three digits");
+});
+
+test("every other plain key is swallowed and reaches nothing: no motion, no command, no half-typed sequence", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    for (const key of ["x", "d", "g", "v", "r", "w", ":", "m", "J"]) assert.equal(press(window, key).cancelled, true, key);
+    assert.equal(emitted.length, 0);
+    assert.equal(window.selected, 0);
+    press(window, "Escape");
+    press(window, "d");
+    press(window, "d");
+    assert.deepEqual(emitted.map((event) => event.command), ["msg.delete"], "no stale d from the mode");
+});
+
+test("Escape and Enter end the mode, are swallowed, and the label returns to normal", () => {
+    for (const key of ["Escape", "Enter"]) {
+        const { windows, emitted, modes, runtime } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        enter_resize(window);
+        assert.equal(press(window, key).cancelled, true, key);
+        assert.deepEqual(modes, ["resize", "normal"], key);
+        assert.equal(press(window, "j").cancelled, true);
+        assert.equal(window.selected, 1, `${key}: j moves the list again`);
+        assert.deepEqual(resizes(emitted), [], key);
+        assert.equal(press(window, "Escape").cancelled, false, "Escape is Thunderbird's again");
+    }
+});
+
+test("a count typed before Escape does not carry into the next mode", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    press(window, "5");
+    press(window, "Escape");
+    enter_resize(window);
+    press(window, "l");
+    assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 1]]);
+});
+
+test("w r while in the mode does nothing more: it is one swallowed w and r, and the mode is told once", () => {
+    const { windows, emitted, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    enter_resize(window);
+    assert.deepEqual(modes, ["resize"]);
+    assert.deepEqual(emitted, []);
+    press(window, "Escape");
+    assert.deepEqual(modes, ["resize", "normal"]);
+    assert.equal(press(window, "Escape").cancelled, false, "one Escape ended it");
+});
+
+test("a tab change, a window blur and a closed window end the mode, and the label returns to normal", () => {
+    const ends: [string, (window: FakeWindow) => void][] = [
+        ["tab change", (window) => window.select_tab()],
+        ["window blur", (window) => window.blur()],
+    ];
+    for (const [name, end] of ends) {
+        const fixture = setup();
+        fixture.runtime.install(tree());
+        const window = fixture.windows[0]!;
+        enter_resize(window);
+        end(window);
+        assert.deepEqual(fixture.modes, ["resize", "normal"], name);
+        press(window, "l");
+        assert.deepEqual(resizes(fixture.emitted), [], name);
+    }
+    const closing = setup();
+    closing.runtime.install(tree());
+    enter_resize(closing.windows[0]!);
+    closing.unload(closing.windows[0]!);
+    assert.deepEqual(closing.modes, ["resize"], "a closed window is told nothing");
+    const reopened = new FakeWindow();
+    closing.windows.push(reopened);
+    closing.load(reopened);
+    press(reopened, "l");
+    assert.deepEqual(resizes(closing.emitted), [], "the mode died with its window");
+    assert.deepEqual(closing.modes, ["resize"]);
+});
+
+test("a text field, an open menu, a new layout and a key in another window end the mode, and the key then runs as normal", () => {
+    const text = setup();
+    text.runtime.install(tree());
+    enter_resize(text.windows[0]!);
+    assert.equal(press(text.windows[0]!, "l", { target: { localName: "input" } }).cancelled, false, "the key stays with the field");
+    assert.deepEqual([text.modes, resizes(text.emitted)], [["resize", "normal"], []]);
+
+    const menu = setup();
+    menu.runtime.install(tree());
+    enter_resize(menu.windows[0]!);
+    menu.windows[0]!.menu_keys = [];
+    press(menu.windows[0]!, "l");
+    assert.deepEqual([menu.modes, resizes(menu.emitted)], [["resize", "normal"], []]);
+
+    const layout = setup();
+    layout.runtime.install(tree());
+    enter_resize(layout.windows[0]!);
+    layout.windows[0]!.layout = "layout-vertical";
+    assert.equal(press(layout.windows[0]!, "j").cancelled, true);
+    assert.equal(layout.windows[0]!.selected, 1, "j is a motion again");
+    assert.deepEqual([layout.modes, resizes(layout.emitted)], [["resize", "normal"], []]);
+
+    const other = setup();
+    other.runtime.install(tree());
+    const second = new FakeWindow();
+    other.windows.push(second);
+    other.load(second);
+    enter_resize(other.windows[0]!);
+    press(second, "l");
+    assert.deepEqual(other.modes, ["resize", "normal"]);
+    assert.deepEqual(other.mode_windows, [7, 7]);
+    assert.deepEqual(resizes(other.emitted), []);
+});
+
+test("a chord runs as in normal mode and the mode stays, so the mode follows the focus to another pane", () => {
+    const { windows, emitted, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    assert.equal(press(window, "ArrowDown").cancelled, false, "a named key goes to Thunderbird");
+    assert.equal(press(window, "l", { ctrlKey: true }).cancelled, false);
+    assert.deepEqual(modes, ["resize"]);
+    press(window, "l");
+    assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 1]]);
+});
+
+test("the mode works with the focus in the message body, where the body script would take the key", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    window.in_reading_pane = true;
+    window.body_script_live = true;
+    assert.equal(press(window, "l").cancelled, true);
+    assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 1]]);
+});
+
+test("visual mode ends when resize mode starts, and the label reports resize then normal", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "v");
+    press(window, "j");
+    enter_resize(window);
+    assert.deepEqual(modes, ["visual", "resize"]);
+    press(window, "Escape");
+    assert.deepEqual(modes, ["visual", "resize", "normal"]);
+    assert.equal(window.range, null, "the range collapsed");
+});
+
+test("shutdown ends the mode", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    enter_resize(windows[0]!);
+    runtime.shutdown();
+    runtime.install(tree());
+    press(windows[0]!, "l");
+    assert.deepEqual(resizes(emitted), []);
 });

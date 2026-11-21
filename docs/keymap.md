@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 347 (Mail tab 146, Message 98, Own pages 50, Other tabs 49, Text fields 4)
+bound: 348 (Mail tab 147, Message 98, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -181,6 +181,7 @@ The thread list and the folder pane.
 
 | Key | Command |
 | --- | --- |
+| `wr` | `pane.resize_mode` |
 | `wm` | `pane.toggle message` |
 | `wf` | `pane.toggle folder` |
 | `wh` | `pane.left` |
