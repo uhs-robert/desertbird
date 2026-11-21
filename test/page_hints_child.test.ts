@@ -36,7 +36,8 @@ function fake_page(controls: FakeControl[]) {
         ...control,
         getBoundingClientRect: () => ({ top: 10, left: 10, width: 20, height: 10 }),
         contains: () => true,
-        matches: (selector: string) => selector.includes("input") && control.id === "field" && !selector.includes("a[href]"),
+        // The scan keeps what matches the page selector, which starts with the button rule. The field rule list has no button.
+        matches: (selector: string) => selector.startsWith("button") || (selector.includes("input") && control.id === "field" && !selector.includes("a[href]")),
         closest: () => null,
         click: () => void control.clicked++,
         focus: () => void control.focused++,

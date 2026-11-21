@@ -15,6 +15,17 @@ interface TargetElement extends HintElement {
     href?: string;
     textContent: string | null;
     querySelector(selector: string): TargetElement | null;
+    /** Chrome code sees closed roots through this one. */
+    openOrClosedShadowRoot?: ShadowSide | null;
+}
+
+interface TargetNode {
+    flattenedTreeParentNode?: TargetNode | null;
+}
+
+interface ShadowSide {
+    querySelectorAll(selector: string): Iterable<TargetElement>;
+    elementFromPoint(x: number, y: number): TargetElement | null;
 }
 
 type TargetWindow = HintWindow;
@@ -51,9 +62,28 @@ const THREAD_SUBJECT = ".subject-line, .subject";
 /** A yank copies the address of a link, else the text. */
 const yank_text = (element: TargetElement | null): string => (element?.href ?? element?.textContent ?? "").trim();
 
+// A `moz-*` control keeps its real button or field in a shadow root, which one `querySelectorAll` does not enter. A host whose shadow gave a visible target is replaced by it, so `search-textbox` and its inner field get one label, and the host's text stays as the yank text when the replacement has none (it comes through a slot). A host that is a field stays: a date input's own root holds a calendar button, and the field is what a pick focuses. A host whose shadow targets are all hidden stays too.
+const deep_find = (root: ShadowSide | null | undefined, css: string, shown: (element: TargetElement) => boolean, hosts: Map<TargetElement, TargetElement>): TargetElement[] =>
+    [...(root?.querySelectorAll("*") ?? [])].flatMap((node) => {
+        const inner = deep_find(node.openOrClosedShadowRoot, css, shown, hosts);
+        if (!inner.some(shown) || (node.matches(FIELDS) && !node.matches("search-textbox"))) return [...(node.matches(css) ? [node] : []), ...inner];
+        for (const each of inner) hosts.set(each, node);
+        return inner;
+    });
+
+// The window's own hit test stops at the outer host of a shadow root, and a slotted child is no DOM descendant of the button it sits in. This one starts at the outermost hit, so an overlay outside the host still covers the target, then goes down through the roots and counts the flat tree. A hit inside the target is reported as the target itself.
+const shadow_hit = (window: TargetWindow, target: TargetElement) => (x: number, y: number) => {
+    let hit = window.document.elementFromPoint(x, y) as TargetElement | null;
+    for (let inner; (inner = hit?.openOrClosedShadowRoot?.elementFromPoint(x, y)) && inner !== hit; ) hit = inner;
+    for (let at = hit as TargetNode | null; at; at = at.flattenedTreeParentNode as TargetNode) if (at === target) return at;
+    return hit;
+};
+
 // A row has no focus of its own to take, so the focus action on a row is its pick: the row is selected and the list keeps the focus.
-function on_screen(window: TargetWindow, selector: string, keep: (element: TargetElement) => boolean, act: (element: TargetElement) => void, text_of: (element: TargetElement) => string, focus: (element: TargetElement) => void = act): PickTarget[] {
-    return [...(window.document.querySelectorAll(selector) as Iterable<TargetElement>)].filter((element) => keep(element) && is_on_screen(window, element)).map((element) => ({ window, element, act: () => act(element), focus: () => focus(element), text: text_of(element) }));
+function on_screen(window: TargetWindow, selector: string, keep: (element: TargetElement) => boolean, act: (element: TargetElement) => void, text_of: (element: TargetElement) => string, focus: (element: TargetElement) => void = act, deep?: boolean): PickTarget[] {
+    const hosts = new Map<TargetElement, TargetElement>();
+    const shown = (element: TargetElement) => is_on_screen(window, element, shadow_hit(window, element));
+    return (deep ? deep_find(window.document as unknown as ShadowSide, selector, shown, hosts) : [...(window.document.querySelectorAll(selector) as Iterable<TargetElement>)]).filter((element) => keep(element) && shown(element)).map((element) => ({ window, element, act: () => act(element), focus: () => focus(element), text: text_of(element) || yank_text(hosts.get(element) ?? null) }));
 }
 
 const controls_outside_rows = (window: TargetWindow): PickTarget[] => on_screen(window, CONTROLS, (element) => element.closest(INSIDE_A_ROW) === null, pick_control, yank_text, (element) => element.focus());
@@ -78,8 +108,8 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
     ];
 }
 
-/** The controls on screen in one document. The page actor's hint module labels a web page with these alone. */
-export const collect_window_targets = (window: TargetWindow): PickTarget[] => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus());
+/** The controls on screen in one document, shadow roots included (the mail tab's scan leaves them out: its documents are large). The page actor's hint module labels a web page with these alone. */
+export const collect_window_targets = (window: TargetWindow): PickTarget[] => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus(), true);
 
 /** The targets of a tab that is not the mail tab: the controls of the window, which holds a calendar or tasks tab itself, then those of the tab's own page (settings, the address book, an `about:` page). `page` is null when the tab has no page the parent can read. */
 export const collect_page_targets = (main: TargetWindow, page: TargetWindow | null): PickTarget[] => [main, ...(page ? [page] : [])].flatMap(collect_window_targets);
