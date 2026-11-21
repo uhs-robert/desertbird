@@ -131,9 +131,6 @@ async function key_and_state(instance, args, wait = 700) {
   return wait_for_state(instance, wait);
 }
 
-// The same wait for a description object { what, until, ...options }, such as `tab_count_is(1)`.
-const wait_on = (instance, wait) => wait_state(instance, wait.what, wait.until, wait);
-
 // Restarts the app and records a check that the process changed, so a skipped restart fails the run.
 async function restart_app(instance, app, kind, label) {
   const pid_before = instance.app_pid();
@@ -1830,8 +1827,8 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
 const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
 const PAINT_MARGIN_MS = 2000;
-const tab_count_is = (count) => ({ what: `the main window to hold ${count} tabs`, until: (state) => main_window_tabs(state).length === count, show: (state) => `tabs ${main_window_tabs(state).length}` });
-const tab_active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active ${active_index(state)}` });
+const tab_count_is = (count) => ({ what: `${count} tab${count === 1 ? "" : "s"} in the main window`, until: (state) => main_window_tabs(state).length === count, show: (state) => `${main_window_tabs(state).length} tabs`, timeout_ms: 10000 });
+const active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active index ${active_index(state)}` });
 // The new tab is the last one. A tab that reports no status counts as loaded, and a loaded page can still be unpainted, so callers add `PAINT_MARGIN_MS` where a click or a pixel read follows.
 const last_tab_loaded = (count) => ({ what: `tab ${count} to open and finish loading`, until: (state) => main_window_tabs(state).length === count && main_window_tabs(state).at(-1).raw?.status !== "loading", show: (state) => `tabs ${main_window_tabs(state).length}, last ${main_window_tabs(state).at(-1)?.raw?.status}`, timeout_ms: 15000 });
 
@@ -1855,7 +1852,7 @@ async function run_own_pages(instance) {
   const before = await tab_count();
   const open_page = async (page) => {
     const reply = await instance.ask("open_own_page", 20000, { page });
-    const opened = await wait_on(instance, last_tab_loaded(before + 1));
+    const opened = await wait_for_state(instance, last_tab_loaded(before + 1));
     await sleep(PAINT_MARGIN_MS);
     check(app, kind, `the ${page} page opens in a tab`, main_window_tabs(opened).length === before + 1, `reply ${JSON.stringify(reply)}`);
   };
@@ -1899,7 +1896,7 @@ async function run_own_pages(instance) {
   await shot("options_find", "options page after / and Key bindings: the heading is selected");
   check(app, kind, "/ finds text on the options page with no refusal toast", (await hud_pixels(instance, `${app}_own_find_after`)) === strip_before_find);
   await instance.ask("remove_tab", 20000, { index: before });
-  await wait_on(instance, tab_count_is(before));
+  await wait_for_state(instance, tab_count_is(before));
   // A click on the first setting, a text input.
   await open_page("options");
   await instance.click(590, 250);
@@ -1911,12 +1908,12 @@ async function run_own_pages(instance) {
   const chord_closed = await key_and_state(instance, ["-M", "alt", "q", "-m", "alt"], tab_count_is(before));
   check(app, kind, "Alt+q closes a remote page tab, input focused", main_window_tabs(chord_closed).length === before, `tabs ${main_window_tabs(chord_closed).length}, expected ${before}`);
   await instance.ask("select_tab", 20000, { index: 0 });
-  await wait_on(instance, tab_active_is(0));
+  await wait_for_state(instance, active_is(0));
   // The readable tabs take q, : and g? through the main-window runtime. Each opens by its Thunderbird shortcut.
   // The address book focuses its search field, which keeps q as text, so a click on the folder list or the grid first puts the focus in the tab as a user's click does. g ? shows the root key list, and the next key removes it.
   for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
     await open();
-    const opened = await wait_on(instance, last_tab_loaded(before + 1));
+    const opened = await wait_for_state(instance, last_tab_loaded(before + 1));
     await sleep(PAINT_MARGIN_MS);
     check(app, kind, `the ${name} tab opens`, main_window_tabs(opened).length === before + 1, `tabs ${main_window_tabs(opened).length}`);
     await instance.click(...click_at);
@@ -1945,8 +1942,6 @@ async function run_own_pages(instance) {
 async function run_tabs(instance, { check, note, shot, key_and_state }) {
   const app = instance.app;
   const kind = "default";
-  const tab_count_is = (count) => ({ what: `${count} tab${count === 1 ? "" : "s"} in the main window`, until: (state) => main_window_tabs(state).length === count, show: (state) => `${main_window_tabs(state).length} tabs`, timeout_ms: 10000 });
-  const active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active index ${active_index(state)}` });
   const active_is_last = { what: "the last tab to be active", until: (state) => active_index(state) === main_window_tabs(state).length - 1, show: (state) => `active index ${active_index(state)} of ${main_window_tabs(state).length}` };
   const trash_count = (state) => state.folders["/Trash"]?.length ?? 0;
   const trash_is = (count) => ({ what: `Trash to hold ${count}`, until: (state) => trash_count(state) === count, show: (state) => `Trash holds ${trash_count(state)}`, timeout_ms: 10000 });
@@ -2151,7 +2146,7 @@ async function run_no_identity(instance) {
   let state = await key_and_state(instance, ["g"], { what: "g g to select the first row", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed[0], show: (current) => `selected ${first_selected(current)}` });
   check(app, kind, "g g selects the first row", first_selected(state) !== null);
   // One message, so the refusal is the identity one and not the "select one message" one.
-  await key_and_state(instance, ["G"], { what: "G to select the last row", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed.at(-1) });
+  await key_and_state(instance, ["G"], at_bottom);
   const refused_r = await toast_cycle(instance, `${app}_r`, ["r"]);
   state = refused_r.state;
   check(app, kind, "r with no identity shows the refusal as a toast", refused_r.shown, `selected ${state.selected.length}`);
@@ -2175,7 +2170,7 @@ async function run_mail_account(instance) {
   const app = instance.app;
   const kind = "mail_account";
   const compose_identity = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.identity_id)?.identity_id ?? null;
-  await wait_on(instance, mail_window_ready);
+  await wait_for_state(instance, mail_window_ready);
   await instance.press(["-k", "F6"]);
   const cases = [
     ["Local Folders message", "inbox-s2@fixture.invalid", [["r"], "r", "id2"], [["g", "F"], "g F", "id2"]],
@@ -2186,7 +2181,7 @@ async function run_mail_account(instance) {
     for (const [presses, name, expected] of keys) {
       await instance.ask(`select:${header_id}`, 30000);
       const selected = selects(header_id);
-      await wait_on(instance, selected);
+      await wait_for_state(instance, selected);
       for (const key of presses.slice(0, -1)) await instance.press([key]);
       const state = await key_and_state(instance, [presses.at(-1)], compose_opens((tab) => Boolean(tab.identity_id)));
       check(app, kind, `${name} on a ${label} composes from identity ${expected}`, compose_identity(state) === expected, `compose identity ${compose_identity(state)}, selected ${state.selected.map((message) => message.header_id)}`);
@@ -2245,7 +2240,7 @@ const COMPOSE_EDITOR_HTML_KINDS = { compose_editor_html: "below", compose_editor
 
 // The image a stored draft gives back: a draft with a data image Thunderbird embeds is saved and opened again, and a NOTE records the `src` of each image. The external editor keeps only the image sources its allowlist names.
 // The compose helpers below share these. A reply to inbox-s2 is loaded once its subject, its quote and its signature are in.
-const compose_tab_of = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
+const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
 const reply_is_loaded = (tab) => Boolean(tab.subject) && tab.is_plain !== null && (tab.body ?? "").includes("Body of inbox-s2.") && (tab.body ?? "").includes("E2E signature line");
 // The mail window has the focus and a mail tab, so F6 reaches the thread list.
 const mail_window_ready = { what: "the mail window to have a mail tab and the focus", until: (state) => state.mail_tab !== null && state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 10000 };
@@ -2254,11 +2249,11 @@ const selects_inbox_s2 = selects("inbox-s2@fixture.invalid");
 // Puts the focus in the thread list, selects inbox-s2 and presses `r`. Returns the state once the reply has loaded.
 async function reply_to_inbox_s2(instance, { focus_list = false } = {}) {
   if (focus_list) {
-    await wait_on(instance, mail_window_ready);
+    await wait_for_state(instance, mail_window_ready);
     await instance.press(["-k", "F6"]);
   }
   await instance.ask("select:inbox-s2@fixture.invalid", 30000);
-  await wait_on(instance, selects_inbox_s2);
+  await wait_for_state(instance, selects_inbox_s2);
   return key_and_state(instance, ["r"], compose_opens(reply_is_loaded));
 }
 
@@ -2273,7 +2268,6 @@ async function note_draft_image(instance) {
 async function run_compose_editor_html(instance) {
   const app = instance.app;
   const kind = instance.kind;
-  const compose_tab = compose_tab_of;
   if (!existsSync(DESERTFOX_HOST)) {
     note(app, kind, "external editor not run", `no DesertFox host at ${DESERTFOX_HOST}; set E2E_DESERTFOX_HOST`);
     return;
@@ -2311,7 +2305,6 @@ async function run_compose_editor_html(instance) {
 async function run_compose_editor(instance) {
   const app = instance.app;
   const kind = instance.kind;
-  const compose_tab = compose_tab_of;
   if (!existsSync(DESERTFOX_HOST)) {
     note(app, kind, "external editor not run", `no DesertFox host at ${DESERTFOX_HOST}; set E2E_DESERTFOX_HOST`);
     return;
@@ -2367,11 +2360,10 @@ async function run_compose_editor(instance) {
 async function run_quick_replies(instance) {
   const app = instance.app;
   const kind = instance.kind;
-  const compose_tab = compose_tab_of;
-  await wait_on(instance, mail_window_ready);
+  await wait_for_state(instance, mail_window_ready);
   await instance.press(["-k", "F6"]);
   await instance.ask("select:inbox-s2@fixture.invalid", 30000);
-  await wait_on(instance, selects_inbox_s2);
+  await wait_for_state(instance, selects_inbox_s2);
   await instance.press(["g"]);
   await instance.press(["r"]);
   let state = await key_and_state(instance, ["1"], compose_opens((tab) => reply_is_loaded(tab) && tab.body.includes("Quick reply one.")));
@@ -2416,7 +2408,6 @@ const tab_document = (state, body) => body.tab_id === main_window_tabs(state).fi
 const window_document = (state, body) => body.window_id === state.windows.find((window) => window.type === "messageDisplay")?.id;
 // g e and g f from the message body go through the background page to the window, and the helper state has no focus to read, so the keys after them wait this margin.
 const FOCUS_MOVE_MARGIN_MS = 1200;
-const flag_is = (id, flagged) => ({ what: `${id} to become ${flagged ? "flagged" : "unflagged"}`, until: (state) => Object.entries(state.flags).some(([flagged_id, flags]) => flagged_id === id && flags.flagged) === flagged, show: (state) => `flagged ${JSON.stringify(Object.entries(state.flags).filter(([, flags]) => flags.flagged).map(([flagged_id]) => flagged_id))}` });
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 10000 });
 
 async function run_message_scripts(instance) {
@@ -2430,7 +2421,7 @@ async function run_message_scripts(instance) {
   const show_in_pane = async (id) => {
     const since = Date.now();
     await instance.ask(`select:${id}@fixture.invalid`, 30000);
-    await wait_on(instance, body_reports(id, since, pane_document_of(id)));
+    await wait_for_state(instance, body_reports(id, since, pane_document_of(id)));
     await instance.press(["-k", "F6"]);
     return instance.ask("state");
   };
@@ -2599,7 +2590,7 @@ async function run_message_scripts(instance) {
   // wtype drops the second key of a pair typed in one call, so m and s go in two presses.
   const flag_keys = async (id, flagged) => {
     await instance.press(["m"]);
-    return key_and_state(instance, ["s"], flag_is(id, flagged));
+    return key_and_state(instance, ["s"], flag_becomes(id, "flagged", flagged));
   };
   const flagged_ids = (snapshot) => Object.entries(snapshot.flags).filter(([, flags]) => flags.flagged).map(([id]) => id);
   await show_in_pane("reading-plain");
@@ -2620,22 +2611,22 @@ async function run_message_scripts(instance) {
   await show_in_pane("reading-plain");
   const tab_requested = Date.now();
   await instance.ask("open_message_tab");
-  state = await wait_on(instance, body_reports("the message tab", tab_requested, tab_document));
+  state = await wait_for_state(instance, body_reports("the message tab", tab_requested, tab_document));
   check(app, kind, "a message tab opened", main_window_tabs(state).some((tab) => tab.type === "messageDisplay"), JSON.stringify(main_window_tabs(state).map((tab) => tab.type)));
   await shot("message_tab", "message in its own tab");
   await scroll_keys("message tab");
   await find_checks("message tab");
   // The tab shows reading-plain while the list selects another message, so a key that read the list would flag the wrong one.
   await instance.ask("select_tab", 20000, { index: 0 });
-  await wait_on(instance, tab_active_is(0));
+  await wait_for_state(instance, active_is(0));
   await instance.ask("select:reading-html@fixture.invalid", 30000);
-  await wait_on(instance, selects("reading-html@fixture.invalid"));
+  await wait_for_state(instance, selects("reading-html@fixture.invalid"));
   await instance.ask("select_tab", 20000, { index: 1 });
-  await wait_on(instance, tab_active_is(1));
+  await wait_for_state(instance, active_is(1));
   state = await flag_keys(plain_id, true);
   check(app, kind, "message tab: m s flags the message of the tab, not the list selection", flagged_ids(state).includes(plain_id) && !flagged_ids(state).includes("reading-html@fixture.invalid"), `flagged ${JSON.stringify(flagged_ids(state))}`);
   // u in the tab undoes the star it just set. g C opens the conversation of the displayed message: it needs the message in Thunderbird's search index, so the result is a note.
-  state = await key_and_state(instance, ["u"], flag_is(plain_id, false));
+  state = await key_and_state(instance, ["u"], flag_becomes(plain_id, "flagged", false));
   check(app, kind, "message tab: u undoes the star", !flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   const tabs_before_conversation = main_window_tabs(state).length;
   await instance.press(["g"]);
@@ -2645,31 +2636,31 @@ async function run_message_scripts(instance) {
   if (main_window_tabs(state).length > tabs_before_conversation) {
     // The conversation tab opened after the message tab. Close it so the tab count below stays one.
     await instance.ask("select_tab", 20000, { index: tabs_before_conversation });
-    await wait_on(instance, tab_active_is(tabs_before_conversation));
+    await wait_for_state(instance, active_is(tabs_before_conversation));
     await key_and_state(instance, ["q"], tab_count_is(tabs_before_conversation));
   }
   await instance.ask("select_tab", 20000, { index: 1 });
-  await wait_on(instance, tab_active_is(1));
-  state = await key_and_state(instance, ["K"], tab_active_is(0));
+  await wait_for_state(instance, active_is(1));
+  state = await key_and_state(instance, ["K"], active_is(0));
   check(app, kind, "message tab: K switches to the mail tab", active_index(state) === 0, `active ${active_index(state)}`);
   await instance.ask("select_tab", 20000, { index: 1 });
-  await wait_on(instance, tab_active_is(1));
+  await wait_for_state(instance, active_is(1));
   await instance.press(["t"]);
-  state = await key_and_state(instance, ["0"], tab_active_is(0));
+  state = await key_and_state(instance, ["0"], active_is(0));
   check(app, kind, "message tab: t 0 goes to the first tab", active_index(state) === 0, `active ${active_index(state)}`);
   await instance.ask("select_tab", 20000, { index: 1 });
-  await wait_on(instance, tab_active_is(1));
+  await wait_for_state(instance, active_is(1));
   state = await key_and_state(instance, ["q"], tab_count_is(1));
   check(app, kind, "message tab: q closes the tab", main_window_tabs(state).length === 1, `tabs left ${main_window_tabs(state).length}`);
   await instance.ask("reset_tabs");
-  await wait_on(instance, { ...tab_count_is(1), until: (current) => main_window_tabs(current).length === 1 && active_index(current) === 0 });
+  await wait_for_state(instance, { ...tab_count_is(1), until: (current) => main_window_tabs(current).length === 1 && active_index(current) === 0 });
 
   // A message window.
   await instance.ask("select:reading-plain@fixture.invalid", 30000);
-  await wait_on(instance, selects("reading-plain@fixture.invalid"));
+  await wait_for_state(instance, selects("reading-plain@fixture.invalid"));
   const window_requested = Date.now();
   await instance.ask("open_message_window");
-  state = await wait_on(instance, body_reports("the message window", window_requested, window_document));
+  state = await wait_for_state(instance, body_reports("the message window", window_requested, window_document));
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
@@ -2688,7 +2679,7 @@ async function run_message_scripts(instance) {
   state = await key_and_state(instance, ["q"], window_of_type("messageDisplay", false));
   check(app, kind, "message window: q closes the window", !state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await instance.ask("close_message_windows");
-  await wait_on(instance, window_of_type("messageDisplay", false));
+  await wait_for_state(instance, window_of_type("messageDisplay", false));
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
