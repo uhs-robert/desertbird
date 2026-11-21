@@ -88,7 +88,8 @@ test("a throw in before_start is a FAIL line, keeps the timings entry and return
 
 const committed_weights: Record<string, number> = JSON.parse(readFileSync(join(import.meta.dirname, "..", "tools", "e2e", "piece_seconds.json"), "utf8"));
 const APPS = ["thunderbird", "betterbird"];
-const { DEFAULT_PIECE_DEADLINE_S } = await import(join(import.meta.dirname, "..", "tools", "e2e", "shards.mjs"));
+const { DEFAULT_PIECE_DEADLINE_S, parse_piece_id } = await import(join(import.meta.dirname, "..", "tools", "e2e", "shards.mjs"));
+const run_dir_module = await import(join(import.meta.dirname, "..", "tools", "e2e", "run_dir.mjs"));
 
 test("every weight names a real <app>/<kind>/<section>, and every piece of a full run has one", () => {
   const ids = APPS.flatMap((app) => pieces.map((piece) => `${app}/${piece.name}`));
@@ -102,6 +103,26 @@ test("every weight times 1.5 fits its piece's deadline", () => {
     const piece = pieces.find((candidate) => id.endsWith(`/${candidate.name}`)) as { deadline_s?: number } | undefined;
     const deadline_s = piece?.deadline_s ?? DEFAULT_PIECE_DEADLINE_S;
     assert.ok(seconds * 1.5 <= deadline_s, `${id} weighs ${seconds} s, over two thirds of its ${deadline_s} s deadline`);
+  }
+});
+
+// Two workers share one run dir and nothing else. Each piece's dir holds its own labwc socket (runtime), HOME and profile, and its sink binds port 0.
+// The coordinator reaps a dead worker's piece by the dir join(run_dir, id), so that dir must be the one piece_runner starts the app in.
+test("every piece of a full run gets a dir of its own, apart from every other piece's display, HOME and profile", () => {
+  const run_dir = join(tmpdir(), "desertbird-e2e-XXXXXX");
+  const { start_paths_of } = run_dir_module;
+  const ids = APPS.flatMap((app) => pieces.map((piece) => `${app}/${piece.name}`));
+  const dirs = ids.map((id) => {
+    const { app, name } = parse_piece_id(id);
+    const piece = pieces.find((candidate) => candidate.name === name)!;
+    assert.equal(join(run_dir, id), join(run_dir, app, piece.kind, piece.section));
+    return join(run_dir, id);
+  });
+  for (const [at, dir] of dirs.entries()) {
+    for (const [other_at, other] of dirs.entries()) {
+      if (at === other_at) continue;
+      for (const path of start_paths_of(dir)) assert.ok(path !== other && !path.startsWith(`${other}/`), `${path} lies in ${other}`);
+    }
   }
 });
 
