@@ -169,6 +169,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                       viewAllThreads: async () => {},
                       viewScroll: async () => {},
                       paneFocus: async () => true,
+                      paneResize: async () => true,
                       appCommand: async () => true,
                       appOpenPage: async () => {},
                   },

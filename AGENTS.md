@@ -51,7 +51,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
 - Each bundle has a size guard in `tools/build.mjs` and a ceiling. The build fails above a guard, and `test/build.test.ts` checks each guard against its ceiling. The raise history is in `docs/design.md`, "Bundle size guards". Guards and ceilings, in bytes:
   - `experiment/keys.js`: guard 23356, ceiling 40960 (`KEYS_MAX_BYTES`).
   - `experiment/overlay.js`: guard 27212, ceiling 40960 (`PARENT_MAX_BYTES`).
-  - `experiment/app.js`: guard 8549, ceiling 12800 (`APP_MAX_BYTES`).
+  - `experiment/app.js`: guard 10597, ceiling 12800 (`APP_MAX_BYTES`).
   - `content/message_display.js`: guard 18162, ceiling 24576 (`CONTENT_MAX_BYTES`).
   - `experiment/hints.js`: guard 15098, ceiling 20480 (`HINTS_MAX_BYTES`).
   - `experiment/pages.js`: guard 26896, ceiling 34816 (`PAGES_MAX_BYTES`).

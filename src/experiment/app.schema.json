@@ -129,6 +129,37 @@
         ]
       },
       {
+        "name": "paneResize",
+        "type": "function",
+        "async": true,
+        "description": "Moves the border of the focused pane in about:3pane by steps of 24 CSS pixels toward left, right, up or down, and stores the size as a drag does. With reset it gives both splitters their default sizes and removes the stored ones. Answers false, changing nothing, when the focused pane has no border on that axis or is collapsed. Never collapses a pane.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": {
+                "type": "integer"
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right",
+                  "up",
+                  "down",
+                  "reset"
+                ]
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        ]
+      },
+      {
         "name": "appCommand",
         "type": "function",
         "async": true,

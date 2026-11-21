@@ -32,7 +32,7 @@ const KEYS_MAX_BYTES = 23356;
 const KEYS_CEILING_BYTES = 40960;
 
 // `experiment/app.js`, loaded on the first thread list, pane focus or app call.
-const APP_MAX_BYTES = 8549;
+const APP_MAX_BYTES = 10597;
 const APP_CEILING_BYTES = 12800;
 
 // `experiment/folderpane.js`, loaded on the first folder pane call.
