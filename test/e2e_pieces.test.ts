@@ -35,13 +35,22 @@ test("a web_hints list still selects the web piece and the other sections", () =
 test("E2E_ONLY narrows the pieces by section name or alias, across kinds when E2E_KINDS is unset", () => {
   assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "page_hints" })), ["pages/page_hints"]);
   assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "web_hints" })), ["web/main"]);
-  assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "hud", E2E_KINDS: "default" })), ["default/all"]);
-  assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "typing,keys" })), ["pages/keys", "pages/typing"]);
+  assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "hud", E2E_KINDS: "default" })), ["default/hud"]);
+  assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "typing,keys" })), ["default/keys", "pages/keys", "pages/typing"]);
 });
 
-test("the popup piece is in the default kind and E2E_ONLY=popup takes it alone", () => {
-  assert.deepEqual(names(select_pieces(pieces, { E2E_KINDS: "default" })), ["default/all", "default/popup"]);
-  assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "popup" })), ["default/popup"]);
+const DEFAULT_SECTIONS = ["cmdline", "cmdline_launch", "folders", "followup", "hud", "keys", "mode_label", "panes_chrome", "panes_focus", "panes_undo", "popup", "search", "steps", "tabs", "threads", "view_settings", "visual", "window_hints"];
+
+test("the default kind is one piece per section, popup included and scale left out", () => {
+  assert.deepEqual(names(select_pieces(pieces, { E2E_KINDS: "default" })), DEFAULT_SECTIONS.map((section) => `default/${section}`));
+});
+
+test("the aliases of the default sections select their pieces", () => {
+  const only = (alias: string) => names(select_pieces(pieces, { E2E_KINDS: "default", E2E_ONLY: alias }));
+  assert.deepEqual(only("panes"), ["default/panes_chrome", "default/panes_focus", "default/panes_undo"]);
+  assert.deepEqual(only("hints"), ["default/window_hints"]);
+  for (const alias of ["popup", "steps", "threads", "cmdline", "cmdline_launch", "search", "mode_label", "keys"]) assert.deepEqual(only(alias), [`default/${alias}`]);
+  assert.deepEqual(only("tabs"), ["default/tabs"]);
 });
 
 test("E2E_SCALE=1 takes the scale piece alone, and E2E_ONLY=scale without it throws", () => {
