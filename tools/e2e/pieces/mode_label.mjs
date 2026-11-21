@@ -11,7 +11,6 @@ export const pieces = Object.entries(STYLES).map(([kind, seeds]) => ({
   kind,
   section: "main",
   seeds,
-  // The themed piece reads raw pixels against the theme, so it has no classic strips to compare with.
-  before_start: kind === "mode_label_themed" ? null : reference_strips,
+  before_start: reference_strips,
   run: (instance, ctx) => run_mode_label_kind(instance, ctx),
 }));
