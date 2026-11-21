@@ -108,24 +108,66 @@ e2e_locked *args: install_deps
     if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=""; fi
     run_limit_s=7200
     if [ -n "$deadline_s" ]; then run_limit_s=$((deadline_s + 120)); fi
+    exec just e2e_in_scope "$run_limit_s" npm run --silent e2e -- "${run_args[@]}"
+
+# Runs a command in a capped systemd user scope, for `just e2e` and `just e2e-flakes`: limit_s is the run time limit, and the memory cap follows E2E_SHARDS (default 3). Without a user session it runs the command bare and says so.
+[private]
+[positional-arguments]
+e2e_in_scope limit_s *cmd:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    limit_s="$1"; shift
+    E2E_SHARDS="${E2E_SHARDS:-3}"
     # About 1 GB of app and 0.2 GB of labwc per worker by RSS (measure.md), plus the runner. 2 GB a worker and 2 GB over.
     memory_max_g=$((2 + 2 * E2E_SHARDS))
     # Inside agents.slice, keep the scope there too: a bare scope lands in app.slice and escapes the slice CPU cap.
     slice_args=(); if grep -q /agents.slice/ /proc/self/cgroup 2>/dev/null; then slice_args=(--slice=agents.slice); fi
-    scope_args=(systemd-run --user --scope "${slice_args[@]}" --quiet -p MemoryMax=${memory_max_g}G -p MemoryHigh=$((memory_max_g - 1))G -p MemorySwapMax=0 -p TimeoutStopSec=20 -p RuntimeMaxSec=$run_limit_s)
-    run_cmd=(npm run --silent e2e -- "${run_args[@]}")
+    scope_args=(systemd-run --user --scope "${slice_args[@]}" --quiet -p MemoryMax=${memory_max_g}G -p MemoryHigh=$((memory_max_g - 1))G -p MemorySwapMax=0 -p TimeoutStopSec=20 -p RuntimeMaxSec=$limit_s)
+    run_cmd=("$@")
     if command -v systemd-run >/dev/null 2>&1 && "${scope_args[@]}" true >/dev/null 2>&1; then
         run_cmd=("${scope_args[@]}" "${run_cmd[@]}")
+        echo "e2e: scope: systemd-run --user --scope, memory max ${memory_max_g} GB, run limit ${limit_s} s" >&2
     else
         echo "e2e: no systemd user session, so this run has no memory cap or time limit." >&2
     fi
-    echo "e2e: ${E2E_SHARDS} worker(s), run limit ${run_limit_s} s, memory max ${memory_max_g} GB" >&2
+    echo "e2e: ${E2E_SHARDS} worker(s), run limit ${limit_s} s, memory max ${memory_max_g} GB" >&2
     exec "${run_cmd[@]}"
 
 # Run only the e2e pieces the change can affect, on Betterbird, against E2E_BASE (default origin/main: commits, working tree and new files). Takes the lock and scope of `just e2e`.
 [positional-arguments]
 e2e-changed *args:
     E2E_CHANGED=1 just e2e "$@"
+
+# Run `just e2e` n times and fold the runs into the flake history (`npm run e2e:flakes`, see tools/e2e/README.md). It takes the lock of `just e2e` for the whole batch, sweeps, builds, and runs the batch in one scope with the memory cap of `just e2e` and a time limit of n run limits plus 600 s. Arguments after n go to each run, for example `just e2e-flakes 3 betterbird`. E2E_SHARDS must be 2 or more.
+[positional-arguments]
+e2e-flakes n *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    lock_file=/tmp/desertbird-e2e.lock
+    if ! flock -n -o "$lock_file" true; then
+        echo "e2e: the lock $lock_file is busy, waiting up to 3600 s. Holders:" >&2
+        for holder_pid in $(fuser "$lock_file" 2>/dev/null); do
+            ps -o pid=,args= -p "$holder_pid" >&2 || true
+        done
+    fi
+    exec flock -o -w 3600 "$lock_file" just e2e_flakes_locked "$@"
+
+# The body of `just e2e-flakes`, which holds the lock.
+[private]
+[positional-arguments]
+e2e_flakes_locked n *args: install_deps
+    #!/usr/bin/env bash
+    set -euo pipefail
+    n="$1"; shift
+    if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then echo "e2e-flakes: n must be a positive number, got $n" >&2; exit 2; fi
+    export E2E_SHARDS="${E2E_SHARDS:-3}"
+    if ! [[ "$E2E_SHARDS" =~ ^([2-9]|[1-9][0-9]+)$ ]]; then echo "e2e-flakes: E2E_SHARDS must be a number of 2 or more, got $E2E_SHARDS" >&2; exit 2; fi
+    node tools/e2e/sweep.mjs
+    npm run --silent build
+    # One run limit as in `just e2e`: the deadline the runner prints plus a margin. The batch gets n of them, and 600 s for the build and the fold.
+    deadline_s=$(node tools/e2e/run.mjs --print-deadline --xpi dist/desertbird.xpi "$@" | tail -n 1)
+    if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=7080; fi
+    exec just e2e_in_scope $((n * (deadline_s + 120) + 600)) npm run --silent e2e:flakes -- "$n" "$@"
 
 # Kill the apps of dead e2e runs now, without starting a run. `just e2e` does this before each run. Only apps started with a -profile or -C path in a desertbird-e2e-* dir of the temp dir are matched, and a run that holds its lock is left alone.
 e2e-sweep:

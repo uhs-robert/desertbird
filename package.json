@@ -13,6 +13,7 @@
     "unit:file": "node --test --test-timeout=30000 --test-force-exit --no-warnings",
     "test": "npm run --silent check",
     "e2e": "node tools/e2e/run.mjs",
+    "e2e:flakes": "node tools/e2e/flakes.mjs run",
     "e2e:weights": "node tools/e2e/shards.mjs write-weights",
     "docs:gen": "node --no-warnings tools/gen-keymap-docs.ts --write",
     "docs:check": "node --no-warnings tools/gen-keymap-docs.ts --check",

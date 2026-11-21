@@ -9,6 +9,15 @@ export const areas = ["compose", "mode_label"];
 // A 1x1 PNG for the draft image measurement.
 const PIXEL_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
+// The mode label is drawn by the compose script, so it shows once the script listens. Ctrl+E before that goes to the editor itself and is lost. The label sits at the bottom right of the compose window, and a stretch of body of the same size shows what the region draws with no label.
+const COMPOSE_LABEL_REGION = "970,672 96x22";
+const COMPOSE_BLANK_REGION = "700,672 96x22";
+
+async function wait_compose_script(instance, { hud_pixels, wait_pixels }) {
+  const blank = await hud_pixels(instance, `${instance.app}_compose_blank`, COMPOSE_BLANK_REGION);
+  return wait_pixels(instance, "the compose script to draw its mode label", `${instance.app}_compose_label`, COMPOSE_LABEL_REGION, (hash) => hash !== blank, { timeout_ms: 10000 });
+}
+
 async function run_compose_editor_html(instance, ctx) {
   const { report, check, note, key_and_state, close_compose } = ctx;
   const app = instance.app;
@@ -22,6 +31,7 @@ async function run_compose_editor_html(instance, ctx) {
     check(app, kind, `${label}: no event handler, script URL or live tag from the Markdown`, !/onerror|javascript:|<b>kept/i.test(html) && html.includes("&lt;b&gt;kept as text&lt;/b&gt;"), `html ${JSON.stringify(html)}`);
   };
   const edit_in = async (label) => {
+    await wait_compose_script(instance, ctx);
     const state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], compose_opens((tab) => (tab.html ?? "").includes("<strong>Edited</strong>")));
     report.shots.push({ app, kind, path: await instance.shot(`${app}_${kind}_${label}`), name: `${kind}_${label}`, line: `HTML compose window after Ctrl+E (${label})` });
     return compose_tab(state)?.html ?? "";
@@ -62,6 +72,7 @@ async function run_compose_editor(instance, ctx) {
   const body_of = (state) => compose_tab(state)?.body ?? "";
   // The editor runs outside the app and writes its text into the body, so the body is the sign that it finished.
   const editor_wrote_text = compose_opens((tab) => (tab.body ?? "").trim() === EDITED_TEXT);
+  await wait_compose_script(instance, ctx);
   state = await key_and_state(instance, ["-M", "ctrl", "e", "-m", "ctrl"], editor_wrote_text);
   const after = compose_tab(state)?.body ?? "";
   check(app, kind, "Ctrl+E runs the editor through desertbird_host and writes its text into the body", after.trim() === EDITED_TEXT, `body ${JSON.stringify(after)}`);
