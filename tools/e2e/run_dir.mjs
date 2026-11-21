@@ -4,9 +4,9 @@
 // - no sweep: a kept dir (failure, E2E_KEEP=1) is the evidence the owner asked for, and stays until the owner removes it;
 // - a dir named by E2E_DIR is never removed, only unlocked, because the owner chose it and may hold other files there;
 // - DesertFox's process sweeps (sweep_dead_sessions, sweep_orphan_compositors) are left out of this PR. A SIGKILLed run can orphan its apps, and PR 7's systemd scope is what ends them.
-import { linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir, userInfo } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const LOCK_FILE = "run.lock";
 const TAKEOVER_GUARD = "run.lock.takeover";
@@ -24,16 +24,42 @@ export function process_start_ticks(pid) {
   }
 }
 
-// The path with symlinks resolved as far as it exists, so a link into the real home cannot pass for a path in the run dir.
+// The path with every symlink resolved, so a link into the real home cannot pass for a path in the run dir.
+// It walks the components itself, because realpathSync throws on a dangling link and a lexical fallback would then accept the link's own name.
+// A dangling link is followed to its target, and the part of the path that does not exist yet is appended as it is.
 function real_path(path) {
-  const absolute = resolve(path);
-  try {
-    return realpathSync(absolute);
-  } catch {
-    const parent = resolve(absolute, "..");
-    return parent === absolute ? absolute : join(real_path(parent), absolute.slice(parent.length + 1));
+  let pending = resolve(path).split(sep).filter(Boolean);
+  let resolved = sep;
+  for (let links = 0; pending.length > 0; ) {
+    const [next, ...rest] = pending;
+    pending = rest;
+    if (next === ".") continue;
+    if (next === "..") {
+      resolved = dirname(resolved);
+      continue;
+    }
+    const candidate = join(resolved, next);
+    let found;
+    try {
+      found = lstatSync(candidate);
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+      return join(candidate, ...pending);
+    }
+    if (!found.isSymbolicLink()) {
+      resolved = candidate;
+      continue;
+    }
+    if (++links > 40) throw new Error(`too many symlinks in ${path}`);
+    const target = readlinkSync(candidate);
+    if (isAbsolute(target)) resolved = sep;
+    pending = [...target.split(sep).filter(Boolean), ...pending];
   }
+  return resolved;
 }
+
+// Every path under a work dir that an app start writes or removes. start_app and the run loop check them all before the first write.
+export const start_paths_of = (work_dir) => [work_dir, ...["profile", "out", "home", "runtime"].map((name) => join(work_dir, name))];
 
 // The homes the guards protect. os.homedir() reads $HOME, which a sandbox or a caller can point anywhere, so the passwd entry counts too.
 export function real_homes() {

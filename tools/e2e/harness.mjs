@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { start_session } from "../measure/session.mjs";
 import { build_profile, install_xpi } from "./profile.mjs";
-import { assert_app_isolated, assert_start_paths } from "./run_dir.mjs";
+import { assert_app_isolated, assert_start_paths, start_paths_of } from "./run_dir.mjs";
 import { start_memory_sampler } from "./timings.mjs";
 
 const helper_dir = join(dirname(fileURLToPath(import.meta.url)), "helper");
@@ -94,11 +94,11 @@ export function install_lifecycle(run_dir, { exit = (code) => process.exit(code)
   return finish;
 }
 
-// `run_dir` is the folder the guard holds the app inside. It defaults to `work_dir` for a caller with no run dir of its own (measure_concurrent.mjs).
-export async function start_app({ app, app_binary, work_dir, run_dir = work_dir, kind = "default", xpi_path = null, startup_ms = Number(process.env.E2E_STARTUP_MS ?? 30000) }) {
+// `begin_session` is a seam for tests. `run_dir` is the folder the guard holds the app inside. It defaults to `work_dir` for a caller with no run dir of its own (measure_concurrent.mjs).
+export async function start_app({ app, app_binary, work_dir, run_dir = work_dir, kind = "default", xpi_path = null, startup_ms = Number(process.env.E2E_STARTUP_MS ?? 30000), begin_session = start_session }) {
   if (shutdown !== null) throw new Error("the run is stopping, no app starts");
   // Before build_profile and the rmSync below delete anything: a symlink in the work dir that points at the owner's home is refused here.
-  assert_start_paths({ run_dir, paths: [work_dir, join(work_dir, "profile"), join(work_dir, "out"), join(work_dir, "home"), join(work_dir, "runtime")] });
+  assert_start_paths({ run_dir, paths: start_paths_of(work_dir) });
   mkdirSync(work_dir, { recursive: true });
   const { profile_dir, folder_dir } = build_profile(join(work_dir, "profile"), { kind });
   if (xpi_path) install_xpi(profile_dir, xpi_path);
@@ -107,7 +107,7 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
   rmSync(out_dir, { recursive: true, force: true });
   mkdirSync(out_dir, { recursive: true });
   // The continuation after this await runs before the shutdown's own, since it awaited first, so the session is tracked when the shutdown looks.
-  const session = track_session(await track_start(start_session(work_dir)));
+  const session = track_session(await track_start(begin_session(work_dir)));
   try {
     if (shutdown !== null) throw new Error("the run is stopping, no app starts");
     assert_app_isolated({ run_dir, profile_dir, env: session.env });
@@ -266,6 +266,8 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
       if (app_exit === null) try { process.kill(-app_child.pid, "SIGKILL"); } catch {}
       for (let waited = 0; app_exit === null && waited < 5000; waited += 100) await sleep(100);
       if (app_exit === null) throw new Error("the old app did not exit after SIGKILL");
+      // The shutdown's SIGTERM ended the old app, and a new one started here could outlive the run.
+      if (shutdown !== null) throw new Error("the run is stopping, no app restarts");
       start_child_app();
       await wait_startup();
     },

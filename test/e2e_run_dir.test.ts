@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import net from "node:net";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
@@ -305,4 +306,40 @@ test("an uncaught error kills every tracked group, frees the lock and exits 1", 
   assert.equal(code, 1);
   assert.ok(!group_alive(group));
   assert.ok(!existsSync(lock_of(root)));
+}));
+
+test("a dangling link to a place outside the run dir is refused", () => in_tmp((root) => {
+  const run_dir = join(root, "run");
+  mkdirSync(run_dir);
+  const outside = join(root, "outside", "not_made_yet");
+  symlinkSync(outside, join(run_dir, "profile"));
+  symlinkSync(join(run_dir, "profile"), join(run_dir, "chained"));
+  symlinkSync("../outside/not_made_yet", join(run_dir, "relative"));
+  assert.ok(!existsSync(outside));
+  for (const name of ["profile", "chained", "relative"]) {
+    assert.throws(() => assert_start_paths({ run_dir, paths: [join(run_dir, name)], real_home: join(root, "home") }), /outside the run dir/, name);
+    assert.throws(() => assert_start_paths({ run_dir, paths: [join(run_dir, name, "deeper")], real_home: join(root, "home") }), /outside the run dir/, name);
+  }
+  assert_start_paths({ run_dir, paths: [join(run_dir, "fresh", "child")], real_home: join(root, "home") });
+}));
+
+test("a dangling link that points inside the run dir is accepted", () => in_tmp((root) => {
+  const run_dir = join(root, "run");
+  mkdirSync(run_dir);
+  symlinkSync(join(run_dir, "later"), join(run_dir, "link"));
+  assert_start_paths({ run_dir, paths: [join(run_dir, "link")], real_home: join(root, "home") });
+}));
+
+test("a symlinked home under a reused E2E_DIR is refused before the editor host writes anything", () => in_tmp((root) => {
+  const e2e_dir = join(root, "reused");
+  const kind_dir = join(e2e_dir, "betterbird", "compose_editor");
+  const outside = join(root, "owner_home");
+  mkdirSync(kind_dir, { recursive: true });
+  mkdirSync(outside);
+  symlinkSync(outside, join(kind_dir, "home"));
+  // /bin/true stands in for the binary. The run must stop on the guard, long before any app would start.
+  const run = spawnSync(process.execPath, [join(tools_dir, "run.mjs"), "betterbird", "--binary", "betterbird=/bin/true"], { env: { ...process.env, E2E_DIR: e2e_dir, E2E_KINDS: "compose_editor", E2E_TIMINGS_FILE: join(root, "timings.json") }, encoding: "utf8" });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /refusing to start an app/);
+  assert.deepEqual(readdirSync(outside), [], "nothing was written through the link");
 }));

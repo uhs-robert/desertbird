@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { install_lifecycle, start_app } from "./harness.mjs";
-import { assert_start_paths, open_run_dir } from "./run_dir.mjs";
+import { assert_start_paths, open_run_dir, start_paths_of } from "./run_dir.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
 import { run_pane_moves, run_resize_mode } from "./panes_checks.mjs";
@@ -2741,7 +2741,8 @@ for (const app of apps) {
   const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,pages,zoom,web,compose_editor,compose_editor_html,compose_editor_html_top").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
-    assert_start_paths({ run_dir: e2e_dir, paths: [work_dir] });
+    // Before install_editor_host and seed_storage write into the work dir.
+    assert_start_paths({ run_dir: e2e_dir, paths: start_paths_of(work_dir) });
     const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind.startsWith("compose_editor") ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];
     if (kind.startsWith("compose_editor")) install_editor_host(work_dir, kind);
     const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path && kind === "own_pages" ? seed_storage(xpi_path, work_dir, {}, OPEN_OWN_PAGES_SCRIPT) : xpi_path;
