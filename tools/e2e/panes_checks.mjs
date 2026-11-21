@@ -65,7 +65,7 @@ export async function run_pane_moves(instance, ctx) {
 }
 
 // Resize mode (`w r`) in the mail tab: the border of the focused pane moves by direction, the label shows RESIZE, and the mode ends where it should. It takes the helpers of `run.mjs` as arguments, as `run_panes` does, and runs at the end of it.
-// The helper add-on reads no pane size, so a size comes from a screenshot: the splitter between the folder pane and the thread list is the darkest pixel of a row inside the window (`edge_x`). The label is compared as a hash of its screenshot strip. The splitter above the message pane is the second border-colored pixel of a column (`edge_y`). Waits poll those reads. The negative rows end at the barrier of `run.mjs`.
+// The helper add-on reads no pane size, so a size comes from a screenshot: the splitter between the folder pane and the thread list is the darkest pixel of a row inside the window (`edge_x`). The label is compared as a hash of its screenshot strip. The splitter above the message pane is the second border-colored line of a column (`edge_y`). Waits poll those reads. The negative rows end at the barrier of `run.mjs`.
 // The layout is the classic one the run starts in. The vertical layout and a layout change are unit tests (`test/pane_resize.test.ts`, `test/runtime.test.ts`): the helper add-on cannot set a layout.
 const STEP_PX = 24;
 // The status bar label sits at the bottom left. The strip is wide enough for `-- RESIZE --`.
@@ -94,8 +94,14 @@ export async function run_resize_mode(instance, ctx) {
   // The y of the splitter above the message pane: the second border-colored pixel of the column.
   async function edge_y() {
     const { pixels } = read_ppm(await instance.shot_region(name_of("edge_y"), EDGE_COLUMN, "ppm"));
+    // A rule can be more than one pixel row thick, so rows in a run count as one line.
     const lines = [];
-    for (let y = 0; y < pixels.length / 3; y++) if (BORDER_COLOR.every((channel, at) => Math.abs(pixels[y * 3 + at] - channel) <= 4)) lines.push(y + 100);
+    let in_line = false;
+    for (let y = 0; y < pixels.length / 3; y++) {
+      const is_border = BORDER_COLOR.every((channel, at) => Math.abs(pixels[y * 3 + at] - channel) <= 4);
+      if (is_border && !in_line) lines.push(y + 100);
+      in_line = is_border;
+    }
     return lines[1] ?? -1;
   }
   // The x of the splitter: the darkest pixel of the row between the spaces bar and the middle of the window.

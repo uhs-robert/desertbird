@@ -67,7 +67,6 @@ const PANES = [
 ];
 
 const PANE_NAMES = ["folders", "threads", "message"];
-const PANE_IDS = ["folderPane", "threadPane", "messagePane"];
 
 export function app_verbs(context: ExtensionContext) {
     const pane_of = (window_id: number) => mail_pane_of(context, window_id) as AppPane;
@@ -83,7 +82,7 @@ export function app_verbs(context: ExtensionContext) {
         paneResize: guard("app.paneResize", ({ windowId, direction, steps }: AppPaneResizeArgs): boolean => {
             const about_3pane = pane_of(windowId);
             const pane = focused_pane(about_3pane.browsingContext.topChromeWindow.document);
-            return direction === "reset" ? reset_sizes(about_3pane) : move_border(about_3pane, about_3pane.document.getElementById(PANE_IDS[pane]!), pane === 1, direction, steps);
+            return direction === "reset" ? reset_sizes(about_3pane) : move_border(about_3pane, pane, direction, steps);
         }),
         appCommand: guard("app.appCommand", ({ windowId, name }: AppCommandArgs): boolean => {
             const holder = controller_holder_of(context, windowId);

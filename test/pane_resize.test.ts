@@ -13,7 +13,7 @@ interface Rect {
 
 const rect = (left: number, top: number, right: number, bottom: number): Rect => ({ left, top, right, bottom });
 
-type Layout = "classic" | "vertical" | "horizontal";
+type Layout = "classic" | "wide" | "vertical" | "widethread" | "stacked" | "horizontal";
 
 // A 1000 by 800 about:3pane. Each splitter is 4 pixels thick and its `resizeElement` is the pane it sizes, as the layouts of Thunderbird set them.
 const LAYOUTS: Record<Layout, { boxes: Record<string, Rect>; splitters: Record<"folder" | "message", { box: Rect; direction: "horizontal" | "vertical"; resizes: string; attributes: Record<string, string> }> }> = {
@@ -29,6 +29,27 @@ const LAYOUTS: Record<Layout, { boxes: Record<string, Rect>; splitters: Record<"
         splitters: {
             folder: { box: rect(200, 0, 204, 800), direction: "horizontal", resizes: "folderPane", attributes: { "collapse-width": "100" } },
             message: { box: rect(600, 0, 604, 800), direction: "horizontal", resizes: "messagePane", attributes: { "collapse-width": "200", "collapse-height": "100" } },
+        },
+    },
+    wide: {
+        boxes: { folderPane: rect(0, 0, 200, 400), threadPane: rect(204, 0, 1000, 400), messagePane: rect(0, 404, 1000, 800) },
+        splitters: {
+            folder: { box: rect(200, 0, 204, 400), direction: "horizontal", resizes: "folderPane", attributes: { "collapse-width": "100" } },
+            message: { box: rect(0, 400, 1000, 404), direction: "vertical", resizes: "messagePane", attributes: { "collapse-width": "200", "collapse-height": "100" } },
+        },
+    },
+    widethread: {
+        boxes: { threadPane: rect(0, 0, 1000, 400), folderPane: rect(0, 404, 200, 800), messagePane: rect(204, 404, 1000, 800) },
+        splitters: {
+            folder: { box: rect(200, 404, 204, 800), direction: "horizontal", resizes: "folderPane", attributes: { "collapse-width": "100" } },
+            message: { box: rect(0, 400, 1000, 404), direction: "vertical", resizes: "messagePane", attributes: { "collapse-width": "200", "collapse-height": "100" } },
+        },
+    },
+    stacked: {
+        boxes: { folderPane: rect(0, 0, 496, 300), threadPane: rect(0, 304, 496, 800), messagePane: rect(500, 0, 1000, 800) },
+        splitters: {
+            folder: { box: rect(0, 300, 496, 304), direction: "vertical", resizes: "folderPane", attributes: { "collapse-height": "100" } },
+            message: { box: rect(496, 0, 500, 800), direction: "horizontal", resizes: "messagePane", attributes: { "collapse-width": "200", "collapse-height": "100" } },
         },
     },
     horizontal: {
@@ -55,14 +76,14 @@ function mail_window({ layout = "classic", focus = "threads", collapsed = null, 
     const elements = Object.fromEntries(Object.keys(boxes).map((id) => [id, { getBoundingClientRect: () => (collapsed === id ? rect(0, 0, 0, 0) : boxes[id]!) }]));
     const events: string[] = [];
     const sizes: string[] = [];
-    // The grid gives a pane what it asks for, less what would leave the thread list under 100 pixels. The pane grows on its far edge and the thread list gives the room.
+    // The grid gives a pane what it asks for, at least 100 pixels, less what would leave the thread list under 100 pixels. The pane grows on its far edge and the thread list gives the room.
     const lay_out = (resizes: string, along_x: boolean, asked: number | null) => {
         if (asked === null) return;
         const [lo, hi] = along_x ? (["left", "right"] as const) : (["top", "bottom"] as const);
         const pane = boxes[resizes]!;
         const threads = boxes["threadPane"]!;
         const spare = threads[hi] - threads[lo] - 100;
-        pane[hi] = pane[lo] + Math.min(asked, pane[hi] - pane[lo] + spare);
+        pane[hi] = pane[lo] + Math.max(100, Math.min(asked, pane[hi] - pane[lo] + spare));
     };
     const splitter_of = (id: string, name: "folder" | "message") => {
         const entry = spec.splitters[name];
@@ -144,6 +165,25 @@ const CELLS: [Layout, NonNullable<Options["focus"]>, PaneResizeDirection, string
     ["classic", "threads", "up", ["message height 420"]],
     ["classic", "message", "up", ["message height 420"]],
     ["classic", "message", "down", ["message height 372"]],
+    ["classic", "message", "left", ["folder width 176"]],
+    ["classic", "message", "right", ["folder width 224"]],
+    ["wide", "folders", "right", ["folder width 224"]],
+    ["wide", "folders", "down", ["message height 372"]],
+    ["wide", "folders", "up", ["message height 420"]],
+    ["wide", "threads", "left", ["folder width 176"]],
+    ["wide", "threads", "down", ["message height 372"]],
+    ["wide", "message", "up", ["message height 420"]],
+    ["widethread", "folders", "right", ["folder width 224"]],
+    ["widethread", "folders", "down", ["message height 372"]],
+    ["widethread", "threads", "up", ["message height 420"]],
+    ["widethread", "message", "left", ["folder width 176"]],
+    ["widethread", "message", "down", ["message height 372"]],
+    ["stacked", "folders", "down", ["folder height 324"]],
+    ["stacked", "folders", "right", ["message width 476"]],
+    ["stacked", "threads", "down", ["folder height 324"]],
+    ["stacked", "threads", "left", ["message width 524"]],
+    ["stacked", "message", "right", ["message width 476"]],
+    ["stacked", "message", "left", ["message width 524"]],
     ["vertical", "folders", "right", ["folder width 224"]],
     ["vertical", "threads", "right", ["message width 372"]],
     ["vertical", "threads", "left", ["message width 420"]],
@@ -172,18 +212,18 @@ test("a count multiplies the step", async () => {
 });
 
 test("an axis with no border for the pane refuses and changes nothing", async () => {
-    for (const [layout, focus, direction] of [["classic", "folders", "down"], ["vertical", "threads", "down"], ["vertical", "message", "up"], ["horizontal", "folders", "right"], ["horizontal", "message", "left"]] as const) {
+    for (const [layout, focus, direction] of [["classic", "folders", "down"], ["widethread", "threads", "left"], ["widethread", "threads", "right"], ["wide", "message", "left"], ["stacked", "message", "up"], ["vertical", "threads", "down"], ["vertical", "message", "up"], ["horizontal", "folders", "right"], ["horizontal", "message", "left"]] as const) {
         const result = await press({ layout, focus }, direction);
         assert.equal(result.answer, false, `${layout} ${focus} ${direction}`);
         assert.deepEqual([result.sizes, result.events], [[], []], `${layout} ${focus} ${direction}`);
     }
 });
 
-test("a pane stops at a floor above every collapse size, so a key never collapses it", async () => {
+test("a pane stops at the grid minimum and stores that size, so a key never collapses it", async () => {
     const shrunk = await press({ focus: "folders" }, "left", 100);
-    assert.deepEqual(shrunk.sizes, ["folder width 120"]);
+    assert.deepEqual(shrunk.sizes, ["folder width 100"]);
     const message_shrunk = await press({ focus: "message" }, "down", 100);
-    assert.deepEqual(message_shrunk.sizes, ["message height 120"]);
+    assert.deepEqual(message_shrunk.sizes, ["message height 100"]);
 });
 
 test("a pane asks for more than the grid gives and stores what the grid gave, and the stop answers true", async () => {

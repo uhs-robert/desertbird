@@ -46,8 +46,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     overlay_is_loading(window: Window): boolean;
     /** Whether focus sits in the reading pane. Plain printable keys are swallowed there, so no motion runs and Thunderbird's own single-key shortcuts do not fire. */
     in_reading_pane(window: Window): boolean;
-    /** A string that changes when the pane layout changes. Resize mode ends when it does. */
-    layout_of(window: Window): string;
+    /** Whether the focus sits in a text field or in the overlay's browser. Unlike `is_typing_target`, a message body that runs the body script does not count: resize mode keeps its keys there. */
+    in_text_field(window: Window): boolean;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
@@ -95,15 +95,17 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     const tell_mode = (w: Window) => {
         const mode: ModeName = resize_window ? "resize" : visual_anchor >= 0 ? "visual" : "normal";
         if (mode === told_mode) return;
-        const told = told_window ?? w;
+        const before = told_window ?? w;
         told_mode = mode;
         told_window = mode === "normal" ? null : w;
-        deps.emit({ command: "mode", mode, windowId: deps.window_id_of(told) });
+        const tell = (name: ModeName, window: Window) => deps.emit({ command: "mode", mode: name, windowId: deps.window_id_of(window) });
+        // A mode that starts in another window clears the old window first, so no label keeps the old mode.
+        if (before !== w || mode === "normal") tell("normal", before);
+        if (mode !== "normal") tell(mode, w);
     };
 
-    // Resize mode: the window it runs in, or null. It takes the plain keys of the window until Escape or Enter, a tab change, a window blur, a text field or menu, another window, or a new layout ends it. `resize_layout` is the layout it started in, and `resize_count` the digits typed since the last move.
+    // Resize mode: the window it runs in, or null. It takes the plain keys of the window until Escape or Enter, a tab change, a window blur, a text field, a menu or another window ends it. `resize_count` holds the digits typed since the last move, up to the six digits of the matcher.
     let resize_window: Window | null = null;
-    let resize_layout = "";
     let resize_count = 0;
 
     // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command that removes or moves rows ends it too, so `a` or `d` acts on the range once. One that leaves the rows (`m r`, `m s`) keeps it.
@@ -122,12 +124,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count?: number): void | null {
         if (leaf.steps[0]?.invocation.id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
-        if (leaf.steps[0]?.invocation.id === "pane.resize_mode") {
-            if (resize_window) return;
-            if (visual_anchor >= 0) end_visual(port);
-            [resize_window, resize_layout, resize_count] = [window, deps.layout_of(window), 0];
-            return;
-        }
+        if (leaf.steps[0]?.invocation.id === "pane.resize_mode") return void ((resize_window = window), (resize_count = 0), visual_anchor >= 0 && end_visual(port));
         if (leaf.steps[0]?.invocation.id === "visual.toggle") return visual_anchor < 0 ? void ((visual_end = visual_anchor = port.selected_index()), (visual_marks = port.marks(visual_anchor, visual_anchor))) : end_visual(port);
         if (leaf.steps[0]?.invocation.id !== KEY_LIST) last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         for (const step of leaf.steps) {
@@ -163,19 +160,28 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
                 return;
             }
         }
+        // A key in another window ends the mode before any early return below.
+        if (resize_window && resize_window !== window) resize_window = null;
         if (deps.tab_kind_of(window)) return matcher.reset();
         const typing = deps.is_typing_target(window, event);
         const menu_takes = typing ? null : deps.menu_takes_key(window, token);
-        if (resize_window && (resize_window !== window || (typing && !deps.in_reading_pane(window)) || menu_takes !== null || deps.layout_of(window) !== resize_layout)) resize_window = null;
+        if (resize_window && (deps.in_text_field(window) || menu_takes !== null)) resize_window = null;
         // A chord is no resize key, so it runs as in normal mode and the mode stays: `<A-l>` moves the focus to the message pane and the mode follows it.
-        if (resize_window && (is_plain_printable(token) || token === "<Escape>" || token === "<Enter>")) {
+        if (resize_window && /^(.|<Escape>|<Enter>)$/.test(token)) {
             swallow(event);
             const direction = RESIZE_KEYS[token];
-            if (/^\d$/.test(token)) resize_count = (resize_count * 10 + Number(token)) % 1000;
+            if (/^\d$/.test(token)) {
+                if (resize_count < 100000) resize_count = resize_count * 10 + Number(token);
+            }
             else if (direction) {
                 deps.emit({ command: "pane.resize", args: { direction }, count: resize_count || 1, windowId: deps.window_id_of(window), messageIds: [] });
                 resize_count = 0;
-            } else if (!is_plain_printable(token)) resize_window = null;
+            } else if (!is_plain_printable(token)) {
+                // A chord prefix typed in the mode must not complete after it.
+                resize_window = null;
+                matcher.reset();
+                pend(window, []);
+            }
             return;
         }
         // The thread list is the target unless the key goes to a text field or an open menu.
@@ -236,8 +242,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         entry.stop_blur_listening();
         hooked.delete(window);
         if (sequence_window === window) sequence_window = null;
-        // The window is gone, so nothing is left to tell.
-        if (resize_window === window) (resize_window = null), (told_mode = "normal"), (told_window = null);
+        if (resize_window === window) (resize_window = null), tell_mode(window);
     }
 
     return {

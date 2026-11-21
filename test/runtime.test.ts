@@ -27,8 +27,8 @@ class FakeWindow implements KeyTarget {
     /** The keys the open menu takes, or null with no menu open. */
     menu_keys: string[] | null = null;
     has_focus = true;
-    /** The layout string `layout_of` reads. */
-    layout = "layout-classic";
+    /** The focus sits in a text field. */
+    text_field = false;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
     selected = 0;
     rows = 10;
@@ -118,6 +118,7 @@ const tree = () => ({
             ".": leaf("repeat.last", "chrome"),
             v: leaf("visual.toggle", "chrome"),
             w: { kind: "branch", children: { r: leaf("pane.resize_mode", "chrome") } },
+            "<C-b>": { kind: "branch", children: { y: leaf("msg.read", "background") } },
             r: leaf("msg.read", "background"),
             "=": leaf("msg.sort", "background"),
             s: keeps_selection("msg.flag"),
@@ -154,7 +155,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         menu_takes_key: (window, key) => window.menu_keys && window.menu_keys.includes(key.toLowerCase()),
         overlay_is_loading: (window) => window.overlay_loading,
         in_reading_pane: (window) => window.in_reading_pane,
-        layout_of: (window) => window.layout,
+        in_text_field: (window) => window.text_field,
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
             return () => void window.tab_listeners.delete(listener);
@@ -1313,8 +1314,10 @@ test("a count typed in the mode applies to the next move only", () => {
     enter_resize(window);
     for (const key of ["1", "2", "l", "l", "0", "h", "3", "0", "k"]) press(window, key);
     assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 12], [{ direction: "right" }, 1], [{ direction: "left" }, 1], [{ direction: "up" }, 30]]);
-    for (const key of ["1", "2", "3", "4", "j"]) press(window, key);
-    assert.equal(resizes(emitted).at(-1)![1], 234, "a count keeps its last three digits");
+    for (const key of ["1", "2", "3", "4", "5", "6", "7", "j"]) press(window, key);
+    assert.equal(resizes(emitted).at(-1)![1], 123456, "a count stops at six digits, as in normal mode, and the seventh digit is dropped");
+    for (const key of ["1", "0", "0", "0", "l"]) press(window, key);
+    assert.equal(resizes(emitted).at(-1)![1], 1000, "1000 is 1000, not a wrapped count");
 });
 
 test("every other plain key is swallowed and reaches nothing: no motion, no command, no half-typed sequence", () => {
@@ -1390,19 +1393,20 @@ test("a tab change, a window blur and a closed window end the mode, and the labe
     closing.runtime.install(tree());
     enter_resize(closing.windows[0]!);
     closing.unload(closing.windows[0]!);
-    assert.deepEqual(closing.modes, ["resize"], "a closed window is told nothing");
+    assert.deepEqual(closing.modes, ["resize", "normal"], "the closed window is told normal, so no state is left");
     const reopened = new FakeWindow();
     closing.windows.push(reopened);
     closing.load(reopened);
     press(reopened, "l");
     assert.deepEqual(resizes(closing.emitted), [], "the mode died with its window");
-    assert.deepEqual(closing.modes, ["resize"]);
+    assert.deepEqual(closing.modes, ["resize", "normal"]);
 });
 
-test("a text field, an open menu, a new layout and a key in another window end the mode, and the key then runs as normal", () => {
+test("a text field, an open menu and a key in another window end the mode, and the key then runs as normal", () => {
     const text = setup();
     text.runtime.install(tree());
     enter_resize(text.windows[0]!);
+    text.windows[0]!.text_field = true;
     assert.equal(press(text.windows[0]!, "l", { target: { localName: "input" } }).cancelled, false, "the key stays with the field");
     assert.deepEqual([text.modes, resizes(text.emitted)], [["resize", "normal"], []]);
 
@@ -1412,14 +1416,6 @@ test("a text field, an open menu, a new layout and a key in another window end t
     menu.windows[0]!.menu_keys = [];
     press(menu.windows[0]!, "l");
     assert.deepEqual([menu.modes, resizes(menu.emitted)], [["resize", "normal"], []]);
-
-    const layout = setup();
-    layout.runtime.install(tree());
-    enter_resize(layout.windows[0]!);
-    layout.windows[0]!.layout = "layout-vertical";
-    assert.equal(press(layout.windows[0]!, "j").cancelled, true);
-    assert.equal(layout.windows[0]!.selected, 1, "j is a motion again");
-    assert.deepEqual([layout.modes, resizes(layout.emitted)], [["resize", "normal"], []]);
 
     const other = setup();
     other.runtime.install(tree());
@@ -1477,4 +1473,62 @@ test("shutdown ends the mode", () => {
     runtime.install(tree());
     press(windows[0]!, "l");
     assert.deepEqual(resizes(emitted), []);
+});
+
+test("a chord prefix typed in the mode does not complete after Escape or Enter, and its pending report is cleared", () => {
+    for (const key of ["Escape", "Enter"]) {
+        const { windows, emitted, pending, runtime } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        enter_resize(window);
+        press(window, "b", { ctrlKey: true });
+        assert.deepEqual(pending.at(-1)!.keys, ["<C-b>"], "the chord waits for its second key");
+        press(window, key);
+        assert.deepEqual(pending.at(-1)!.keys, [], `${key} clears the pending report`);
+        press(window, "y");
+        assert.equal(emitted.length, 0, `${key}: the y after the mode does not complete <C-b> y`);
+    }
+});
+
+test("a text field inside the reading pane ends the mode, while the body script alone does not", () => {
+    const { windows, emitted, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    window.in_reading_pane = true;
+    window.body_script_live = true;
+    press(window, "l");
+    assert.deepEqual(modes, ["resize"], "the body script is no text field");
+    window.text_field = true;
+    assert.equal(press(window, "l").cancelled, false, "the key stays with the field");
+    assert.deepEqual(modes, ["resize", "normal"]);
+    assert.deepEqual(resizes(emitted), [[{ direction: "right" }, 1]]);
+});
+
+test("a key in another window whose front tab is not the mail tab ends the mode", () => {
+    const { windows, modes, mode_windows, load, runtime } = setup();
+    runtime.install(tree());
+    const second = new FakeWindow();
+    second.in_mail_tab = false;
+    windows.push(second);
+    load(second);
+    enter_resize(windows[0]!);
+    press(second, "j");
+    assert.deepEqual(modes, ["resize", "normal"]);
+    assert.deepEqual(mode_windows, [7, 7], "the end goes to the window that heard the start");
+});
+
+test("a mode that starts in another window clears the old window's mode first", () => {
+    const { windows, modes, mode_windows, load, runtime } = setup();
+    runtime.install(tree());
+    const second = new FakeWindow();
+    second.view = windows[0]!.view;
+    windows.push(second);
+    load(second);
+    press(windows[0]!, "v");
+    assert.deepEqual([modes, mode_windows], [["visual"], [7]]);
+    enter_resize(second);
+    assert.deepEqual([modes, mode_windows], [["visual", "normal", "resize"], [7, 7, 8]], "window 7 is cleared, window 8 shows resize");
+    press(second, "Escape");
+    assert.deepEqual([modes.at(-1), mode_windows.at(-1)], ["normal", 8]);
 });
