@@ -37,11 +37,11 @@ export interface HintWindow {
 }
 
 /** What a mouse would hit: the element is drawn, and it is the one on top at its own centre. A page can hide an element or stack it under another, and such an element must get no label. */
-export function is_on_screen(window: HintWindow, element: HintElement): boolean {
+export function is_on_screen(window: HintWindow, element: HintElement, at = (x: number, y: number): unknown => window.document.elementFromPoint(x, y)): boolean {
     const box = element.getBoundingClientRect();
     if (!(box.width > 0 && box.height > 0 && box.top < window.innerHeight && box.top + box.height > 0 && box.left < window.innerWidth && box.left + box.width > 0)) return false;
     const style = window.getComputedStyle(element);
     if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0) return false;
-    const hit = window.document.elementFromPoint(box.left + box.width / 2, (Math.max(box.top, 0) + Math.min(box.top + box.height, window.innerHeight)) / 2);
+    const hit = at(box.left + box.width / 2, (Math.max(box.top, 0) + Math.min(box.top + box.height, window.innerHeight)) / 2);
     return hit === element || element.contains(hit);
 }

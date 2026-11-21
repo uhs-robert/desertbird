@@ -6,7 +6,8 @@ const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-
 const SPACES = { calendar: [22, 112], settings: [22, 653] };
 // The whole window but the right edge, where an overlay scrollbar fades out on its own.
 const WHOLE_WINDOW = "0,0 1264x720";
-const MAIL_TAB_LABEL = { thunderbird: "al", betterbird: "al" };
+// The tab strip comes after the window's own toolbar controls, among them the global search bar, whose field sits in a shadow root. Betterbird measured; Thunderbird shows the same bar and is assumed to match.
+const MAIL_TAB_LABEL = { thunderbird: "ss", betterbird: "ss" };
 // The page keys drop plain keys for 1.5 s after `f`. A key typed later meets the page keys, and only the marker of the pick keeps it from running there.
 const PAST_THE_HOLD_MS = 2500;
 // The first pick loads the hints bundle, which can take seconds on a cold app.
@@ -123,6 +124,8 @@ export async function run_page_hints(instance, { check, note, shot, key_and_stat
   await hint_tab({ name: "calendar", open: () => instance.click(...SPACES.calendar), region: "0,0 1264x320" });
   // The search field of each of these two has the focus on open, and `f` typed there is text. The clicks are those of `pages_checks.mjs`.
   await hint_tab({ name: "settings", open: () => instance.click(...SPACES.settings), leave_field: async () => { await instance.click(160, 321); await sleep(500); await instance.click(1220, 450); } });
-  await hint_tab({ name: "address book", open: () => instance.press(CTRL_SHIFT("b")), leave_field: () => instance.click(165, 151), page_pick: { label: "sk", does: "selects the Personal Address Book row of its page", region: "45,130 240x100" } });
+  await hint_tab({ name: "address book", open: () => instance.press(CTRL_SHIFT("b")), leave_field: () => instance.click(165, 151), page_pick: { label: "da", does: "selects the Personal Address Book row of its page", region: "45,130 240x100" } });
+  // The side panel categories are `moz-page-nav-button` hosts with their button in a shadow root, so a flat scan labels none of them. The region is the three category rows, clear of the spaces bar, so it stays plain while the page labels none of them.
+  await hint_tab({ name: "about:addons", open: async () => { await instance.press(["g"]); await instance.press(["p"]); await instance.press(["a"]); }, region: "50,150 280x150", page_pick: { label: "sk", does: "switches to the Themes list", region: "340,90 700x100" } });
   check(app, kind, "hints: the app survived the page hint checks", instance.exited() === null);
 }

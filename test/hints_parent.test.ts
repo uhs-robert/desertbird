@@ -97,7 +97,8 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
     const drawn_in: string[] = [];
     const marks = new Set<string>();
     const shown = { top: 10, left: 10, width: 20, height: 10 };
-    const control = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null };
+    // The page scan walks every element and keeps the ones that match, so this control matches the page selector and no field one.
+    const control = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: (selector: string) => selector.startsWith("button"), closest: () => null };
     const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove() {}, append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), setAttribute: (attribute: string) => void marks.add(attribute), removeAttribute: (attribute: string) => void marks.delete(attribute) } });
     const window_like = (name: string, matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(name, matching), ...listeners(name) });
     const page = window_like("page", [control, control]);

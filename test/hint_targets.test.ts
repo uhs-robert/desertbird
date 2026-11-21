@@ -29,7 +29,7 @@ function fake_window(by_selector: Record<string, FakeElement[]>) {
             contains: () => true,
             focus: () => each.log!.push("focus"),
             click: () => each.log!.push("click"),
-            matches: (selector: string) => selector.split(", ").includes(each.name.split(" ")[0]!),
+            matches: (selector: string) => selector.startsWith(`${CONTROLS}, `) || selector.split(", ").includes(each.name.split(" ")[0]!),
             querySelector: (selector: string) => each.parts?.[selector] ?? null,
             closest: (selector: string) => (selector === "tabs" ? tabs : selector === "#folderTree, tbody" && each.inside_row ? each : null),
         });
@@ -38,7 +38,7 @@ function fake_window(by_selector: Record<string, FakeElement[]>) {
         innerHeight: 600,
         innerWidth: 800,
         getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }),
-        document: { querySelectorAll: (selector: string) => (by_selector[selector] ?? (selector.startsWith(`${CONTROLS}, `) ? by_selector["page"] : undefined) ?? []).map(decorate), elementFromPoint: () => null },
+        document: { querySelectorAll: (selector: string) => (by_selector[selector] ?? (selector.startsWith(`${CONTROLS}, `) || selector === "*" ? by_selector["page"] : undefined) ?? []).map(decorate), elementFromPoint: () => null },
     };
 }
 
@@ -152,4 +152,106 @@ test("every contenteditable but false gets a label, and a pick focuses it and do
     for (const target of targets) target.act();
     assert.deepEqual(log, ["focus bare", "focus on", "focus plain", "click button"]);
     window.close();
+});
+
+// Real shadow roots in jsdom. jsdom has no layout, no hit test, no chrome-only `openOrClosedShadowRoot` and no `flattenedTreeParentNode`, so each is stood in for here. Every element gets a box of its own the first time it is measured, and the hit test answers from that box: the element itself, or the one `covered_by` names for it, retargeted to the scope of the document or the shadow root that is asked.
+function shadow_page(html: string, covered_by: Record<string, string> = {}) {
+    const { window } = new JSDOM(html);
+    const document = window.document;
+    const roots = new WeakMap<object, ShadowRoot>();
+    const attach = window.Element.prototype.attachShadow;
+    window.Element.prototype.attachShadow = function (this: Element, init: ShadowRootInit) {
+        const root = attach.call(this, init);
+        roots.set(this, root);
+        (root as unknown as { elementFromPoint: unknown }).elementFromPoint = (_x: number, y: number) => retarget(at_height(y), root);
+        return root;
+    };
+    Object.defineProperty(window.Element.prototype, "openOrClosedShadowRoot", { get(this: Element) { return roots.get(this) ?? null; } });
+    Object.defineProperty(window.Node.prototype, "flattenedTreeParentNode", { get(this: Element & { host?: Node }) { return this.assignedSlot ?? this.parentNode ?? this.host ?? null; } });
+    const tops = new Map<Element, number>();
+    Object.assign(window.HTMLElement.prototype, {
+        getBoundingClientRect(this: Element) {
+            if (!tops.has(this)) tops.set(this, 10 + 30 * tops.size);
+            return { top: tops.get(this)!, left: 10, width: 20, height: 10 };
+        },
+    });
+    const log: string[] = [];
+    Object.assign(window.HTMLElement.prototype, { click(this: { id: string }) { log.push(`click ${this.id}`); }, focus(this: { id: string }) { log.push(`focus ${this.id}`); } });
+    const by_id = (id: string): Element | null => {
+        const search = (scope: ParentNode): Element | null => {
+            for (const element of scope.querySelectorAll("*")) {
+                if (element.id === id) return element;
+                const inner = roots.get(element) && search(roots.get(element)!);
+                if (inner) return inner;
+            }
+            return null;
+        };
+        return search(document);
+    };
+    // The element under a point is the one measured at that height, or its cover.
+    const at_height = (y: number): Element | null => {
+        const [element] = [...tops].find(([, top]) => top + 5 === y) ?? [null];
+        const cover = element && covered_by[element.id];
+        return (cover && by_id(cover)) || element;
+    };
+    // What a scope can see of an element: itself, or the host of the shadow root that holds it, up to the scope.
+    const retarget = (element: Element | null, scope: Document | ShadowRoot): Element | null => {
+        let at = element;
+        while (at && at.getRootNode() !== scope) at = (at.getRootNode() as ShadowRoot).host ?? null;
+        return at;
+    };
+    document.elementFromPoint = (_x: number, y: number) => retarget(at_height(y), document);
+    const page = { innerHeight: 600, innerWidth: 800, getComputedStyle: (element: Element) => ({ display: element.id === "hidden" ? "none" : "block", visibility: "visible", opacity: "1" }), document };
+    const root_of = (id: string, markup: string, mode: "open" | "closed" = "open") => {
+        const shadow = document.getElementById(id)!.attachShadow({ mode });
+        shadow.innerHTML = markup;
+        return shadow;
+    };
+    return { window, page, log, root_of, ids: () => collect_window_targets(page as never).map((target) => (target.element as unknown as Element).id), pick: (id: string) => collect_window_targets(page as never).find((target) => (target.element as unknown as Element).id === id)!.act() };
+}
+
+const SHADOW_HTML = `<button id="light">Light</button><div id="host"></div><div id="outer"></div><div id="field_host"></div><div id="slot_host"><span id="label">Label</span></div><div id="overlay"></div>`;
+
+test("a button in an open or a closed shadow root gets a label, in document order, and a hidden one none", () => {
+    const { ids, root_of } = shadow_page(SHADOW_HTML);
+    root_of("host", `<button id="inner">In</button><button id="hidden">Hidden</button>`);
+    const outer = root_of("outer", `<div id="nested"></div><button id="after">After</button>`, "closed");
+    outer.getElementById("nested")!.attachShadow({ mode: "closed" }).innerHTML = `<button id="deep">Deep</button>`;
+    assert.deepEqual(ids(), ["light", "inner", "deep", "after"]);
+});
+
+test("a pick on a shadow button clicks that button", () => {
+    const { pick, log, root_of } = shadow_page(SHADOW_HTML);
+    root_of("host", `<button id="inner">In</button>`);
+    pick("inner");
+    assert.deepEqual(log, ["click inner"]);
+});
+
+test("a host whose shadow root holds the field gets no label of its own, so the field has one", () => {
+    const { ids, root_of } = shadow_page(`<search-textbox id="field_host"></search-textbox>`);
+    root_of("field_host", `<input id="field">`);
+    assert.deepEqual(ids(), ["field"]);
+});
+
+test("a button inside a slot sits under its own light child: the hit on the child counts as the button", () => {
+    const { ids, root_of, window } = shadow_page(SHADOW_HTML, { slot_btn: "label" });
+    root_of("slot_host", `<button id="slot_btn"><slot></slot></button>`);
+    assert.deepEqual(ids(), ["light", "slot_btn"]);
+    assert.equal(window.document.getElementById("label")!.assignedSlot?.parentElement?.id, "slot_btn");
+});
+
+test("an overlay outside the host covers a shadow button, and a hit on another shadow element does too", () => {
+    const { ids, root_of } = shadow_page(SHADOW_HTML, { inner: "overlay", other: "inner" });
+    root_of("host", `<button id="inner">In</button><button id="other">Other</button>`);
+    assert.deepEqual(ids(), ["light"]);
+});
+
+test("the mail tab keeps its flat scan and labels no shadow button", () => {
+    const { page, root_of } = shadow_page(SHADOW_HTML);
+    root_of("host", `<button id="inner">In</button>`);
+    const empty = new JSDOM("").window;
+    const pane = { ...fake_window({}), document: empty.document, folderTree: {}, threadTree: {}, messageBrowser: { contentWindow: null } };
+    const targets = collect_targets(page as never, pane as unknown as HintMailPane);
+    assert.deepEqual(targets.map((target) => (target.element as unknown as Element).id), ["light"]);
+    empty.close();
 });
