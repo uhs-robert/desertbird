@@ -174,8 +174,9 @@ export function read_setup(env, { queue_length }) {
   };
 }
 
-// A piece's own deadline_s wins over the run's default, so E2E_PIECE_DEADLINE_S never shortens a piece that is known to be long.
-export const deadline_s_of = (piece, default_s) => piece.deadline_s ?? default_s;
+// The larger of the piece's own deadline_s and the run's default. E2E_PIECE_DEADLINE_S never shortens a piece that is known to be long,
+// and raising it raises every piece, so a loaded machine has one knob.
+export const deadline_s_of = (piece, default_s) => Math.max(piece.deadline_s ?? 0, default_s);
 
 // The run deadline when E2E_DEADLINE_S is unset: 1.5 times the longer of an even share of the queue's weight and its heaviest piece, plus 60 s for the
 // worker starts, and never under DEADLINE_FLOOR_S. A piece with no weight counts as its piece deadline. The piece deadline already bounds a hang,

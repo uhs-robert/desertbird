@@ -165,6 +165,32 @@ test("a worker that fails to spawn ends the run with a startup failure", LIMIT, 
   assert.deepEqual(merged.incomplete?.not_started, ["thunderbird/a/main", "thunderbird/b/main"]);
 });
 
+test("a report that cannot be written fails a run whose pieces all passed", LIMIT, async (t) => {
+  const { result, merged, lines } = await run_fake(t, ["thunderbird/a/main", "thunderbird/b/main"], { report_path: tmpdir() });
+  assert.equal(result.exit_code, 1);
+  assert.equal(merged.exit_code, 1);
+  assert.deepEqual(merged.failures, []);
+  assert.ok(lines.some((line) => line.startsWith("e2e: timings or report not written")));
+});
+
+// A child that emits error with no pid and then exit anyway: the worker's exit must count once.
+test("a worker whose error and exit both arrive is counted once", LIMIT, async (t) => {
+  const { EventEmitter } = await import("node:events");
+  const { PassThrough } = await import("node:stream");
+  const fork_that_fails_twice = () => {
+    const child = Object.assign(new EventEmitter(), { pid: undefined, stdout: new PassThrough(), stderr: new PassThrough(), send: () => true, kill: () => true });
+    setImmediate(() => {
+      child.emit("error", new Error("spawn EAGAIN"));
+      child.emit("exit", null, null);
+    });
+    return child;
+  };
+  const { result, merged, lines } = await run_fake(t, ["thunderbird/a/main", "thunderbird/b/main"], { fork: fork_that_fails_twice });
+  assert.equal(result.exit_code, 1);
+  assert.equal(merged.failures.length, 2, merged.failures.join("\n"));
+  assert.equal(lines.filter((line) => /checks passed$/.test(line)).length, 1, "the run finished once");
+});
+
 test("the run deadline stops every worker mid-piece and names the pieces in flight and not started", LIMIT, async (t) => {
   const ids = ["thunderbird/a/hang", "thunderbird/b/app", "thunderbird/c/main", "thunderbird/d/main"];
   const started = Date.now();

@@ -163,8 +163,9 @@ test("read_setup defaults to one worker and checks every setting", () => {
   }
 });
 
-test("a piece's own deadline wins over the run's default", () => {
+test("a piece's deadline is the larger of its own and the run's default", () => {
   assert.equal(deadline_s_of({ deadline_s: 250 }, 60), 250);
+  assert.equal(deadline_s_of({ deadline_s: 250 }, 400), 400, "E2E_PIECE_DEADLINE_S raises the long tier too");
   assert.equal(deadline_s_of({}, 60), 60);
 });
 

@@ -143,7 +143,9 @@ export function run_sharded(setup) {
     }
   }
 
+  // Once per worker: a fork that never spawned reaches here from its error handler, and an exit event that still follows must not count it twice.
   function on_exit(entry, exit) {
+    if (entry.exit !== undefined) return;
     entry.exit = exit;
     entry.finished_ms = elapsed_ms();
     clearTimeout(entry.piece_timer);
@@ -201,15 +203,21 @@ export function run_sharded(setup) {
     }));
     const checks = merge_check_reports(results, ids);
     const failed_checks = checks.checks.filter((check) => !check.ok).map(({ piece, worker, name, detail }) => ({ piece, worker, name, detail }));
-    const exit_code = final_exit_code({ failed_check_count: failed_checks.length, failure_count: failures.length, incomplete, stop_reason, stop_exit_code });
+    let exit_code = final_exit_code({ failed_check_count: failed_checks.length, failure_count: failures.length, incomplete, stop_reason, stop_exit_code });
     const merged = merge_reports(workers.map((entry) => ({ worker: entry.worker, report: entry.report })), { total_ms, workers: worker_info, incomplete, filter });
     Object.assign(merged, { failed_checks, failures, exit_code });
-    try {
-      write_json(timings_path, merged);
-      if (report_path) write_json(report_path, checks);
-    } catch (error) {
-      log(`e2e: timings not written: ${error.message}`);
-    }
+    // A run that cannot show its evidence did not pass. A stop keeps its own code. The report goes first, so the timings file records a failed write of it.
+    const write_or_fail = (path, value) => {
+      try {
+        write_json(path, value);
+      } catch (error) {
+        log(`e2e: timings or report not written: ${error.message}`);
+        if (exit_code === 0) exit_code = 1;
+        merged.exit_code = exit_code;
+      }
+    };
+    if (report_path) write_or_fail(report_path, checks);
+    write_or_fail(timings_path, merged);
     log(summary_text(merged));
     for (const warning of stale_weight_warnings(merged.pieces, weights)) log(`e2e: slower than its weight on ${shard_count} workers: ${warning}`);
     log(`e2e: timings ${timings_path}${report_path ? `, report ${report_path}` : ""}`);
