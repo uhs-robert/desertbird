@@ -1,6 +1,8 @@
 // The `pages` kind: the keys of every tab that is not the mail tab, each opened by its own route and with no click first. A route whose click position is not pinned yet records NOTE lines and no FAIL, so the first run can measure it.
 // Departs from `run_own_pages`, which keeps the after-a-click case of the address book and calendar: this file covers the no-click case and the other tabs. It takes the helpers of `run.mjs` as arguments, as `run_tabs` does.
 
+import { back_to, drawn_since } from "./predicates.mjs";
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-m", "ctrl"];
@@ -45,11 +47,11 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
     await instance.press(["g"]);
     const helped = await key_and_state(instance, ["?"], 3000);
     verdict(`g ? opens no tab from the ${name} tab`, (helped.windows.find((window) => window.type === "normal")?.tabs ?? []).length === before + 1);
-    const list_shown = await wait_pixels(instance, `the key list of the ${name} tab to draw`, `${app}_${slug}_list_shown`, key_list_region, (hash) => hash !== list_before, { timeout_ms: 3000 });
+    const list_shown = await wait_pixels(instance, `the key list of the ${name} tab to draw`, `${app}_${slug}_list_shown`, key_list_region, drawn_since(list_before), { timeout_ms: 3000 });
     verdict(`g ? shows the key list in the ${name} tab`, list_shown !== list_before);
     await shot(`${slug}_key_list`, `${name} tab after g ?: the key list shows`);
     await instance.press(["-k", "Escape"]);
-    const list_gone = await wait_pixels(instance, `the key list of the ${name} tab to go`, `${app}_${slug}_list_gone`, key_list_region, (hash) => hash === list_before, { timeout_ms: 3000 });
+    const list_gone = await wait_pixels(instance, `the key list of the ${name} tab to go`, `${app}_${slug}_list_gone`, key_list_region, back_to(list_before), { timeout_ms: 3000 });
     verdict(`the next key removes the key list in the ${name} tab`, list_gone === list_before);
 
     // A half-typed t lists the tab keys after the which-key delay.

@@ -3,7 +3,7 @@
 //   node tools/e2e/flakes.mjs run <n> [thunderbird|betterbird]...
 //   node tools/e2e/flakes.mjs fold <commit> <timings file>...   (a missing, unreadable or serial file is a run error)
 // A check is a flake when it fails in some runs of the batch and passes in others. A check that fails in every run is broken, and the alert says so.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,13 +18,20 @@ const repo_dir = join(import.meta.dirname, "..", "..");
 
 export const history_path = () => process.env.E2E_FLAKES_HISTORY || join(homedir(), ".local", "state", "desertbird", "e2e-flakes.jsonl");
 
+// A coordinator failure is "<app>/<kind>/<section>: <what happened>" for a piece that died, timed out or failed with no failed check. It counts as one case per piece, so a piece that dies in every run alerts. Text with no piece id is one case of the run.
+const PIECE_FAILURE_CASE = "(piece failure)";
+function failure_key(failure) {
+  const match = /^([\w.-]+\/[\w.-]+\/[\w.-]+): /.exec(failure);
+  return match ? `${match[1]}\n${PIECE_FAILURE_CASE}` : `(run)\n${failure}`;
+}
+
 // A run error is a run with no usable file: setup failed, the run died before it wrote one, or it ran serially and so has no merged `exit_code`.
 // `reports` has one entry per run, undefined for a run error. A batch with fewer than half its runs completed is too thin to read.
 export function fold_batch(reports, { commit, at }) {
   const completed = reports.filter(Boolean);
   const cases = new Map();
   for (const report of completed) {
-    const failed_here = new Set((report.failed_checks ?? []).map((failed) => `${failed.piece}\n${failed.name}`));
+    const failed_here = new Set([...(report.failed_checks ?? []).map((failed) => `${failed.piece}\n${failed.name}`), ...(report.failures ?? []).map(failure_key)]);
     for (const key of failed_here) {
       const [piece, name] = key.split("\n");
       if (!cases.has(key)) cases.set(key, { piece, case: name, fail: 0 });
@@ -49,7 +56,9 @@ export function alert_reasons(line) {
   const reasons = [];
   for (const failing of line.cases) {
     if (failing.fail < FAIL_ALERT_RUNS) continue;
-    const verdict = failing.fail === line.runs ? "failed in every run (broken, not flaky)" : `failed in ${failing.fail} of ${line.runs} runs`;
+    // A run error never ran the check, so it is not a run the check could pass.
+    const ran = line.runs - line.run_errors;
+    const verdict = failing.fail === ran ? "failed in every run that completed (broken, not flaky)" : `failed in ${failing.fail} of ${line.runs} runs`;
     reasons.push(`${failing.piece} "${failing.case}" ${verdict}`);
   }
   if (line.run_errors >= RUN_ERROR_ALERT_RUNS) reasons.push(`${line.run_errors} of ${line.runs} runs errored`);
@@ -102,7 +111,45 @@ function fold_and_alert(commit, report_paths) {
   return reasons.length > 0 || history_failed ? 1 : 0;
 }
 
-function run_batch(n, run_args) {
+// A serial run writes no merged file, so n serial runs would take hours and all count as run errors.
+export function shards_error(value) {
+  return /^[2-9]$|^[1-9][0-9]+$/.test(value) ? null : `E2E_SHARDS must be a number of 2 or more, got ${value}`;
+}
+
+const SIGNAL_CODES = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
+
+// Runs a child and waits for it. A SIGINT, SIGTERM or SIGHUP to this process goes on to the child, which stops its apps and exits, and the wait ends only then. A synchronous spawn would leave the child and its apps running after this process died and the lock freed.
+// `signals` is the process by default and an emitter in tests. Resolves { status, signal } with the signal this process received, if any.
+export function run_child(command, args, options, signals = process) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, options);
+    let received = null;
+    const forwarders = Object.keys(SIGNAL_CODES).map((name) => {
+      const forward = () => {
+        received ??= name;
+        child.kill(name);
+      };
+      signals.on(name, forward);
+      return [name, forward];
+    });
+    const done = (status) => {
+      for (const [name, forward] of forwarders) signals.off(name, forward);
+      resolve({ status, signal: received });
+    };
+    child.on("error", () => done(null));
+    child.on("close", (status, child_signal) => done(status ?? child_signal));
+  });
+}
+
+async function run_batch(n, run_args) {
+  const shards = process.env.E2E_SHARDS || DEFAULT_SHARDS;
+  const bad_shards = shards_error(shards);
+  if (bad_shards) {
+    console.error(`e2e-flakes: ${bad_shards}`);
+    return 2;
+  }
+  // The revision the batch tests, read before the build and kept until the fold: HEAD can move while the batch runs.
+  const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: repo_dir, encoding: "utf8" }).stdout.trim() || "unknown";
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const batch_dir = join(repo_dir, ".logs", `e2e-flakes-${stamp}`);
   mkdirSync(batch_dir, { recursive: true });
@@ -116,17 +163,21 @@ function run_batch(n, run_args) {
     console.log(`e2e-flakes: run ${run} of ${n}`);
     const timings_file = join(batch_dir, `run-${run}.json`);
     const log = openSync(join(batch_dir, `run-${run}.log`), "w");
-    const env = { ...process.env, E2E_TIMINGS_FILE: timings_file, E2E_SHARDS: process.env.E2E_SHARDS || DEFAULT_SHARDS };
-    const result = spawnSync(process.execPath, [join(import.meta.dirname, "run.mjs"), "--xpi", join(repo_dir, "dist", "desertbird.xpi"), ...run_args], { cwd: repo_dir, env, stdio: ["ignore", log, log] });
-    console.log(`e2e-flakes: run ${run} exit ${result.status ?? result.signal}`);
+    const env = { ...process.env, E2E_TIMINGS_FILE: timings_file, E2E_SHARDS: shards };
+    const result = await run_child(process.execPath, [join(import.meta.dirname, "run.mjs"), "--xpi", join(repo_dir, "dist", "desertbird.xpi"), ...run_args], { cwd: repo_dir, env, stdio: ["ignore", log, log] });
+    console.log(`e2e-flakes: run ${run} exit ${result.status}`);
+    // The run has stopped its apps by now. The batch stops with it and records nothing, since a cut batch is no sample.
+    if (result.signal) {
+      console.error(`e2e-flakes: stopped by ${result.signal} in run ${run}, nothing recorded`);
+      return SIGNAL_CODES[result.signal];
+    }
     report_paths.push(timings_file);
   }
-  const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: repo_dir, encoding: "utf8" }).stdout.trim();
   console.log(`e2e-flakes: logs in ${batch_dir}`);
-  return fold_and_alert(head || "unknown", report_paths);
+  return fold_and_alert(head, report_paths);
 }
 
-function main(args) {
+async function main(args) {
   const [command, ...rest] = args;
   if (command === "run") {
     const [n_text, ...run_args] = rest;
@@ -134,7 +185,7 @@ function main(args) {
       console.error(`e2e-flakes: n must be a positive number, got ${n_text}`);
       return 2;
     }
-    return run_batch(Number(n_text), run_args);
+    return await run_batch(Number(n_text), run_args);
   }
   if (command === "fold") {
     const [commit, ...report_paths] = rest;
@@ -144,4 +195,4 @@ function main(args) {
   return 2;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exit(main(process.argv.slice(2)));
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exit(await main(process.argv.slice(2)));
