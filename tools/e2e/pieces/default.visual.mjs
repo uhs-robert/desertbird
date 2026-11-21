@@ -72,8 +72,11 @@ async function run_visual(instance, ctx) {
   const in_inbox = archive_range.filter((id) => state.folders["/Inbox"]?.includes(id));
   check(app, kind, "a in visual mode archives the whole range", archive_range.length === 3 && in_inbox.length === 0, `range ${archive_range.join(" ")}, still in the Inbox ${in_inbox.join(" ")}`);
   const after_x = state.folders["/Inbox"]?.length;
+  const dotted = first_selected(state);
   state = await keys(["."], { what: ". to archive one more row", until: (current) => current.folders["/Inbox"]?.length === after_x - 1, timeout_ms: 10000 });
   check(app, kind, ". after a in visual mode archives the one selected row", state.folders["/Inbox"]?.length === after_x - 1, `Inbox ${after_x} then ${state.folders["/Inbox"]?.length}`);
+  state = await keys(["u"], { what: "u to bring the . archive back", until: (current) => current.folders["/Inbox"]?.includes(dotted) === true, timeout_ms: 10000 });
+  check(app, kind, "u undoes the . archive, one row back in the Inbox", state.folders["/Inbox"]?.includes(dotted) === true && state.folders["/Inbox"]?.length === after_x, `${dotted} in the Inbox ${state.folders["/Inbox"]?.includes(dotted)}, Inbox ${after_x - 1} then ${state.folders["/Inbox"]?.length}`);
   await shot("visual_after_a", "Inbox after a archived the range");
   check(app, kind, "the app survived visual mode", instance.exited() === null);
 }

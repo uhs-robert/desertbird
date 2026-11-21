@@ -63,6 +63,7 @@ Departures from the single run, each on purpose:
 - `E2E_SCALE=1` selects the scale piece alone. Before, it made every kind run the scale code.
 - A name in `E2E_ONLY` or `E2E_KINDS` that matches nothing is an error. Before, an unknown `E2E_ONLY` ran everything and an unknown kind ran the no-identity checks.
 - The `pages` kind is three pieces, so three app starts: the key checks, the hint checks and the typing checks. Before, one app ran all three.
+- `E2E_ONLY=keys` also takes `default/keys`, next to `pages/keys`. Add `E2E_KINDS` to narrow it.
 - The popup key checks are the piece `default/popup` and run in a full run. Before, they ran only under `E2E_ONLY=popup`.
 - The preamble checks of the default kind (the Inbox opens with keys) repeat in each piece that opens the Inbox.
 - The mode label style pieces start their own classic reference app (about 8 s each). Before, they compared against strips that the `default` kind left in a module variable, which a piece run alone or in a worker would lose.

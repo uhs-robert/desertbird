@@ -162,14 +162,12 @@ async function run_cmdline(instance, ctx) {
   await instance.press(return_key);
   state = await wait_state(instance, "o inb Enter to show the Inbox", (current) => current.mail_tab?.folder === "/Inbox", { soft: true, timeout_ms: 10000 });
   check(app, kind, "o then inb Enter shows the highlighted folder, the Inbox", state.mail_tab?.folder === "/Inbox", `folder ${state.mail_tab?.folder}`);
-  let listed_inbox = await wait_state(instance, "the Inbox to list its messages", (current) => current.listed.length > 0, { soft: true, timeout_ms: 10000 });
-  // A long run remembers a selection in the Inbox. Run alone, the pick selects no row, so g g gives the m m a message to move.
-  if (listed_inbox.selected.length === 0) {
-    await instance.press(["g"]);
-    listed_inbox = await key_and_state(instance, ["g"], { what: "g g to select the first row", until: (current) => current.selected.length > 0 });
-  }
+  await wait_state(instance, "the Inbox to list its messages", (current) => current.listed.length > 0, { soft: true, timeout_ms: 10000 });
+  // Thunderbird restores a folder's selection only after a message loaded there, and none did in this fresh profile, so the pick selects no row. g g gives the m m a message to move.
+  await instance.press(["g"]);
+  const listed_inbox = await key_and_state(instance, ["g"], { what: "g g to select the first row", until: (current) => current.selected.length > 0 });
   const before_j = selection_of(listed_inbox);
-  // The folder pick selects a row of its own. A probe on both apps (a Down after `o inb Enter` and 3 s) moved that selection, so the focus is in the list. A j straight after the pick moved nothing in full runs, and on main the check never saw it. The message to move is the one that is selected.
+  // The message to move is the one that g g selected.
   const moved = before_j === "" ? undefined : before_j.split(",")[0];
   await instance.press(["m"]);
   await open_command_line(instance, ["m"]);

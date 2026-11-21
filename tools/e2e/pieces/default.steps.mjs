@@ -3,7 +3,7 @@
 import { sleep, first_selected, selects, at_bottom, at_top } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
-// The step keys in the Views folder (6 messages: unread v0 to v2, starred v0 and v1, an attachment on v0). The row order comes from the listing, since earlier checks sorted the folder.
+// The step keys in the Views folder (6 messages: unread v0 to v2, starred v0 and v1, an attachment on v0). The row order comes from the listing, not from a fixed order.
 // The oracle walks that order: the steps must visit the matching rows in turn and stay on the last one.
 async function run_steps(instance, ctx) {
   const { app, kind, shot, check, note, barrier, show_folder, key_and_state } = ctx;
@@ -44,7 +44,7 @@ async function run_steps(instance, ctx) {
     }
   }
   note(app, kind, "unread counts the step reads", JSON.stringify((await instance.ask("folder_unread")).counts));
-  // Earlier checks read every fixture message, so m u first makes one Inbox message unread. ] U from the end of Views must then land on it.
+  // The setup marked every Inbox message read, so m u first makes one Inbox message unread. ] U from the end of Views must then land on it.
   await show_folder(instance, "/Inbox");
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], at_top);
@@ -59,11 +59,19 @@ async function run_steps(instance, ctx) {
   await shot("step_unread_all_folders", "the folder ] U opened, with an unread message selected");
 }
 
-// The `] U` check expects the one message that `m u` makes unread to be the only unread one. A long run had read every message by then, so the piece marks the Inbox read first.
-const mark_inbox_read = async (instance, ctx) => {
+// The `] U` check expects the one message that `m u` makes unread to be the only unread one, so the Inbox is marked read first.
+// The attachment checks need the attachment message (views-0) off the first row, so one Inbox message moves into Views first, which also makes it 7 rows.
+const prepare_inbox_and_views = async (instance, ctx) => {
+  const { wait_state, key_and_state, open_command_line } = ctx;
   await instance.press(["m"]);
   await instance.press(["R"]);
-  await ctx.wait_state(instance, "m R to mark the Inbox read", (now) => now.folders["/Inbox"].every((id) => now.flags[id]?.read !== false), { timeout_ms: 8000 });
+  await wait_state(instance, "m R to mark the Inbox read", (now) => now.folders["/Inbox"].every((id) => now.flags[id]?.read !== false), { timeout_ms: 8000 });
+  const moved = first_selected(await key_and_state(instance, ["G"], at_bottom));
+  await instance.press(["m"]);
+  await open_command_line(instance, ["m"]);
+  await instance.press(["vie"]);
+  await instance.press(["-k", "Return"]);
+  await wait_state(instance, `${moved} to leave the Inbox for /Views`, (now) => !now.folders["/Inbox"].includes(moved), { timeout_ms: 10000 });
 };
 
-export const piece = section_piece({ section: "steps", only: ["steps"], setup: mark_inbox_read, run: run_steps });
+export const piece = section_piece({ section: "steps", only: ["steps"], setup: prepare_inbox_and_views, run: run_steps });

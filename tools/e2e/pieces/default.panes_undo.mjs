@@ -7,7 +7,7 @@ async function run_panes_undo(instance, ctx) {
   const { app, kind, shot, check, wait_state, barrier, expect_absent } = ctx;
   const { keys, at_second_last, in_folder, messages_in_inbox, at_second, holds } = panes_helpers(instance, ctx);
   await show_inbox_listed(instance, ctx);
-  // The undo checks below expect an older step on the stack, which the visual section's `.` left in a long run. Run alone, the stack is empty, so one archive goes first.
+  // The undo checks below expect an older step on the stack, and the stack of a fresh app is empty, so one archive goes first.
   // The second last row is a single message, so the later u brings back exactly one. A collapsed thread root would archive its whole thread.
   await keys(["G"], at_bottom);
   const seed = first_selected(await keys(["k"], at_second_last));
@@ -68,7 +68,7 @@ async function run_panes_undo(instance, ctx) {
   state = await undo_typed(victim);
   check(app, kind, ":undo after d d moves the message back too", in_folder(state, victim, "/Inbox"), `${victim} in the Inbox after :undo ${in_folder(state, victim, "/Inbox")}`);
   const inbox_before = messages_in_inbox(state);
-  // One stack serves the whole run, so the next u steps back to an older entry: the archive that the setup made.
+  // One stack serves the piece, so the next u steps back to an older entry: the archive that the setup made.
   state = await keys(["u"], { what: "the next u to undo the older a archive", until: (current) => messages_in_inbox(current) === inbox_before + 1, timeout_ms: 10000, show: (current) => `Inbox ${messages_in_inbox(current)}` });
   check(app, kind, "the next u undoes the older a archive, one message back in the Inbox", messages_in_inbox(state) === inbox_before + 1, `Inbox ${inbox_before} then ${messages_in_inbox(state)}`);
   // Empty the stack: it holds at most 20 entries, and a step whose message is gone takes a second u to drop. Most of these u change nothing, so no state shows each one land. The barrier proves the last u reached the key runtime. It does not prove the background has drained the queue: undo_newest runs the steps one after another, with retries. So the folder counts must then hold for a quiet period.

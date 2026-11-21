@@ -66,7 +66,7 @@ async function run_hud(instance, ctx) {
   await poll("the which-key panel to show before j", "hud_panel_before_j", drawn_since(before_panel));
   const moved_in_panel = await key_and_state(instance, ["j"], { what: "j to move the list while the which-key panel shows", until: (state) => selection_of(state) !== before_g_j, show: (state) => `selected ${selection_of(state)}` });
   check(app, kind, "j moves the list while the which-key panel shows", selection_of(moved_in_panel) !== before_g_j);
-  // A click on a folder row, which sits under the hud box, reaches the folder pane. The Views folder is the one shown at this point of a full run, so another folder is the target.
+  // A click on a folder row, which sits under the hud box, reaches the folder pane. The row to click depends on which folder shows, so it is picked from the shown folder.
   const displayed = (await instance.ask("state")).mail_tab?.folder;
   await instance.press(["q"]);
   await sleep(800);
