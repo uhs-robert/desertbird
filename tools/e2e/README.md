@@ -97,22 +97,38 @@ Copied from DesertFox's `test/key/` (`run.mjs`, `worker.mjs`, `shards.mjs`, `tim
 - Workers send their checks and timings entries in `piece_done` and write no file. One run dir and one lock, held by the coordinator.
 - Signals in both the coordinator and the worker go through `install_lifecycle` (`harness.mjs`), whose `on_signal` hook stops the workers and writes the report before the exit, and whose `announce: false` keeps a worker quiet.
 - Setting names are `E2E_*`. `KEY_TEST_ORDER=reverse` is not copied, since the serial run keeps the registry order.
-- The default worker count is 1 for now, where DesertFox runs 8.
+- The default worker count is 1 for `npm run e2e`, where DesertFox runs 8. `just e2e` sets 3, since fleet sessions run at most 3 apps at once (see Scope and lock).
 
 ## Changed-only runs
 
-`E2E_CHANGED=1` keeps the pieces that the change can affect. Each piece file has one line, `export const areas = [...]`, with the areas it exercises. `areas.mjs` maps `src/` files to areas (`area_rules`, first match wins) and diffs against `E2E_BASE` (default `origin/main`: commits, working tree and new files). A piece runs when it shares an area with a changed src file. A changed piece file runs that piece. A change to `src/manifest.json`, the router, `protocol.ts`, the key runtime (`chrome/runtime.ts`, `parent_keys.ts`, `platform.ts`), the config, `vendor/`, `tools/build.mjs` or any harness file of `tools/e2e/` runs every piece. A helper that only some pieces use (`_default_shared.mjs`, `panes_checks.mjs`) runs those pieces. A src file that no rule places runs every piece, and `test/e2e_areas.test.ts` fails on it, so add a rule. A docs-only change runs nothing. The check `registry.select_pieces` makes the choice, and `changed_run_apps` gives `run.mjs` its app list `["betterbird"]` unless apps are named: a changed-only run uses Betterbird alone, and the full run covers both apps. A diff that selects no piece prints `e2e: no pieces selected` and exits 0, serial or sharded.
+`E2E_CHANGED=1` keeps the pieces that the change can affect. Each piece file has one line, `export const areas = [...]`, with the areas it exercises. `areas.mjs` maps `src/` files to areas (`area_rules`, first match wins) and diffs against `E2E_BASE` (default `origin/main`: commits, working tree and new files). A piece runs when it shares an area with a changed src file. A changed piece file runs that piece. A change to `src/manifest.json`, the router, `protocol.ts`, the key runtime (`chrome/runtime.ts`, `parent_keys.ts`, `platform.ts`, `focus.ts`, `view.ts`), the overlay host (`overlay.ts`, `overlay_id.ts`, `parent_overlay.ts`), `notify.ts`, the config, `vendor/`, `package.json`, `tools/build.mjs` or any harness file of `tools/e2e/` runs every piece. A helper that only some pieces use (`_default_shared.mjs`, `panes_checks.mjs`) runs those pieces. A src file that no rule places runs every piece, and `test/e2e_areas.test.ts` fails on it, so add a rule. A docs-only change runs nothing. The check `registry.select_pieces` makes the choice, and `changed_run_apps` gives `run.mjs` its app list `["betterbird"]` unless apps are named: a changed-only run uses Betterbird alone, and the full run covers both apps. A diff that selects no piece prints `e2e: no pieces selected` and exits 0, serial or sharded.
 
 `node tools/e2e/changed.mjs [base [head]]` or `--paths a,b` prints the pieces and runs nothing. `E2E_CHANGED_PATHS` (a comma list) replaces the git diff.
 
 Departures from DesertFox `test/key/areas.mjs`, each on purpose:
 
 - The pieces are read per file (`areas` sits in the piece file, not the piece object), because one file can hold several pieces (`mode_label.mjs`, `compose_editor.mjs`). The choice is a set of files, and the registry keeps the pieces from those files.
-- The selection hook is `E2E_CHANGED=1` in the registry in place of a `just key-test-changed` recipe, since this repo adds no justfile recipe and no npm script for it yet.
+- The selection hook is `E2E_CHANGED=1` in the registry and `just e2e-changed` sets it (the base is `E2E_BASE`), in place of DesertFox's `key-test-changed` taking the base as an argument.
 - Betterbird only, because the owner chose one app for a changed-only run.
 - The bridge (`src/background/bridge/`) maps to no area, since no piece drives it.
 - The harness rule is wider than DesertFox's list: any file of `tools/e2e/` that has no narrower rule selects every piece, so a new harness file errs to the safe side. No src file is unplaced in DesertFox either way, and a src file with no rule selects every piece.
 - There is no host rule and no `{setup:true}` case, since DesertBird has neither.
+
+## Scope and lock
+
+`just e2e [args]` takes the lock, then installs, sweeps, builds and runs `npm run e2e -- --xpi dist/desertbird.xpi [args]` on 3 workers (`E2E_SHARDS` overrides) in a capped systemd scope when `systemd-run --user` works. `just e2e-changed [args]` adds `E2E_CHANGED=1` (the base is `E2E_BASE`). `just e2e-sweep` runs the sweep alone. The justfile calls npm, never the reverse.
+
+- Lock: `/tmp/desertbird-e2e.lock`, one run per machine, because two runs break the memory budget. The build sits under it, since a build outside it would delete `dist/` under a run that still reads the xpi. A second run prints the holders and waits up to 3600 s, then fails. Never wrap the recipe in `flock`.
+- Scope: `MemoryMax` of 2 GB per worker plus 2 GB (8 GB on 3 workers), `MemoryHigh` 1 GB under it, no swap. The runtime limit is the run deadline plus 120 s. `run.mjs --print-deadline` prints the deadline, which is `E2E_DEADLINE_S` or the one derived from the weights. A run with no deadline (serial, or one piece) gets 7200 s. The scope joins `agents.slice` when the caller is in it. With no systemd user session the run goes on without a cap and says so.
+- Sweep (`sweep.mjs`): under the lock, it kills the process groups of any `desertbird-e2e-*` dir in the temp dir that hold a command line with `-profile <dir>/...` or `-C <dir>/...`, which is what a run starts. It takes each dir's lock while it reaps, so a live run is skipped and an `E2E_DIR` run cannot start mid-reap. A reader of the kept logs (`less`, `rg`), a dir from `E2E_DIR` and anything else (the owner's Betterbird, `~/.thunderbird`) is left alone. The dirs stay as evidence.
+
+Departures from DesertFox's `key-test` recipe:
+
+- The lock wait is 3600 s, not 900 s, for the longer run. A full run takes about 20 minutes, so waiting beats failing.
+- The runtime limit is the deadline plus 120 s, where DesertFox adds 70 s. The extra 50 s covers the worker stop grace (10 s), the app stops and the report, which run longer here. A run with no deadline gets 7200 s.
+- `MemoryMax` scales with `E2E_SHARDS`, where DesertFox fixes 16 GB and 14 GB for its 8 shards. No `CPUQuota`: `agents.slice` already caps the CPU.
+- The sweep runs in the recipe under the lock, where DesertFox's `run.mjs` sweeps itself. It finds a run by its dir and lock, where DesertFox reads an owner file.
+- No `build-key-test` step: the run uses the one build, made under the lock.
 
 ## Startup
 

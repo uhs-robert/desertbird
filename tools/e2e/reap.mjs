@@ -4,7 +4,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 
 // The process groups whose members name a path under `piece_dir` on their command line. The trailing slash keeps `compose_editor_html` from matching `compose_editor_html_top`.
-export function groups_naming(piece_dir, proc_dir = "/proc") {
+// `names_dir(args, prefix)` says whether a command line names the dir. The default is any argument that holds it, which suits a piece dir of a live run.
+// A caller that points this at old dirs passes a narrower test, since people open those dirs with less, tail and rg.
+export function groups_naming(piece_dir, proc_dir = "/proc", names_dir = (args, prefix) => args.some((arg) => arg.includes(prefix))) {
   const prefix = `${piece_dir.replace(/\/+$/, "")}/`;
   const own_group = process_group_of(process.pid, proc_dir);
   const groups = new Set();
@@ -16,7 +18,7 @@ export function groups_naming(piece_dir, proc_dir = "/proc") {
     } catch {
       continue;
     }
-    if (!args.some((arg) => arg.includes(prefix))) continue;
+    if (!names_dir(args, prefix)) continue;
     const group = process_group_of(Number(entry), proc_dir);
     // Never this process's own group: a worker or the coordinator that named the dir on its own command line would kill itself.
     if (group !== undefined && group > 1 && group !== own_group) groups.add(group);
@@ -34,8 +36,8 @@ function process_group_of(pid, proc_dir) {
 }
 
 // SIGKILLs every group found by groups_naming and returns the groups. A content process shares its app's group, so one kill per group ends them all.
-export function reap_piece_dir(piece_dir) {
-  const groups = groups_naming(piece_dir);
+export function reap_piece_dir(piece_dir, names_dir) {
+  const groups = groups_naming(piece_dir, "/proc", names_dir);
   for (const group of groups) try { process.kill(-group, "SIGKILL"); } catch {}
   return groups;
 }
