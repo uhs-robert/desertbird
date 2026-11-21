@@ -127,6 +127,14 @@ e2e_locked *args: install_deps
 e2e-changed *args:
     E2E_CHANGED=1 just e2e "$@"
 
+# Run `just e2e` n times and fold the runs into the flake history (`npm run e2e:flakes`, see tools/e2e/README.md). Takes the lock of `just e2e` for the whole batch, sweeps first and builds once. The batch has no systemd scope, so it has no memory cap or time limit. Arguments after n go to each run, for example `just e2e-flakes 3 betterbird`.
+[positional-arguments]
+e2e-flakes n *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    lock_file=/tmp/desertbird-e2e.lock
+    exec flock -o -w 3600 "$lock_file" bash -c 'node tools/e2e/sweep.mjs && exec npm run --silent e2e:flakes -- "$@"' _ "$@"
+
 # Kill the apps of dead e2e runs now, without starting a run. `just e2e` does this before each run. Only apps started with a -profile or -C path in a desertbird-e2e-* dir of the temp dir are matched, and a run that holds its lock is left alone.
 e2e-sweep:
     node tools/e2e/sweep.mjs

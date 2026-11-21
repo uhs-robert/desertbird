@@ -9,7 +9,7 @@ const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-
 const SPACES = { calendar: [22, 112], tasks: [22, 157], settings: [22, 653] };
 const PAGE_REGION = "0,150 1260x480";
 
-export async function run_pages(instance, { check, note, shot, key_and_state, hud_pixels, open_inbox, close_command_line, key_list_region }) {
+export async function run_pages(instance, { check, note, shot, key_and_state, hud_pixels, wait_pixels, open_inbox, close_command_line, key_list_region }) {
   const app = instance.app;
   const kind = "pages";
   await open_inbox(instance);
@@ -45,12 +45,12 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
     await instance.press(["g"]);
     const helped = await key_and_state(instance, ["?"], 3000);
     verdict(`g ? opens no tab from the ${name} tab`, (helped.windows.find((window) => window.type === "normal")?.tabs ?? []).length === before + 1);
-    const list_shown = await hud_pixels(instance, `${app}_${slug}_list_shown`, key_list_region);
+    const list_shown = await wait_pixels(instance, `the key list of the ${name} tab to draw`, `${app}_${slug}_list_shown`, key_list_region, (hash) => hash !== list_before, { timeout_ms: 3000 });
     verdict(`g ? shows the key list in the ${name} tab`, list_shown !== list_before);
     await shot(`${slug}_key_list`, `${name} tab after g ?: the key list shows`);
     await instance.press(["-k", "Escape"]);
-    await sleep(1500);
-    verdict(`the next key removes the key list in the ${name} tab`, (await hud_pixels(instance, `${app}_${slug}_list_gone`, key_list_region)) === list_before);
+    const list_gone = await wait_pixels(instance, `the key list of the ${name} tab to go`, `${app}_${slug}_list_gone`, key_list_region, (hash) => hash === list_before, { timeout_ms: 3000 });
+    verdict(`the next key removes the key list in the ${name} tab`, list_gone === list_before);
 
     // A half-typed t lists the tab keys after the which-key delay.
     await instance.press(["t"]);
