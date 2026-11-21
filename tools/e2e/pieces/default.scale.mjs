@@ -3,6 +3,8 @@
 import { BIG_MESSAGES } from "../../measure/fixtures.mjs";
 import { same } from "../predicates.mjs";
 
+export const areas = ["motions"];
+
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.
 async function run_scale(instance, ctx) {
   const { check, note, open_inbox, wait_state } = ctx;

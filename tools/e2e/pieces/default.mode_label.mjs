@@ -2,4 +2,6 @@
 import { run_mode_label } from "./_mode_label.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["mode_label", "theme"];
+
 export const piece = section_piece({ section: "mode_label", only: ["mode_label"], run: run_mode_label });

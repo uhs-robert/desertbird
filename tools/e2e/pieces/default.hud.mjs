@@ -4,6 +4,8 @@ import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
 import { sleep, selects, HUD_REGION, holds_twice, drawn_since, back_to, KEY_LIST_REGION, TOAST_EXPIRY_MS } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["hud", "theme"];
+
 // The which-key panel, the root key list, a toast and the help page, in the Inbox with the thread list focused. The screenshots carry the E2E_THEME name. A panel is shown or gone when the window's pixels differ or match: the same selection and no panel draws the same window.
 async function run_hud(instance, ctx) {
   const { app, kind, shot, check, wait_state, key_and_state, hud_pixels, wait_pixels } = ctx;

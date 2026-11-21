@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 import { sleep, compose_opens, compose_tab, reply_is_loaded, mail_window_ready, selects_inbox_s2 } from "../predicates.mjs";
 import { EDITED_TEXT, DESERTFOX_HOST, COMPOSE_EDITOR_HTML_KINDS, install_editor_host } from "../seed.mjs";
 
+export const areas = ["compose", "mode_label"];
+
 // A 1x1 PNG for the draft image measurement.
 const PIXEL_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 

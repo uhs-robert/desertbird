@@ -3,6 +3,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { changed_piece_files } from "./areas.mjs";
 
 // The kinds of a run with no E2E_KINDS, in the order they run.
 export const DEFAULT_KINDS = ["default", "reply_no_identity", "mail_account", "message", "message_remote", "quick_reply_plain", "quick_reply_html", "mode_label_badge", "mode_label_off", "mode_label_themed", "own_pages", "pages", "zoom", "web", "compose_editor", "compose_editor_html", "compose_editor_html_top"];
@@ -47,5 +48,14 @@ export function select_pieces(pieces, env = {}) {
   const unmet = chosen.find((piece) => piece.needs_env && env[piece.needs_env] !== "1");
   if (unmet) throw new Error(`${unmet.name} needs ${unmet.needs_env}=1 in the environment, which prepares its profile. Run it with ${unmet.needs_env}=1 alone.`);
   if (chosen.length === 0) throw new Error(`E2E_ONLY=${E2E_ONLY} matches no piece of the kinds ${kinds.join(", ")}`);
-  return [...new Map(chosen.map((piece) => [piece.name, piece])).values()];
+  const unique = [...new Map(chosen.map((piece) => [piece.name, piece])).values()];
+  // E2E_CHANGED=1 keeps the pieces whose areas the diff touches. It may leave none, and then nothing runs.
+  if (env.E2E_CHANGED !== "1") return unique;
+  const changed_files = changed_piece_files(env);
+  return unique.filter((piece) => changed_files.has(piece.file));
+}
+
+// The apps of a changed-only run, or null for the caller's own choice. A change checks one app, and Betterbird is the one that runs the same code with the extra Betterbird window features.
+export function changed_run_apps(env = {}) {
+  return env.E2E_CHANGED === "1" ? ["betterbird"] : null;
 }

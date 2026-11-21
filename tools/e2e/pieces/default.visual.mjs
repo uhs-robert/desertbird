@@ -4,6 +4,8 @@ import { first_selected, same, drawn_since, back_to } from "../predicates.mjs";
 import { LABEL_STRIP } from "./_mode_label.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["visual", "mail_keys", "mode_label"];
+
 // Visual mode in the Inbox with every thread open, so each row is one message. The commands run on the real list: m s flags the range and a archives it.
 // The mode label shows the mode and no state does, so v and Escape are waited for on the label's pixels.
 async function run_visual(instance, ctx) {

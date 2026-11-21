@@ -3,6 +3,8 @@
 import { sleep, first_selected, selects, flag_becomes, main_window_tabs, active_index, tab_count_is, active_is, ppm_colors } from "../predicates.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
+export const areas = ["message_body", "hints", "tabs", "mail_keys", "theme", "panes"];
+
 // The body script: keys while a message is read, in the reading pane, a message tab and a message window. The helper's own content script reports the scroll position and whether DesertBird marked the document.
 const LINE_STEP_PX = 40;
 

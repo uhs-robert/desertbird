@@ -10,7 +10,7 @@ import { install_lifecycle, start_app } from "./harness.mjs";
 import { open_run_dir } from "./run_dir.mjs";
 import { create_timings, default_timings_path, filter_of, report_path_of } from "./timings.mjs";
 import { run_piece } from "./piece_runner.mjs";
-import { load_pieces, select_pieces } from "./registry.mjs";
+import { changed_run_apps, load_pieces, select_pieces } from "./registry.mjs";
 import { deadline_s_of, derive_deadline_s, load_weights, parse_piece_id, piece_id, read_setup, stale_weight_warnings } from "./shards.mjs";
 import { run_sharded } from "./coordinator.mjs";
 
@@ -31,7 +31,8 @@ const binaries = {
   betterbird: "/usr/bin/betterbird",
 };
 for (let value; (value = option("--binary")); ) { const [name, path] = value.split("="); binaries[name] = path; }
-const apps = args.length ? args : ["thunderbird", "betterbird"];
+// A changed-only run checks one app unless the caller names the apps.
+const apps = args.length ? args : (changed_run_apps(process.env) ?? ["thunderbird", "betterbird"]);
 
 let pieces;
 let setup;
@@ -40,6 +41,10 @@ try {
   const repeated = apps.find((app, at) => apps.indexOf(app) !== at);
   if (repeated) throw new Error(`${repeated} is named twice`);
   pieces = select_pieces(await load_pieces(), process.env);
+  if (pieces.length === 0) {
+    console.log("e2e: no pieces selected");
+    process.exit(0);
+  }
   // With no xpi a piece only starts its app, so one piece per kind proves the setup.
   if (!xpi_path) pieces = pieces.filter((piece, at) => pieces.findIndex((other) => other.kind === piece.kind) === at);
   setup = read_setup(process.env, { queue_length: apps.length * pieces.length });

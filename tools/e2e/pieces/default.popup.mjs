@@ -1,6 +1,8 @@
 // The popup key checks (see popup_checks.mjs): plain keys while a menu is open. Part of the default run.
 import { run_popup_keys } from "../popup_checks.mjs";
 
+export const areas = ["popup"];
+
 export const piece = {
   kind: "default",
   section: "popup",

@@ -4,6 +4,8 @@ import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
 import { HUD_REGION, holds_twice, sleep, CTRL, first_selected, selects, at_bottom, main_window_tabs, active_index, tab_count_is, active_is } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["tabs"];
+
 // Tab commands. The helper add-on opens, selects and closes tabs through the API, since wtype has no mouse.
 async function run_tabs(instance, ctx) {
   const { check, note, shot, key_and_state, wait_state, wait_for_state, toast_cycle } = ctx;

@@ -3,6 +3,8 @@ import { section_piece } from "./_default_shared.mjs";
 import { panes_helpers, show_inbox_listed } from "./_panes_shared.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
+export const areas = ["panes"];
+
 // Pane focus and folder row folds: native Down moves the selection of the pane that has focus, so it tells which pane a key focused. Then the chords, the hidden panes, the page keys and the leader.
 async function run_panes_focus(instance, ctx) {
   const { app, kind, shot, check, note, wait_for_state } = ctx;

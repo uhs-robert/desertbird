@@ -2,6 +2,8 @@ import { sleep, first_selected, at_top, at_bottom, thread_shows } from "../predi
 import { section_piece } from "./_default_shared.mjs";
 import { panes_helpers, show_inbox_listed } from "./_panes_shared.mjs";
 
+export const areas = ["panes", "mail_keys"];
+
 // u and :undo, then the native Delete that u leaves alone.
 async function run_panes_undo(instance, ctx) {
   const { app, kind, shot, check, wait_state, barrier, expect_absent } = ctx;
