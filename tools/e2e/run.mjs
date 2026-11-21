@@ -25,6 +25,8 @@ const option = (name) => {
   return value;
 };
 const xpi_path = option("--xpi");
+// `just e2e` reads the run deadline from here to set its scope limit, so the recipe never repeats derive_deadline_s.
+const print_deadline = args.includes("--print-deadline") && args.splice(args.indexOf("--print-deadline"), 1).length > 0;
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
 const binaries = {
   thunderbird: join(measure_dir, "thunderbird-153.7.0esr", "thunderbird", "thunderbird"),
@@ -49,6 +51,19 @@ try {
   if (!xpi_path) pieces = pieces.filter((piece, at) => pieces.findIndex((other) => other.kind === piece.kind) === at);
   setup = read_setup(process.env, { queue_length: apps.length * pieces.length });
 } catch (error) { console.error(`e2e: ${error.message}`); process.exit(SETUP_ERROR_EXIT); }
+
+// The deadline of a sharded run, from E2E_DEADLINE_S or derived from the weights of the queue. A serial run has none.
+function run_deadline_s() {
+  const ids = apps.flatMap((app) => pieces.map((piece) => piece_id(app, piece)));
+  const { weights, source } = load_weights({ logs_dir: join(repo_dir, ".logs"), chosen_file: process.env.E2E_WEIGHTS });
+  const piece_deadline_of = (id) => deadline_s_of(pieces.find((piece) => piece.name === parse_piece_id(id).name), setup.piece_deadline_s);
+  return { ids, weights, source, piece_deadline_of, deadline_s: setup.deadline_s ?? derive_deadline_s({ ids, weights, shard_count: setup.shard_count, piece_deadline_of }) };
+}
+
+if (print_deadline) {
+  if (setup.shard_count > 1) console.log(run_deadline_s().deadline_s);
+  process.exit(0);
+}
 
 let run_dir;
 try { run_dir = open_run_dir(); } catch (error) { console.error(`e2e: ${error.message}`); process.exit(1); }
@@ -102,11 +117,8 @@ async function run_on_workers() {
     finish(false);
     process.exit(SETUP_ERROR_EXIT);
   }
-  const ids = apps.flatMap((app) => pieces.map((piece) => piece_id(app, piece)));
-  const { weights, source } = load_weights({ logs_dir: join(repo_dir, ".logs"), chosen_file: process.env.E2E_WEIGHTS });
+  const { ids, weights, source, piece_deadline_of, deadline_s } = run_deadline_s();
   console.log(`e2e: weights from ${source}`);
-  const piece_deadline_of = (id) => deadline_s_of(pieces.find((piece) => piece.name === parse_piece_id(id).name), setup.piece_deadline_s);
-  const deadline_s = setup.deadline_s ?? derive_deadline_s({ ids, weights, shard_count: setup.shard_count, piece_deadline_of });
   sharded = run_sharded({ ids, weights, shard_count: setup.shard_count, deadline_s, piece_deadline_of, init: { run_dir: e2e_dir, xpi_path, binaries }, timings_path, report_path: xpi_path ? report_path : null, filter });
   const { exit_code } = await sharded.done;
   if (signalled) return;
