@@ -786,9 +786,10 @@ async function run_followup(instance) {
   const app = instance.app;
   const kind = "default";
   let state = await instance.ask("state");
+  // The list has no selection after g g here, so j picks the row. The target is whichever row j reached.
   await instance.press(["g"]);
-  await key_and_state(instance, ["g"], selects(COLLAPSED_ROWS[0]));
-  state = await key_and_state(instance, ["j"], selects(COLLAPSED_ROWS[1]));
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["j"], { what: "j to select a row", until: (current) => first_selected(current) !== null, show: (current) => `selected ${first_selected(current)}` });
   const target = first_selected(state);
   const tags_before = JSON.stringify(state.flags[target]?.tags ?? []);
   const id_start = Buffer.from(target.slice(0, 20));
@@ -1295,6 +1296,8 @@ async function run_mode_label(instance, { app, kind, shot }) {
   const poll_strip = (what, until, region = LABEL_STRIP) => wait_pixels(instance, what, `${app}_${kind}_label_poll`, region, until, { timeout_ms: 5000 });
   const after_key = async (what, before, region = LABEL_STRIP) => (shows ? poll_strip(what, drawn_since(before), region) : sleep(900));
   const back_to_label = async (what, wanted) => (shows ? poll_strip(what, back_to(wanted)) : sleep(900));
+  // With the label off the strip holds still before the bar has settled, and no signal follows, so that kind keeps the fixed wait.
+  if (!shows) await sleep(1500);
   await poll_strip("the strip to hold still", holds_twice());
   const normal = await strip_of("normal");
   await raw_strip("normal");
