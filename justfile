@@ -103,7 +103,9 @@ e2e_locked *args: install_deps
     if ! [[ "$E2E_SHARDS" =~ ^[1-9][0-9]*$ ]]; then echo "e2e: E2E_SHARDS must be a positive number, got $E2E_SHARDS" >&2; exit 2; fi
     run_args=(--xpi dist/desertbird.xpi "$@")
     # The runner prints the deadline it will use, so the limit follows it. A margin covers the stop grace and the report after the deadline. A run with no deadline (serial, or one piece) has no bound of its own, and a full serial run takes about an hour, so it gets 7200 s.
-    deadline_s=$(node tools/e2e/run.mjs --print-deadline "${run_args[@]}")
+    # The last line is the deadline. A run that selects no piece prints a message instead and exits 0, and then the limit is the fallback.
+    deadline_s=$(node tools/e2e/run.mjs --print-deadline "${run_args[@]}" | tail -n 1)
+    if ! [[ "$deadline_s" =~ ^[1-9][0-9]*$ ]]; then deadline_s=""; fi
     run_limit_s=7200
     if [ -n "$deadline_s" ]; then run_limit_s=$((deadline_s + 120)); fi
     # About 1 GB of app and 0.2 GB of labwc per worker by RSS (measure.md), plus the runner. 2 GB a worker and 2 GB over.
