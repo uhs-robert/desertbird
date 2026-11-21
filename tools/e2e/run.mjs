@@ -1827,6 +1827,8 @@ const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
 const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
 const PAINT_MARGIN_MS = 2000;
+// The address book and the calendar paint later than an own page. At 2000 ms on Thunderbird the click landed before the grid was ready.
+const CHROME_TAB_MARGIN_MS = 3000;
 const tab_count_is = (count) => ({ what: `${count} tab${count === 1 ? "" : "s"} in the main window`, until: (state) => main_window_tabs(state).length === count, show: (state) => `${main_window_tabs(state).length} tabs`, timeout_ms: 10000 });
 const active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active index ${active_index(state)}` });
 // The new tab is the last one. A tab that reports no status counts as loaded, and a loaded page can still be unpainted, so callers add `PAINT_MARGIN_MS` where a click or a pixel read follows.
@@ -1914,7 +1916,7 @@ async function run_own_pages(instance) {
   for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
     await open();
     const opened = await wait_for_state(instance, last_tab_loaded(before + 1));
-    await sleep(PAINT_MARGIN_MS);
+    await sleep(CHROME_TAB_MARGIN_MS);
     check(app, kind, `the ${name} tab opens`, main_window_tabs(opened).length === before + 1, `tabs ${main_window_tabs(opened).length}`);
     await instance.click(...click_at);
     await sleep(500);
