@@ -258,7 +258,27 @@ function lifecycle_child(root: string, body: string) {
   return { child, exited, line_starting };
 }
 const pids_of = (line: string) => line.split(" ").slice(1).map(Number) as [number, number];
-const group_alive = (pgid: number) => { try { process.kill(-pgid, 0); return true; } catch { return false; } };
+// A group counts as gone when no member runs. kill(-pgid, 0) also succeeds for a zombie, and an orphan of a killed group stays a zombie
+// where the process that adopts it never reaps, as on a CI container without an init. The members are read from /proc for that reason.
+// The kill reaches a process before the kernel has finished tearing it down, so the check polls to a deadline.
+function group_members_running(pgid: number) {
+  return readdirSync("/proc").filter((entry) => {
+    if (!/^\d+$/.test(entry)) return false;
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, "latin1");
+      const [state, , group] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      return Number(group) === pgid && state !== "Z";
+    } catch {
+      return false;
+    }
+  });
+}
+async function group_gone(pgid: number, deadline_ms = 5000) {
+  for (const started = Date.now(); group_members_running(pgid).length > 0; await new Promise((wake) => setTimeout(wake, 25))) {
+    if (Date.now() - started > deadline_ms) return false;
+  }
+  return true;
+}
 
 test("SIGTERM stops every tracked group, frees the lock and exits 143", () => in_tmp(async (root) => {
   const { child, exited, line_starting } = lifecycle_child(root, `const a = track_session(fake_session(false)); const b = track_session(fake_session(true)); console.log("ready " + a.groups[0] + " " + b.groups[0]);`);
@@ -268,7 +288,7 @@ test("SIGTERM stops every tracked group, frees the lock and exits 143", () => in
   const { code } = await exited;
   assert.equal(code, 143);
   assert.ok(!existsSync(lock_of(root)));
-  assert.ok(!group_alive(first) && !group_alive(second));
+  assert.ok(await group_gone(first) && await group_gone(second));
 }));
 
 test("a second signal during the shutdown does not cut the kill grace short", () => in_tmp(async (root) => {
@@ -281,7 +301,7 @@ test("a second signal during the shutdown does not cut the kill grace short", ()
   const { code, at } = await exited;
   assert.equal(code, 143, "the first signal's code");
   assert.ok(at - first_at >= 3000, `the process lived ${at - first_at} ms, short of the kill grace`);
-  assert.ok(!group_alive(group), "the group that ignored SIGTERM is dead");
+  assert.ok(await group_gone(group), "the group that ignored SIGTERM is dead");
   assert.ok(!existsSync(lock_of(root)));
 }));
 
@@ -295,7 +315,7 @@ test("a signal while a session is still starting waits for it and stops it", () 
   const { code } = await exited;
   const [group] = pids_of(await line_starting("started"));
   assert.equal(code, 130);
-  assert.ok(!group_alive(group), "the session that came up during the shutdown is stopped");
+  assert.ok(await group_gone(group), "the session that came up during the shutdown is stopped");
   assert.ok(!existsSync(lock_of(root)));
 }));
 
@@ -304,7 +324,7 @@ test("an uncaught error kills every tracked group, frees the lock and exits 1", 
   const [group] = pids_of(await line_starting("ready"));
   const { code } = await exited;
   assert.equal(code, 1);
-  assert.ok(!group_alive(group));
+  assert.ok(await group_gone(group));
   assert.ok(!existsSync(lock_of(root)));
 }));
 
