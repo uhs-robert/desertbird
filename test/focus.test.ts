@@ -187,7 +187,7 @@ test("the overlay's browser is a typing target by its final id and not by its lo
     assert.equal(is_typing({ target: browser(OVERLAY_LOADING_ID) }, document_of(browser(OVERLAY_LOADING_ID))), false);
 });
 
-test("an open menupopup takes the access keys of its direct items, a panel takes keys only with the focus inside it", () => {
+test("an open menupopup takes the access keys of its direct items, a panel takes no plain key", () => {
     const list = element("tbody");
     const item = (key: string, owner: () => unknown, attributes: string[] = []) => ({ getAttribute: () => key, hasAttribute: (name: string) => attributes.includes(name), closest: owner });
     const popup = (local_name: string, state: string, make_items: (self: object) => object[], contains: (node: unknown) => boolean = () => false) => {

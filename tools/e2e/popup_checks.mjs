@@ -55,7 +55,7 @@ export async function run_popup_keys(instance, { check, shot, key_and_state, fir
 
   // The last check moved the list, so the baseline is the selection now.
   start = first_selected(state);
-  // The app menu opened by the keyboard puts the focus inside the panel, and an arrow key moves it onto an item. The panel has no access keys, so a plain key must reach nothing. Escape after a click leaves the focus on the button, where Space opens the menu.
+  // The app menu opened by the keyboard puts the focus inside the panel. A plain key must reach nothing there, also after an arrow key. Escape after a click leaves the focus on the button, where Space opens the menu.
   await instance.click(...APP_MENU_BUTTON);
   await sleep(1000);
   await instance.press(["-k", "Escape"]);
@@ -67,10 +67,10 @@ export async function run_popup_keys(instance, { check, shot, key_and_state, fir
   check(app, kind, "app menu open by keyboard: j marks nothing as junk and moves nothing", untouched(state), detail(state));
   await instance.press(["-k", "Down"]);
   await sleep(500);
-  await shot("popup_app_menu_item_focused", "app menu with an arrow key pressed, focus on an item");
+  await shot("popup_app_menu_after_arrow", "app menu after an arrow key pressed in it");
   const folders_in_panel = JSON.stringify(state.folders);
   for (const key of ["j", "a", "n"]) state = await key_and_state(instance, [key], 1200);
-  check(app, kind, "app menu with focus on an item: j, a and n mark, archive and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_in_panel, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_in_panel}`);
+  check(app, kind, "app menu after an arrow key inside it: j, a and n mark, archive and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_in_panel, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_in_panel}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
 }
