@@ -228,7 +228,9 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
     assert_start_paths({ run_dir: deps.run_dir, paths: start_paths_of(work_dir) });
     const xpi_path = deps.xpi_path && seeds ? seed_storage(deps.xpi_path, work_dir, seeds) : deps.xpi_path;
     const extra = await deps.start_app({ app, app_binary: deps.binaries[app], work_dir, run_dir: deps.run_dir, kind: "default", xpi_path });
-    return { ...extra, kind: "default" };
+    const instance = { ...extra, kind: "default" };
+    ctx.extra_instances.push(instance);
+    return instance;
   }
 
   const ctx = {
@@ -237,6 +239,8 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
     instance: null,
     // What the piece's before_start hook returned.
     reference: null,
+    // The apps start_extra started, so the runner can add their startups and memory to the piece's timings entry.
+    extra_instances: [],
     report, wait_stats,
     check, note, shot, timed,
     sleep, wait_for, wait_state, wait_for_state, key_and_state, barrier, expect_absent, wait_pixels, drawn_since, back_to, holds_twice,
