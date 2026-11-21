@@ -208,7 +208,7 @@ export function run_sharded(setup) {
       log(`e2e: timings not written: ${error.message}`);
     }
     log(summary_text(merged));
-    for (const warning of stale_weight_warnings(merged.pieces, weights)) log(`e2e: stale weight: ${warning} (npm run e2e:weights refreshes the weights)`);
+    for (const warning of stale_weight_warnings(merged.pieces, weights)) log(`e2e: slower than its weight on ${shard_count} workers: ${warning}`);
     log(`e2e: timings ${timings_path}${report_path ? `, report ${report_path}` : ""}`);
     const passed = checks.checks.filter((check) => check.ok).length;
     log(`e2e: ${passed} of ${checks.checks.length} checks passed`);

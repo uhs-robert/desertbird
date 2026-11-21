@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 
 export const COMMITTED_WEIGHTS_PATH = join(import.meta.dirname, "piece_seconds.json");
 export const DEFAULT_SHARDS = 1;
-export const DEFAULT_DEADLINE_S = 900;
+// The least run deadline an unset E2E_DEADLINE_S derives (derive_deadline_s), so a short filtered run keeps room for a slow start.
+export const DEADLINE_FLOOR_S = 900;
 export const DEFAULT_PIECE_DEADLINE_S = 120;
 
 export const piece_id = (app, piece) => `${app}/${piece.name}`;
@@ -35,8 +36,12 @@ export function weights_from_report(report) {
   return weights;
 }
 
+// A sharded run's merged file lists its workers. A serial run's file has no `workers`.
+const is_sharded = (report) => (report.workers?.length ?? 0) > 1;
+
 // The newest e2e-timings file in logs_dir that lists pieces of an unfiltered run, or undefined. The `.report.json` beside each one holds checks, not times.
-export function newest_timings_file(logs_dir) {
+// `serial_only` skips the files of sharded runs, whose pieces ran slower under the load of the other workers.
+export function newest_timings_file(logs_dir, { serial_only = false } = {}) {
   let names;
   try {
     names = readdirSync(logs_dir).filter((name) => /^e2e-timings-.*\.json$/.test(name) && !name.endsWith(".report.json"));
@@ -47,7 +52,7 @@ export function newest_timings_file(logs_dir) {
   for (const { path, mtime_ms } of by_age) {
     try {
       const report = JSON.parse(readFileSync(path, "utf8"));
-      if (Array.isArray(report.pieces) && report.pieces.length > 0 && !report.filter) return { path, mtime_ms, report };
+      if (Array.isArray(report.pieces) && report.pieces.length > 0 && !report.filter && !(serial_only && is_sharded(report))) return { path, mtime_ms, report };
     } catch {
       // A file cut off by a kill mid-write is skipped.
     }
@@ -142,6 +147,8 @@ export function write_weights(timings_path, { committed_path = COMMITTED_WEIGHTS
   const report = JSON.parse(readFileSync(timings_path, "utf8"));
   if (report.incomplete) throw new Error(`${timings_path} is from a run that did not finish (${report.incomplete.reason}), so its pieces are cut short`);
   if (report.filter) throw new Error(`${timings_path} is from a run filtered by ${report.filter}, so its pieces may have skipped checks`);
+  // The weights feed the piece deadline test (weight x 1.5), which assumes a piece alone on the machine. On several workers the pieces run up to twice as long.
+  if (is_sharded(report)) throw new Error(`${timings_path} is from a run on ${report.workers.length} workers, so its pieces ran slower than alone. Name the timings file of a serial run (E2E_SHARDS=1)`);
   const fresh = weights_from_report(report);
   if (Object.keys(fresh).length === 0) throw new Error(`${timings_path} lists no finished piece`);
   const old = JSON.parse(readFileSync(committed_path, "utf8"));
@@ -161,7 +168,8 @@ function positive_integer_from_env(env, name, fallback) {
 export function read_setup(env, { queue_length }) {
   return {
     shard_count: Math.min(positive_integer_from_env(env, "E2E_SHARDS", DEFAULT_SHARDS), Math.max(1, queue_length)),
-    deadline_s: positive_integer_from_env(env, "E2E_DEADLINE_S", DEFAULT_DEADLINE_S),
+    // Undefined when unset: the runner derives it from the weights of the queue (derive_deadline_s).
+    deadline_s: positive_integer_from_env(env, "E2E_DEADLINE_S", undefined),
     piece_deadline_s: positive_integer_from_env(env, "E2E_PIECE_DEADLINE_S", DEFAULT_PIECE_DEADLINE_S),
   };
 }
@@ -169,15 +177,24 @@ export function read_setup(env, { queue_length }) {
 // A piece's own deadline_s wins over the run's default, so E2E_PIECE_DEADLINE_S never shortens a piece that is known to be long.
 export const deadline_s_of = (piece, default_s) => piece.deadline_s ?? default_s;
 
+// The run deadline when E2E_DEADLINE_S is unset: 1.5 times the longer of an even share of the queue's weight and its heaviest piece, plus 60 s for the
+// worker starts, and never under DEADLINE_FLOOR_S. A piece with no weight counts as its piece deadline. The piece deadline already bounds a hang,
+// so this only stops a queue that runs away, and a fixed 900 s stopped every full run of both apps on 3 workers (about 1,300 s).
+export function derive_deadline_s({ ids, weights, shard_count, piece_deadline_of }) {
+  const seconds = ids.map((id) => weights[id] ?? piece_deadline_of(id));
+  const sum = seconds.reduce((total, value) => total + value, 0);
+  return Math.max(DEADLINE_FLOOR_S, Math.ceil(1.5 * Math.max(sum / shard_count, ...seconds, 0)) + 60);
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [verb, given_file] = process.argv.slice(2);
   if (verb !== "write-weights") {
     console.error("usage: node tools/e2e/shards.mjs write-weights [timings file]");
     process.exit(2);
   }
-  const timings_path = given_file ?? newest_timings_file(join(import.meta.dirname, "..", "..", ".logs"))?.path;
+  const timings_path = given_file ?? newest_timings_file(join(import.meta.dirname, "..", "..", ".logs"), { serial_only: true })?.path;
   if (!timings_path) {
-    console.error("e2e:weights: no unfiltered .logs/e2e-timings-*.json in this checkout. Run a full `npm run e2e -- --xpi dist/desertbird.xpi` first, or name a file.");
+    console.error("e2e:weights: no unfiltered serial .logs/e2e-timings-*.json in this checkout. Run a full `npm run e2e -- --xpi dist/desertbird.xpi` first, or name a file.");
     process.exit(2);
   }
   const { load_pieces } = await import("./registry.mjs");

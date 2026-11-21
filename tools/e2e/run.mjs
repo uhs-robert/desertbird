@@ -11,7 +11,7 @@ import { open_run_dir } from "./run_dir.mjs";
 import { create_timings, default_timings_path, filter_of, report_path_of } from "./timings.mjs";
 import { run_piece } from "./piece_runner.mjs";
 import { load_pieces, select_pieces } from "./registry.mjs";
-import { deadline_s_of, load_weights, parse_piece_id, piece_id, read_setup } from "./shards.mjs";
+import { deadline_s_of, derive_deadline_s, load_weights, parse_piece_id, piece_id, read_setup, stale_weight_warnings } from "./shards.mjs";
 import { run_sharded } from "./coordinator.mjs";
 
 const SETUP_ERROR_EXIT = 2;
@@ -70,6 +70,8 @@ async function run_serial() {
     writeFileSync(report_path, JSON.stringify(report, null, 2));
     console.log(`e2e: timings ${timings_path}, report ${report_path}`);
   }
+  // Against the committed weights only: the newest local file is this run's own. A sharded run prints no such hint, since its pieces ran under load.
+  if (!filter) for (const warning of stale_weight_warnings(timings.report().pieces, load_weights().weights)) console.log(`e2e: stale weight: ${warning} (npm run e2e:weights refreshes the weights)`);
   finish(all_ok);
   process.exit(all_ok ? 0 : 1);
 }
@@ -96,7 +98,8 @@ async function run_on_workers() {
   const { weights, source } = load_weights({ logs_dir: join(repo_dir, ".logs"), chosen_file: process.env.E2E_WEIGHTS });
   console.log(`e2e: weights from ${source}`);
   const piece_deadline_of = (id) => deadline_s_of(pieces.find((piece) => piece.name === parse_piece_id(id).name), setup.piece_deadline_s);
-  sharded = run_sharded({ ids, weights, shard_count: setup.shard_count, deadline_s: setup.deadline_s, piece_deadline_of, init: { run_dir: e2e_dir, xpi_path, binaries }, timings_path, report_path: xpi_path ? report_path : null, filter });
+  const deadline_s = setup.deadline_s ?? derive_deadline_s({ ids, weights, shard_count: setup.shard_count, piece_deadline_of });
+  sharded = run_sharded({ ids, weights, shard_count: setup.shard_count, deadline_s, piece_deadline_of, init: { run_dir: e2e_dir, xpi_path, binaries }, timings_path, report_path: xpi_path ? report_path : null, filter });
   const { exit_code } = await sharded.done;
   if (signalled) return;
   finish(exit_code === 0);

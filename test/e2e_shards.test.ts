@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
 const shards = await import(join(import.meta.dirname, "..", "tools", "e2e", "shards.mjs"));
-const { build_incomplete, classify_exit, create_ledger, deadline_s_of, final_exit_code, load_weights, newest_timings_file, parse_piece_id, piece_id, queue_order, read_setup, stale_weight_warnings, unweighted_warnings, weights_from_report, write_weights } = shards;
+const { build_incomplete, classify_exit, create_ledger, deadline_s_of, derive_deadline_s, DEADLINE_FLOOR_S, final_exit_code, load_weights, newest_timings_file, parse_piece_id, piece_id, queue_order, read_setup, stale_weight_warnings, unweighted_warnings, weights_from_report, write_weights } = shards;
 
 function in_tmp(body: (dir: string) => void) {
   const dir = mkdtempSync(join(tmpdir(), "e2e-shards-test-"));
@@ -155,7 +155,7 @@ test("a piece far over its weight warns, and a piece with no weight warns", () =
 });
 
 test("read_setup defaults to one worker and checks every setting", () => {
-  assert.deepEqual(read_setup({}, { queue_length: 10 }), { shard_count: 1, deadline_s: 900, piece_deadline_s: 120 });
+  assert.deepEqual(read_setup({}, { queue_length: 10 }), { shard_count: 1, deadline_s: undefined, piece_deadline_s: 120 });
   assert.equal(read_setup({ E2E_SHARDS: "6" }, { queue_length: 4 }).shard_count, 4, "capped at the queue");
   assert.equal(read_setup({ E2E_SHARDS: "3", E2E_DEADLINE_S: "300", E2E_PIECE_DEADLINE_S: "60" }, { queue_length: 10 }).deadline_s, 300);
   for (const [name, value] of [["E2E_SHARDS", "0"], ["E2E_SHARDS", "abc"], ["E2E_SHARDS", "-1"], ["E2E_DEADLINE_S", "1.5"], ["E2E_PIECE_DEADLINE_S", "0"]]) {
@@ -167,3 +167,35 @@ test("a piece's own deadline wins over the run's default", () => {
   assert.equal(deadline_s_of({ deadline_s: 250 }, 60), 250);
   assert.equal(deadline_s_of({}, 60), 60);
 });
+
+test("an unset run deadline is 1.5 times the larger of a worker's share and the heaviest piece, plus 60 s, and at least the floor", () => {
+  assert.equal(DEADLINE_FLOOR_S, 900);
+  const piece_deadline_of = () => 120;
+  const ids = ["a/b/1", "a/b/2", "a/b/3", "a/b/4"];
+  const weights = { "a/b/1": 900, "a/b/2": 900, "a/b/3": 900, "a/b/4": 900 };
+  assert.equal(derive_deadline_s({ ids, weights, shard_count: 3, piece_deadline_of }), 1860, "share 1200 s");
+  assert.equal(derive_deadline_s({ ids, weights: { ...weights, "a/b/1": 1500 }, shard_count: 4, piece_deadline_of }), 2310, "heaviest 1500 s beats the share");
+  assert.equal(derive_deadline_s({ ids: ["a/b/1"], weights: { "a/b/1": 30 }, shard_count: 3, piece_deadline_of }), 900, "the floor");
+  assert.equal(derive_deadline_s({ ids: ["a/b/new"], weights: {}, shard_count: 1, piece_deadline_of: () => 1000 }), 1560, "no weight counts as its piece deadline");
+});
+
+test("the committed weights give a full run of both apps on 3 workers a deadline over its measured 1,290 s", () => {
+  const committed = JSON.parse(readFileSync(join(import.meta.dirname, "..", "tools", "e2e", "piece_seconds.json"), "utf8"));
+  assert.ok(derive_deadline_s({ ids: Object.keys(committed), weights: committed, shard_count: 3, piece_deadline_of: () => 120 }) > 1290);
+});
+
+test("write_weights refuses the file of a run on several workers, and the newest serial file is the default", () => in_tmp((dir) => {
+  const committed = join(dir, "piece_seconds.json");
+  write_json(committed, { "a/b/c": 5 });
+  const logs = join(dir, "logs");
+  mkdirSync(logs);
+  const serial = join(logs, "e2e-timings-1.json");
+  write_json(serial, { pieces: [{ name: "a/b/c", wall_ms: 7000 }] });
+  set_age(serial, 60);
+  const sharded = join(logs, "e2e-timings-2.json");
+  write_json(sharded, { workers: [{ worker: 1 }, { worker: 2 }, { worker: 3 }], pieces: [{ name: "a/b/c", wall_ms: 12_000, worker: 1 }] });
+  assert.throws(() => write_weights(sharded, { committed_path: committed, piece_ids: ["a/b/c"] }), /on 3 workers/);
+  assert.deepEqual(JSON.parse(readFileSync(committed, "utf8")), { "a/b/c": 5 }, "the weights are unchanged");
+  assert.equal(newest_timings_file(logs).path, sharded, "the queue order still reads the newest file");
+  assert.equal(newest_timings_file(logs, { serial_only: true }).path, serial);
+}));
