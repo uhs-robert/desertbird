@@ -187,8 +187,8 @@ async function tab_command(command) {
 
 // What the body report script last sent: the scroll state of the message document that reported last, and whether DesertBird's body script had marked it.
 let latest_body = null;
-browser.runtime.onMessage.addListener((message) => {
-  if (message?.kind === "body_report") latest_body = { ...message, received: Date.now() };
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (message?.kind === "body_report") latest_body = { ...message, tab_id: sender.tab?.id ?? null, window_id: sender.tab?.windowId ?? null, received: Date.now() };
 });
 
 // Opens the selected message in its own window, as a key-less double click would.

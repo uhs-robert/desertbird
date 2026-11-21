@@ -8,6 +8,8 @@ function report() {
     .sendMessage({
       kind: "body_report",
       href: location.href,
+      // When this document began, so a wait can tell a new document from the one it replaces.
+      doc_start: Math.round(performance.timeOrigin),
       is_top: window === window.top,
       live: root.hasAttribute(LIVE_ATTRIBUTE),
       scroll_y: Math.round(window.scrollY),
