@@ -87,16 +87,16 @@ test("every command names a tab need, so a new command cannot leak into a tab by
 
 test("the message tree has the mail keys that need a message, the reading keys and no list key", () => {
     const root = message_root();
-    assert.deepEqual(["a", "j", "/", "f", "H"].map((key) => leaf_at(root, key)?.id), ["msg.archive", "message.scroll_down", "cmdline.open", "hint.pick", "pane.focus"]);
+    assert.deepEqual(["a", "j", "/", "f", "H"].map((key) => leaf_at(root, key)?.id), ["msg.archive", "message.scroll_down", "cmdline.open", "hint.pick", "pane.left"]);
     assert.deepEqual(leaf_at(root, "/")?.args, { text: "find " });
     for (const keys of [["m", "R"], ["F", "t"], ["F", "f"], ["s", "s"], [";", ";"], ["<C-x>"], ["<C-c>"], ["o"], ["s", "d"], ["]", "u"], ["z", "z"], ["."], ["?"], ["v"]]) assert.equal(leaf_at(root, ...keys)?.id, undefined, keys.join(" "));
     // `h` and `l` fold a thread in the mail tab and scroll sideways here, where no list exists.
     assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["message.scroll_left", "message.scroll_right", "message.page_down", "message.page_up"]);
 });
 
-test("w h and w l step the pane relatively in the mail and message trees, beside the absolute chords", () => {
+test("H, L, A-h, A-l, w h and w l step the pane relatively in the mail and message trees, beside the fixed g f, g e, g m jumps", () => {
     for (const root of [compile_default_keymap().compiled.modes.normal as TreeBranch, message_root()]) {
-        assert.deepEqual([["w", "h"], ["w", "l"], ["<A-h>"], ["<A-l>"], ["L"]].map((keys) => [leaf_at(root, ...keys)?.id, leaf_at(root, ...keys)?.args]), [["pane.left", undefined], ["pane.right", undefined], ["pane.focus", { pane: "threads" }], ["pane.focus", { pane: "message" }], ["pane.focus", { pane: "threads" }]]);
+        assert.deepEqual([["w", "h"], ["w", "l"], ["<A-h>"], ["<A-l>"], ["H"], ["L"]].map((keys) => leaf_at(root, ...keys)?.id), ["pane.left", "pane.right", "pane.left", "pane.right", "pane.left", "pane.right"]);
     }
 });
 

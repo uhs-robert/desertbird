@@ -39,7 +39,6 @@ The thread list and the folder pane.
 | `:` | `cmdline.open` |
 | `o` | `cmdline.open 'open '` |
 | `T` | `cmdline.open 'tab '` |
-| `H` | `folder.collapse` |
 | `<C-o>` | `jump.back` |
 | `<C-i>` | `jump.forward` |
 | `M` | `mark.set` |
@@ -49,9 +48,10 @@ The thread list and the folder pane.
 | `<C-d>` | `view.half_page next` |
 | `<C-u>` | `view.half_page previous` |
 | `u` | `undo` |
-| `<A-h>` | `pane.focus threads` |
-| `L` | `pane.focus threads` |
-| `<A-l>` | `pane.focus message` |
+| `H` | `pane.left` |
+| `<A-h>` | `pane.left` |
+| `L` | `pane.right` |
+| `<A-l>` | `pane.right` |
 | `/` | `search.open forward` |
 | `?` | `search.open backward` |
 | `n` | `search.next` |
@@ -271,7 +271,6 @@ A message in a tab, a window or the message pane.
 | `n` | `message.find_next` |
 | `N` | `message.find_prev` |
 | `f` | `hint.pick` |
-| `H` | `pane.focus folders` |
 | `a` | `msg.archive` |
 | `r` | `msg.reply` |
 | `R` | `msg.reply --all` |
@@ -286,9 +285,10 @@ A message in a tab, a window or the message pane.
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
 | `u` | `undo` |
-| `<A-h>` | `pane.focus threads` |
-| `L` | `pane.focus threads` |
-| `<A-l>` | `pane.focus message` |
+| `H` | `pane.left` |
+| `<A-h>` | `pane.left` |
+| `L` | `pane.right` |
+| `<A-l>` | `pane.right` |
 
 #### Go
 

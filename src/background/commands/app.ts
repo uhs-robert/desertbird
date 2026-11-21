@@ -6,11 +6,12 @@ import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
 // `msg.undo` reverses DesertBird's own changes from its undo log, never Thunderbird's: Thunderbird records no step for an API change, and mixing the two stacks would undo in the wrong order. It and the two commands that open a tab or a window change mail or open pages, so `bridge` is false. The pane commands only move the focus.
-// Each names a pane, not a direction: `<A-h>` and `L` both reach the thread list from any pane. `pane.left` and `pane.right` are the relative pair, on `w h` and `w l` under the `w` prefix of the pane toggles.
+// The relative pair `pane.left` and `pane.right` sit on `H` and `L`, `<A-h>` and `<A-l>`, and on `w h` and `w l` under the `w` prefix of the pane toggles. Each stops at the edge and never wraps. The fixed jumps stay on `g f`, `g e` and `g m`.
 const PANE_CHORDS = {
-    "<A-h>": { id: "pane.focus", args: { pane: "threads" }, label: "Focus thread list" },
-    L: { id: "pane.focus", args: { pane: "threads" }, label: "Focus thread list" },
-    "<A-l>": { id: "pane.focus", args: { pane: "message" }, label: "Focus message pane" },
+    H: { id: "pane.left", label: "Pane left" },
+    "<A-h>": { id: "pane.left", label: "Pane left" },
+    L: { id: "pane.right", label: "Pane right" },
+    "<A-l>": { id: "pane.right", label: "Pane right" },
 };
 
 // Undo and the conversation view act on the displayed message as well as on the list, so the message tree binds them too.
@@ -84,9 +85,5 @@ export const app: CommandGroup = {
         wh: { id: "pane.left", label: "Pane left" },
         wl: { id: "pane.right", label: "Pane right" },
         ...PANE_CHORDS,
-    },
-    // The body script takes every key while the message pane has the focus, so the way out of it is bound there too.
-    message_keys: {
-        H: { id: "pane.focus", args: { pane: "folders" }, label: "Focus folder pane" },
     },
 };

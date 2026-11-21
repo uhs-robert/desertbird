@@ -59,7 +59,6 @@ export const folders: CommandGroup = {
         "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back.", count: "repeat", run: scoped<FolderApi>(jump_forward) },
     }),
     normal_keys: {
-        H: { id: "folder.collapse", label: "Collapse folder or go to folders" },
         gi: { id: "folder.open", args: { special: "inbox" }, label: "Inbox" },
         gt: { id: "folder.open", args: { special: "trash" }, label: "Trash" },
         gd: { id: "folder.open", args: { special: "drafts" }, label: "Drafts" },
