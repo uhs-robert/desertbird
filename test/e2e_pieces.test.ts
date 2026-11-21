@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mock, test } from "node:test";
@@ -84,4 +84,30 @@ test("a throw in before_start is a FAIL line, keeps the timings entry and return
   } finally {
     rmSync(run_dir, { recursive: true, force: true });
   }
+});
+
+const committed_weights: Record<string, number> = JSON.parse(readFileSync(join(import.meta.dirname, "..", "tools", "e2e", "piece_seconds.json"), "utf8"));
+const APPS = ["thunderbird", "betterbird"];
+const { DEFAULT_PIECE_DEADLINE_S } = await import(join(import.meta.dirname, "..", "tools", "e2e", "shards.mjs"));
+
+test("every weight names a real <app>/<kind>/<section>, and every piece of a full run has one", () => {
+  const ids = APPS.flatMap((app) => pieces.map((piece) => `${app}/${piece.name}`));
+  for (const id of Object.keys(committed_weights)) assert.ok(ids.includes(id), `${id} is no piece`);
+  for (const app of APPS) for (const piece of pieces.filter((candidate) => !candidate.opt_in)) assert.ok(`${app}/${piece.name}` in committed_weights, `${app}/${piece.name} has no weight`);
+});
+
+// A piece that grows near its deadline fails here first, so raising a deadline_s is a conscious edit and not a surprise kill in a sharded run.
+test("every weight times 1.5 fits its piece's deadline", () => {
+  for (const [id, seconds] of Object.entries(committed_weights)) {
+    const piece = pieces.find((candidate) => id.endsWith(`/${candidate.name}`)) as { deadline_s?: number } | undefined;
+    const deadline_s = piece?.deadline_s ?? DEFAULT_PIECE_DEADLINE_S;
+    assert.ok(seconds * 1.5 <= deadline_s, `${id} weighs ${seconds} s, over two thirds of its ${deadline_s} s deadline`);
+  }
+});
+
+// A Unix socket path ends at 108 bytes. The longest piece name with the default run dir under the temp dir must leave room for that.
+test("the longest private Wayland socket path stays under 100 bytes", () => {
+  const run_dir = join(tmpdir(), "desertbird-e2e-XXXXXX");
+  const longest = Math.max(...APPS.flatMap((app) => pieces.map((piece) => join(run_dir, app, piece.kind, piece.section, "runtime", "wayland-1").length)));
+  assert.ok(longest < 100, `${longest} bytes`);
 });
