@@ -1064,10 +1064,10 @@ async function run_panes(instance, { app, kind, shot }) {
     await instance.press(["-k", "Return"]);
     return wait_state(instance, `:undo to bring ${id} back to the Inbox`, (current) => in_folder(current, id, "/Inbox"), { timeout_ms: 10000, show: (current) => `${current.folders["/Inbox"].length} in the Inbox` });
   };
-  // No helper state marks the end of the queued undo steps, so the counts of the three folders must stay put for QUIET_MS.
+  // No helper state marks the end of the queued undo steps, so the count of every folder must stay put for QUIET_MS. One undo step for a gone message takes about 3 s and changes no count, so the window spans two of them. Archived mail lands in a subfolder (/Archives/2025), so no fixed path list sees it.
   const wait_for_quiet_counts = async () => {
-    const QUIET_MS = 3500;
-    const counts_of = (current) => ["/Inbox", "/Trash", "/Archives"].map((path) => current.folders[path]?.length ?? 0).join(",");
+    const QUIET_MS = 7000;
+    const counts_of = (current) => Object.keys(current.folders).sort().map((path) => `${path}:${current.folders[path].length}`).join(" ");
     let counts = counts_of(await instance.ask("state"));
     let since = Date.now();
     const give_up = Date.now() + 60000;
