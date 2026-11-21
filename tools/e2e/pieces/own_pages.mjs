@@ -4,7 +4,7 @@ import { sleep, CTRL_SHIFT, KEY_LIST_REGION, main_window_tabs, PAINT_MARGIN_MS, 
 import { OPEN_OWN_PAGES_SCRIPT } from "../seed.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
-export const areas = ["own_pages", "theme"];
+export const areas = ["own_pages", "theme", "message_body", "hud", "cmdline", "pages"];
 
 // DesertBird's own pages run the message keys themselves: q closes the page tab, and q typed in an option input stays text.
 async function run_own_pages(instance, ctx) {

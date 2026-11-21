@@ -4,7 +4,7 @@ import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
 import { sleep, first_selected, selects, folder_shown, holds_twice, drawn_since } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
-export const areas = ["hints"];
+export const areas = ["hints", "folders", "cmdline", "theme"];
 
 async function run_window_hints(instance, ctx) {
   const { app, kind, shot, check, wait_for_state, key_and_state, wait_pixels, open_command_line, press_in_command_line } = ctx;

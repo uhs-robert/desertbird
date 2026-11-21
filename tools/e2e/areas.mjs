@@ -15,8 +15,8 @@ const shared_files = [
   "src/background/commands/{define,index,tab_keymaps}.ts",
   "src/background/config/**",
   "src/shared/{protocol,swallow,keymap_tree}.ts",
-  "src/chrome/{runtime,parent_keys,platform}.ts",
-  "src/experiment/keys.schema.json",
+  "src/chrome/{runtime,parent_keys,platform,focus,view,motions,page_focus,mode_label,overlay,overlay_id,parent_overlay}.ts",
+  "src/experiment/{keys,overlay}.schema.json",
 ];
 
 // First match wins, so order matters: a narrow rule sits before the folder glob that would also take its file.
@@ -31,27 +31,29 @@ export const area_rules = [
   { globs: ["src/background/theme/**", "src/shared/{follow_theme,theme_choice,theme_css}.ts"], areas: ["theme"] },
   // The folder list of the command line completes from the folder pane.
   { globs: ["src/background/cmdline/folder_rows.ts"], areas: ["cmdline", "folders"] },
-  { globs: ["src/background/cmdline/**", "src/background/{commands,handlers}/cmdline.ts", "src/overlay/{cmdline,confirm,line_edit}.*", "src/chrome/{overlay,overlay_id,parent_overlay}.ts", "src/experiment/overlay.schema.json"], areas: ["cmdline"] },
+  { globs: ["src/background/cmdline/**", "src/background/{commands,handlers}/cmdline.ts", "src/overlay/{cmdline,confirm,line_edit}.*"], areas: ["cmdline"] },
   { globs: ["src/background/hud/**", "src/overlay/hud.*", "src/background/{notify,new_mail_notify}.ts", "src/background/commands/new_mail.ts"], areas: ["hud"] },
   // The help page shows in the hud piece and the own_pages piece.
   { globs: ["src/help/**", "src/background/{commands,handlers}/help.ts"], areas: ["hud", "own_pages"] },
   { globs: ["src/options/**"], areas: ["own_pages"] },
   { globs: ["src/content/body_hints.ts"], areas: ["hints", "message_body"] },
+  // The own pages (options, help) run these same body scripts for j, q and /.
+  { globs: ["src/content/{body_find,body_keys}.ts"], areas: ["message_body", "own_pages"] },
+  { globs: ["src/content/page_keys.ts"], areas: ["own_pages"] },
   { globs: ["src/chrome/{hint_pick,hint_targets,parent_hints,page_hints_child}.ts", "src/shared/{hint_labels,hint_view}.ts", "src/background/commands/hints.ts", "src/background/handlers/hint_window.ts", "src/experiment/hints.schema.json"], areas: ["hints"] },
-  { globs: ["src/content/{body_find,body_keys,message_display}.ts", "src/background/{body_requests,handlers/message_find}.ts", "src/background/commands/reading.ts"], areas: ["message_body"] },
+  { globs: ["src/content/message_display.ts", "src/background/{body_requests,handlers/message_find}.ts", "src/background/commands/reading.ts"], areas: ["message_body"] },
   { globs: ["src/background/search/**", "src/background/{commands,handlers}/search.ts"], areas: ["search"] },
   { globs: ["src/background/handlers/{folder_collapse,folder_marks,folder_open,folder_state,special_folder,displayed_folder,jump_history}.ts", "src/background/commands/folders.ts", "src/chrome/parent_folderpane.ts", "src/experiment/folderpane.schema.json"], areas: ["folders"] },
-  { globs: ["src/background/{commands,handlers}/view.ts", "src/chrome/{view,view_verbs}.ts"], areas: ["views"] },
+  { globs: ["src/background/{commands,handlers}/view.ts", "src/chrome/view_verbs.ts"], areas: ["views"] },
   { globs: ["src/background/{commands,handlers}/thread*.ts"], areas: ["threads"] },
-  { globs: ["src/chrome/mode_label.ts", "src/content/compose_mode_label.ts"], areas: ["mode_label"] },
-  // focus.ts also decides where a key goes while a menu is open, which the popup piece tests.
-  { globs: ["src/chrome/focus.ts"], areas: ["panes", "popup"] },
+    // The compose label is checked in the compose editor and quick reply pieces.
+  { globs: ["src/content/compose_mode_label.ts"], areas: ["mode_label", "compose", "quick_reply"] },
   { globs: ["src/chrome/{pane_resize,readable_focus}.ts"], areas: ["panes"] },
-  { globs: ["src/chrome/motions.ts", "src/background/commands/motion.ts"], areas: ["motions", "visual"] },
+  { globs: ["src/background/commands/motion.ts"], areas: ["motions", "visual"] },
   { globs: ["src/background/{commands,handlers}/step.ts"], areas: ["motions", "views"] },
   { globs: ["src/background/{commands,handlers}/tabs.ts"], areas: ["tabs", "popup"] },
   { globs: ["src/background/{commands,handlers}/zoom.ts", "src/chrome/parent_zoom.ts", "src/experiment/zoom.schema.json"], areas: ["zoom"] },
-  { globs: ["src/chrome/{page_actions,page_actor_child,page_actor_parent,page_focus,page_runtime,parent_pages}.ts", "src/content/page_keys.ts", "src/background/commands/page.ts", "src/experiment/pages.schema.json"], areas: ["pages", "web"] },
+  { globs: ["src/chrome/{page_actions,page_actor_child,page_actor_parent,page_focus,page_runtime,parent_pages}.ts", "src/background/commands/page.ts", "src/experiment/pages.schema.json"], areas: ["pages", "web"] },
   { globs: ["src/background/{commands,handlers}/followup.ts", "src/background/{followup_presets,followup_store}.ts"], areas: ["followup"] },
   { globs: ["src/background/{commands,handlers}/quick_reply.ts", "src/background/quick_reply_store.ts"], areas: ["quick_reply", "compose"] },
   { globs: ["src/background/{commands,handlers}/compose.ts", "src/background/{compose_markdown,external_editor}.ts", "src/content/compose_{edit_key,keys}.ts", "src/background/commands/account_param.ts", "src/background/handlers/{account_choice,identity}.ts"], areas: ["compose"] },
@@ -120,7 +122,7 @@ const support_rules = [
   { globs: ["tools/e2e/web_checks.mjs", "tools/e2e/web_fixture.mjs"], pieces: [piece_file("web.main")] },
   { globs: ["tools/e2e/zoom_checks.mjs"], pieces: [piece_file("zoom.main")] },
   // Anything else in tools/e2e is the harness: the profile, the helper add-on, the start, the predicates and the report all sit under every piece.
-  { globs: ["tools/e2e/**", "tools/build.mjs", "vendor/**"], pieces: "all" },
+  { globs: ["tools/e2e/**", "tools/build.mjs", "vendor/**", "package.json", "package-lock.json", "tsconfig.json"], pieces: "all" },
 ];
 const compiled_support_rules = support_rules.map((rule) => ({ ...rule, patterns: rule.globs.map(glob_to_regex), piece_patterns: rule.pieces === "all" ? null : rule.pieces.map(glob_to_regex) }));
 

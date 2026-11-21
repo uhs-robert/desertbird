@@ -3,7 +3,7 @@
 import { sleep, first_selected, selects, at_bottom, at_top } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
-export const areas = ["motions", "views"];
+export const areas = ["motions", "views", "folders", "mail_keys"];
 
 // The step keys in the Views folder (6 messages: unread v0 to v2, starred v0 and v1, an attachment on v0). The row order comes from the listing, not from a fixed order.
 // The oracle walks that order: the steps must visit the matching rows in turn and stay on the last one.

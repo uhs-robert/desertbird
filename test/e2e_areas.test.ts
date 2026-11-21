@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -66,4 +67,32 @@ test("E2E_CHANGED=1 keeps the pieces of the changed files and runs Betterbird al
   assert.equal(select_pieces(pieces, { E2E_CHANGED: "1", E2E_CHANGED_PATHS: "src/manifest.json" }).length, select_pieces(pieces, {}).length);
   assert.deepEqual(changed_run_apps({ E2E_CHANGED: "1" }), ["betterbird"]);
   assert.equal(changed_run_apps({}), null);
+});
+
+// A value import loads the file for every key, so a file that a shared key runtime file reaches must be shared too. The background main.ts wires every feature, so the walk stays in chrome, content and shared. Type imports vanish at build time and are skipped.
+function value_imports(path: string): string[] {
+  const text = readFileSync(join(import.meta.dirname, "..", path), "utf8");
+  const found: string[] = [];
+  for (const match of text.matchAll(/^(?:import|export)\s+(?!type\b)[^;]*?from\s+"(\.[^"]+)"/gms)) {
+    const target = join(path, "..", match[1]).replaceAll("\\", "/");
+    if (/^src\/(chrome|content|shared)\//.test(target) && existsSync(join(import.meta.dirname, "..", target))) found.push(target);
+  }
+  return found;
+}
+
+test("every src file that a shared file imports is shared too", () => {
+  const is_shared = (path: string) => areas_of_file(path)?.length === area_names.length;
+  const seen = new Set<string>();
+  const queue = src_files.filter((path) => path.endsWith(".ts") && /^src\/(chrome|content|shared)\//.test(path) && is_shared(path));
+  const unshared: string[] = [];
+  while (queue.length) {
+    const path = queue.pop() as string;
+    if (seen.has(path)) continue;
+    seen.add(path);
+    for (const target of value_imports(path)) {
+      if (!is_shared(target)) unshared.push(`${path} imports ${target}`);
+      queue.push(target);
+    }
+  }
+  assert.deepEqual(unshared, [], "add each imported file to shared_files in tools/e2e/areas.mjs");
 });

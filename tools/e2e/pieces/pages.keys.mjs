@@ -2,7 +2,7 @@
 import { run_pages } from "../pages_checks.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
-export const areas = ["pages"];
+export const areas = ["pages", "tabs", "cmdline", "hud"];
 
 export const piece = {
   kind: "pages",

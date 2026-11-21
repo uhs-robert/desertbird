@@ -3,7 +3,7 @@
 import { compose_opens, compose_tab, reply_is_loaded, mail_window_ready, selects_inbox_s2 } from "../predicates.mjs";
 import { QUICK_REPLY_SEED } from "../seed.mjs";
 
-export const areas = ["quick_reply", "compose"];
+export const areas = ["quick_reply", "compose", "hud", "mode_label"];
 
 async function run_quick_replies(instance, ctx) {
   const { report, check, note, wait_for_state, key_and_state, close_compose, toast_cycle } = ctx;

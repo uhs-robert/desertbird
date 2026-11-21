@@ -3,7 +3,7 @@
 import { sleep, selects, QUIET_AFTER_ESCAPE_MS } from "../predicates.mjs";
 import { section_piece, ensure_views_folder } from "./_default_shared.mjs";
 
-export const areas = ["cmdline"];
+export const areas = ["cmdline", "views", "mail_keys", "theme"];
 
 // Issue 97: the overlay mount focuses its browser before its page loads, and keys typed right after the colon used to reach Thunderbird's shortcuts. The old check ran with no message selected, so j and a had nothing to move or archive.
 async function run_cmdline_launch(instance, ctx) {

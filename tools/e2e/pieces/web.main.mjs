@@ -2,7 +2,7 @@
 import { run_web } from "../web_checks.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
-export const areas = ["web", "hints", "pages"];
+export const areas = ["web", "hints", "pages", "tabs", "cmdline"];
 
 export const piece = {
   kind: "web",

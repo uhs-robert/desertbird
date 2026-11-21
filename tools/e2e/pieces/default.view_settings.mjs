@@ -3,7 +3,7 @@
 import { same, listed_count, pane_is, sorted_by } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
-export const areas = ["views"];
+export const areas = ["views", "cmdline"];
 
 // The view settings, read as row counts of the Views folder (6 messages: 3 unread, 2 starred, 1 with an attachment, 2 tagged).
 // The tag and search forms have no default key, so the helper applies the same arguments the handlers send, straight through the API.

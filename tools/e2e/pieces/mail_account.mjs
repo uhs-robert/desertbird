@@ -2,7 +2,7 @@
 
 import { selects, compose_opens, mail_window_ready } from "../predicates.mjs";
 
-export const areas = ["compose"];
+export const areas = ["compose", "mail_keys"];
 
 // A default POP3 account with the identities "id2" (main) and "id3" (alias), plus Local Folders with none. A message of Local Folders borrows the default account's identity, and a message addressed to the alias keeps the alias.
 async function run_mail_account(instance, ctx) {

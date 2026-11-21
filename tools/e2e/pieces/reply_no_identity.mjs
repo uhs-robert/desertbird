@@ -2,7 +2,7 @@
 
 import { sleep, first_selected, at_bottom } from "../predicates.mjs";
 
-export const areas = ["compose"];
+export const areas = ["compose", "hud"];
 
 async function run_no_identity(instance, ctx) {
   const { report, check, open_inbox, expect_absent, key_and_state, toast_cycle } = ctx;
