@@ -20,6 +20,9 @@ const QUICK_REPLY_SIGNATURE = { "mail.identity.id1.htmlSigText": "E2E signature 
 // A reply above the quote with the signature above it too, the layout where the user's text and the signature share one side.
 const REPLY_ON_TOP = { "mail.identity.id1.compose_html": true, "mail.identity.id1.reply_on_top": 1, "mail.identity.id1.sig_bottom": false };
 
+// Settings of the add-on that every run seeds into its storage, because a profile pref cannot reach them. A toast of a refused command lasts 6 s by default, and a check that waits for its end waited that long each time. No check names the default time, so the run shortens it here, and `src/` keeps its default.
+export const E2E_SETTINGS = { toast_error_ms: 3000 };
+
 const BASE_PREFS = {
   "mail.accountmanager.accounts": "account1",
   "mail.accountmanager.defaultaccount": "account1",
@@ -52,6 +55,8 @@ const BASE_PREFS = {
   "mail.chat.enabled": false,
   "mail.rights.version": 1,
   "mail.collect_email_address_outgoing": false,
+  // The text caret blinks, so a region with the command line open draws two different hashes in turn. A blink time of 0 keeps the caret drawn, and a pixel poll sees only real changes.
+  "ui.caretBlinkTime": 0,
 };
 
 // The Views folder serves the view setting checks. Six single messages: 3 unread (v0 to v2), 2 starred (v0, v1), 1 with an attachment (v0). The helper add-on tags v4 and v5.
