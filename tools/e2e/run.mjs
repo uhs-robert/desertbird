@@ -942,7 +942,7 @@ async function run_panes(instance, { app, kind, shot }) {
   await shot("panes_ctrl_d_u", "the selection after <C-d> then <C-u>");
   await keys(["H"]);
 
-  // The pane chords name a pane. Native Down tells which pane has the focus: it moves the folder or the list selection, and in the message it moves no row.
+  // The chords move the focus one pane left or right. Native Down tells which pane has the focus: it moves the folder or the list selection, and in the message it moves no row.
   const ALT = (key) => ["-M", "alt", key, "-m", "alt"];
   const list_moved = async (name, row_before) => {
     const after = first_selected(await down(leaves_row(row_before)));
@@ -986,13 +986,13 @@ async function run_panes(instance, { app, kind, shot }) {
   let list_row = first_selected(await keys(["H"], 1500));
   state = await down(leaves_row(list_row));
   check(app, kind, "H with the folder pane hidden leaves the focus in the thread list", folder_pane_hidden && first_selected(state) !== list_row && folder_of(state) === "/Inbox", `hidden ${folder_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
-  await shot("panes_hidden_folder_H", "H with the folder pane hidden: a toast refuses it");
+  await shot("panes_hidden_folder_H", "H with the folder pane hidden: the focus stays");
   await keys(["w", "f"], pane_is("folder", true));
   await keys(["g", "g"], at_top);
   state = await keys(["w", "m"], pane_is("message", false));
   const message_pane_hidden = state.mail_tab?.message_pane_visible === false;
   list_row = first_selected(await press_state(ALT("l"), 1500));
-  await shot("panes_hidden_message_alt_l", "A-l with the message pane hidden: a toast refuses it");
+  await shot("panes_hidden_message_alt_l", "A-l with the message pane hidden: the focus stays");
   state = await down(leaves_row(list_row));
   check(app, kind, "A-l with the message pane hidden leaves the focus in the thread list", message_pane_hidden && first_selected(state) !== list_row, `hidden ${message_pane_hidden}, selected ${list_row} then ${first_selected(state)}, folder ${folder_of(state)}`);
   await keys(["w", "m"], pane_is("message", true));

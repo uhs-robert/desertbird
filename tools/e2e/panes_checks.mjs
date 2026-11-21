@@ -32,9 +32,13 @@ export async function run_pane_moves(instance, ctx) {
     }
     return "message";
   };
+  // The helper state shows no pane focus, and the pane command lands after the key is injected, so one probe right after the key can see the old pane. The move polls the probe until it shows the expected pane, which a late command satisfies, and one more probe then confirms the focus held, which a late move past an edge would break.
   const move = async (name, keys, expected) => {
     await instance.press(keys);
-    const pane = await probe();
+    let pane = await probe();
+    const began = Date.now();
+    while (pane !== expected && Date.now() - began < 5000) pane = await probe();
+    if (pane === expected) pane = await probe();
     check(app, kind, name, pane === expected, `the focus is in the ${pane} pane, expected ${expected}`);
   };
 

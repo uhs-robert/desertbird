@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, UNREPEATABLE_IDS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
@@ -75,12 +74,6 @@ test("the pane chords bind in the message document too, so focus can leave the m
 test("the pane commands only move the focus, so the bridge may run them", () => {
     for (const id of ["pane.focus", "pane.left", "pane.right"]) assert.equal(registry.get(id)?.bridge, true, id);
     for (const id of ["motion.down", "motion.up", "motion.top", "motion.bottom"]) assert.equal(registry.get(id)?.bridge, true, id);
-});
-
-test("pane.left and pane.right stop at the edge: the chrome verb answers false past an end and the focus stays", () => {
-    const source = readFileSync(new URL("../src/chrome/app_verbs.ts", import.meta.url), "utf8");
-    assert.match(source, /PANES\[pane === "left" \? focused - 1 : pane === "right" \? focused \+ 1 : /, "no wrap: an index past an end finds no pane");
-    assert.doesNotMatch(source, /% PANES\.length/);
 });
 
 test("pane.left and pane.right ask for the pane beside the focused one and stay quiet at the end", async () => {
