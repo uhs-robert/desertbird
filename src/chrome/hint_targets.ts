@@ -21,9 +21,6 @@ interface TargetElement extends HintElement {
 
 interface TargetNode {
     flattenedTreeParentNode?: TargetNode | null;
-    parentNode?: TargetNode | null;
-    /** Set on a shadow root: the element it belongs to. */
-    host?: TargetNode | null;
 }
 
 interface ShadowSide {
