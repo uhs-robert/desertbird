@@ -544,6 +544,15 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, w
 - `cmd_openConversation` is enabled for one selected message that the search index covers. It opened a conversation tab in the full run and was disabled in a fresh profile, where `g C` opened nothing and the command refused with a message. Keys do not run in the conversation tab.
 - `openAddonsMgr("addons://list/extension")` and `openAddonsMgr("addons://list/theme")` open or reuse the Add-ons Manager tab. `openContentTab("about:config")` opens the configuration editor in a tab. Keys do not run in those tabs, so the next key press needs the mail tab in front.
 
+## Pane sizes
+
+Read from the Betterbird 153 source (`pane-layout.mjs`, `pane-splitter.js`, `about3Pane.xhtml`), and the live move measured with the end-to-end run on Betterbird in the classic layout. Thunderbird ESR was not run.
+
+- `paneLayout.folderPaneSplitter` and `messagePaneSplitter` are `pane-splitter` elements. `resizeElement` is the pane a splitter sizes, `resizeDirection` says whether it sets the width (`horizontal`) or the height, and `width` and `height` hold the wanted size. Setting one writes a CSS variable that the grid takes as a maximum (`minmax(auto, var(...))`), so the pane can come out smaller than asked. The verb sets the size again to what the pane took, as `_updateSize` does for a drag.
+- Only `PaneLayout` listens for `splitter-resized` on these two splitters, and it stores `splitter[width or height]` in XULStore under `folderPaneBox` or `messagepaneboxwrapper` at `chrome://messenger/content/messenger.xhtml`. Other `splitter-resized` listeners (the column headers, the address book, compose) sit on other splitters. A drag fires the event when it ends, and a plain `width` set fires nothing, so the verb dispatches it.
+- Measured: with the folder pane focused in the classic layout, `l` in resize mode moved the splitter 24 pixels right, `3 l` three steps, `h` one step back, and `=` returned it to its first place. `j` in the thread list moved the border above the message pane 24 pixels down. The splitter x and y were read from screenshots (309 and 166 at the start).
+- Not measured: how soon XULStore writes `xulstore.json` after `removeValue` or the event, a restart with a stored size, the five other layouts, and Thunderbird ESR. The layout facts come from the source.
+
 ## Mode label
 
 - The label is a XUL `label` with class `statusbarpanel`, inserted before the first child of `#statusTextBox` (else `#status-bar`) of `messenger.xhtml`. Measured on Thunderbird 153.7.0 and Betterbird with the end-to-end run: it draws at the start of the bar, left of the status text.

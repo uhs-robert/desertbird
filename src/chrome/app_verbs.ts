@@ -3,10 +3,12 @@
 import { focused_pane } from "./focus.ts";
 import type { MainWindow, ExtensionContext } from "./platform.ts";
 import { guard, open_main_windows, open_windows, tabmail_of } from "./platform.ts";
+import { move_border, reset_sizes } from "./pane_resize.ts";
+import type { ResizePane } from "./pane_resize.ts";
 import { mail_pane_of } from "./view.ts";
 import type { FolderTreeLike, ThreadVerbPane } from "./view.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
-import type { AppCommandArgs, AppOpenPageArgs, AppPaneFocusArgs } from "../shared/protocol.ts";
+import type { AppCommandArgs, AppOpenPageArgs, AppPaneFocusArgs, AppPaneResizeArgs } from "../shared/protocol.ts";
 
 interface Controller {
     isCommandEnabled(name: string): boolean;
@@ -24,10 +26,10 @@ interface MessageBodyBrowser {
 }
 
 /** The members of `about:3pane` these verbs read. Its main window is `browsingContext.topChromeWindow`. */
-interface AppPane extends ThreadVerbPane {
+interface AppPane extends ThreadVerbPane, ResizePane {
     folderTree: FolderTreeLike;
     messageBrowser: { contentWindow?: { getMessagePaneBrowser?(): MessageBodyBrowser } | null };
-    paneLayout: { folderPaneVisible: boolean; messagePaneVisible: boolean };
+    paneLayout: ResizePane["paneLayout"] & { folderPaneVisible: boolean; messagePaneVisible: boolean };
     browsingContext: { topChromeWindow: AppWindow };
 }
 
@@ -76,6 +78,11 @@ export function app_verbs(context: ExtensionContext) {
             const element = PANES[pane === "left" ? focused - 1 : pane === "right" ? focused + 1 : PANE_NAMES.indexOf(pane)]?.(about_3pane);
             element && element.focus?.();
             return !!element;
+        }),
+        paneResize: guard("app.paneResize", ({ windowId, direction, steps }: AppPaneResizeArgs): boolean => {
+            const about_3pane = pane_of(windowId);
+            const pane = focused_pane(about_3pane.browsingContext.topChromeWindow.document);
+            return direction === "reset" ? reset_sizes(about_3pane) : move_border(about_3pane, pane, direction, steps);
         }),
         appCommand: guard("app.appCommand", ({ windowId, name }: AppCommandArgs): boolean => {
             const holder = controller_holder_of(context, windowId);

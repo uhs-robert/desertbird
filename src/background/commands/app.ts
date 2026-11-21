@@ -1,4 +1,4 @@
-import { focus_pane, focus_pane_beside, open_conversation, open_page } from "../handlers/app.ts";
+import { focus_pane, focus_pane_beside, open_conversation, open_page, resize_pane } from "../handlers/app.ts";
 import { undo } from "../handlers/undo.ts";
 import type { UndoApi } from "../handlers/undo.ts";
 import type { AppHandlerApi } from "../handlers/app.ts";
@@ -72,6 +72,16 @@ export const app: CommandGroup = {
             intent: "Move the focus to the pane right of the focused one. From the folder pane it goes to the thread list, from the thread list to the message pane. It stops at the message pane, and a hidden message pane or one with no message counts as the end.",
             needs: ["app.paneFocus"],
             run: scoped<AppHandlerApi>(focus_pane_beside("right")),
+        },
+        "pane.resize": {
+            bridge: false,
+            runs_in: "background",
+            label: "Resize the focused pane",
+            intent: "Move the border of the focused pane by 24 CSS pixels. A count multiplies the step. A pane that sits between two borders moves the one after it. The size is stored as a drag stores it, so it stays after a restart. `reset` puts both splitters back to their default sizes. It refuses a pane that is hidden, or a layout with no border on that axis, and it never collapses a pane. The resize mode of `w r` types these as `h`, `l`, `j`, `k` and `=`.",
+            count: "repeat",
+            needs: ["app.paneResize"],
+            params: [{ name: "direction", type: "enum", values: ["left", "right", "up", "down", "reset"], description: { left: "Move the border to the left.", right: "Move the border to the right.", up: "Move the border up.", down: "Move the border down.", reset: "Put both splitters back to their default sizes." } }],
+            run: scoped<AppHandlerApi>(resize_pane),
         },
     }),
     normal_keys: {

@@ -7,7 +7,7 @@ import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[]; background_ids?: string[] }> = {
-    motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle"] },
+    motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle", "pane.resize_mode"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move", "msg.copy"] },
     compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new", "compose.edit_external"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
@@ -28,7 +28,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     help: { runs_in: "background", ids: ["help.open", "options.open", "help.whichkey"] },
     search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
     page: { runs_in: "chrome", ids: ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.page_down", "page.page_up", "page.scroll_left", "page.scroll_right", "page.top", "page.bottom", "mode.insert", "mode.escape"] },
-    app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right"] },
+    app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right", "pane.resize"] },
     zoom: { runs_in: "background", ids: ["zoom.by", "zoom.set"] },
 };
 

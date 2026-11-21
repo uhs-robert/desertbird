@@ -20,14 +20,16 @@ export function contrast_ratio(first: string, second: string): number {
     return (lighter! + 0.05) / (darker! + 0.05);
 }
 
+// The resize color is the theme warn role: the caret role misses 4.5 to 1 on the light status bar for some themes (`test/theme.test.ts`).
 // The text on a badge is whichever of the theme's own background and text color reads better on the mode colors.
 function scheme_of(colors: RoleColors): ModeLabelScheme {
-    const modes = [colors.mode_normal, colors.mode_visual, colors.mode_insert];
+    const modes = [colors.mode_normal, colors.mode_visual, colors.mode_insert, colors.warn];
     const worst_on = (text: string) => Math.min(...modes.map((mode) => contrast_ratio(text, mode)));
     return {
         normal: colors.mode_normal,
         visual: colors.mode_visual,
         insert: colors.mode_insert,
+        resize: colors.warn,
         on_badge: worst_on(colors.bg_core) >= worst_on(colors.fg_core) ? colors.bg_core : colors.fg_core,
     };
 }

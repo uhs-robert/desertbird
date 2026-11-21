@@ -105,7 +105,7 @@ export interface KeysPending {
     root?: true;
 }
 
-/** The third thing `keys.onInvocation` carries: visual mode or manual insert mode (`i` in a page tab) started or ended in a window. Only the key runtimes know them. Insert from a focused text field is not sent: the status bar label reads the focus itself. */
+/** The third thing `keys.onInvocation` carries: visual mode, resize mode (`w r`) or manual insert mode (`i` in a page tab) started or ended in a window. Only the key runtimes know them. Insert from a focused text field is not sent: the status bar label reads the focus itself. */
 export interface KeysMode {
     command: "mode";
     mode: ModeName;
@@ -114,7 +114,7 @@ export interface KeysMode {
 
 export type KeysEvent = KeysInvocation | KeysPending | KeysMode;
 
-export const MODE_NAMES = ["normal", "visual", "insert"] as const;
+export const MODE_NAMES = ["normal", "visual", "insert", "resize"] as const;
 export type ModeName = (typeof MODE_NAMES)[number];
 
 export const MODE_INDICATORS = ["always", "not_normal", "off"] as const;
@@ -129,6 +129,7 @@ export interface ModeLabelScheme {
     normal: string;
     visual: string;
     insert: string;
+    resize: string;
     on_badge: string;
 }
 
@@ -183,7 +184,7 @@ export const EXPERIMENT_VERBS = {
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
     folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
     // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
-    app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "appCommand", "appOpenPage"], events: [] },
+    app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"], events: [] },
     // Loaded on first use, like `folderpane`.
     zoom: { functions: ["get", "set"], events: [] },
 } as const;
@@ -201,6 +202,7 @@ export interface AppApi {
     viewAllThreads(args: AppViewAllThreadsArgs): Promise<void>;
     viewScroll(args: AppViewScrollArgs): Promise<void>;
     paneFocus(args: AppPaneFocusArgs): Promise<boolean>;
+    paneResize(args: AppPaneResizeArgs): Promise<boolean>;
     appCommand(args: AppCommandArgs): Promise<boolean>;
     appOpenPage(args: AppOpenPageArgs): Promise<void>;
 }
@@ -305,6 +307,17 @@ export type Pane = "folders" | "threads" | "message";
 export interface AppPaneFocusArgs {
     windowId: number;
     pane: Pane | "left" | "right";
+}
+
+/** The way a pane border moves: the border of the focused pane goes left, right, up or down, or both splitters go back to their default sizes. */
+export const PANE_RESIZE_DIRECTIONS = ["left", "right", "up", "down", "reset"] as const;
+export type PaneResizeDirection = (typeof PANE_RESIZE_DIRECTIONS)[number];
+
+/** `steps` is how many steps of 24 CSS pixels the border moves. The answer is false, changing nothing, when the focused pane has no border on that axis, is collapsed, or the folder pane has no splitter in this view. A move that stops at the size limit answers true. */
+export interface AppPaneResizeArgs {
+    windowId: number;
+    direction: PaneResizeDirection;
+    steps: number;
 }
 
 /** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. */

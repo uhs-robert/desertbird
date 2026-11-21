@@ -1,6 +1,6 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { focused_pane, in_reading_pane, is_typing, menu_takes_key, overlay_is_loading } from "./focus.ts";
+import { focused_pane, in_reading_pane, in_text_field, is_typing, menu_takes_key, overlay_is_loading } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
@@ -44,6 +44,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         menu_takes_key: (window: MainWindow, key: string) => menu_takes_key(window.document, key),
         overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
+        in_text_field: (window: MainWindow) => in_text_field(window.document),
         on_tab_select(window, listener) {
             // On the window and not on the tab strip: at startup the strip does not exist yet when the window is hooked (measured), and a capture listener on the window sees the event from any element below it.
             window.addEventListener("TabSelect", listener, true);

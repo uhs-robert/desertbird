@@ -27,7 +27,7 @@ test("every Oasis theme: each mode color reads on the status bar of its scheme, 
     for (const name of OASIS_THEME_NAMES) {
         const colors = mode_label_colors(resolve_theme(name));
         for (const scheme of ["dark", "light"] as const) {
-            for (const mode of ["normal", "visual", "insert"] as const) {
+            for (const mode of ["normal", "visual", "insert", "resize"] as const) {
                 const color = colors[scheme][mode];
                 assert.ok(contrast_ratio(color, STATUS_BAR[scheme]) >= READABLE, `${name} ${scheme} ${mode} ${color} on the status bar`);
                 assert.ok(contrast_ratio(colors[scheme].on_badge, color) >= READABLE, `${name} ${scheme} ${mode} badge text`);

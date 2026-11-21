@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { start_app } from "./harness.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
-import { run_pane_moves } from "./panes_checks.mjs";
+import { run_pane_moves, run_resize_mode } from "./panes_checks.mjs";
 import { run_popup_keys } from "./popup_checks.mjs";
 import { run_typing } from "./typing_checks.mjs";
 
@@ -1126,6 +1126,7 @@ async function run_panes(instance, { app, kind, shot }) {
   await instance.press(["u"]);
   await expect_absent(instance, "with the stack empty, u leaves a native Delete to Thunderbird and changes no mail", (current) => (deleted && !in_folder(current, victim, "/Inbox") && messages_in_inbox(current) === inbox_after_delete ? null : `${victim} out of the Inbox after Delete ${deleted}, in the Inbox after u ${in_folder(current, victim, "/Inbox")}, Inbox ${inbox_after_delete} then ${messages_in_inbox(current)}`), { margin_ms: 4000, in_list: true });
   await run_pane_moves(instance, { check, note, shot, key_and_state, open_inbox, wait_state, wait_for_state, expect_absent });
+  await run_resize_mode(instance, { check, note, shot, wait_for, wait_state, expect_absent, barrier });
 }
 
 // Timing for the step keys on the scale fixture (E2E_SCALE=1: a folder of 10,000 messages, 3 of every 10 unread and 1 in 25 starred, plus 50 folders of 100). Each time is the wall time from the key to the selection change, polled through the light selection command.
