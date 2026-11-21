@@ -208,10 +208,11 @@ test("an open menupopup takes the access keys of its direct items, a panel takes
     const app_menu = popup("panel", "open", (self) => [item("n", () => self), item("a", () => ({}))]);
     for (const key of ["n", "a", "j"]) assert.equal(menu_takes_key(doc(app_menu), key), false, key);
     const focused_panel = popup("panel", "showing", () => [], (node) => node === list);
-    assert.equal(menu_takes_key(doc(focused_panel), "j"), true);
+    // Focus inside the panel (keyboard open, a view change, an arrow key) takes no plain key either.
+    assert.equal(menu_takes_key(doc(focused_panel), "j"), false);
     // A panel-list has no state and carries `open`.
     const panel_list = { localName: "panel-list", hasAttribute: (name: string) => name === "open", contains: (node: unknown) => node === list };
-    assert.equal(menu_takes_key(doc(panel_list), "j"), true);
+    assert.equal(menu_takes_key(doc(panel_list), "j"), false);
     assert.equal(menu_takes_key(doc({ ...panel_list, hasAttribute: () => false }), "j"), null);
 });
 

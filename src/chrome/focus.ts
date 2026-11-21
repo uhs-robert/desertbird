@@ -81,12 +81,11 @@ const documents_on_the_way = (document: FocusDocument): FocusDocument[] => [docu
 /** Whether a menu or panel is open in the window or in a document on the way to the focus, such as the thread list's context menu in about:3pane. */
 export const menu_is_open = (document: FocusDocument): boolean => documents_on_the_way(document).some((each) => [...(each.querySelectorAll?.("menupopup, panel") ?? [])].some((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "")));
 
-/** Whether an open popup takes the plain key: null when none is open. A `menupopup` consumes its own keys, so it takes the access keys of its direct items. A `panel` (the app menu) or `panel-list` ignores access keys after a click and leaves the key to Thunderbird's shortcuts, so it takes every key while the focus is inside it and none otherwise. Items of closed submenus and hidden panel views are not direct items of an open popup and do not count. The search stays in the light tree: no shadow popup exists in the mail window. */
+/** Whether an open popup takes the plain key: null when none is open. A `menupopup` consumes its own keys, so it takes the access keys of its direct items. A `panel` (the app menu) or `panel-list` takes no plain key, with the focus inside it or not: its keyboard handling covers named keys only and has no access keys, so a plain letter would reach Thunderbird's shortcuts. Items of closed submenus and hidden panel views are not direct items of an open popup and do not count. The search stays in the light tree: no shadow popup exists in the mail window. */
 export function menu_takes_key(document: FocusDocument, key: string): boolean | null {
     const open = documents_on_the_way(document).flatMap((each) => [...(each.querySelectorAll?.("menupopup, panel, panel-list") ?? [])].filter((popup) => SHOWN_POPUP_STATES.has(popup.state ?? "") || (popup.localName === "panel-list" && popup.hasAttribute?.("open") === true)));
     if (!open.length) return null;
-    const focus = focus_chain(document);
-    return open.some((popup) => (popup.localName === "menupopup" ? [...(popup.querySelectorAll?.("[accesskey]") ?? [])].some((item) => item.closest?.("menupopup") === popup && !item.hasAttribute?.("hidden") && item.getAttribute?.("accesskey")?.toLowerCase() === key.toLowerCase()) : focus.some((node) => popup.contains?.(node))));
+    return open.some((popup) => popup.localName === "menupopup" && [...(popup.querySelectorAll?.("[accesskey]") ?? [])].some((item) => item.closest?.("menupopup") === popup && !item.hasAttribute?.("hidden") && item.getAttribute?.("accesskey")?.toLowerCase() === key.toLowerCase()));
 }
 
 export interface KeyEventTargets {
