@@ -30,6 +30,43 @@ const dead_pid = () => spawnSync("true").pid;
 const lock_of = (dir: string) => join(dir, "run.lock");
 const own_ticks = () => process_start_ticks(process.pid);
 
+// Every test that starts a process ends within this. Without a timeout a test that awaits a child forever holds the whole node --test run open,
+// because node:test keeps the loop alive while a test is pending, and the timeout turns that hang into a failure.
+const CHILD_TEST_LIMIT = { timeout: 30_000 };
+
+// A node child that is SIGKILLed when its test ends, whether the test passed, failed or timed out.
+// `line_starting` rejects with the child's stderr once the child is gone without printing the line, so a child that died early fails at once.
+function node_child(signal: AbortSignal, script: string) {
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: "pipe", signal, killSignal: "SIGKILL" });
+  // The kill at the test's end comes as an AbortError event, which would otherwise throw.
+  child.on("error", () => {});
+  let stderr = "";
+  child.stderr.on("data", (data) => { stderr += data; });
+  const lines: string[] = [];
+  let closed = false;
+  const waiters: Array<() => void> = [];
+  const wake_all = () => waiters.splice(0).forEach((wake) => wake());
+  // A chunk can end inside a line, so the fragment after the last newline waits for the next chunk.
+  let fragment = "";
+  child.stdout.on("data", (data) => {
+    const parts = (fragment + data).split("\n");
+    fragment = parts.pop() ?? "";
+    lines.push(...parts.filter(Boolean));
+    wake_all();
+  });
+  child.once("close", () => { if (fragment) lines.push(fragment); closed = true; wake_all(); });
+  const exited = new Promise<{ code: number | null; at: number }>((done) => child.once("exit", (code) => done({ code, at: Date.now() })));
+  const line_starting = async (prefix: string) => {
+    for (;;) {
+      const found = lines.find((line) => line.startsWith(prefix));
+      if (found) return found;
+      if (closed) throw new Error(`the child exited before it printed "${prefix}". Its stderr:\n${stderr}`);
+      await new Promise<void>((wake) => waiters.push(wake));
+    }
+  };
+  return { child, exited, line_starting, lines };
+}
+
 test("a lock held by a live process is refused", () => in_tmp((root) => {
   const first = acquire_lock(root);
   assert.throws(() => acquire_lock(root), /is held by the run with pid/);
@@ -71,12 +108,11 @@ test("a stale takeover guard left by a dead run does not block the takeover", ()
   acquire_lock(root)();
 }));
 
-test("a run that was killed leaves a lock the next run takes over", () => in_tmp(async (root) => {
+test("a run that was killed leaves a lock the next run takes over", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
   const script = `import { acquire_lock } from ${JSON.stringify(join(import.meta.dirname, "..", "tools", "e2e", "run_dir.mjs"))}; acquire_lock(${JSON.stringify(root)}); console.log("held"); setInterval(() => {}, 1000);`;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
-  await new Promise((done) => child.stdout.once("data", done));
+  const { child, exited, line_starting } = node_child(t.signal, script);
+  await line_starting("held");
   assert.throws(() => acquire_lock(root), /is held by the run with pid/);
-  const exited = new Promise((done) => child.once("exit", done));
   child.kill("SIGKILL");
   await exited;
   acquire_lock(root)();
@@ -215,21 +251,24 @@ function assert_app_isolated_paths(run_dir: string, path: string, home: string) 
   assert_start_paths({ run_dir, paths: [path], real_home: home });
 }
 
-test("two runs that find one stale lock at once leave exactly one holder", () => in_tmp(async (root) => {
+test("two runs that find one stale lock at once leave exactly one holder", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
   writeFileSync(lock_of(root), `${dead_pid()} 1\n`);
   const script = `import { acquire_lock } from ${JSON.stringify(join(tools_dir, "run_dir.mjs"))};
     try { acquire_lock(${JSON.stringify(root)}); console.log("won"); } catch (error) { console.log("refused: " + error.message); }
     process.stdin.resume();`;
-  const children = Array.from({ length: 8 }, () => spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["pipe", "pipe", "inherit"] }));
-  const answers = await Promise.all(children.map((child) => new Promise<string>((done) => child.stdout.once("data", (data) => done(String(data).trim())))));
-  for (const child of children) child.stdin.end();
+  const children = Array.from({ length: 8 }, () => node_child(t.signal, script));
+  const answers = await Promise.all(children.map(({ line_starting }) => line_starting("")));
+  for (const { child } of children) child.stdin.end();
   assert.equal(answers.filter((answer) => answer === "won").length, 1, answers.join("\n"));
   assert.ok(answers.every((answer) => answer === "won" || /is held by the run with pid/.test(answer)), answers.join("\n"));
 }));
 
+const pids_of = (line: string) => line.split(" ").slice(1).map(Number) as [number, number];
+
 // A child that runs the real lifecycle wiring with a fake session: a detached process group that stands in for labwc and the app.
 // `ignore_term` makes the group survive SIGTERM, so only the SIGKILL after the grace ends it, as with a hung app.
-function lifecycle_child(root: string, body: string) {
+// The groups it names in its output are SIGKILLed when the test ends, since a lifecycle bug leaves them running.
+function lifecycle_child(signal: AbortSignal, root: string, body: string) {
   const script = `import { spawn } from "node:child_process";
     import { install_lifecycle, track_session, track_start, stop_all_apps } from ${JSON.stringify(join(tools_dir, "harness.mjs"))};
     import { open_run_dir } from ${JSON.stringify(join(tools_dir, "run_dir.mjs"))};
@@ -243,37 +282,60 @@ function lifecycle_child(root: string, body: string) {
     };
     setInterval(() => {}, 1000);
     ${body}`;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "ignore"] });
-  const lines: string[] = [];
-  const waiters: Array<() => void> = [];
-  child.stdout.on("data", (data) => { lines.push(...String(data).split("\n").filter(Boolean)); waiters.splice(0).forEach((wake) => wake()); });
-  const exited = new Promise<{ code: number | null; at: number }>((done) => child.once("exit", (code) => done({ code, at: Date.now() })));
-  const line_starting = async (prefix: string) => {
-    for (;;) {
-      const found = lines.find((line) => line.startsWith(prefix));
-      if (found) return found;
-      await new Promise<void>((wake) => waiters.push(wake));
-    }
+  const lifecycle = node_child(signal, script);
+  const kill_named_groups = () => {
+    for (const group of lifecycle.lines.flatMap(pids_of)) if (group > 1) try { process.kill(-group, "SIGKILL"); } catch { /* gone */ }
   };
-  return { child, exited, line_starting };
+  // The child can still be printing a group when the test ends, so the scan runs again once its output has closed.
+  signal.addEventListener("abort", () => {
+    kill_named_groups();
+    lifecycle.child.once("close", kill_named_groups);
+  }, { once: true });
+  return lifecycle;
 }
-const pids_of = (line: string) => line.split(" ").slice(1).map(Number) as [number, number];
-const group_alive = (pgid: number) => { try { process.kill(-pgid, 0); return true; } catch { return false; } };
+// A group counts as gone when no member runs. kill(-pgid, 0) also succeeds for a zombie, and an orphan of a killed group stays a zombie
+// where the process that adopts it never reaps, as on a CI container without an init. The members are read from /proc for that reason.
+// The kill reaches a process before the kernel has finished tearing it down, so the check polls to a deadline.
+function group_members_running(pgid: number) {
+  return readdirSync("/proc").filter((entry) => {
+    if (!/^\d+$/.test(entry)) return false;
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, "latin1");
+      const [state, , group] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      return Number(group) === pgid && state !== "Z";
+    } catch {
+      return false;
+    }
+  });
+}
+// /proc in another pid namespace, or mounted with hidepid, shows no member of any group, and group_gone would then pass with no kill at all.
+function assert_group_runs(pgid: number) {
+  assert.ok(group_members_running(pgid).length > 0, `/proc shows no running member of group ${pgid} before the kill`);
+}
+async function group_gone(pgid: number, deadline_ms = 5000) {
+  for (const started = Date.now(); group_members_running(pgid).length > 0; await new Promise((wake) => setTimeout(wake, 25))) {
+    if (Date.now() - started > deadline_ms) return false;
+  }
+  return true;
+}
 
-test("SIGTERM stops every tracked group, frees the lock and exits 143", () => in_tmp(async (root) => {
-  const { child, exited, line_starting } = lifecycle_child(root, `const a = track_session(fake_session(false)); const b = track_session(fake_session(true)); console.log("ready " + a.groups[0] + " " + b.groups[0]);`);
+test("SIGTERM stops every tracked group, frees the lock and exits 143", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
+  const { child, exited, line_starting } = lifecycle_child(t.signal, root, `const a = track_session(fake_session(false)); const b = track_session(fake_session(true)); console.log("ready " + a.groups[0] + " " + b.groups[0]);`);
   const [first, second] = pids_of(await line_starting("ready"));
+  assert_group_runs(first);
+  assert_group_runs(second);
   assert.ok(existsSync(lock_of(root)));
   child.kill("SIGTERM");
   const { code } = await exited;
   assert.equal(code, 143);
   assert.ok(!existsSync(lock_of(root)));
-  assert.ok(!group_alive(first) && !group_alive(second));
+  assert.ok(await group_gone(first) && await group_gone(second));
 }));
 
-test("a second signal during the shutdown does not cut the kill grace short", () => in_tmp(async (root) => {
-  const { child, exited, line_starting } = lifecycle_child(root, `const a = track_session(fake_session(true)); console.log("ready " + a.groups[0]);`);
+test("a second signal during the shutdown does not cut the kill grace short", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
+  const { child, exited, line_starting } = lifecycle_child(t.signal, root, `const a = track_session(fake_session(true)); console.log("ready " + a.groups[0]);`);
   const [group] = pids_of(await line_starting("ready"));
+  assert_group_runs(group);
   const first_at = Date.now();
   child.kill("SIGTERM");
   await new Promise((wake) => setTimeout(wake, 500));
@@ -281,30 +343,35 @@ test("a second signal during the shutdown does not cut the kill grace short", ()
   const { code, at } = await exited;
   assert.equal(code, 143, "the first signal's code");
   assert.ok(at - first_at >= 3000, `the process lived ${at - first_at} ms, short of the kill grace`);
-  assert.ok(!group_alive(group), "the group that ignored SIGTERM is dead");
+  assert.ok(await group_gone(group), "the group that ignored SIGTERM is dead");
   assert.ok(!existsSync(lock_of(root)));
 }));
 
-test("a signal while a session is still starting waits for it and stops it", () => in_tmp(async (root) => {
-  const { child, exited, line_starting } = lifecycle_child(root, `
+test("a signal while a session is still starting waits for it and stops it", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
+  const { child, exited, line_starting } = lifecycle_child(t.signal, root, `
     let session;
     track_start(new Promise((done) => setTimeout(() => { session = fake_session(false); track_session(session); console.log("started " + session.groups[0]); done(session); }, 1000)));
-    console.log("ready");`);
-  await line_starting("ready");
+    const visibility_probe = spawn("sleep", ["600"], { detached: true, stdio: "ignore" });
+    visibility_probe.unref();
+    console.log("ready " + visibility_probe.pid);`);
+  // The session comes up and is stopped inside the shutdown, so no moment exists to see it run. A probe group stands in to prove /proc sees this namespace.
+  const [probe] = pids_of(await line_starting("ready"));
+  assert_group_runs(probe);
   child.kill("SIGINT");
   const { code } = await exited;
   const [group] = pids_of(await line_starting("started"));
   assert.equal(code, 130);
-  assert.ok(!group_alive(group), "the session that came up during the shutdown is stopped");
+  assert.ok(await group_gone(group), "the session that came up during the shutdown is stopped");
   assert.ok(!existsSync(lock_of(root)));
 }));
 
-test("an uncaught error kills every tracked group, frees the lock and exits 1", () => in_tmp(async (root) => {
-  const { exited, line_starting } = lifecycle_child(root, `const a = track_session(fake_session(true)); console.log("ready " + a.groups[0]); setTimeout(() => { throw new Error("boom"); }, 200);`);
+test("an uncaught error kills every tracked group, frees the lock and exits 1", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
+  const { exited, line_starting } = lifecycle_child(t.signal, root, `const a = track_session(fake_session(true)); console.log("ready " + a.groups[0]); setTimeout(() => { throw new Error("boom"); }, 200);`);
   const [group] = pids_of(await line_starting("ready"));
+  assert_group_runs(group);
   const { code } = await exited;
   assert.equal(code, 1);
-  assert.ok(!group_alive(group));
+  assert.ok(await group_gone(group));
   assert.ok(!existsSync(lock_of(root)));
 }));
 
@@ -330,7 +397,7 @@ test("a dangling link that points inside the run dir is accepted", () => in_tmp(
   assert_start_paths({ run_dir, paths: [join(run_dir, "link")], real_home: join(root, "home") });
 }));
 
-test("a symlinked home under a reused E2E_DIR is refused before the editor host writes anything", () => in_tmp((root) => {
+test("a symlinked home under a reused E2E_DIR is refused before the editor host writes anything", CHILD_TEST_LIMIT, () => in_tmp((root) => {
   const e2e_dir = join(root, "reused");
   const kind_dir = join(e2e_dir, "betterbird", "compose_editor");
   const outside = join(root, "owner_home");
@@ -338,7 +405,8 @@ test("a symlinked home under a reused E2E_DIR is refused before the editor host 
   mkdirSync(outside);
   symlinkSync(outside, join(kind_dir, "home"));
   // /bin/true stands in for the binary. The run must stop on the guard, long before any app would start.
-  const run = spawnSync(process.execPath, [join(tools_dir, "run.mjs"), "betterbird", "--binary", "betterbird=/bin/true"], { env: { ...process.env, E2E_DIR: e2e_dir, E2E_KINDS: "compose_editor", E2E_TIMINGS_FILE: join(root, "timings.json") }, encoding: "utf8" });
+  // spawnSync blocks the event loop, so the test's own timeout cannot fire here and the call carries its own.
+  const run = spawnSync(process.execPath, [join(tools_dir, "run.mjs"), "betterbird", "--binary", "betterbird=/bin/true"], { env: { ...process.env, E2E_DIR: e2e_dir, E2E_KINDS: "compose_editor", E2E_TIMINGS_FILE: join(root, "timings.json") }, encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
   assert.notEqual(run.status, 0);
   assert.match(run.stderr, /refusing to start an app/);
   assert.deepEqual(readdirSync(outside), [], "nothing was written through the link");
