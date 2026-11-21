@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { first_selected, selects, at_top, leaves_row } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["followup"];
+
 // m f d sets a follow-up reminder and tags nothing yet. m f c cancels. The due fire needs a clock run of a day and `src/` takes no test hook, so the fire is a hand check. The persisted reminder is read from the profile, and a real restart keeps it.
 async function run_followup(instance, ctx) {
   const { check, open_inbox, wait_for, wait_for_state, key_and_state, restart } = ctx;

@@ -3,6 +3,8 @@
 import { sleep, same, leaves_row, window_has_focus, window_is_closed, QUIET_AFTER_ESCAPE_MS, sorted_by } from "../predicates.mjs";
 import { section_piece, ensure_views_folder } from "./_default_shared.mjs";
 
+export const areas = ["cmdline"];
+
 // The command line, in the Views folder (`ensure_views_folder` shows it). `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.
 // Focus back in the list is measured with Thunderbird's own Down key: it moves the list selection only while the list has focus, and the overlay is gone from the focus chain by then.
 async function run_cmdline(instance, ctx) {

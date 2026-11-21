@@ -4,6 +4,8 @@ import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
 import { sleep, first_selected, selects, thread_shows } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["threads"];
+
 // The barrier's own check, on the fold path, whose background command is longer than the flip: a fold pressed before the barrier must have landed when the barrier returns. A miss means the barrier is too weak for the negative checks that rely on it.
 async function measure_barrier(instance, ctx) {
   const { check, barrier, key_and_state } = ctx;

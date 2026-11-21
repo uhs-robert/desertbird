@@ -2,6 +2,8 @@
 import { run_page_hints } from "../page_hints_checks.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
+export const areas = ["pages", "hints"];
+
 export const piece = {
   kind: "pages",
   section: "page_hints",

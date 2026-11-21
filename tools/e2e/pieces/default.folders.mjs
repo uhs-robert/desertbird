@@ -3,6 +3,8 @@
 import { sleep, CTRL, folder_shown, main_window_tabs } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["folders"];
+
 // Restarts the app, so it goes after the checks that need the session as it is.
 async function run_folders(instance, ctx) {
   const { check, note, wait_state, wait_for_state, restart } = ctx;

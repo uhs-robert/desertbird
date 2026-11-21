@@ -2,6 +2,8 @@ import { FLAT_ROWS, COLLAPSED_ROWS } from "../fixture_rows.mjs";
 import { sleep, CTRL_SHIFT, first_selected, same, selects, flag_becomes, compose_opens } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["motions", "mail_keys", "compose", "panes"];
+
 // The key checks of the Inbox: motions, the keys that must do nothing, the context menu, the quick filter, a restart, archive and delete, the reading pane focus, C-l, the message state keys and the compose keys.
 // Row bookkeeping (`gone`, `live_rows`, `row_of`) lives inside this one piece, so no piece reads another's.
 async function run_keys(instance, ctx, start) {

@@ -4,6 +4,8 @@ import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
 import { selects, listed_count } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
+export const areas = ["search"];
+
 // / and ? search the thread list with the Quick Filter: rows narrow while typing, Escape restores, Enter keeps the filter and selects, n and N step. The fixture subjects "Single 1" and "Single 10".."Single 19" give 11 rows in the Inbox.
 async function run_search(instance, ctx) {
   const { app, kind, shot, check, wait_state, wait_for_state, key_and_state, open_command_line, press_in_command_line } = ctx;

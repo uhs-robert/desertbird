@@ -1,6 +1,8 @@
 // The pages kind, typing keys in a page tab and the quick filter (see typing_checks.mjs).
 import { run_typing } from "../typing_checks.mjs";
 
+export const areas = ["pages"];
+
 export const piece = {
   kind: "pages",
   section: "typing",
