@@ -97,7 +97,21 @@ Copied from DesertFox's `test/key/` (`run.mjs`, `worker.mjs`, `shards.mjs`, `tim
 - Workers send their checks and timings entries in `piece_done` and write no file. One run dir and one lock, held by the coordinator.
 - Signals in both the coordinator and the worker go through `install_lifecycle` (`harness.mjs`), whose `on_signal` hook stops the workers and writes the report before the exit, and whose `announce: false` keeps a worker quiet.
 - Setting names are `E2E_*`. `KEY_TEST_ORDER=reverse` is not copied, since the serial run keeps the registry order.
-- The default worker count is 1 for now, where DesertFox runs 8.
+- The default worker count is 1 for `npm run e2e`, where DesertFox runs 8. `just e2e` sets 3, since fleet sessions run at most 3 apps at once (see Scope and lock).
+
+## Scope and lock
+
+`just e2e [args]` builds, then runs `npm run e2e -- --xpi dist/desertbird.xpi` on 3 workers (`E2E_SHARDS` overrides) under one `flock` and, when `systemd-run --user` works, in a capped scope. `just e2e-changed [base]` adds `E2E_CHANGED=1`. `just e2e-sweep` runs the sweep alone. The justfile calls npm, never the reverse.
+
+- Lock: `/tmp/desertbird-e2e.lock`, one run per machine, because two runs break the memory budget. A second run prints the holders and waits up to 3600 s, like DesertFox's key test, and then fails. Waiting beats failing here, since a full run takes about 20 minutes and a fleet queues behind it. Never wrap the recipe in `flock`.
+- Scope: `MemoryMax` of 2 GB per worker plus 2 GB (8 GB on 3 workers), `MemoryHigh` 1 GB under it, no swap, and a runtime limit of 3600 s, or `E2E_DEADLINE_S` plus 120 s when set. It joins `agents.slice` when the caller is in it. With no systemd user session the run goes on without a cap and says so.
+- Sweep (`sweep.mjs`): before each run, under the lock, it kills the process groups that name a `desertbird-e2e-*` dir in the temp dir whose `run.lock` is dead or missing (`reap.mjs` does the matching). A live run, a dir from `E2E_DIR` and anything else (the owner's Betterbird, `~/.thunderbird`) is left alone. The dirs stay as evidence.
+
+Departures from DesertFox's `key-test` recipe:
+
+- The lock wait is 3600 s, not 900 s, for the longer run.
+- No `CPUQuota` and no `build-key-test` step: the measured limit is memory, and the run uses the one build.
+- The sweep matches by run dir and its lock, where DesertFox reads an owner file in each session dir.
 
 ## Changed-only runs
 

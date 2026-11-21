@@ -1,9 +1,9 @@
 // The work dir of one e2e run, the lock that keeps two runs out of one dir, and the guard that keeps an app away from the owner's home and display.
 // Copied in shape from DesertFox's test/key/session.mjs (make_run_dir, owner file, process_start_ticks). Departures:
 // - the lock sits in the work dir and a second run refuses a live one, where DesertFox makes a fresh dir for every run and sweeps dead ones;
-// - no sweep: a kept dir (failure, E2E_KEEP=1) is the evidence the owner asked for, and stays until the owner removes it;
+// - the run itself sweeps nothing: a kept dir (failure, E2E_KEEP=1) is the evidence the owner asked for, and stays until the owner removes it;
 // - a dir named by E2E_DIR is never removed, only unlocked, because the owner chose it and may hold other files there;
-// - DesertFox's process sweeps (sweep_dead_sessions, sweep_orphan_compositors) are left out of this PR. A SIGKILLed run can orphan its apps, and PR 7's systemd scope is what ends them.
+// - the process sweeps (sweep_dead_sessions, sweep_orphan_compositors) live in sweep.mjs, which `just e2e` runs under its lock.
 import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
