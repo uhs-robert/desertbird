@@ -68,18 +68,26 @@ export function kill_all_apps_now() {
 
 // Signals stop every app and free the lock, then exit with the code of the first signal. The exit event also kills what is left and frees the lock, so a crash leaves nothing running or locked.
 // Returns the function the run calls once with its verdict.
-export function install_lifecycle(run_dir, { exit = (code) => process.exit(code) } = {}) {
+// `on_signal(signal)` runs once, on the first signal, and is awaited before the apps stop: the coordinator stops its workers and writes its report there.
+// `announce: false` keeps the closing line quiet, for a worker whose run dir belongs to the coordinator.
+export function install_lifecycle(run_dir, { exit = (code) => process.exit(code), on_signal = null, announce = true } = {}) {
   let finished = false;
   let signal_code = null;
+  let stopping = null;
   const finish = (ok) => {
     if (finished) return;
     finished = true;
-    console.log(`e2e: work dir ${run_dir.dir} ${run_dir.close(ok)}`);
+    const closed = run_dir.close(ok);
+    if (announce) console.log(`e2e: work dir ${run_dir.dir} ${closed}`);
   };
   for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) {
     process.on(signal, () => {
       signal_code ??= code;
-      stop_all_apps().then(() => { finish(false); exit(signal_code); });
+      stopping ??= (async () => {
+        try { await on_signal?.(signal); } catch (error) { console.error(error); }
+        await stop_all_apps();
+      })();
+      stopping.then(() => { finish(false); exit(signal_code); });
     });
   }
   // The main flow runs on while the apps stop. Its errors then come from the shutdown, so they must not end the process with code 1 before the shutdown finishes.
@@ -233,6 +241,8 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
       });
     });
     await new Promise((resolve) => sink.listen(0, "127.0.0.1", resolve));
+    // A shutdown that began during the listen has stopped the session already, so an app spawned now would run on with no compositor until its kill timer.
+    if (shutdown !== null) throw new Error("the run is stopping, no app starts");
     // The app finds add-ons in the profile only at startup, so the helper goes in before the app starts.
     if (xpi_path) install_helper(work_dir, profile_dir, sink.address().port);
     start_child_app();

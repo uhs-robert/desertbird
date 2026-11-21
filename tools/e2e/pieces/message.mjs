@@ -1,6 +1,7 @@
 // The message body scripts: the reading pane, find, hints, mail keys, tabs and windows. The remote piece runs the same checks with remote content allowed by the profile kind.
 
 import { sleep, first_selected, selects, flag_becomes, main_window_tabs, active_index, tab_count_is, active_is, ppm_colors } from "../predicates.mjs";
+import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
 // The body script: keys while a message is read, in the reading pane, a message tab and a message window. The helper's own content script reports the scroll position and whether DesertBird marked the document.
 const LINE_STEP_PX = 40;
@@ -308,5 +309,6 @@ async function run_message_scripts(instance, ctx) {
 export const pieces = ["message", "message_remote"].map((kind) => ({
   kind,
   section: "main",
+  deadline_s: LONG_PIECE_DEADLINE_S,
   run: (instance, ctx) => run_message_scripts(instance, ctx),
 }));

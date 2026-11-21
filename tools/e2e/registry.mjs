@@ -7,6 +7,9 @@ import { pathToFileURL } from "node:url";
 // The kinds of a run with no E2E_KINDS, in the order they run.
 export const DEFAULT_KINDS = ["default", "reply_no_identity", "mail_account", "message", "message_remote", "quick_reply_plain", "quick_reply_html", "mode_label_badge", "mode_label_off", "mode_label_themed", "own_pages", "pages", "zoom", "web", "compose_editor", "compose_editor_html", "compose_editor_html_top"];
 
+// The piece deadline of the pieces that run longer than the default 120 s allows (`deadline_s` on the piece). A unit test fails when a piece's weight times 1.5 passes its deadline.
+export const LONG_PIECE_DEADLINE_S = 250;
+
 const pieces_dir = join(import.meta.dirname, "pieces");
 
 // Loads every piece, each with its `name` set. Throws on a duplicate name.

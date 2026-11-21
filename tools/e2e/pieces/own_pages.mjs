@@ -2,6 +2,7 @@
 
 import { sleep, CTRL_SHIFT, KEY_LIST_REGION, main_window_tabs, PAINT_MARGIN_MS, CHROME_TAB_MARGIN_MS, tab_count_is, active_is, last_tab_loaded } from "../predicates.mjs";
 import { OPEN_OWN_PAGES_SCRIPT } from "../seed.mjs";
+import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
 // DesertBird's own pages run the message keys themselves: q closes the page tab, and q typed in an option input stays text.
 async function run_own_pages(instance, ctx) {
@@ -105,5 +106,6 @@ export const piece = {
   section: "main",
   seeds: {},
   extra_script: OPEN_OWN_PAGES_SCRIPT,
+  deadline_s: LONG_PIECE_DEADLINE_S,
   run: (instance, ctx) => run_own_pages(instance, ctx),
 };
