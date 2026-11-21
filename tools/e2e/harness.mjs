@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { start_session } from "../measure/session.mjs";
 import { build_profile, install_xpi } from "./profile.mjs";
+import { assert_app_isolated } from "./run_dir.mjs";
 import { start_memory_sampler } from "./timings.mjs";
 
 const helper_dir = join(dirname(fileURLToPath(import.meta.url)), "helper");
@@ -24,7 +25,22 @@ function install_helper(work_dir, profile_dir, sink_port) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function start_app({ app, app_binary, work_dir, kind = "default", xpi_path = null, startup_ms = Number(process.env.E2E_STARTUP_MS ?? 30000) }) {
+// Every session that is up and not yet stopped, so a signal can stop each app the run started.
+const live_sessions = new Set();
+let stopping_all = false;
+
+// Stops every live session and waits out the kill timer of session.stop(), which dies with node. Later start_app calls refuse to start.
+export async function stop_all_apps() {
+  stopping_all = true;
+  if (live_sessions.size === 0) return;
+  for (const session of live_sessions) session.stop();
+  live_sessions.clear();
+  await sleep(3500);
+}
+
+// `run_dir` is the folder the guard holds the app inside. It defaults to `work_dir` for a caller with no run dir of its own.
+export async function start_app({ app, app_binary, work_dir, run_dir = work_dir, kind = "default", xpi_path = null, startup_ms = Number(process.env.E2E_STARTUP_MS ?? 30000) }) {
+  if (stopping_all) throw new Error("the run is stopping, no app starts");
   mkdirSync(work_dir, { recursive: true });
   const { profile_dir, folder_dir } = build_profile(join(work_dir, "profile"), { kind });
   if (xpi_path) install_xpi(profile_dir, xpi_path);
@@ -33,6 +49,16 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   rmSync(out_dir, { recursive: true, force: true });
   mkdirSync(out_dir, { recursive: true });
   const session = await start_session(work_dir);
+  live_sessions.add(session);
+  try {
+    if (stopping_all) throw new Error("the run is stopping, no app starts");
+    assert_app_isolated({ run_dir, profile_dir, env: session.env });
+  } catch (error) {
+    live_sessions.delete(session);
+    session.stop();
+    await sleep(3500);
+    throw error;
+  }
   let app_exit = null;
   let sink = null;
   let pending = null;
@@ -159,6 +185,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
   } catch (error) {
     sampler?.stop();
     sink?.close();
+    live_sessions.delete(session);
     session.stop();
     // session.stop() sends the kill from an unref'd timer that dies with node, so a hung app outlives the run unless the timer gets its time, as stop() gives it.
     await sleep(3500);
@@ -212,6 +239,7 @@ export async function start_app({ app, app_binary, work_dir, kind = "default", x
     stop: async () => {
       sampler.stop();
       sink.close();
+      live_sessions.delete(session);
       session.stop();
       await sleep(3500);
     },

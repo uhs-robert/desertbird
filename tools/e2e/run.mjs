@@ -1,20 +1,29 @@
 // End-to-end run in a headless labwc session:
 //   node tools/e2e/run.mjs [thunderbird|betterbird]... [--xpi path] [--binary app=path]
 // With no --xpi it only proves the setup: each app starts in a fresh profile and one screenshot is taken.
-// Scratch files go to $E2E_DIR (default /tmp/desertbird-e2e). Thunderbird comes from tools/measure/fetch_thunderbird.sh. Betterbird is /usr/bin/betterbird.
+// Scratch files go to $E2E_DIR, or to a fresh desertbird-e2e-* folder under the temp dir that is removed after a pass unless E2E_KEEP=1. Thunderbird comes from tools/measure/fetch_thunderbird.sh. Betterbird is /usr/bin/betterbird.
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { start_app } from "./harness.mjs";
+import { start_app, stop_all_apps } from "./harness.mjs";
+import { open_run_dir } from "./run_dir.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
 import { run_pane_moves, run_resize_mode } from "./panes_checks.mjs";
 import { run_popup_keys } from "./popup_checks.mjs";
 import { run_typing } from "./typing_checks.mjs";
 
-const e2e_dir = resolve(process.env.E2E_DIR ?? "/tmp/desertbird-e2e");
+let run_dir;
+try { run_dir = open_run_dir(); } catch (error) { console.error(`e2e: ${error.message}`); process.exit(1); }
+const e2e_dir = run_dir.dir;
+console.log(`e2e: work dir ${e2e_dir}`);
+// A signal stops every app this run started and frees the lock before the process ends. The lock is also freed on any other exit, so a crash leaves no live lock.
+let finishing = false;
+const finish = (ok) => { if (!finishing) { finishing = true; console.log(`e2e: work dir ${e2e_dir} ${run_dir.close(ok)}`); } };
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) process.on(signal, async () => { await stop_all_apps(); finish(false); process.exit(code); });
+process.on("exit", () => finish(false));
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
 const timings = create_timings(resolve(process.env.E2E_TIMINGS_FILE ?? join(e2e_dir, "timings.json")));
 // Charges the wall time of one default-kind section to the timings file.
@@ -2757,4 +2766,5 @@ if (xpi_path) {
   writeFileSync(join(e2e_dir, "report.json"), JSON.stringify(report, null, 2));
   all_ok = all_ok && report.checks.every((entry) => entry.ok);
 }
+finish(all_ok);
 process.exit(all_ok ? 0 : 1);
