@@ -59,7 +59,8 @@ export function create_timings(file) {
       }
     },
     // One piece per piece run: its wall time from before its first app start to after stop, plus what the instance measured.
-    add_piece({ app, kind, section, wall_ms, startups, peak_memory_kb }) { pieces.push({ name: `${app}/${kind}/${section}`, wall_ms, startups, peak_memory_kb }); },
+    // `reference_apps` is one { startups, peak_memory_kb } per extra app the piece started (the mode label reference app). It is left out when the piece started none.
+    add_piece({ app, kind, section, wall_ms, startups, peak_memory_kb, reference_apps = [] }) { pieces.push({ name: `${app}/${kind}/${section}`, wall_ms, startups, peak_memory_kb, ...(reference_apps.length ? { reference_apps } : {}) }); },
     report,
     write() {
       mkdirSync(dirname(file), { recursive: true });
