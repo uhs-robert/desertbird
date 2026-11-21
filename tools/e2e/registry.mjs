@@ -26,7 +26,8 @@ export async function load_pieces(dir = pieces_dir) {
 
 // The pieces a run takes, in run order, from the three env settings.
 // E2E_KINDS is a comma list of kinds and takes every piece of each, apart from the opt-in ones. E2E_ONLY is a comma list of section names or aliases and narrows the chosen kinds to the pieces that carry one of them (an opt-in piece runs only when named). E2E_SCALE=1 takes the scale piece alone. A name that matches nothing throws and lists the valid ones.
-export function select_pieces(pieces, { E2E_KINDS, E2E_ONLY, E2E_SCALE } = {}) {
+export function select_pieces(pieces, env = {}) {
+  const { E2E_KINDS, E2E_ONLY, E2E_SCALE } = env;
   if (E2E_SCALE === "1") return pieces.filter((piece) => piece.name === "default/scale");
   const kinds = E2E_KINDS ? E2E_KINDS.split(",") : DEFAULT_KINDS;
   const known_kinds = [...new Set(pieces.map((piece) => piece.kind))];
@@ -40,6 +41,8 @@ export function select_pieces(pieces, { E2E_KINDS, E2E_ONLY, E2E_SCALE } = {}) {
     if (unknown.length) throw new Error(`E2E_ONLY names no section: ${unknown.join(", ")}. Names: ${valid.join(", ")}`);
   }
   const chosen = kinds.flatMap((kind) => pieces.filter((piece) => piece.kind === kind && (only ? names_of(piece).some((name) => only.includes(name)) : !piece.opt_in)));
+  const unmet = chosen.find((piece) => piece.needs_env && env[piece.needs_env] !== "1");
+  if (unmet) throw new Error(`${unmet.name} needs ${unmet.needs_env}=1 in the environment, which prepares its profile. Run it with ${unmet.needs_env}=1 alone.`);
   if (chosen.length === 0) throw new Error(`E2E_ONLY=${E2E_ONLY} matches no piece of the kinds ${kinds.join(", ")}`);
   return [...new Map(chosen.map((piece) => [piece.name, piece])).values()];
 }

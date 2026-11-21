@@ -42,10 +42,7 @@ export const piece = {
   section: "scale",
   toast_seed: true,
   opt_in: true,
-  only: ["scale"],
-  run: (instance, ctx) => {
-    // profile.mjs reads E2E_SCALE itself to add the Big folder, so E2E_ONLY=scale alone would run against a profile without it.
-    if (process.env.E2E_SCALE !== "1") throw new Error("the scale piece needs E2E_SCALE=1, which adds the Big folder to the profile");
-    return run_scale(instance, ctx);
-  },
+  // profile.mjs reads E2E_SCALE itself to add the Big folder, so a run that names this piece without it would use a profile with no Big folder. The registry refuses that.
+  needs_env: "E2E_SCALE",
+  run: (instance, ctx) => run_scale(instance, ctx),
 };
