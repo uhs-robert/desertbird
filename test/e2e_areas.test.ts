@@ -74,7 +74,7 @@ function value_imports(path: string): string[] {
   const text = readFileSync(join(import.meta.dirname, "..", path), "utf8");
   const found: string[] = [];
   for (const match of text.matchAll(/^(?:import|export)\s+(?!type\b)[^;]*?from\s+"(\.[^"]+)"/gms)) {
-    const target = join(path, "..", match[1]).replaceAll("\\", "/");
+    const target = join(path, "..", (match[1] as string)).replaceAll("\\", "/");
     if (/^src\/(chrome|content|shared)\//.test(target) && existsSync(join(import.meta.dirname, "..", target))) found.push(target);
   }
   return found;
