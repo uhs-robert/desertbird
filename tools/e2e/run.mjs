@@ -22,7 +22,7 @@ console.log(`e2e: work dir ${e2e_dir}`);
 const finish = install_lifecycle(run_dir);
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
 // Timings and report outlive the run dir, which is scratch and goes after a pass. Like DesertFox's default_timings_path, they go under <repo>/.logs, and E2E_TIMINGS_FILE overrides.
-const timings_path = resolve(process.env.E2E_TIMINGS_FILE ?? join(import.meta.dirname, "..", "..", ".logs", `e2e-timings-${new Date().toISOString().replace(/[:.]/g, "-")}.json`));
+const timings_path = resolve(process.env.E2E_TIMINGS_FILE ?? join(import.meta.dirname, "..", "..", ".logs", `e2e-timings-${new Date().toISOString().replace(/[:.]/g, "-")}-${process.pid}.json`));
 const report_path = timings_path.replace(/\.json$/, "") + ".report.json";
 const timings = create_timings(timings_path);
 // Charges the wall time of one default-kind section to the timings file.
