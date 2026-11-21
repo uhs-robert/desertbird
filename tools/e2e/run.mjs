@@ -1829,9 +1829,10 @@ async function run_view_settings(instance, check_in) {
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
 const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
+const PAINT_MARGIN_MS = 2000;
 const tab_count_is = (count) => ({ what: `the main window to hold ${count} tabs`, until: (state) => main_window_tabs(state).length === count, show: (state) => `tabs ${main_window_tabs(state).length}` });
 const tab_active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active ${active_index(state)}` });
-// The new tab is the last one. A tab that reports no status counts as loaded.
+// The new tab is the last one. A tab that reports no status counts as loaded, and a loaded page can still be unpainted, so callers add `PAINT_MARGIN_MS` where a click or a pixel read follows.
 const last_tab_loaded = (count) => ({ what: `tab ${count} to open and finish loading`, until: (state) => main_window_tabs(state).length === count && main_window_tabs(state).at(-1).raw?.status !== "loading", show: (state) => `tabs ${main_window_tabs(state).length}, last ${main_window_tabs(state).at(-1)?.raw?.status}`, timeout_ms: 15000 });
 
 // One screenshot with its report line. The shot rule: the worker reads every one.
@@ -1855,6 +1856,7 @@ async function run_own_pages(instance) {
   const open_page = async (page) => {
     const reply = await instance.ask("open_own_page", 20000, { page });
     const opened = await wait_on(instance, last_tab_loaded(before + 1));
+    await sleep(PAINT_MARGIN_MS);
     check(app, kind, `the ${page} page opens in a tab`, main_window_tabs(opened).length === before + 1, `reply ${JSON.stringify(reply)}`);
   };
   // A page nobody clicked yet: its first keys must work, so j scrolls it and q closes it.
@@ -1915,6 +1917,7 @@ async function run_own_pages(instance) {
   for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
     await open();
     const opened = await wait_on(instance, last_tab_loaded(before + 1));
+    await sleep(PAINT_MARGIN_MS);
     check(app, kind, `the ${name} tab opens`, main_window_tabs(opened).length === before + 1, `tabs ${main_window_tabs(opened).length}`);
     await instance.click(...click_at);
     await sleep(500);
@@ -2405,8 +2408,14 @@ const near = (value, expected) => Math.abs(value - expected) <= 2;
 // The body report follows a scroll after 100 ms, so a wait on the scroll position ends once the key's scroll has settled and not on a read halfway.
 const scroll_is = (what, until) => ({ what, until: (state) => until(body_state(state)), show: (state) => `scrollY ${body_state(state).scroll_y}` });
 const scrolls_near = (position) => scroll_is(`the body to scroll to ${position}`, (body) => near(body.scroll_y, position));
-// A message document has reported once the helper holds a report that came after `since`, or one whose text names the message and shows the body script live.
-const body_reports = (id, since) => ({ what: `the document of ${id} to report`, until: (state) => (state.body?.received ?? 0) >= since || (state.body?.live === true && (state.body.text_start ?? "").includes(` of ${id}.`)), show: (state) => `body ${state.body?.href}`, timeout_ms: 10000 });
+// A document has reported once the helper holds a report from it. `from_target` picks the target by the sender of the report (its tab or its window), and `doc_start` must be later than `since`, so the report is from a document made after the action and not from the one it replaces.
+const body_reports = (what, since, from_target) => ({ what: `the document of ${what} to report`, until: (state) => state.body !== null && state.body.doc_start >= since && from_target(state, state.body), show: (state) => `body of tab ${state.body?.tab_id}, window ${state.body?.window_id}, started ${state.body?.doc_start}, ${state.body?.href}`, timeout_ms: 10000 });
+// The pane is in the mail tab. A framed document inside the message reports too and does not carry the message text, so only the top document must name the message.
+const pane_document_of = (id) => (state, body) => body.tab_id === state.mail_tab?.id && (body.is_top === false || (body.text_start ?? "").includes(` of ${id}.`));
+const tab_document = (state, body) => body.tab_id === main_window_tabs(state).find((tab) => tab.type === "messageDisplay")?.id;
+const window_document = (state, body) => body.window_id === state.windows.find((window) => window.type === "messageDisplay")?.id;
+// g e and g f from the message body go through the background page to the window, and the helper state has no focus to read, so the keys after them wait this margin.
+const FOCUS_MOVE_MARGIN_MS = 1200;
 const flag_is = (id, flagged) => ({ what: `${id} to become ${flagged ? "flagged" : "unflagged"}`, until: (state) => Object.entries(state.flags).some(([flagged_id, flags]) => flagged_id === id && flags.flagged) === flagged, show: (state) => `flagged ${JSON.stringify(Object.entries(state.flags).filter(([, flags]) => flags.flagged).map(([flagged_id]) => flagged_id))}` });
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 10000 });
 
@@ -2421,7 +2430,7 @@ async function run_message_scripts(instance) {
   const show_in_pane = async (id) => {
     const since = Date.now();
     await instance.ask(`select:${id}@fixture.invalid`, 30000);
-    await wait_on(instance, body_reports(id, since));
+    await wait_on(instance, body_reports(id, since, pane_document_of(id)));
     await instance.press(["-k", "F6"]);
     return instance.ask("state");
   };
@@ -2518,6 +2527,7 @@ async function run_message_scripts(instance) {
   state = await show_in_pane("reading-plain");
   await instance.press(["g"]);
   await instance.press(["e"]);
+  await sleep(FOCUS_MOVE_MARGIN_MS);
   const list_row = first_selected(await instance.ask("state"));
   state = await key_and_state(instance, ["-k", "Down"], { what: "Down to move the list selection", until: (current) => first_selected(current) !== list_row && first_selected(current) !== null, show: (current) => `selected ${first_selected(current)}` });
   check(app, kind, "pane: g e in the message body focuses the thread list, so Down moves the selection", first_selected(state) !== list_row && first_selected(state) !== null, `selected ${list_row} then ${first_selected(state)}`);
@@ -2525,12 +2535,14 @@ async function run_message_scripts(instance) {
   const folder_before = state.mail_tab?.folder;
   await instance.press(["g"]);
   await instance.press(["f"]);
+  await sleep(FOCUS_MOVE_MARGIN_MS);
   state = await key_and_state(instance, ["-k", "Down"], { what: "Down to move the folder selection", until: (current) => current.mail_tab?.folder !== folder_before, show: (current) => `folder ${current.mail_tab?.folder}` });
   check(app, kind, "pane: g f in the message body focuses the folder pane, so Down moves the folder", state.mail_tab?.folder !== folder_before, `folder ${folder_before} then ${state.mail_tab?.folder}`);
   await key_and_state(instance, ["-k", "Up"], { what: "Up to move the folder selection back", until: (current) => current.mail_tab?.folder === folder_before, show: (current) => `folder ${current.mail_tab?.folder}` });
   // The checks below press F6 from the list, so put the focus back there.
   await instance.press(["g"]);
   await instance.press(["e"]);
+  await sleep(FOCUS_MOVE_MARGIN_MS);
 
   // HTML mail, remote content and a sandboxed frame. The measurement the design asked for: does the script run there?
   for (const id of READING_FOLDER_MESSAGES.slice(1)) {
@@ -2602,12 +2614,13 @@ async function run_message_scripts(instance) {
   check(app, kind, "pane: after q the thread list has the focus, so j moves the selection", first_selected(state) !== selected_before_j, `selected ${selected_before_j} then ${first_selected(state)}`);
   await instance.press(["g"]);
   await instance.press(["e"]);
+  await sleep(FOCUS_MOVE_MARGIN_MS);
 
   // A message tab: the message opens in a new tab and the keys go to it.
   await show_in_pane("reading-plain");
   const tab_requested = Date.now();
   await instance.ask("open_message_tab");
-  state = await wait_on(instance, { ...body_reports("reading-plain", tab_requested), until: (current) => main_window_tabs(current).some((tab) => tab.type === "messageDisplay") && (current.body?.received ?? 0) >= tab_requested });
+  state = await wait_on(instance, body_reports("the message tab", tab_requested, tab_document));
   check(app, kind, "a message tab opened", main_window_tabs(state).some((tab) => tab.type === "messageDisplay"), JSON.stringify(main_window_tabs(state).map((tab) => tab.type)));
   await shot("message_tab", "message in its own tab");
   await scroll_keys("message tab");
@@ -2656,7 +2669,7 @@ async function run_message_scripts(instance) {
   await wait_on(instance, selects("reading-plain@fixture.invalid"));
   const window_requested = Date.now();
   await instance.ask("open_message_window");
-  state = await wait_on(instance, { ...window_of_type("messageDisplay", true), until: (current) => current.windows.some((window) => window.type === "messageDisplay") && (current.body?.received ?? 0) >= window_requested, what: "a message window to open and its document to report" });
+  state = await wait_on(instance, body_reports("the message window", window_requested, window_document));
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
