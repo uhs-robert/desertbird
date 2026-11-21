@@ -99,6 +99,21 @@ Copied from DesertFox's `test/key/` (`run.mjs`, `worker.mjs`, `shards.mjs`, `tim
 - Setting names are `E2E_*`. `KEY_TEST_ORDER=reverse` is not copied, since the serial run keeps the registry order.
 - The default worker count is 1 for `npm run e2e`, where DesertFox runs 8. `just e2e` sets 3, since fleet sessions run at most 3 apps at once (see Scope and lock).
 
+## Changed-only runs
+
+`E2E_CHANGED=1` keeps the pieces that the change can affect. Each piece file has one line, `export const areas = [...]`, with the areas it exercises. `areas.mjs` maps `src/` files to areas (`area_rules`, first match wins) and diffs against `E2E_BASE` (default `origin/main`: commits, working tree and new files). A piece runs when it shares an area with a changed src file. A changed piece file runs that piece. A change to `src/manifest.json`, the router, `protocol.ts`, the key runtime (`chrome/runtime.ts`, `parent_keys.ts`, `platform.ts`, `focus.ts`, `view.ts`), the overlay host (`overlay.ts`, `overlay_id.ts`, `parent_overlay.ts`), `notify.ts`, the config, `vendor/`, `package.json`, `tools/build.mjs` or any harness file of `tools/e2e/` runs every piece. A helper that only some pieces use (`_default_shared.mjs`, `panes_checks.mjs`) runs those pieces. A src file that no rule places runs every piece, and `test/e2e_areas.test.ts` fails on it, so add a rule. A docs-only change runs nothing. The check `registry.select_pieces` makes the choice, and `changed_run_apps` gives `run.mjs` its app list `["betterbird"]` unless apps are named: a changed-only run uses Betterbird alone, and the full run covers both apps. A diff that selects no piece prints `e2e: no pieces selected` and exits 0, serial or sharded.
+
+`node tools/e2e/changed.mjs [base [head]]` or `--paths a,b` prints the pieces and runs nothing. `E2E_CHANGED_PATHS` (a comma list) replaces the git diff.
+
+Departures from DesertFox `test/key/areas.mjs`, each on purpose:
+
+- The pieces are read per file (`areas` sits in the piece file, not the piece object), because one file can hold several pieces (`mode_label.mjs`, `compose_editor.mjs`). The choice is a set of files, and the registry keeps the pieces from those files.
+- The selection hook is `E2E_CHANGED=1` in the registry and `just e2e-changed` sets it (the base is `E2E_BASE`), in place of DesertFox's `key-test-changed` taking the base as an argument.
+- Betterbird only, because the owner chose one app for a changed-only run.
+- The bridge (`src/background/bridge/`) maps to no area, since no piece drives it.
+- The harness rule is wider than DesertFox's list: any file of `tools/e2e/` that has no narrower rule selects every piece, so a new harness file errs to the safe side. No src file is unplaced in DesertFox either way, and a src file with no rule selects every piece.
+- There is no host rule and no `{setup:true}` case, since DesertBird has neither.
+
 ## Scope and lock
 
 `just e2e [args]` takes the lock, then installs, sweeps, builds and runs `npm run e2e -- --xpi dist/desertbird.xpi [args]` on 3 workers (`E2E_SHARDS` overrides) in a capped systemd scope when `systemd-run --user` works. `just e2e-changed [args]` adds `E2E_CHANGED=1` (the base is `E2E_BASE`). `just e2e-sweep` runs the sweep alone. The justfile calls npm, never the reverse.

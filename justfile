@@ -122,7 +122,7 @@ e2e_locked *args: install_deps
     echo "e2e: ${E2E_SHARDS} worker(s), run limit ${run_limit_s} s, memory max ${memory_max_g} GB" >&2
     exec "${run_cmd[@]}"
 
-# Run only the e2e pieces the change can affect, on Betterbird, against E2E_BASE (default origin/main: commits, working tree and new files). Takes the lock and scope of `just e2e`. Needs E2E_CHANGED in the registry (the changed-areas PR).
+# Run only the e2e pieces the change can affect, on Betterbird, against E2E_BASE (default origin/main: commits, working tree and new files). Takes the lock and scope of `just e2e`.
 [positional-arguments]
 e2e-changed *args:
     E2E_CHANGED=1 just e2e "$@"
