@@ -46,7 +46,7 @@ export const area_rules = [
   { globs: ["src/background/handlers/{folder_collapse,folder_marks,folder_open,folder_state,special_folder,displayed_folder,jump_history}.ts", "src/background/commands/folders.ts", "src/chrome/parent_folderpane.ts", "src/experiment/folderpane.schema.json"], areas: ["folders"] },
   { globs: ["src/background/{commands,handlers}/view.ts", "src/chrome/view_verbs.ts"], areas: ["views"] },
   { globs: ["src/background/{commands,handlers}/thread*.ts"], areas: ["threads"] },
-    // The compose label is checked in the compose editor and quick reply pieces.
+  // The compose label is checked in the compose editor and quick reply pieces.
   { globs: ["src/content/compose_mode_label.ts"], areas: ["mode_label", "compose", "quick_reply"] },
   { globs: ["src/chrome/{pane_resize,readable_focus}.ts"], areas: ["panes"] },
   { globs: ["src/background/commands/motion.ts"], areas: ["motions", "visual"] },
@@ -57,12 +57,14 @@ export const area_rules = [
   { globs: ["src/background/{commands,handlers}/followup.ts", "src/background/{followup_presets,followup_store}.ts"], areas: ["followup"] },
   { globs: ["src/background/{commands,handlers}/quick_reply.ts", "src/background/quick_reply_store.ts"], areas: ["quick_reply", "compose"] },
   { globs: ["src/background/{commands,handlers}/compose.ts", "src/background/{compose_markdown,external_editor}.ts", "src/content/compose_{edit_key,keys}.ts", "src/background/commands/account_param.ts", "src/background/handlers/{account_choice,identity}.ts"], areas: ["compose"] },
+  // The first display of a folder waits through loading.ts, for the folder and view handlers.
+  { globs: ["src/background/handlers/loading.ts"], areas: ["mail_keys", "folders", "views"] },
   // The record store backs the snooze, follow-up and quick reply stores.
   { globs: ["src/background/record_store.ts"], areas: ["mail_keys", "followup", "quick_reply"] },
   // Flags, archive, delete, undo, snooze and the other commands that act on the selected messages. app.schema.json is the Experiment those verbs run through.
   {
     globs: [
-      "src/background/{commands,handlers}/{app,messages,message,message_state,message_query,each_message,undo,snooze,unsubscribe,attachments,clipboard,loading}.ts",
+      "src/background/{commands,handlers}/{app,messages,message,message_state,message_query,each_message,undo,snooze,unsubscribe,attachments,clipboard}.ts",
       "src/background/commands/captures.ts",
       "src/background/{snooze_presets,snooze_store,undo_log,list_unsubscribe,record_store,scheduler,safe_filename}.ts",
       "src/chrome/{app_verbs,parent_app}.ts",
@@ -113,7 +115,7 @@ export function read_piece_file_areas() {
 // What a change under tools/ or vendor/ runs. A piece file selects itself, a shared helper of some pieces selects those, and any other file here selects every piece, so a new file errs to the safe side. Listed first wins.
 const piece_file = (glob) => `tools/e2e/pieces/${glob}.mjs`;
 const support_rules = [
-  { globs: ["tools/e2e/{README.md,timings.mjs,measure_concurrent.mjs}", "tools/e2e/pieces/README.md"], pieces: [] },
+  { globs: ["tools/e2e/{README.md,timings.mjs,measure_concurrent.mjs,piece_seconds.json}", "tools/e2e/pieces/README.md"], pieces: [] },
   { globs: ["tools/e2e/pieces/_default_shared.mjs"], pieces: [piece_file("default.*")] },
   { globs: ["tools/e2e/pieces/_mode_label.mjs"], pieces: [piece_file("default.mode_label"), piece_file("default.visual"), piece_file("mode_label")] },
   { globs: ["tools/e2e/pieces/_panes_shared.mjs", "tools/e2e/panes_checks.mjs"], pieces: [piece_file("default.panes_*")] },
@@ -123,7 +125,7 @@ const support_rules = [
   { globs: ["tools/e2e/popup_checks.mjs"], pieces: [piece_file("default.popup")] },
   { globs: ["tools/e2e/web_checks.mjs", "tools/e2e/web_fixture.mjs"], pieces: [piece_file("web.main")] },
   { globs: ["tools/e2e/zoom_checks.mjs"], pieces: [piece_file("zoom.main")] },
-  // Anything else in tools/e2e is the harness: the profile, the helper add-on, the start, the predicates and the report all sit under every piece.
+  // Anything else in tools/e2e is the harness, and that includes the runner machinery (coordinator, worker, shards, reap), which decides how every piece starts and ends: the profile, the helper add-on, the start, the predicates and the report all sit under every piece.
   { globs: ["tools/e2e/**", "tools/build.mjs", "vendor/**", "package.json", "package-lock.json", "tsconfig.json"], pieces: "all" },
 ];
 const compiled_support_rules = support_rules.map((rule) => ({ ...rule, patterns: rule.globs.map(glob_to_regex), piece_patterns: rule.pieces === "all" ? null : rule.pieces.map(glob_to_regex) }));
