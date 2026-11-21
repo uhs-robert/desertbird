@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { start_session } from "../measure/session.mjs";
 import { build_profile, install_xpi } from "./profile.mjs";
-import { assert_app_isolated } from "./run_dir.mjs";
+import { assert_app_isolated, assert_start_paths } from "./run_dir.mjs";
 import { start_memory_sampler } from "./timings.mjs";
 
 const helper_dir = join(dirname(fileURLToPath(import.meta.url)), "helper");
@@ -25,22 +25,80 @@ function install_helper(work_dir, profile_dir, sink_port) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Every session that is up and not yet stopped, so a signal can stop each app the run started.
-const live_sessions = new Set();
-let stopping_all = false;
+// Every session that is up, until its kill grace is over. A session stays here while it stops, so a later signal still waits for it.
+// A session is any object with stop() (SIGTERM now, SIGKILL after a timer that dies with node) and the pids of its process groups.
+const tracked_sessions = new Set();
+// start_session calls in flight: labwc is already running there, but the session is not returned yet.
+const starts_in_flight = new Set();
+const KILL_GRACE_MS = 3500;
+let shutdown = null;
 
-// Stops every live session and waits out the kill timer of session.stop(), which dies with node. Later start_app calls refuse to start.
-export async function stop_all_apps() {
-  stopping_all = true;
-  if (live_sessions.size === 0) return;
-  for (const session of live_sessions) session.stop();
-  live_sessions.clear();
-  await sleep(3500);
+// Registers a start_session call that is still waiting for its compositor, so a shutdown waits for it. Returns the promise.
+export function track_start(starting) {
+  starts_in_flight.add(starting);
+  starting.then(() => starts_in_flight.delete(starting), () => starts_in_flight.delete(starting));
+  return starting;
 }
 
-// `run_dir` is the folder the guard holds the app inside. It defaults to `work_dir` for a caller with no run dir of its own.
+export function track_session(session) {
+  tracked_sessions.add(session);
+  return session;
+}
+
+async function stop_tracked(session) {
+  session.stop();
+  await sleep(KILL_GRACE_MS);
+  tracked_sessions.delete(session);
+}
+
+// Stops every app the run started and returns one promise that every caller shares, so a second signal waits on the first shutdown.
+// A start that is still waiting for its compositor is awaited first. It tracks its session as it returns and then throws, and the session is stopped with the rest.
+export function stop_all_apps() {
+  shutdown ??= (async () => {
+    while (starts_in_flight.size > 0) await Promise.allSettled([...starts_in_flight]);
+    await Promise.all([...tracked_sessions].map(stop_tracked));
+  })();
+  return shutdown;
+}
+
+// Synchronous SIGKILL of every tracked process group, for an exit that has no time to wait: an uncaught error or the exit event.
+export function kill_all_apps_now() {
+  for (const session of tracked_sessions) for (const group of session.groups) try { process.kill(-group, "SIGKILL"); } catch {}
+}
+
+// Signals stop every app and free the lock, then exit with the code of the first signal. The exit event also kills what is left and frees the lock, so a crash leaves nothing running or locked.
+// Returns the function the run calls once with its verdict.
+export function install_lifecycle(run_dir, { exit = (code) => process.exit(code) } = {}) {
+  let finished = false;
+  let signal_code = null;
+  const finish = (ok) => {
+    if (finished) return;
+    finished = true;
+    console.log(`e2e: work dir ${run_dir.dir} ${run_dir.close(ok)}`);
+  };
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) {
+    process.on(signal, () => {
+      signal_code ??= code;
+      stop_all_apps().then(() => { finish(false); exit(signal_code); });
+    });
+  }
+  // The main flow runs on while the apps stop. Its errors then come from the shutdown, so they must not end the process with code 1 before the shutdown finishes.
+  process.on("uncaughtException", (error) => {
+    console.error(error);
+    if (signal_code !== null) return;
+    kill_all_apps_now();
+    finish(false);
+    exit(1);
+  });
+  process.on("exit", () => { kill_all_apps_now(); finish(false); });
+  return finish;
+}
+
+// `run_dir` is the folder the guard holds the app inside. It defaults to `work_dir` for a caller with no run dir of its own (measure_concurrent.mjs).
 export async function start_app({ app, app_binary, work_dir, run_dir = work_dir, kind = "default", xpi_path = null, startup_ms = Number(process.env.E2E_STARTUP_MS ?? 30000) }) {
-  if (stopping_all) throw new Error("the run is stopping, no app starts");
+  if (shutdown !== null) throw new Error("the run is stopping, no app starts");
+  // Before build_profile and the rmSync below delete anything: a symlink in the work dir that points at the owner's home is refused here.
+  assert_start_paths({ run_dir, paths: [work_dir, join(work_dir, "profile"), join(work_dir, "out"), join(work_dir, "home"), join(work_dir, "runtime")] });
   mkdirSync(work_dir, { recursive: true });
   const { profile_dir, folder_dir } = build_profile(join(work_dir, "profile"), { kind });
   if (xpi_path) install_xpi(profile_dir, xpi_path);
@@ -48,15 +106,13 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
   // A reply left by an earlier run in the same directory carries a seq this run reuses, so the directory starts empty.
   rmSync(out_dir, { recursive: true, force: true });
   mkdirSync(out_dir, { recursive: true });
-  const session = await start_session(work_dir);
-  live_sessions.add(session);
+  // The continuation after this await runs before the shutdown's own, since it awaited first, so the session is tracked when the shutdown looks.
+  const session = track_session(await track_start(start_session(work_dir)));
   try {
-    if (stopping_all) throw new Error("the run is stopping, no app starts");
+    if (shutdown !== null) throw new Error("the run is stopping, no app starts");
     assert_app_isolated({ run_dir, profile_dir, env: session.env });
   } catch (error) {
-    live_sessions.delete(session);
-    session.stop();
-    await sleep(3500);
+    await stop_tracked(session);
     throw error;
   }
   let app_exit = null;
@@ -185,10 +241,8 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
   } catch (error) {
     sampler?.stop();
     sink?.close();
-    live_sessions.delete(session);
-    session.stop();
-    // session.stop() sends the kill from an unref'd timer that dies with node, so a hung app outlives the run unless the timer gets its time, as stop() gives it.
-    await sleep(3500);
+    // stop_tracked gives the kill timer of session.stop() its time. That timer is unref'd and dies with node, so a hung app outlives the run without it.
+    await stop_tracked(session);
     throw error;
   }
 
@@ -239,9 +293,7 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
     stop: async () => {
       sampler.stop();
       sink.close();
-      live_sessions.delete(session);
-      session.stop();
-      await sleep(3500);
+      await stop_tracked(session);
     },
   };
 }

@@ -6,9 +6,9 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readd
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { start_app, stop_all_apps } from "./harness.mjs";
-import { open_run_dir } from "./run_dir.mjs";
+import { dirname, join, resolve } from "node:path";
+import { install_lifecycle, start_app } from "./harness.mjs";
+import { assert_start_paths, open_run_dir } from "./run_dir.mjs";
 import { create_timings } from "./timings.mjs";
 import { run_pages } from "./pages_checks.mjs";
 import { run_pane_moves, run_resize_mode } from "./panes_checks.mjs";
@@ -19,13 +19,12 @@ let run_dir;
 try { run_dir = open_run_dir(); } catch (error) { console.error(`e2e: ${error.message}`); process.exit(1); }
 const e2e_dir = run_dir.dir;
 console.log(`e2e: work dir ${e2e_dir}`);
-// A signal stops every app this run started and frees the lock before the process ends. The lock is also freed on any other exit, so a crash leaves no live lock.
-let finishing = false;
-const finish = (ok) => { if (!finishing) { finishing = true; console.log(`e2e: work dir ${e2e_dir} ${run_dir.close(ok)}`); } };
-for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) process.on(signal, async () => { await stop_all_apps(); finish(false); process.exit(code); });
-process.on("exit", () => finish(false));
+const finish = install_lifecycle(run_dir);
 const measure_dir = resolve(process.env.MEASURE_DIR ?? "/tmp/desertbird-measure");
-const timings = create_timings(resolve(process.env.E2E_TIMINGS_FILE ?? join(e2e_dir, "timings.json")));
+// Timings and report outlive the run dir, which is scratch and goes after a pass. Like DesertFox's default_timings_path, they go under <repo>/.logs, and E2E_TIMINGS_FILE overrides.
+const timings_path = resolve(process.env.E2E_TIMINGS_FILE ?? join(import.meta.dirname, "..", "..", ".logs", `e2e-timings-${new Date().toISOString().replace(/[:.]/g, "-")}.json`));
+const report_path = timings_path.replace(/\.json$/, "") + ".report.json";
+const timings = create_timings(timings_path);
 // Charges the wall time of one default-kind section to the timings file.
 const timed = (instance, name, action) => timings.section(instance.app, instance.kind ?? "default", name, action);
 const binaries = {
@@ -2742,11 +2741,12 @@ for (const app of apps) {
   const kinds = (process.env.E2E_KINDS ?? "default,reply_no_identity,mail_account,message,message_remote,quick_reply_plain,quick_reply_html,mode_label_badge,mode_label_off,mode_label_themed,own_pages,pages,zoom,web,compose_editor,compose_editor_html,compose_editor_html_top").split(",");
   for (const kind of kinds) {
     const work_dir = join(e2e_dir, app, kind);
+    assert_start_paths({ run_dir: e2e_dir, paths: [work_dir] });
     const seeds = kind.startsWith("quick_reply") ? { desertbird_quick_replies: { record_version: 1, slots: QUICK_REPLY_SEED } } : kind.startsWith("compose_editor") ? { desertbird_settings: { external_editor: true } } : MODE_LABEL_KINDS[kind];
     if (kind.startsWith("compose_editor")) install_editor_host(work_dir, kind);
     const kind_xpi = xpi_path && seeds ? seed_storage(xpi_path, work_dir, seeds) : xpi_path && kind === "own_pages" ? seed_storage(xpi_path, work_dir, {}, OPEN_OWN_PAGES_SCRIPT) : xpi_path;
     const kind_began = Date.now();
-    const instance = await start_app({ app, app_binary: binaries[app], work_dir, kind, xpi_path: kind_xpi });
+    const instance = await start_app({ app, app_binary: binaries[app], work_dir, run_dir: e2e_dir, kind, xpi_path: kind_xpi });
     try {
       if (xpi_path) await run_assertions({ ...instance, kind });
       else {
@@ -2763,7 +2763,9 @@ for (const app of apps) {
   }
 }
 if (xpi_path) {
-  writeFileSync(join(e2e_dir, "report.json"), JSON.stringify(report, null, 2));
+  mkdirSync(dirname(report_path), { recursive: true });
+  writeFileSync(report_path, JSON.stringify(report, null, 2));
+  console.log(`e2e: timings ${timings_path}, report ${report_path}`);
   all_ok = all_ok && report.checks.every((entry) => entry.ok);
 }
 finish(all_ok);
