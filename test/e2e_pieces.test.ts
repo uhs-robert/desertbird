@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
 const { load_pieces, select_pieces, DEFAULT_KINDS } = await import(join(import.meta.dirname, "..", "tools", "e2e", "registry.mjs"));
@@ -62,7 +62,12 @@ test("a throw in before_start is a FAIL line, keeps the timings entry and return
   try {
     const timings = create_timings(join(run_dir, "timings.json"));
     const piece = { kind: "k", section: "main", before_start: async () => { throw new Error("no reference"); }, run: async () => {} };
+    // run_piece prints the FAIL line it records. Keep it out of the check output, where a grep for FAIL would find it.
+    const log = mock.method(console, "log", () => {});
     const result = await run_piece("betterbird", piece, { binaries: { betterbird: "/bin/true" }, xpi_path: "x.xpi", run_dir, timings, start_app: async () => { throw new Error("must not start"); } });
+    const printed = log.mock.calls.map((call) => String(call.arguments[0]));
+    log.mock.restore();
+    assert.ok(printed.some((line) => line.startsWith("FAIL betterbird/k ")));
     assert.equal(result.ok, false);
     assert.equal(result.report.checks.length, 1);
     assert.match(result.report.checks[0].detail, /no reference/);
