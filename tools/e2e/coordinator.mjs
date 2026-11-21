@@ -67,7 +67,11 @@ export function run_sharded(setup) {
       });
     }
     // A send to a worker that died after its last message fails here, and the exit handler records the death.
-    child.on("error", (error) => log(`e2e: w${number}: ${error.message}`));
+    // A fork that never spawned (EAGAIN, ENOMEM) has no pid and may never emit exit, so its exit is recorded here, or `done` would never resolve and the lock would stay held.
+    child.on("error", (error) => {
+      log(`e2e: w${number}: ${error.message}`);
+      if (child.pid === undefined && entry.exit === undefined) on_exit(entry, { code: null, signal: null });
+    });
     child.on("message", (message) => on_message(entry, message));
     child.on("exit", (code, signal) => on_exit(entry, { code, signal }));
     child.send({ type: "init", ...init });
@@ -99,7 +103,6 @@ export function run_sharded(setup) {
       stop_worker(entry);
       return;
     }
-    deadline_timer ??= setTimeout(() => stop_all(`the ${deadline_s} s deadline passed (E2E_DEADLINE_S)`, 1), deadline_s * 1000);
     entry.state = "busy";
     entry.piece = { id, handed_ms: elapsed_ms() };
     const piece_deadline_s = piece_deadline_of(id);
@@ -215,6 +218,8 @@ export function run_sharded(setup) {
     resolve_done({ exit_code, merged, stop_reason });
   }
 
+  // From the start, not the first hand-out, so a worker that never says ready cannot hold the run open.
+  deadline_timer = setTimeout(() => stop_all(`the ${deadline_s} s deadline passed (E2E_DEADLINE_S)`, 1), deadline_s * 1000);
   for (let index = 0; index < shard_count; index++) spawn_worker(index * stagger_ms);
   return { done, stop: stop_all };
 }

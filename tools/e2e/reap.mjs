@@ -12,7 +12,7 @@ export function groups_naming(piece_dir, proc_dir = "/proc") {
     if (!/^\d+$/.test(entry)) continue;
     let args;
     try {
-      args = readFileSync(`${proc_dir}/${entry}/cmdline`, "latin1").split("\0");
+      args = readFileSync(`${proc_dir}/${entry}/cmdline`, "utf8").split("\0");
     } catch {
       continue;
     }

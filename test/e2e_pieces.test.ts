@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { mock, test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
@@ -100,7 +101,7 @@ test("every weight names a real <app>/<kind>/<section>, and every piece of a ful
 // A piece that grows near its deadline fails here first, so raising a deadline_s is a conscious edit and not a surprise kill in a sharded run.
 test("every weight times 1.5 fits its piece's deadline", () => {
   for (const [id, seconds] of Object.entries(committed_weights)) {
-    const piece = pieces.find((candidate) => id.endsWith(`/${candidate.name}`)) as { deadline_s?: number } | undefined;
+    const piece = pieces.find((candidate) => candidate.name === parse_piece_id(id).name) as { deadline_s?: number } | undefined;
     const deadline_s = piece?.deadline_s ?? DEFAULT_PIECE_DEADLINE_S;
     assert.ok(seconds * 1.5 <= deadline_s, `${id} weighs ${seconds} s, over two thirds of its ${deadline_s} s deadline`);
   }
@@ -126,9 +127,19 @@ test("every piece of a full run gets a dir of its own, apart from every other pi
   }
 });
 
-// A Unix socket path ends at 108 bytes. The longest piece name with the default run dir under the temp dir must leave room for that.
+// A Unix socket path ends at 108 bytes. The longest piece name under a default run dir in /tmp must leave room for that.
+// A fixed /tmp, not tmpdir(): `just test` points TMPDIR at a longer scratch dir, and this test pins the piece layout, not the caller's TMPDIR.
 test("the longest private Wayland socket path stays under 100 bytes", () => {
-  const run_dir = join(tmpdir(), "desertbird-e2e-XXXXXX");
+  const run_dir = join("/tmp", "desertbird-e2e-XXXXXX");
   const longest = Math.max(...APPS.flatMap((app) => pieces.map((piece) => join(run_dir, app, piece.kind, piece.section, "runtime", "wayland-1").length)));
   assert.ok(longest < 100, `${longest} bytes`);
+});
+
+// Two equal apps would give two workers one piece id and one profile dir. The runner refuses them before it opens a run dir or starts anything.
+test("the runner refuses an app named twice with the setup exit code", { timeout: 30_000 }, () => {
+  const { E2E_DIR: _unset, ...env } = process.env;
+  const run = spawnSync(process.execPath, [join(import.meta.dirname, "..", "tools", "e2e", "run.mjs"), "thunderbird", "thunderbird"], { encoding: "utf8", env: { ...env, E2E_SHARDS: "2" }, timeout: 20_000, killSignal: "SIGKILL" });
+  assert.equal(run.status, 2, run.stdout + run.stderr);
+  assert.match(run.stderr, /thunderbird is named twice/);
+  assert.doesNotMatch(run.stdout, /work dir/);
 });

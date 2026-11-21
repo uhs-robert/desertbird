@@ -241,6 +241,8 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
       });
     });
     await new Promise((resolve) => sink.listen(0, "127.0.0.1", resolve));
+    // A shutdown that began during the listen has stopped the session already, so an app spawned now would run on with no compositor until its kill timer.
+    if (shutdown !== null) throw new Error("the run is stopping, no app starts");
     // The app finds add-ons in the profile only at startup, so the helper goes in before the app starts.
     if (xpi_path) install_helper(work_dir, profile_dir, sink.address().port);
     start_child_app();

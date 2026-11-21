@@ -66,3 +66,56 @@ test("install_lifecycle with announce false prints nothing when the run closes",
   const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
   assert.equal(run.stdout, "finished\n", run.stderr);
 });
+
+// A worker whose coordinator disconnects calls stop_all_apps while run_piece may be inside start_app. The shutdown must wait for that start, stop its
+// compositor and let no app spawn after it. A child process, for the same reason as above.
+test("a shutdown during an app start in flight waits for it, stops its session and spawns no app", { timeout: 30_000 }, () => {
+  const root = mkdtempSync(join(tmpdir(), "e2e-start-in-flight-test-"));
+  const script = `
+    import { spawn } from "node:child_process";
+    import { mkdirSync } from "node:fs";
+    import net from "node:net";
+    import { join } from "node:path";
+    import { start_app, stop_all_apps } from ${JSON.stringify(join(import.meta.dirname, "..", "tools", "e2e", "harness.mjs"))};
+    const root = ${JSON.stringify(root)};
+    const work_dir = join(root, "work");
+    const runtime = join(work_dir, "runtime");
+    mkdirSync(runtime, { recursive: true });
+    const server = net.createServer();
+    await new Promise((done) => server.listen(join(runtime, "wayland-0"), done));
+    const groups = [];
+    let spawned = 0;
+    const begin_session = async () => {
+      const compositor = spawn("sleep", ["600"], { detached: true, stdio: "ignore" });
+      compositor.unref();
+      groups.push(compositor.pid);
+      console.log("compositor " + compositor.pid);
+      await new Promise((wake) => setTimeout(wake, 500));
+      return {
+        env: { HOME: join(work_dir, "home"), XDG_RUNTIME_DIR: runtime, WAYLAND_DISPLAY: "wayland-0" },
+        groups,
+        press: async () => undefined,
+        spawn_app: () => { spawned++; throw new Error("an app spawned"); },
+        stop: () => { for (const pid of groups) try { process.kill(-pid, "SIGKILL"); } catch {} },
+      };
+    };
+    const starting = start_app({ app: "betterbird", app_binary: "unused", work_dir, run_dir: root, startup_ms: 10, begin_session }).catch((error) => console.log("start: " + error.message));
+    await new Promise((wake) => setTimeout(wake, 100));
+    await stop_all_apps();
+    await starting;
+    console.log("spawned " + spawned);
+    server.close();`;
+  try {
+    const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
+    const compositor = Number(/compositor (\d+)/.exec(run.stdout)?.[1]);
+    try {
+      assert.match(run.stdout, /start: the run is stopping, no app starts/, run.stderr);
+      assert.match(run.stdout, /spawned 0/);
+      assert.throws(() => process.kill(-compositor, 0), "the compositor group is gone");
+    } finally {
+      try { process.kill(-compositor, "SIGKILL"); } catch { /* gone */ }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

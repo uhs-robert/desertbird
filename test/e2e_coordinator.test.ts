@@ -144,6 +144,27 @@ test("a worker that dies before ready is not replaced, and the queue is reported
   assert.deepEqual(merged.incomplete, { reason: "every worker exited before the queue was empty", in_flight: [], not_started: ["thunderbird/a/main", "thunderbird/b/main", "thunderbird/c/main"] });
 });
 
+test("the run deadline also stops workers that never say ready", LIMIT, async (t) => {
+  const started = Date.now();
+  const { result, merged } = await run_fake(t, ["thunderbird/a/main", "thunderbird/b/main"], { deadline_s: 1, env: { ...process.env, FAKE_WORKER_START: "silent" } });
+  assert.ok(Date.now() - started < 8000);
+  assert.equal(result.exit_code, 1);
+  assert.match(result.stop_reason, /the 1 s deadline passed/);
+  assert.deepEqual(merged.incomplete?.not_started, ["thunderbird/a/main", "thunderbird/b/main"]);
+});
+
+// A fork that cannot spawn emits error and close, and no exit. The run must still end, or the lock stays held.
+test("a worker that fails to spawn ends the run with a startup failure", LIMIT, async (t) => {
+  const { fork } = await import("node:child_process");
+  const fork_with_no_node = (file: string, args: string[], options: object) => fork(file, args, { ...options, execPath: "/nonexistent/node" });
+  const { result, merged } = await run_fake(t, ["thunderbird/a/main", "thunderbird/b/main"], { fork: fork_with_no_node });
+  assert.equal(result.exit_code, 1);
+  assert.equal(merged.workers.length, 2, "no replacement for a worker that never started");
+  assert.equal(merged.failures.length, 2);
+  for (const failure of merged.failures) assert.match(failure, /^worker w\d startup/);
+  assert.deepEqual(merged.incomplete?.not_started, ["thunderbird/a/main", "thunderbird/b/main"]);
+});
+
 test("the run deadline stops every worker mid-piece and names the pieces in flight and not started", LIMIT, async (t) => {
   const ids = ["thunderbird/a/hang", "thunderbird/b/app", "thunderbird/c/main", "thunderbird/d/main"];
   const started = Date.now();

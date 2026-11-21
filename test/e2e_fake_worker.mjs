@@ -1,7 +1,7 @@
 // A stand-in for tools/e2e/worker.mjs in the coordinator tests. It speaks the same messages and starts no app.
 // A word in the piece id picks what it does: `hang` never answers, `stubborn` also ignores SIGTERM, `crash` exits 3 mid-piece,
 // `fail` reports a failed check, `slow` takes 400 ms, and `app` starts a detached group that names the piece dir on its command line, then hangs.
-// FAKE_WORKER_START=fail makes every worker fail before `ready`.
+// FAKE_WORKER_START=fail makes every worker fail before `ready`, and FAKE_WORKER_START=silent makes it never answer `init`.
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 
@@ -17,6 +17,7 @@ let run_dir = null;
 
 process.on("message", async (message) => {
   if (message.type === "init") {
+    if (process.env.FAKE_WORKER_START === "silent") return;
     if (process.env.FAKE_WORKER_START === "fail") {
       await send({ type: "startup_failed", reason: "the fake worker was told to fail" });
       process.exit(1);

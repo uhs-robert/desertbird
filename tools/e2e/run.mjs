@@ -36,6 +36,9 @@ const apps = args.length ? args : ["thunderbird", "betterbird"];
 let pieces;
 let setup;
 try {
+  // A repeated app would give two workers one piece id, and so one profile dir.
+  const repeated = apps.find((app, at) => apps.indexOf(app) !== at);
+  if (repeated) throw new Error(`${repeated} is named twice`);
   pieces = select_pieces(await load_pieces(), process.env);
   // With no xpi a piece only starts its app, so one piece per kind proves the setup.
   if (!xpi_path) pieces = pieces.filter((piece, at) => pieces.findIndex((other) => other.kind === piece.kind) === at);

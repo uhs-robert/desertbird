@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -52,6 +52,21 @@ test("reap_piece_dir kills the groups that name the piece dir and spares a piece
     assert.deepEqual(reap_piece_dir(join(root, "nothing")), []);
   } finally {
     for (const pid of [target, labwc, spared]) try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// /proc/<pid>/cmdline holds the bytes of each argument. A run dir with a non-ASCII name must still match.
+test("groups_naming matches a piece dir whose name is not ASCII", () => {
+  const root = mkdtempSync(join(tmpdir(), "e2e-reap-utf8-test-"));
+  try {
+    const piece_dir = join(root, "café", "thunderbird", "web", "main");
+    const proc = join(root, "proc");
+    mkdirSync(join(proc, "4242"), { recursive: true });
+    writeFileSync(join(proc, "4242", "cmdline"), Buffer.from(["thunderbird", "-profile", join(piece_dir, "profile"), ""].join("\0"), "utf8"));
+    writeFileSync(join(proc, "4242", "stat"), "4242 (thunderbird) S 1 4240 4240 0");
+    assert.deepEqual(groups_naming(piece_dir, proc), [4240]);
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
