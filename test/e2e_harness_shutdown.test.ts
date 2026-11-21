@@ -9,7 +9,7 @@ import { test } from "node:test";
 // The harness keeps its shutdown state for the life of the process, so this file holds the one test that starts a shutdown.
 const { start_app, stop_all_apps } = await import(join(import.meta.dirname, "..", "tools", "e2e", "harness.mjs"));
 
-test("a restart that begins during a shutdown starts no new app", async () => {
+test("a restart that begins during a shutdown starts no new app", { timeout: 30_000 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), "e2e-shutdown-test-"));
   const server = net.createServer();
   // Stopped at the end: the sink and the memory sampler hold the event loop open.
@@ -20,6 +20,8 @@ test("a restart that begins during a shutdown starts no new app", async () => {
     await new Promise<void>((done) => server.listen(join(runtime, "wayland-0"), done));
     let spawned = 0;
     const children: number[] = [];
+    // A shutdown that fails or times out leaves its sleep groups running, so the test's end kills them.
+    t.signal.addEventListener("abort", () => { for (const pid of children) try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }, { once: true });
     // A session stand-in: one detached group per app, and an environment that passes the guard.
     const fake_session = {
       env: { HOME: join(root, "home"), XDG_RUNTIME_DIR: runtime, WAYLAND_DISPLAY: "wayland-0" },
