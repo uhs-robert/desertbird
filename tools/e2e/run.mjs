@@ -173,6 +173,10 @@ const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 // Wait descriptions for key_and_state, one per kind of result the keys of the default section cause.
 const selects = (id) => ({ what: `the selection to reach ${id}`, until: (state) => first_selected(state) === id, show: (state) => `selected ${first_selected(state)}` });
 const at_bottom = { what: "the selection to reach the last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-1), show: (state) => `selected ${first_selected(state)}` };
+const at_top = { what: "the selection to reach the first row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed[0], show: (state) => `selected ${first_selected(state)}` };
+const leaves_row = (row) => ({ what: `the selection to leave ${row}`, until: (state) => first_selected(state) !== null && first_selected(state) !== row, show: (state) => `selected ${first_selected(state)}` });
+const listed_count = (count) => ({ what: `the list to show ${count} rows`, until: (state) => state.listed.length === count, show: (state) => `${state.listed.length} listed` });
+const pane_is = (pane, visible) => ({ what: `the ${pane} pane to be ${visible ? "shown" : "hidden"}`, until: (state) => state.mail_tab?.[`${pane}_pane_visible`] === visible, show: (state) => `message/folder pane ${state.mail_tab?.message_pane_visible}/${state.mail_tab?.folder_pane_visible}` });
 const flag_becomes = (id, name, value) => ({ what: `${name} of ${id} to become ${value}`, until: (state) => state.flags[id]?.[name] === value, show: (state) => `${name} ${state.flags[id]?.[name]}` });
 // A compose window opens late: the subject and the quote arrive after the window, and Thunderbird can take many seconds.
 const compose_opens = (tab_is_ready) => ({ what: "a compose window with its content", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some(tab_is_ready)), timeout_ms: 15000 });
@@ -363,8 +367,9 @@ async function toast_cycle(instance, name, press_args, lead_keys = [], { expect_
     return { state, shown: (await hud_pixels(instance, `${name}_during`)) !== before };
   }
   const during = await wait_pixels(instance, `the toast of ${name} to show`, `${name}_during`, HUD_REGION, drawn_since(before), { timeout_ms: 5000 });
-  const state = await instance.ask("state");
   const after = await wait_pixels(instance, `the toast of ${name} to go`, `${name}_after`, HUD_REGION, back_to(before), { timeout_ms: TOAST_EXPIRY_MS + 2000 });
+  // Read after the toast has gone: a refusal that still opens a compose window does so many seconds late.
+  const state = await instance.ask("state");
   return { state, shown: during !== before, gone: after === before };
 }
 
@@ -786,10 +791,9 @@ async function run_followup(instance) {
   const app = instance.app;
   const kind = "default";
   let state = await instance.ask("state");
-  // The list has no selection after g g here, so j picks the row. The target is whichever row j reached.
   await instance.press(["g"]);
-  await instance.press(["g"]);
-  state = await key_and_state(instance, ["j"], { what: "j to select a row", until: (current) => first_selected(current) !== null, show: (current) => `selected ${first_selected(current)}` });
+  const top = first_selected(await key_and_state(instance, ["g"], at_top));
+  state = await key_and_state(instance, ["j"], leaves_row(top));
   const target = first_selected(state);
   const tags_before = JSON.stringify(state.flags[target]?.tags ?? []);
   const id_start = Buffer.from(target.slice(0, 20));
@@ -827,7 +831,7 @@ async function run_steps(instance, { app, kind, shot }) {
   await instance.press(["e"]);
   await sleep(1000);
   await instance.press(["g"]);
-  let state = await key_and_state(instance, ["g"], { what: "g g to select the first row of Views", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed[0], show: (current) => `selected ${first_selected(current)}` });
+  let state = await key_and_state(instance, ["g"], at_top);
   const listed = state.listed;
   const has = { u: (id, now) => now.flags[id]?.read === false, s: (id, now) => now.flags[id]?.flagged === true, a: (id) => id === "views-0@fixture.invalid" };
   // Selecting a message can mark it read, so each press is judged against the flags read just before it.
@@ -842,7 +846,7 @@ async function run_steps(instance, { app, kind, shot }) {
     if (want !== first_selected(before)) after = await key_and_state(instance, [key], selects(want));
     else {
       await instance.press([key]);
-      await sleep(400);
+      await sleep(1200);
       after = await barrier(instance);
     }
     const got = first_selected(after);
@@ -850,7 +854,7 @@ async function run_steps(instance, { app, kind, shot }) {
   };
   for (const [key, name] of [["u", "unread"], ["s", "starred"], ["a", "attachment"]]) {
     await instance.press(["g"]);
-    await key_and_state(instance, ["g"], { what: "g g to select the first row of Views", until: (current) => first_selected(current) === current.listed[0] });
+    await key_and_state(instance, ["g"], at_top);
     for (const backward of [false, true]) {
       const misses = [];
       for (let press = 0; press < 4; press++) misses.push(await press_step(key, backward));
@@ -861,7 +865,7 @@ async function run_steps(instance, { app, kind, shot }) {
   // Earlier checks read every fixture message, so m u first makes one Inbox message unread. ] U from the end of Views must then land on it.
   await show_folder(instance, "/Inbox");
   await instance.press(["g"]);
-  await key_and_state(instance, ["g"], { what: "g g to select the first row of the Inbox", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed[0] });
+  await key_and_state(instance, ["g"], at_top);
   await instance.press(["m"]);
   const marked = (await key_and_state(instance, ["u"], { what: "m u to mark the selected row unread", until: (current) => current.selected.length > 0 && current.selected.every((message) => current.flags[message.header_id]?.read === false), timeout_ms: 8000 })).selected.map((message) => message.header_id);
   await show_folder(instance, "/Views");
@@ -935,7 +939,8 @@ async function run_visual(instance, { app, kind, shot }) {
   await enter_visual();
   await keys(["j"], selects_rows(rows.slice(0, 2)));
   const archive_range = ids((await keys(["j"], selects_rows(rows.slice(0, 3)))).selected);
-  state = await keys(["a"], { what: "a to archive the whole range", until: (current) => archive_range.every((id) => !current.folders["/Inbox"]?.includes(id)), timeout_ms: 10000 });
+  // The . below repeats on the selected row, so the wait also needs the selection to have left the archived rows.
+  state = await keys(["a"], { what: "a to archive the whole range and select a remaining row", until: (current) => archive_range.every((id) => !current.folders["/Inbox"]?.includes(id)) && current.selected.length > 0 && current.selected.every((message) => !archive_range.includes(message.header_id)), timeout_ms: 10000 });
   const in_inbox = archive_range.filter((id) => state.folders["/Inbox"]?.includes(id));
   check(app, kind, "a in visual mode archives the whole range", archive_range.length === 3 && in_inbox.length === 0, `range ${archive_range.join(" ")}, still in the Inbox ${in_inbox.join(" ")}`);
   const after_x = state.folders["/Inbox"]?.length;
@@ -962,12 +967,8 @@ async function run_panes(instance, { app, kind, shot }) {
   // Waits on what each key changes in the helper state. A key that only moves the focus, hides a toast or folds a tree row has no state, so those keep their fixed wait.
   const folder_lands_on = (path) => ({ what: `the folder selection to reach ${path}`, until: (state) => folder_of(state) === path, show: (state) => `folder ${folder_of(state)}` });
   const folder_leaves = (path) => ({ what: `the folder selection to leave ${path}`, until: (state) => folder_of(state) !== path && folder_of(state) !== null, show: (state) => `folder ${folder_of(state)}` });
-  const at_top = { what: "the selection to reach the first row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed[0], show: (state) => `selected ${first_selected(state)}` };
   const at_second_last = { what: "the selection to reach the second last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-2), show: (state) => `selected ${first_selected(state)}` };
   const at_second = { what: "the selection to reach the second row", until: (state) => first_selected(state) !== null && state.listed.indexOf(first_selected(state)) === 1, show: (state) => `selected ${first_selected(state)}` };
-  const leaves_row = (row) => ({ what: `the selection to leave ${row}`, until: (state) => first_selected(state) !== null && first_selected(state) !== row, show: (state) => `selected ${first_selected(state)}` });
-  const listed_count = (count) => ({ what: `the list to show ${count} rows`, until: (state) => state.listed.length === count, show: (state) => `${state.listed.length} listed` });
-  const pane_is = (pane, visible) => ({ what: `the ${pane} pane to be ${visible ? "shown" : "hidden"}`, until: (state) => state.mail_tab?.[`${pane}_pane_visible`] === visible });
   const holds = (what, path, id, present) => ({ what: `${id} ${present ? "in" : "out of"} ${path} (${what})`, until: (state) => in_folder(state, id, path) === present, timeout_ms: 10000 });
   const only_tab = { what: "the extra tabs to close", until: (state) => tabs_of(state).length === 1, show: (state) => `tabs ${tabs_of(state).join(" ")}` };
   const opens_tab = (what, is_page) => ({ what: `${what} to open in a tab`, until: (state) => tabs_of(state).some(is_page), show: (state) => `tabs ${tabs_of(state).join(" ")}`, timeout_ms: 15000 });
@@ -1236,7 +1237,7 @@ async function run_scale(instance) {
   await open_inbox(instance);
   await instance.ask("show_folder", 20000, { path: "/Big" });
   // Thunderbird lists the folder only once it has read the whole mbox.
-  await wait_state(instance, "/Big to list all its messages", (state) => state.mail_tab?.folder === "/Big" && state.listed.length >= BIG_MESSAGES, { timeout_ms: 60000 });
+  await wait_state(instance, "/Big to list all its messages", (state) => state.mail_tab?.folder === "/Big" && state.listed.length >= BIG_MESSAGES, { timeout_ms: 60000, step_ms: 2000 });
   const timed = async (name, keys, expect = null) => {
     const before = await selection();
     for (const key of keys.slice(0, -1)) await instance.press([key]);
@@ -1431,6 +1432,10 @@ async function run_hud(instance, { app, kind, shot }) {
   const displayed = (await instance.ask("state")).mail_tab?.folder;
   await instance.press(["q"]);
   await sleep(800);
+  // The click is tested with a toast up: the toast of an earlier step is gone, so J raises a new one.
+  const before_toast = await poll("the strip to hold still before the toast", "hud_before_click_toast", holds_twice());
+  await instance.press(["J"]);
+  await poll("the toast of J to show before the click", "hud_toast_before_click", drawn_since(before_toast));
   await instance.click(130, displayed === "/Views" ? 224 : 252);
   // The folder change is polled for up to 8 s, so a slow repaint is not a failure, while a click the hud swallows never changes the folder.
   const clicked = await wait_state(instance, "the click to change the folder", (state) => state.mail_tab !== null && state.mail_tab?.folder !== displayed, { timeout_ms: 8000, soft: true });
@@ -1451,8 +1456,10 @@ async function run_hud(instance, { app, kind, shot }) {
   // The click above moved the shown folder, and the steps after this one start in the Inbox.
   await instance.press(["g"]);
   await key_and_state(instance, ["i"], { what: "g i to show the Inbox", until: (state) => state.mail_tab?.folder === "/Inbox", timeout_ms: 10000 });
-  // The folder load takes the focus and the selection for a while, and a key before that goes nowhere.
-  await sleep(1500);
+  // The click above put the focus in the folder pane, and g i opens a folder without moving it (probe, both apps: g g then selected no message, and Down moved the folder). g e returns it to the list, and has no state, so it keeps its margin.
+  await instance.press(["g"]);
+  await instance.press(["e"]);
+  await sleep(1000);
 }
 
 // The command line, in the Views folder that run_view_settings leaves shown. `:` opens the overlay over the window and the keys go to it. Esc closes it and the list has focus again. A typed command runs.
@@ -1460,8 +1467,6 @@ async function run_hud(instance, { app, kind, shot }) {
 // / and ? search the thread list with the Quick Filter: rows narrow while typing, Escape restores, Enter keeps the filter and selects, n and N step. The fixture subjects "Single 1" and "Single 10".."Single 19" give 11 rows in the Inbox.
 async function run_search(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
-  const selection_is = (id) => ({ what: `the selection to reach ${id}`, until: (state) => selection_of(state) === id, show: (state) => `selected ${selection_of(state)}` });
-  const listed_is = (count) => ({ what: `the list to show ${count} rows`, until: (state) => state.listed.length === count, show: (state) => `${state.listed.length} listed` });
   // The search line is the command line page, so its drawn panel is the signal that it takes keys.
   const open_search = async (key, text) => {
     await open_command_line(instance, [key]);
@@ -1471,7 +1476,7 @@ async function run_search(instance, { app, kind, shot }) {
   const escape_search = () => press_in_command_line(instance, ["-k", "Escape"]);
   const clear_filter = async () => {
     await instance.press(["F"]);
-    return key_and_state(instance, ["r"], listed_is(full));
+    return key_and_state(instance, ["r"], listed_count(full));
   };
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], selects(COLLAPSED_ROWS[0]));
@@ -1481,7 +1486,7 @@ async function run_search(instance, { app, kind, shot }) {
   check(app, kind, "/ then text narrows the list while the line is open", state.listed.length > 0 && state.listed.length < full, `listed ${state.listed.length} of ${full}`);
   await shot("search_typing", "the search line at the bottom with the narrowed list above it");
   await escape_search();
-  state = await wait_for_state(instance, listed_is(full));
+  state = await wait_for_state(instance, listed_count(full));
   check(app, kind, "Escape restores the earlier list", state.listed.length === full, `listed ${state.listed.length}, expected ${full}`);
   await shot("search_escaped", "the full list after Escape, with no search line");
   const before_j = selection_of(await instance.ask("state"));
@@ -1494,34 +1499,34 @@ async function run_search(instance, { app, kind, shot }) {
   const unread = state.listed.length;
   await open_search("/", "Single");
   await escape_search();
-  state = await wait_for_state(instance, listed_is(unread));
+  state = await wait_for_state(instance, listed_count(unread));
   check(app, kind, "Escape after F u restores the unread list", state.listed.length === unread, `listed ${state.listed.length}, expected ${unread}`);
   await clear_filter();
 
   await open_search("/", "Single 1");
   const narrowed = (await wait_state(instance, "the list to narrow to the typed text", (current) => current.listed.length > 0 && current.listed.length < full, { soft: true })).listed;
   await instance.press(["-k", "Return"]);
-  state = await wait_for_state(instance, selection_is(narrowed[0]));
+  state = await wait_for_state(instance, selects(narrowed[0]));
   const first = selection_of(state);
   check(app, kind, "Enter keeps the narrowed list and selects its first row", state.listed.length === narrowed.length && first === narrowed[0], `listed ${state.listed.length}, selected ${first}, first ${narrowed[0]}`);
   await shot("search_entered", "the narrowed list with the first row selected and the match count as a toast");
-  state = await key_and_state(instance, ["n"], selection_is(narrowed[1]));
+  state = await key_and_state(instance, ["n"], selects(narrowed[1]));
   check(app, kind, "n selects the next row", selection_of(state) === narrowed[1], `selected ${selection_of(state)}, expected ${narrowed[1]}`);
-  state = await key_and_state(instance, ["N"], selection_is(narrowed[0]));
+  state = await key_and_state(instance, ["N"], selects(narrowed[0]));
   check(app, kind, "N goes back one row", selection_of(state) === narrowed[0], `selected ${selection_of(state)}, expected ${narrowed[0]}`);
-  state = await key_and_state(instance, ["N"], selection_is(narrowed.at(-1)));
+  state = await key_and_state(instance, ["N"], selects(narrowed.at(-1)));
   check(app, kind, "N from the first row wraps to the last", selection_of(state) === narrowed.at(-1), `selected ${selection_of(state)}, expected ${narrowed.at(-1)}`);
 
   // Escape ended nothing here: the filter stays, so clear it, then n narrows it again from the register.
   await clear_filter();
-  state = await key_and_state(instance, ["n"], listed_is(narrowed.length));
+  state = await key_and_state(instance, ["n"], listed_count(narrowed.length));
   check(app, kind, "n after the filter was cleared narrows the list to the register again", state.listed.length === narrowed.length, `listed ${state.listed.length}, expected ${narrowed.length}`);
 
   await clear_filter();
   await open_search("?", "Single 1");
   await shot("search_backward", "the backward search line with the ? prompt");
   await instance.press(["-k", "Return"]);
-  state = await wait_for_state(instance, selection_is(narrowed.at(-1)));
+  state = await wait_for_state(instance, selects(narrowed.at(-1)));
   check(app, kind, "? then Enter selects the last matching row", selection_of(state) === narrowed.at(-1), `selected ${selection_of(state)}, expected ${narrowed.at(-1)}`);
   await clear_filter();
 }
@@ -1530,19 +1535,19 @@ async function run_search(instance, { app, kind, shot }) {
 const WINDOW_HINT_LABELS = { betterbird: { thread_row_1: "sl", folder_reading: "sh", folder_inbox: "ss" }, thunderbird: { thread_row_1: "sl", folder_reading: "sh", folder_inbox: "ss" } };
 // The labels draw over the toolbars, the folder rows and the message rows, so the whole window is the region to read.
 const WINDOW_REGION = "0,0 1280x720";
-// After the labels end, by a pick, Escape or a key no label starts, plain keys are held for 1.5 s, and nothing shows when the hold is over. `hold_over` waits out what is left of it, counted from the key that ended the labels.
+// The key that runs the hint command (f, or Return on the hint command line) holds plain keys for 1.5 s (`HOLD_MS` in src/chrome/runtime.ts), counted from that key. Nothing shows when the hold is over, so `hold_over` waits out what is left of it, counted from `hold_from`.
 const HINT_HOLD_MS = 1600;
-const hold_over = (since) => sleep(Math.max(0, HINT_HOLD_MS - (Date.now() - since)));
+let hold_from = 0;
+const hold_over = () => sleep(Math.max(0, HINT_HOLD_MS - (Date.now() - hold_from)));
 
 async function run_window_hints(instance, { app, kind, shot }) {
   const labels = WINDOW_HINT_LABELS[app];
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
-  const selection_is = (id) => ({ what: `the selection to reach ${id}`, until: (state) => first_selected(state) === id, show: (state) => `selected ${first_selected(state)}` });
-  const folder_is = (path) => ({ what: `${path} to show`, until: (state) => state.mail_tab?.folder === path, show: (state) => `folder ${state.mail_tab?.folder}`, timeout_ms: 10000 });
   const window_pixels = (name, until, options) => wait_pixels(instance, name, `${app}_hints_${name.replaceAll(" ", "_")}`, WINDOW_REGION, until, { timeout_ms: 5000, ...options });
   // Presses f and returns the pixels of the window before and with the labels.
   const show_labels = async (keys = ["f"]) => {
     const before = await window_pixels("the window before the labels", holds_twice());
+    hold_from = Date.now();
     await instance.press(keys);
     return { before, labelled: await window_pixels("the labels to draw", drawn_since(before)) };
   };
@@ -1554,7 +1559,6 @@ async function run_window_hints(instance, { app, kind, shot }) {
   // Hint letters are home row keys that are also commands (j moves down, s stars). While the labels show they must reach the labels only: the selection must not move.
   await instance.press(["j"]);
   await instance.press(["-k", "Escape"]);
-  const ended_at = Date.now();
   // A message pane that finishes loading changes the window too, so the end of the labels is the region leaving the labelled hash, not returning to an earlier one.
   await window_pixels("Escape to end the labels", drawn_since(labelled));
   // A command that j ran would show in the state a moment after the key, and the focus is not in the list for the barrier yet.
@@ -1563,7 +1567,7 @@ async function run_window_hints(instance, { app, kind, shot }) {
   check(app, kind, "window hints: j typed while the labels show runs no command, and Escape ends them", state.listed.length === rows_before && selection_of(state) === selection_of(top), `listed ${state.listed.length} of ${rows_before}, selected ${selection_of(state)}`);
   await shot("window_hints_ended", "the labels are gone after a letter and Escape");
   // The hold drops plain keys, so wait it out or this check proves nothing.
-  await hold_over(ended_at);
+  await hold_over();
   state = await key_and_state(instance, ["j"], { what: "j to move the selection after Escape", until: (current) => selection_of(current) !== selection_of(top), show: (current) => `selected ${selection_of(current)}` });
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
@@ -1577,46 +1581,45 @@ async function run_window_hints(instance, { app, kind, shot }) {
   // A key that no label continues with ends the labels, and swallows the key.
   const { before: before_z, labelled: labelled_z } = await show_labels();
   await instance.press(["z"]);
-  const z_at = Date.now();
   await window_pixels("z to end the labels", drawn_since(labelled_z));
-  await hold_over(z_at);
+  await hold_over();
   state = await key_and_state(instance, ["j"], { what: "j to move the selection after z", until: (current) => selection_of(current) !== burst_before, show: (current) => `selected ${selection_of(current)}` });
   check(app, kind, "window hints: a key no label starts with ends them, then j moves", selection_of(state) !== selection_of(top) && labelled_z !== before_z, `selected ${selection_of(state)}`);
   // A message row: one pick selects it and leaves the focus in the list.
   await show_labels();
   await instance.press([labels.thread_row_1]);
-  const row_picked_at = Date.now();
-  state = await wait_for_state(instance, selection_is(COLLAPSED_ROWS[1]));
+  state = await wait_for_state(instance, selects(COLLAPSED_ROWS[1]));
   check(app, kind, "window hints: the label of a message row selects that thread", first_selected(state) === COLLAPSED_ROWS[1], `selected ${first_selected(state)}, expected ${COLLAPSED_ROWS[1]}`);
-  await hold_over(row_picked_at);
-  state = await key_and_state(instance, ["j"], selection_is(COLLAPSED_ROWS[2]));
+  await hold_over();
+  state = await key_and_state(instance, ["j"], selects(COLLAPSED_ROWS[2]));
   check(app, kind, "window hints: after a row pick the focus is in the list, so j moves on", first_selected(state) === COLLAPSED_ROWS[2], `selected ${first_selected(state)}, expected ${COLLAPSED_ROWS[2]}`);
   // A folder row: one pick shows that folder, and j then moves in the folder pane.
   await show_labels();
   await shot("window_hints_second", "f again after a row pick: the labels follow the new layout");
   await instance.press([labels.folder_reading]);
-  const folder_picked_at = Date.now();
-  state = await wait_for_state(instance, folder_is("/Reading"));
+  state = await wait_for_state(instance, folder_shown("/Reading"));
   check(app, kind, "window hints: the label of a folder row shows that folder", state.mail_tab?.folder === "/Reading", `displayed folder ${state.mail_tab?.folder}`);
   await shot("window_hints_folder", "the Reading folder shown after a folder hint, no labels left");
-  await hold_over(folder_picked_at);
+  await hold_over();
   await show_labels();
   await instance.press([labels.folder_inbox]);
-  const inbox_picked_at = Date.now();
-  state = await wait_for_state(instance, folder_is("/Inbox"));
+  state = await wait_for_state(instance, folder_shown("/Inbox"));
   check(app, kind, "window hints: the label of the Inbox row returns to the Inbox", state.mail_tab?.folder === "/Inbox", `displayed folder ${state.mail_tab?.folder}`);
   // `; ;` opens the command line with `hint ` typed. A flag and Enter run the window hint command, which labels the window.
-  await hold_over(inbox_picked_at);
+  await hold_over();
   await instance.press([";"]);
   await open_command_line(instance, [";"]);
   await shot("window_hints_cmdline", "after ; ;: the command line is open with hint typed in");
   await press_in_command_line(instance, ["--", "--focus"], WINDOW_REGION);
+  hold_from = Date.now();
   const { after: labels_up } = await press_in_command_line(instance, ["-k", "Return"], WINDOW_REGION);
   await shot("window_hints_cmdline_labels", "after hint --focus on the line: the labels show");
   const { after: labels_gone } = await press_in_command_line(instance, ["-k", "Escape"], WINDOW_REGION);
   state = await instance.ask("state");
   check(app, kind, "window hints: ; ; then hint --focus then Escape leaves the list as it was", state.listed.length === rows_before && labels_up !== labels_gone, `listed ${state.listed.length} of ${rows_before}`);
   check(app, kind, "the app survived the window hint checks", instance.exited() === null);
+  // The next section presses plain keys at once, and the hold would drop its first one.
+  await hold_over();
 }
 
 // The full run arrives in Views. Run alone it would start in the Inbox, where Betterbird has the last row selected and Down cannot move, so the group shows Views itself.
@@ -1655,7 +1658,6 @@ const sorted_by = (sort_type, sort_order) => ({ what: `sort ${sort_type} ${sort_
 
 async function run_cmdline(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
-  const leaves_selection = (selection) => ({ what: `the selection to leave ${selection}`, until: (state) => selection_of(state) !== selection && selection_of(state) !== "", show: (state) => `selected ${selection_of(state)}` });
   const return_key = ["-k", "Return"];
   let state = await instance.ask("state");
   await ensure_views_folder(instance, { app, kind });
@@ -1676,10 +1678,10 @@ async function run_cmdline(instance, { app, kind, shot }) {
   await shot("cmdline_typed", "the line after j and a were typed into it");
   await close_command_line(instance);
   await shot("cmdline_closed", "the window after Escape, with no command line");
-  state = await key_and_state(instance, ["j"], leaves_selection(selected_before));
+  state = await key_and_state(instance, ["j"], leaves_row(selected_before));
   check(app, kind, "after Escape a bound key runs again", selection_of(state) !== selected_before, `selected ${selected_before} then ${selection_of(state)}`);
   const row_after_j = selection_of(state);
-  state = await key_and_state(instance, ["-k", "Down"], leaves_selection(row_after_j));
+  state = await key_and_state(instance, ["-k", "Down"], leaves_row(row_after_j));
   check(app, kind, "after Escape the list has focus: Thunderbird's own Down moves the selection", selection_of(state) !== row_after_j && selection_of(state) !== "", `selected ${row_after_j} then ${selection_of(state)}`);
 
   // The widgets at the right end of the line: the folder and [n/m] at the normal width, none on a search line, none in a window under 30rem.
@@ -1712,7 +1714,7 @@ async function run_cmdline(instance, { app, kind, shot }) {
   check(app, kind, ": sort --date --ascending runs the command", state.mail_tab?.sort_type === "date" && state.mail_tab?.sort_order === "ascending", `sort ${state.mail_tab?.sort_type} ${state.mail_tab?.sort_order}`);
   // The ascending date sort leaves the selection on the first row, where Up cannot move it, so the key is Down.
   const after_run = selection_of(state);
-  state = await key_and_state(instance, ["-k", "Down"], leaves_selection(after_run));
+  state = await key_and_state(instance, ["-k", "Down"], leaves_row(after_run));
   check(app, kind, "after a command ran the list has focus again", selection_of(state) !== after_run, `selected ${after_run} then ${selection_of(state)}`);
 
   // The key m t opens the line with the command started, and the command acts on the message selected when the key was pressed.
@@ -1811,9 +1813,7 @@ async function run_cmdline(instance, { app, kind, shot }) {
   state = await wait_state(instance, "o inb Enter to show the Inbox", (current) => current.mail_tab?.folder === "/Inbox", { soft: true, timeout_ms: 10000 });
   check(app, kind, "o then inb Enter shows the highlighted folder, the Inbox", state.mail_tab?.folder === "/Inbox", `folder ${state.mail_tab?.folder}`);
   const before_j = selection_of(await wait_state(instance, "the Inbox to list its messages", (current) => current.listed.length > 0, { soft: true, timeout_ms: 10000 }));
-  // Enter closes the line after it ran the command, and a key before the line is gone and the focus is back goes nowhere.
-  await wait_pixels(instance, "the line to close", `${app}_cmdline_gone`, KEY_LIST_REGION, holds_twice(), { timeout_ms: 3000 });
-  // The j that stood here moved nothing in measured runs (the focus is not in the list after the folder pick), so the message to move is the selected one.
+  // The folder pick selects a row of its own. A probe on both apps (a Down after `o inb Enter` and 3 s) moved that selection, so the focus is in the list. A j straight after the pick moved nothing in full runs, and on main the check never saw it. The message to move is the one that is selected.
   const moved = before_j === "" ? undefined : before_j.split(",")[0];
   await instance.press(["m"]);
   await open_command_line(instance, ["m"]);
@@ -1831,7 +1831,6 @@ async function run_view_settings(instance, check_in) {
   check(app, kind, "the helper shows the Views folder and tags two messages", prepared.prepared === true, prepared.error ?? JSON.stringify(prepared.seen));
   let state = await wait_state(instance, "the Views folder to list its 6 messages", (current) => current.mail_tab?.folder === "/Views" && current.listed.length === 6, { soft: true, timeout_ms: 10000 });
   check(app, kind, "the Views folder is displayed with 6 messages", state.mail_tab?.folder === "/Views" && state.listed.length === 6, `folder ${state.mail_tab?.folder}, listed ${state.listed.length}`);
-  const listed_count = (count) => ({ what: `the list to show ${count} rows`, until: (current) => current.listed.length === count, show: (current) => `${current.listed.length} listed` });
   const listed_after = async (args, count) => (await key_and_state(instance, args, listed_count(count))).listed.length;
   for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "a"], 1], ["reset", ["F", "r"], 6]]) {
     await instance.press([keys[0]]);
@@ -1891,7 +1890,6 @@ async function run_view_settings(instance, check_in) {
     note(app, kind, `mailTabs.update sortType ${sort_type}`, `${answer.error ? `error ${answer.error}` : "accepted"}, tab then reports sortType ${state.mail_tab?.sort_type}`);
   }
   const panes = (current) => `${current.mail_tab?.message_pane_visible}/${current.mail_tab?.folder_pane_visible}`;
-  const pane_is = (pane, visible) => ({ what: `the ${pane} pane to be ${visible ? "shown" : "hidden"}`, until: (current) => current.mail_tab?.[`${pane}_pane_visible`] === visible, show: (current) => `message/folder pane ${panes(current)}` });
   const before = await instance.ask("state");
   await instance.press(["w"]);
   state = await key_and_state(instance, ["m"], pane_is("message", !before.mail_tab?.message_pane_visible));
@@ -2811,7 +2809,8 @@ async function run_window_hint_colors(instance, { app, kind }) {
   const fill = theme[scheme].primary;
   check(app, kind, `window hints: the label boxes fill with the ${THEMED_LABEL} ${scheme} primary color`, (raw.get(fill) ?? 0) > (before.get(fill) ?? 0) + 200 && !raw.has(theme[other].primary), `${fill} ${before.get(fill) ?? 0} then ${raw.get(fill) ?? 0} px, the ${other} one ${theme[other].primary} ${raw.get(theme[other].primary) ?? 0} px`);
   await instance.press(["-k", "Escape"]);
-  await wait_pixels(instance, "Escape to end the labels", `${app}_${kind}_hint_poll`, whole_window, back_to(unlabelled), { timeout_ms: 3000 });
+  const ended = await wait_pixels(instance, "Escape to end the labels", `${app}_${kind}_hint_poll`, whole_window, back_to(unlabelled), { timeout_ms: 3000 });
+  check(app, kind, "window hints: Escape ends the labels", ended === unlabelled);
 }
 
 async function run_assertions(instance) {

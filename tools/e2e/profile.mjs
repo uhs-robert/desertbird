@@ -55,9 +55,11 @@ const BASE_PREFS = {
   "mail.chat.enabled": false,
   "mail.rights.version": 1,
   "mail.collect_email_address_outgoing": false,
-  // The text caret blinks, so a region with the command line open draws two different hashes in turn. A blink time of 0 keeps the caret drawn, and a pixel poll sees only real changes.
-  "ui.caretBlinkTime": 0,
 };
+
+// Prefs of the e2e runs only. A person looking at an owner-test window keeps the profile users have.
+// The text caret blinks, so a region with the command line open draws two different hashes in turn. A blink time of 0 keeps the caret drawn, and a pixel poll sees only real changes.
+const E2E_ONLY_PREFS = { "ui.caretBlinkTime": 0 };
 
 // The Views folder serves the view setting checks. Six single messages: 3 unread (v0 to v2), 2 starred (v0, v1), 1 with an attachment (v0). The helper add-on tags v4 and v5.
 const VIEWS_COUNT = 6;
@@ -157,7 +159,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
   const remote_prefs = kind === "message_remote" ? { "mailnews.message_display.disable_remote_image": false } : {};
   const owner_prefs = kind === "owner" ? OWNER_PREFS : {};
-  const prefs = { ...BASE_PREFS, ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
+  const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   return { profile_dir, folder_dir };
 }
