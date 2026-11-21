@@ -53,11 +53,11 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
   - `experiment/overlay.js`: guard 27212, ceiling 40960 (`PARENT_MAX_BYTES`).
   - `experiment/app.js`: guard 8549, ceiling 12800 (`APP_MAX_BYTES`).
   - `content/message_display.js`: guard 18162, ceiling 24576 (`CONTENT_MAX_BYTES`).
-  - `experiment/hints.js`: guard 14586, ceiling 20480 (`HINTS_MAX_BYTES`).
+  - `experiment/hints.js`: guard 15098, ceiling 20480 (`HINTS_MAX_BYTES`).
   - `experiment/pages.js`: guard 26896, ceiling 34816 (`PAGES_MAX_BYTES`).
   - `experiment/page_actor_child.sys.mjs`: guard 8704, ceiling 11264 (`ACTOR_CHILD_MAX_BYTES`).
   - `experiment/page_actor_parent.sys.mjs`: guard 5632, ceiling 9216 (`ACTOR_PARENT_MAX_BYTES`).
-  - `experiment/page_hints_child.sys.mjs`: guard 7168, ceiling 10240 (`ACTOR_HINTS_MAX_BYTES`).
+  - `experiment/page_hints_child.sys.mjs`: guard 7680, ceiling 10240 (`ACTOR_HINTS_MAX_BYTES`).
   - `content/page_keys.js`: guard 21400, ceiling 32768 (`PAGE_KEYS_MAX_BYTES`).
   - `experiment/folderpane.js`: guard 5900, ceiling 10240 (`FOLDERPANE_MAX_BYTES`).
   - `experiment/zoom.js`: guard 3544, ceiling 6144 (`ZOOM_MAX_BYTES`).

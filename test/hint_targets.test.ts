@@ -255,3 +255,31 @@ test("the mail tab keeps its flat scan and labels no shadow button", () => {
     assert.deepEqual(targets.map((target) => (target.element as unknown as Element).id), ["light"]);
     empty.close();
 });
+
+test("a host that is a field keeps its label next to its shadow button, and a search-textbox host does not", () => {
+    const { ids, root_of } = shadow_page(`<div id="field_host" contenteditable></div><search-textbox id="search"></search-textbox>`);
+    root_of("field_host", `<button id="calendar">Calendar</button>`);
+    root_of("search", `<input id="search_input">`);
+    assert.deepEqual(ids(), ["field_host", "calendar", "search_input"]);
+});
+
+test("a visible host whose shadow targets are all hidden keeps its label", () => {
+    const { ids, root_of } = shadow_page(`<div id="host" role="button"></div>`);
+    root_of("host", `<button id="hidden">Hidden</button>`);
+    assert.deepEqual(ids(), ["host"]);
+});
+
+test("a shadow target with no text of its own yanks the text of its host, which a slot carries", () => {
+    const { page, root_of } = shadow_page(`<div id="slot_host"><span id="label">  Themes </span></div>`, { slot_btn: "label" });
+    root_of("slot_host", `<button id="slot_btn"><slot></slot></button>`);
+    const [target] = collect_window_targets(page as never);
+    assert.equal((target!.element as unknown as Element).id, "slot_btn");
+    assert.equal(target!.text, "Themes");
+});
+
+test("a shadow root that answers a hit with its own host ends the descent", () => {
+    const { ids, root_of, window } = shadow_page(`<div id="host"></div>`);
+    const root = root_of("host", `<button id="inner">In</button>`);
+    (root as unknown as { elementFromPoint: unknown }).elementFromPoint = () => window.document.getElementById("host");
+    assert.deepEqual(ids(), []);
+});

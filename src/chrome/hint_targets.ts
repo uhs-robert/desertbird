@@ -62,24 +62,28 @@ const THREAD_SUBJECT = ".subject-line, .subject";
 /** A yank copies the address of a link, else the text. */
 const yank_text = (element: TargetElement | null): string => (element?.href ?? element?.textContent ?? "").trim();
 
-// A `moz-*` control keeps its real button or field in a shadow root, which one `querySelectorAll` does not enter. A host whose shadow gave targets is dropped, so a field that is both a rule (`search-textbox`) and a host gets one label.
-const deep_find = (root: ShadowSide | null | undefined, css: string): TargetElement[] =>
+// A `moz-*` control keeps its real button or field in a shadow root, which one `querySelectorAll` does not enter. A host whose shadow gave a visible target is replaced by it, so `search-textbox` and its inner field get one label, and the host's text stays as the yank text when the replacement has none (it comes through a slot). A host that is a field stays: a date input's own root holds a calendar button, and the field is what a pick focuses. A host whose shadow targets are all hidden stays too.
+const deep_find = (root: ShadowSide | null | undefined, css: string, shown: (element: TargetElement) => boolean, hosts: Map<TargetElement, TargetElement>): TargetElement[] =>
     [...(root?.querySelectorAll("*") ?? [])].flatMap((node) => {
-        const inner = deep_find(node.openOrClosedShadowRoot, css);
-        return inner[0] ? inner : node.matches(css) ? node : [];
+        const inner = deep_find(node.openOrClosedShadowRoot, css, shown, hosts);
+        if (!inner.some(shown) || (node.matches(FIELDS) && !node.matches("search-textbox"))) return [...(node.matches(css) ? [node] : []), ...inner];
+        for (const each of inner) hosts.set(each, node);
+        return inner;
     });
 
 // The window's own hit test stops at the outer host of a shadow root, and a slotted child is no DOM descendant of the button it sits in. This one starts at the outermost hit, so an overlay outside the host still covers the target, then goes down through the roots and counts the flat tree. A hit inside the target is reported as the target itself.
 const shadow_hit = (window: TargetWindow, target: TargetElement) => (x: number, y: number) => {
     let hit = window.document.elementFromPoint(x, y) as TargetElement | null;
-    for (let inner; (inner = hit?.openOrClosedShadowRoot?.elementFromPoint(x, y)); ) hit = inner;
+    for (let inner; (inner = hit?.openOrClosedShadowRoot?.elementFromPoint(x, y)) && inner !== hit; ) hit = inner;
     for (let at = hit as TargetNode | null; at; at = at.flattenedTreeParentNode as TargetNode) if (at === target) return at;
     return hit;
 };
 
 // A row has no focus of its own to take, so the focus action on a row is its pick: the row is selected and the list keeps the focus.
 function on_screen(window: TargetWindow, selector: string, keep: (element: TargetElement) => boolean, act: (element: TargetElement) => void, text_of: (element: TargetElement) => string, focus: (element: TargetElement) => void = act, deep?: boolean): PickTarget[] {
-    return (deep ? deep_find(window.document as unknown as ShadowSide, selector) : [...(window.document.querySelectorAll(selector) as Iterable<TargetElement>)]).filter((element) => keep(element) && is_on_screen(window, element, shadow_hit(window, element))).map((element) => ({ window, element, act: () => act(element), focus: () => focus(element), text: text_of(element) }));
+    const hosts = new Map<TargetElement, TargetElement>();
+    const shown = (element: TargetElement) => is_on_screen(window, element, shadow_hit(window, element));
+    return (deep ? deep_find(window.document as unknown as ShadowSide, selector, shown, hosts) : [...(window.document.querySelectorAll(selector) as Iterable<TargetElement>)]).filter((element) => keep(element) && shown(element)).map((element) => ({ window, element, act: () => act(element), focus: () => focus(element), text: text_of(element) || yank_text(hosts.get(element) ?? null) }));
 }
 
 const controls_outside_rows = (window: TargetWindow): PickTarget[] => on_screen(window, CONTROLS, (element) => element.closest(INSIDE_A_ROW) === null, pick_control, yank_text, (element) => element.focus());

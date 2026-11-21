@@ -48,7 +48,7 @@ const CONTENT_MAX_BYTES = 18162;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.
-const HINTS_MAX_BYTES = 14586;
+const HINTS_MAX_BYTES = 15098;
 const HINTS_CEILING_BYTES = 20480;
 
 // `content/compose_keys.js`, registered into every compose body.
@@ -72,7 +72,7 @@ const ACTOR_PARENT_MAX_BYTES = 5632;
 const ACTOR_PARENT_CEILING_BYTES = 9216;
 
 // `experiment/page_hints_child.sys.mjs`, the page actor's hint labels, which a child loads on the first hint pick in its process.
-const ACTOR_HINTS_MAX_BYTES = 7168;
+const ACTOR_HINTS_MAX_BYTES = 7680;
 const ACTOR_HINTS_CEILING_BYTES = 10240;
 
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.

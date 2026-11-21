@@ -249,11 +249,11 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `experiment/zoom.js` | 3544 | 6144 |
 | `content/message_display.js` | 18162 | 24576 |
-| `experiment/hints.js` | 14586 | 20480 |
+| `experiment/hints.js` | 15098 | 20480 |
 | `experiment/pages.js` | 26896 | 34816 |
 | `experiment/page_actor_child.sys.mjs` | 8704 | 11264 |
 | `experiment/page_actor_parent.sys.mjs` | 5632 | 9216 |
-| `experiment/page_hints_child.sys.mjs` | 7168 | 10240 |
+| `experiment/page_hints_child.sys.mjs` | 7680 | 10240 |
 | `content/page_keys.js` | 21400 | 32768 |
 | `content/compose_keys.js` | 3500 | 8192 |
 
@@ -296,7 +296,7 @@ Backspace drops the last key of a half-typed sequence, as in DesertFox (`key_flo
 
 The page actor's two halves are ES modules with guards of their own. The child holds the token reader and the scroll table, and its first build was 7059 bytes; the parent's was 5261. Each guard is that size rounded up to 512 (7168 and 5632) and each ceiling 1.5 times the guard rounded up to 1024 (11264 and 9216). The child's walk of the page skeleton (a count, a prefix, a capture branch, Backspace) and its own insert mode changes took it to 8167, so its guard rose two steps of 512 to 8192. A flat set of every token at any depth had taken about 20 keys that bind nothing as first keys, so the walk decides what happens to a key. Hints in web pages (the `pick` field that takes every key while labels show, the end on a state push and the lazy load of the hint module) took it from 8152 on main to 8469 (317 bytes), so the guard rose one step of 512 to 8704; that code decides what happens to a key. The scan, the labels and the drawing live in the hint module, outside the key child.
 
-The page actor's hint module (`experiment/page_hints_child.sys.mjs`) is an ES module that the child loads on the first hint pick in its process. It holds the pick, the labels, the page controls and the on-screen check, and its first build was 6522 bytes. The guard is that rounded up to 512 (6656) and the ceiling 1.5 times the guard rounded up to 1024 (10240). The shadow-root scan of the Add-ons Manager made it 7157 (628 over main's 6529, clause: decides what happens to a key), and the guard rose by one 512-byte step to 7168.
+The page actor's hint module (`experiment/page_hints_child.sys.mjs`) is an ES module that the child loads on the first hint pick in its process. It holds the pick, the labels, the page controls and the on-screen check, and its first build was 6522 bytes. The guard is that rounded up to 512 (6656) and the ceiling 1.5 times the guard rounded up to 1024 (10240). The shadow-root scan of the Add-ons Manager made it 7157 (628 over main's 6529, clause: decides what happens to a key), and the guard rose by one 512-byte step to 7168. The fixes to that scan made it 7495 (338 over 7157, same clause and reason as for `hints.js`), and the guard rose by one more 512-byte step to 7680.
 
 ### Own page script bundle
 
@@ -348,6 +348,7 @@ The zoom keys run in the mail tab, message documents, own pages and the page tab
 - `f` in the page tabs (a target list for a tab that is not the mail tab, its own page read through the tab's browser, and the marker that makes the page keys step aside) made it 13384 (826 over main's 12558, clause: decides what happens to a key). The guard rose by one 512-byte step to 13562.
 - `f` in web pages and other add-ons' pages (the remote branch of `pick`: find the page actor, focus the browser, ask the child and take its count) made it 13841 (457 over main's 13384, clause: decides what happens to a key). The guard rose by one 512-byte step to 14074.
 - `f` in the Add-ons Manager and other shadow-root pages (the deep target scan, the hit test through the roots and the optional hit function of `is_on_screen`) made it 14534 (648 over main's 13886, clause: decides what happens to a key). The guard rose by one 512-byte step to 14586. `content/message_display.js` shares `hint_view.ts` and grew from 18130 to 18155, within its guard.
+- The fixes to that scan (a host that is a field keeps its label, a host whose shadow targets are all hidden keeps its label, the host's text stands in for the yank text of a slotted replacement, and the hit descent stops when a root answers with its host) made it 14880 (346 over 14534, clause: decides what happens to a key). They cure regressions of the shadow descent on web pages, such as a date input whose calendar button took its label. The guard rose by one more 512-byte step to 15098.
 
 ### Compose script bundle
 
