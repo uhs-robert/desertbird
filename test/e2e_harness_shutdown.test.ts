@@ -14,14 +14,21 @@ test("a restart that begins during a shutdown starts no new app", { timeout: 30_
   const server = net.createServer();
   // Stopped at the end: the sink and the memory sampler hold the event loop open.
   let instance: { restart: () => Promise<void>; stop: () => Promise<void> } | undefined;
+  const children: number[] = [];
+  let released: Promise<void> | undefined;
+  const release_all = () => (released ??= (async () => {
+    for (const pid of children) try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ }
+    server.close();
+    await instance?.stop();
+    rmSync(root, { recursive: true, force: true });
+  })());
+  // A timed-out test never reaches its finally, and the server, the sink and the groups would keep the file's process alive.
+  t.signal.addEventListener("abort", () => { void release_all(); }, { once: true });
   try {
     const runtime = join(root, "runtime");
     mkdirSync(runtime);
     await new Promise<void>((done) => server.listen(join(runtime, "wayland-0"), done));
     let spawned = 0;
-    const children: number[] = [];
-    // A shutdown that fails or times out leaves its sleep groups running, so the test's end kills them.
-    t.signal.addEventListener("abort", () => { for (const pid of children) try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ } }, { once: true });
     // A session stand-in: one detached group per app, and an environment that passes the guard.
     const fake_session = {
       env: { HOME: join(root, "home"), XDG_RUNTIME_DIR: runtime, WAYLAND_DISPLAY: "wayland-0" },
@@ -45,8 +52,6 @@ test("a restart that begins during a shutdown starts no new app", { timeout: 30_
     await stopping;
     for (const pid of children) assert.throws(() => process.kill(-pid, 0), "the group is gone");
   } finally {
-    await instance?.stop();
-    server.close();
-    rmSync(root, { recursive: true, force: true });
+    await release_all();
   }
 });

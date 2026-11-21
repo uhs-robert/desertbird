@@ -46,8 +46,15 @@ function node_child(signal: AbortSignal, script: string) {
   let closed = false;
   const waiters: Array<() => void> = [];
   const wake_all = () => waiters.splice(0).forEach((wake) => wake());
-  child.stdout.on("data", (data) => { lines.push(...String(data).split("\n").filter(Boolean)); wake_all(); });
-  child.once("close", () => { closed = true; wake_all(); });
+  // A chunk can end inside a line, so the fragment after the last newline waits for the next chunk.
+  let fragment = "";
+  child.stdout.on("data", (data) => {
+    const parts = (fragment + data).split("\n");
+    fragment = parts.pop() ?? "";
+    lines.push(...parts.filter(Boolean));
+    wake_all();
+  });
+  child.once("close", () => { if (fragment) lines.push(fragment); closed = true; wake_all(); });
   const exited = new Promise<{ code: number | null; at: number }>((done) => child.once("exit", (code) => done({ code, at: Date.now() })));
   const line_starting = async (prefix: string) => {
     for (;;) {
@@ -276,8 +283,13 @@ function lifecycle_child(signal: AbortSignal, root: string, body: string) {
     setInterval(() => {}, 1000);
     ${body}`;
   const lifecycle = node_child(signal, script);
-  signal.addEventListener("abort", () => {
+  const kill_named_groups = () => {
     for (const group of lifecycle.lines.flatMap(pids_of)) if (group > 1) try { process.kill(-group, "SIGKILL"); } catch { /* gone */ }
+  };
+  // The child can still be printing a group when the test ends, so the scan runs again once its output has closed.
+  signal.addEventListener("abort", () => {
+    kill_named_groups();
+    lifecycle.child.once("close", kill_named_groups);
   }, { once: true });
   return lifecycle;
 }
@@ -296,6 +308,10 @@ function group_members_running(pgid: number) {
     }
   });
 }
+// /proc in another pid namespace, or mounted with hidepid, shows no member of any group, and group_gone would then pass with no kill at all.
+function assert_group_runs(pgid: number) {
+  assert.ok(group_members_running(pgid).length > 0, `/proc shows no running member of group ${pgid} before the kill`);
+}
 async function group_gone(pgid: number, deadline_ms = 5000) {
   for (const started = Date.now(); group_members_running(pgid).length > 0; await new Promise((wake) => setTimeout(wake, 25))) {
     if (Date.now() - started > deadline_ms) return false;
@@ -306,6 +322,8 @@ async function group_gone(pgid: number, deadline_ms = 5000) {
 test("SIGTERM stops every tracked group, frees the lock and exits 143", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
   const { child, exited, line_starting } = lifecycle_child(t.signal, root, `const a = track_session(fake_session(false)); const b = track_session(fake_session(true)); console.log("ready " + a.groups[0] + " " + b.groups[0]);`);
   const [first, second] = pids_of(await line_starting("ready"));
+  assert_group_runs(first);
+  assert_group_runs(second);
   assert.ok(existsSync(lock_of(root)));
   child.kill("SIGTERM");
   const { code } = await exited;
@@ -317,6 +335,7 @@ test("SIGTERM stops every tracked group, frees the lock and exits 143", CHILD_TE
 test("a second signal during the shutdown does not cut the kill grace short", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
   const { child, exited, line_starting } = lifecycle_child(t.signal, root, `const a = track_session(fake_session(true)); console.log("ready " + a.groups[0]);`);
   const [group] = pids_of(await line_starting("ready"));
+  assert_group_runs(group);
   const first_at = Date.now();
   child.kill("SIGTERM");
   await new Promise((wake) => setTimeout(wake, 500));
@@ -332,8 +351,12 @@ test("a signal while a session is still starting waits for it and stops it", CHI
   const { child, exited, line_starting } = lifecycle_child(t.signal, root, `
     let session;
     track_start(new Promise((done) => setTimeout(() => { session = fake_session(false); track_session(session); console.log("started " + session.groups[0]); done(session); }, 1000)));
-    console.log("ready");`);
-  await line_starting("ready");
+    const visibility_probe = spawn("sleep", ["600"], { detached: true, stdio: "ignore" });
+    visibility_probe.unref();
+    console.log("ready " + visibility_probe.pid);`);
+  // The session comes up and is stopped inside the shutdown, so no moment exists to see it run. A probe group stands in to prove /proc sees this namespace.
+  const [probe] = pids_of(await line_starting("ready"));
+  assert_group_runs(probe);
   child.kill("SIGINT");
   const { code } = await exited;
   const [group] = pids_of(await line_starting("started"));
@@ -345,6 +368,7 @@ test("a signal while a session is still starting waits for it and stops it", CHI
 test("an uncaught error kills every tracked group, frees the lock and exits 1", CHILD_TEST_LIMIT, (t) => in_tmp(async (root) => {
   const { exited, line_starting } = lifecycle_child(t.signal, root, `const a = track_session(fake_session(true)); console.log("ready " + a.groups[0]); setTimeout(() => { throw new Error("boom"); }, 200);`);
   const [group] = pids_of(await line_starting("ready"));
+  assert_group_runs(group);
   const { code } = await exited;
   assert.equal(code, 1);
   assert.ok(await group_gone(group));
