@@ -1435,6 +1435,7 @@ async function run_hud(instance, { app, kind, shot }) {
   // The click is tested with a toast up: the toast of an earlier step is gone, so J raises a new one.
   const before_toast = await poll("the strip to hold still before the toast", "hud_before_click_toast", holds_twice());
   await instance.press(["J"]);
+  const click_toast_at = Date.now();
   await poll("the toast of J to show before the click", "hud_toast_before_click", drawn_since(before_toast));
   await instance.click(130, displayed === "/Views" ? 224 : 252);
   // The folder change is polled for up to 8 s, so a slow repaint is not a failure, while a click the hud swallows never changes the folder.
@@ -1444,6 +1445,8 @@ async function run_hud(instance, { app, kind, shot }) {
   // The click moves the focus into the folder pane and loads the folder. Nothing shows when keys reach the runtime again, so this keeps a margin (keys pressed 1 s after the click went nowhere in measured runs).
   await sleep(2500);
   // g ? shows the root key list in the window. ? is a backward search now. The new folder first draws its status text, so the list is compared with the strip once that holds still.
+  // The toast of J lasts 3 s from its key and would sit in the baseline of the key list.
+  await sleep(Math.max(0, TOAST_EXPIRY_MS - (Date.now() - click_toast_at)));
   const key_list_base = await wait_pixels(instance, "the key list region to hold still", `${app}_key_list_base_${theme}`, KEY_LIST_REGION, holds_twice(), { timeout_ms: 5000 });
   await instance.press(["g"]);
   await instance.press(["?"]);
@@ -2811,7 +2814,9 @@ async function run_window_hint_colors(instance, { app, kind }) {
   await instance.press(["-k", "Escape"]);
   // The window can differ from the unlabelled read for other reasons (a pane still loading), so the labels are gone when the window leaves the labelled hash and holds.
   const ended = await wait_pixels(instance, "Escape to end the labels", `${app}_${kind}_hint_poll`, whole_window, drawn_since(labelled), { timeout_ms: 3000 });
-  check(app, kind, "window hints: Escape ends the labels", ended !== labelled);
+  // The fill color count falls back to what it was before f, which a window that merely changed does not do.
+  const after = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_after`, whole_window, "ppm"));
+  check(app, kind, "window hints: Escape ends the labels", ended !== labelled && (after.get(fill) ?? 0) <= (before.get(fill) ?? 0) + 50, `${fill} ${before.get(fill) ?? 0} before f, ${raw.get(fill) ?? 0} with labels, ${after.get(fill) ?? 0} after Escape`);
 }
 
 async function run_assertions(instance) {
