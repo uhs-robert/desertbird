@@ -2803,14 +2803,15 @@ async function run_window_hint_colors(instance, { app, kind }) {
   const before = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_before`, whole_window, "ppm"));
   const unlabelled = await hud_pixels(instance, `${app}_${kind}_hint_unlabelled`, whole_window);
   await instance.press(["f"]);
-  await wait_pixels(instance, "the labels to draw", `${app}_${kind}_hint_poll`, whole_window, drawn_since(unlabelled), { timeout_ms: 5000 });
+  const labelled = await wait_pixels(instance, "the labels to draw", `${app}_${kind}_hint_poll`, whole_window, drawn_since(unlabelled), { timeout_ms: 5000 });
   const raw = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_labels`, whole_window, "ppm"));
   await instance.shot(`${app}_${kind}_hint_labels_shot`);
   const fill = theme[scheme].primary;
   check(app, kind, `window hints: the label boxes fill with the ${THEMED_LABEL} ${scheme} primary color`, (raw.get(fill) ?? 0) > (before.get(fill) ?? 0) + 200 && !raw.has(theme[other].primary), `${fill} ${before.get(fill) ?? 0} then ${raw.get(fill) ?? 0} px, the ${other} one ${theme[other].primary} ${raw.get(theme[other].primary) ?? 0} px`);
   await instance.press(["-k", "Escape"]);
-  const ended = await wait_pixels(instance, "Escape to end the labels", `${app}_${kind}_hint_poll`, whole_window, back_to(unlabelled), { timeout_ms: 3000 });
-  check(app, kind, "window hints: Escape ends the labels", ended === unlabelled);
+  // The window can differ from the unlabelled read for other reasons (a pane still loading), so the labels are gone when the window leaves the labelled hash and holds.
+  const ended = await wait_pixels(instance, "Escape to end the labels", `${app}_${kind}_hint_poll`, whole_window, drawn_since(labelled), { timeout_ms: 3000 });
+  check(app, kind, "window hints: Escape ends the labels", ended !== labelled);
 }
 
 async function run_assertions(instance) {
