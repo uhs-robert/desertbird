@@ -14,16 +14,16 @@ test("a section is recorded under <app>/<kind>/<section>, also when it throws", 
   assert.deepEqual(timings.report().pieces.map((piece: { name: string }) => piece.name), ["thunderbird/default/hud", "thunderbird/default/panes"]);
 });
 
-test("the written report has the DesertFox shape and keeps the extra fields of a kind", () => {
+test("the written report has the DesertFox shape and keeps the extra fields of a piece", () => {
   const dir = mkdtempSync(join(tmpdir(), "desertbird-timings-test-"));
   try {
     const file = join(dir, "nested", "timings.json");
     const timings = create_timings(file);
-    timings.add_kind({ app: "betterbird", kind: "message", wall_ms: 1500, startups: [{ enabled_ms: 1800 }], peak_memory_kb: { app: { rss_kb: 1 } } });
+    timings.add_piece({ app: "betterbird", kind: "message", section: "main", wall_ms: 1500, startups: [{ enabled_ms: 1800 }], peak_memory_kb: { app: { rss_kb: 1 } } });
     timings.write();
     const report = JSON.parse(readFileSync(file, "utf8"));
     for (const key of ["total_ms", "cases_ms", "outside_cases_ms", "categories", "outside_cases", "pieces", "tab_samples", "lost_key_suspects", "cases"]) assert.ok(key in report, key);
-    assert.deepEqual(report.pieces, [{ name: "betterbird/message", wall_ms: 1500, startups: [{ enabled_ms: 1800 }], peak_memory_kb: { app: { rss_kb: 1 } } }]);
+    assert.deepEqual(report.pieces, [{ name: "betterbird/message/main", wall_ms: 1500, startups: [{ enabled_ms: 1800 }], peak_memory_kb: { app: { rss_kb: 1 } } }]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

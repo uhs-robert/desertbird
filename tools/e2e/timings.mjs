@@ -43,7 +43,7 @@ export function start_memory_sampler(groups, interval_ms = 1000) {
 }
 
 // The report has the shape of the DesertFox key-test report (pieces, cases, categories, outside_cases), so its weights and merge code read it.
-// A piece is "<app>/<kind>" or "<app>/<kind>/<section>". A kind piece holds its section pieces inside its wall time. startups and peak_memory_kb are extra fields of the kind piece.
+// A piece is "<app>/<kind>/<section>", which is what a run starts. A piece that still runs several sections of one profile (the default kind) holds their `section` entries inside its wall time. startups and peak_memory_kb are extra fields of the run's piece.
 export function create_timings(file) {
   const started_at = Date.now();
   const pieces = [];
@@ -58,8 +58,9 @@ export function create_timings(file) {
         pieces.push({ name: `${app}/${kind}/${name}`, wall_ms: Date.now() - begun });
       }
     },
-    // One piece per app start that ran a kind: its wall time from before start_app to after stop, plus what the instance measured.
-    add_kind({ app, kind, wall_ms, startups, peak_memory_kb }) { pieces.push({ name: `${app}/${kind}`, wall_ms, startups, peak_memory_kb }); },
+    // One piece per piece run: its wall time from before its first app start to after stop, plus what the instance measured.
+    // `reference_apps` is one { startups, peak_memory_kb } per extra app the piece started (the mode label reference app). It is left out when the piece started none.
+    add_piece({ app, kind, section, wall_ms, startups, peak_memory_kb, reference_apps = [] }) { pieces.push({ name: `${app}/${kind}/${section}`, wall_ms, startups, peak_memory_kb, ...(reference_apps.length ? { reference_apps } : {}) }); },
     report,
     write() {
       mkdirSync(dirname(file), { recursive: true });
