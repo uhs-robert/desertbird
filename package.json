@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && node tools/build.mjs",
     "lint": "eslint",
-    "unit": "node --test --test-timeout=30000 --no-warnings \"test/**/*.test.ts\"",
+    "unit": "node --test --test-timeout=30000 --test-force-exit --no-warnings \"test/**/*.test.ts\"",
     "test": "npm run --silent check",
     "e2e": "node tools/e2e/run.mjs",
     "docs:gen": "node --no-warnings tools/gen-keymap-docs.ts --write",
