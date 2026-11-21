@@ -20,7 +20,7 @@ async function run_web_rows(instance, { check, note, shot, open_inbox, restart, 
   const app = instance.app;
   const kind = "web";
   await open_inbox(instance);
-  const only_hints = process.env.E2E_ONLY === "web_hints";
+  const only_hints = (process.env.E2E_ONLY ?? "").split(",").includes("web_hints");
   const tabs_of = async () => (await instance.ask("state")).windows.find((window) => window.type === "normal")?.tabs ?? [];
   const active_index = async () => (await tabs_of()).find((tab) => tab.active)?.index;
   const before = (await tabs_of()).length;

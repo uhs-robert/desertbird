@@ -9,10 +9,10 @@ const SHIFT_F10 = ["-M", "shift", "-k", "F10", "-m", "shift"];
 // The app menu (hamburger) button at the e2e window size.
 const APP_MENU_BUTTON = [1218, 21];
 
-// Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10.
-const MARK_SUBMENU_REGION = "900,260 190x260";
+// Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10. Thunderbird shows the Inbox as cards and opens the menu at the selected card, Betterbird as a table, so the submenu sits in different places.
+const MARK_SUBMENU_REGIONS = { thunderbird: "610,280 190x290", betterbird: "900,260 190x260" };
 
-const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
+const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGIONS[instance.app], "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
 
 export async function run_popup_keys(instance, { check, shot, key_and_state, first_selected }) {
   const app = instance.app;
@@ -29,7 +29,7 @@ export async function run_popup_keys(instance, { check, shot, key_and_state, fir
   let state = await key_and_state(instance, ["j"], 1200);
   check(app, kind, "context menu open by keyboard: j marks nothing as junk and moves nothing", untouched(state), detail(state));
   // `k` is the access key of Mark in this menu, so it still reaches the menu and opens the submenu.
-  await instance.shot_region("popup_menu_before_k", MARK_SUBMENU_REGION, "ppm");
+  await instance.shot_region("popup_menu_before_k", MARK_SUBMENU_REGIONS[app], "ppm");
   await instance.press(["k"]);
   await sleep(900);
   check(app, kind, "context menu open: its access key k still reaches the menu and opens the Mark submenu", !(await same_pixels(instance, "popup_menu_after_k", "popup_menu_before_k")));

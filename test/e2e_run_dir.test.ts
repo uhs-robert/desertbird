@@ -399,7 +399,7 @@ test("a dangling link that points inside the run dir is accepted", () => in_tmp(
 
 test("a symlinked home under a reused E2E_DIR is refused before the editor host writes anything", CHILD_TEST_LIMIT, () => in_tmp((root) => {
   const e2e_dir = join(root, "reused");
-  const kind_dir = join(e2e_dir, "betterbird", "compose_editor");
+  const kind_dir = join(e2e_dir, "betterbird", "compose_editor", "main");
   const outside = join(root, "owner_home");
   mkdirSync(kind_dir, { recursive: true });
   mkdirSync(outside);
