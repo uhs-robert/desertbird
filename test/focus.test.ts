@@ -187,7 +187,7 @@ test("the overlay's browser is a typing target by its final id and not by its lo
     assert.equal(is_typing({ target: browser(OVERLAY_LOADING_ID) }, document_of(browser(OVERLAY_LOADING_ID))), false);
 });
 
-test("an open menupopup takes the access keys of its direct items, a panel takes keys only with the focus inside it", () => {
+test("an open menupopup takes the access keys of its direct items, a panel takes no plain key", () => {
     const list = element("tbody");
     const item = (key: string, owner: () => unknown, attributes: string[] = []) => ({ getAttribute: () => key, hasAttribute: (name: string) => attributes.includes(name), closest: owner });
     const popup = (local_name: string, state: string, make_items: (self: object) => object[], contains: (node: unknown) => boolean = () => false) => {
@@ -208,10 +208,11 @@ test("an open menupopup takes the access keys of its direct items, a panel takes
     const app_menu = popup("panel", "open", (self) => [item("n", () => self), item("a", () => ({}))]);
     for (const key of ["n", "a", "j"]) assert.equal(menu_takes_key(doc(app_menu), key), false, key);
     const focused_panel = popup("panel", "showing", () => [], (node) => node === list);
-    assert.equal(menu_takes_key(doc(focused_panel), "j"), true);
+    // Focus inside the panel (keyboard open, a view change, an arrow key) takes no plain key either.
+    assert.equal(menu_takes_key(doc(focused_panel), "j"), false);
     // A panel-list has no state and carries `open`.
     const panel_list = { localName: "panel-list", hasAttribute: (name: string) => name === "open", contains: (node: unknown) => node === list };
-    assert.equal(menu_takes_key(doc(panel_list), "j"), true);
+    assert.equal(menu_takes_key(doc(panel_list), "j"), false);
     assert.equal(menu_takes_key(doc({ ...panel_list, hasAttribute: () => false }), "j"), null);
 });
 
