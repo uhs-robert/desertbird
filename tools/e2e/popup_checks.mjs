@@ -10,7 +10,7 @@ const SHIFT_F10 = ["-M", "shift", "-k", "F10", "-m", "shift"];
 const APP_MENU_BUTTON = [1218, 21];
 
 // Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10. Thunderbird shows the Inbox as cards and opens the menu at the selected card, Betterbird as a table, so the submenu sits in different places.
-const MARK_SUBMENU_REGIONS = { thunderbird: "590,280 220x290", betterbird: "900,260 190x260" };
+const MARK_SUBMENU_REGIONS = { thunderbird: "610,280 190x290", betterbird: "900,260 190x260" };
 
 const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGIONS[instance.app], "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
 
