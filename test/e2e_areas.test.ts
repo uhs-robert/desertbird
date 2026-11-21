@@ -69,13 +69,13 @@ test("E2E_CHANGED=1 keeps the pieces of the changed files and runs Betterbird al
   assert.equal(changed_run_apps({}), null);
 });
 
-// A value import loads the file for every key, so a file that a shared key runtime file reaches must be shared too. The background main.ts wires every feature, so the walk stays in chrome, content and shared. Type imports vanish at build time and are skipped.
+// A value import loads the file for every key, so a file that a shared key runtime file reaches must be shared too. The walk starts in chrome, content, shared and the router. The background main.ts wires every feature, so it is not a start. Type imports vanish at build time and are skipped.
 function value_imports(path: string): string[] {
   const text = readFileSync(join(import.meta.dirname, "..", path), "utf8");
   const found: string[] = [];
   for (const match of text.matchAll(/^(?:import|export)\s+(?!type\b)[^;]*?from\s+"(\.[^"]+)"/gms)) {
     const target = join(path, "..", (match[1] as string)).replaceAll("\\", "/");
-    if (/^src\/(chrome|content|shared)\//.test(target) && existsSync(join(import.meta.dirname, "..", target))) found.push(target);
+    if (/^src\/(chrome|content|shared|background)\//.test(target) && existsSync(join(import.meta.dirname, "..", target))) found.push(target);
   }
   return found;
 }
@@ -83,7 +83,7 @@ function value_imports(path: string): string[] {
 test("every src file that a shared file imports is shared too", () => {
   const is_shared = (path: string) => areas_of_file(path)?.length === area_names.length;
   const seen = new Set<string>();
-  const queue = src_files.filter((path) => path.endsWith(".ts") && /^src\/(chrome|content|shared)\//.test(path) && is_shared(path));
+  const queue = src_files.filter((path) => path.endsWith(".ts") && (/^src\/(chrome|content|shared)\//.test(path) || path === "src/background/router.ts") && is_shared(path));
   const unshared: string[] = [];
   while (queue.length) {
     const path = queue.pop() as string;

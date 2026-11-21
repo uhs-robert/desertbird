@@ -11,7 +11,7 @@ export const area_names = ["motions", "mail_keys", "threads", "search", "views",
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
   "src/manifest.json",
-  "src/background/{main,router}.ts",
+  "src/background/{main,router,notify}.ts",
   "src/background/commands/{define,index,tab_keymaps}.ts",
   "src/background/config/**",
   "src/shared/{protocol,swallow,keymap_tree}.ts",
@@ -32,7 +32,7 @@ export const area_rules = [
   // The folder list of the command line completes from the folder pane.
   { globs: ["src/background/cmdline/folder_rows.ts"], areas: ["cmdline", "folders"] },
   { globs: ["src/background/cmdline/**", "src/background/{commands,handlers}/cmdline.ts", "src/overlay/{cmdline,confirm,line_edit}.*"], areas: ["cmdline"] },
-  { globs: ["src/background/hud/**", "src/overlay/hud.*", "src/background/{notify,new_mail_notify}.ts", "src/background/commands/new_mail.ts"], areas: ["hud"] },
+  { globs: ["src/background/hud/**", "src/overlay/hud.*", "src/background/new_mail_notify.ts", "src/background/commands/new_mail.ts"], areas: ["hud"] },
   // The help page shows in the hud piece and the own_pages piece.
   { globs: ["src/help/**", "src/background/{commands,handlers}/help.ts"], areas: ["hud", "own_pages"] },
   { globs: ["src/options/**"], areas: ["own_pages"] },
@@ -57,6 +57,8 @@ export const area_rules = [
   { globs: ["src/background/{commands,handlers}/followup.ts", "src/background/{followup_presets,followup_store}.ts"], areas: ["followup"] },
   { globs: ["src/background/{commands,handlers}/quick_reply.ts", "src/background/quick_reply_store.ts"], areas: ["quick_reply", "compose"] },
   { globs: ["src/background/{commands,handlers}/compose.ts", "src/background/{compose_markdown,external_editor}.ts", "src/content/compose_{edit_key,keys}.ts", "src/background/commands/account_param.ts", "src/background/handlers/{account_choice,identity}.ts"], areas: ["compose"] },
+  // The record store backs the snooze, follow-up and quick reply stores.
+  { globs: ["src/background/record_store.ts"], areas: ["mail_keys", "followup", "quick_reply"] },
   // Flags, archive, delete, undo, snooze and the other commands that act on the selected messages. app.schema.json is the Experiment those verbs run through.
   {
     globs: [
