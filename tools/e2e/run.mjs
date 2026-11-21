@@ -2,8 +2,7 @@
 //   node tools/e2e/run.mjs [thunderbird|betterbird]... [--xpi path] [--binary app=path]
 // With no --xpi it only proves the setup: each app starts in a fresh profile and one screenshot is taken.
 // Scratch files go to $E2E_DIR, or to a fresh desertbird-e2e-* folder under the temp dir that is removed after a pass unless E2E_KEEP=1. Thunderbird comes from tools/measure/fetch_thunderbird.sh. Betterbird is /usr/bin/betterbird.
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -16,6 +15,9 @@ import { run_pages } from "./pages_checks.mjs";
 import { run_pane_moves, run_resize_mode } from "./panes_checks.mjs";
 import { run_popup_keys } from "./popup_checks.mjs";
 import { run_typing } from "./typing_checks.mjs";
+import { sleep, CTRL_SHIFT, CTRL, first_selected, same, selects, at_bottom, at_top, leaves_row, listed_count, pane_is, flag_becomes, compose_opens, thread_shows, folder_shown, window_has_focus, window_is_closed, HUD_REGION, holds_twice, drawn_since, back_to, KEY_LIST_REGION, QUIET_AFTER_ESCAPE_MS, TOAST_EXPIRY_MS, sorted_by, main_window_tabs, active_index, PAINT_MARGIN_MS, CHROME_TAB_MARGIN_MS, tab_count_is, active_is, last_tab_loaded, ppm_colors, luminance_of, compose_tab, reply_is_loaded, mail_window_ready, selects_inbox_s2 } from "./predicates.mjs";
+import { FLAT_ROWS, COLLAPSED_ROWS } from "./fixture_rows.mjs";
+import { seed_storage, QUICK_REPLY_SEED, OPEN_OWN_PAGES_SCRIPT, EDITED_TEXT, DESERTFOX_HOST, COMPOSE_EDITOR_HTML_KINDS, install_editor_host } from "./seed.mjs";
 
 let run_dir;
 try { run_dir = open_run_dir(); } catch (error) { console.error(`e2e: ${error.message}`); process.exit(1); }
@@ -45,17 +47,6 @@ const option = (name) => {
 const xpi_path = option("--xpi");
 for (let value; (value = option("--binary")); ) { const [name, path] = value.split("="); binaries[name] = path; }
 const apps = args.length ? args : ["thunderbird", "betterbird"];
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-m", "ctrl"];
-const header_id = (index) => (index.kind === "thread" ? `inbox-t${index.n}-m0` : `inbox-s${index.n}`) + "@fixture.invalid";
-
-// Row order of the fixture Inbox, sorted by date ascending. Collapsed threads show only their root (m0).
-const FLAT_ROWS = [
-  ...Array.from({ length: 10 }, (_, thread) => Array.from({ length: 4 }, (_, position) => `inbox-t${thread}-m${position}@fixture.invalid`)).flat(),
-  ...Array.from({ length: 20 }, (_, single) => `inbox-s${single}@fixture.invalid`),
-];
-const COLLAPSED_ROWS = [...Array.from({ length: 10 }, (_, thread) => header_id({ kind: "thread", n: thread })), ...Array.from({ length: 20 }, (_, single) => header_id({ kind: "single", n: single }))];
 
 // Evidence for the report: one line per check, plus the shots and any free-form observations.
 const report = { checks: [], shots: [], notes: [] };
@@ -132,16 +123,10 @@ async function expect_absent(instance, name, found, { margin_ms, in_list }) {
 
 const wait_for_state = (instance, wanted) => wait_state(instance, wanted.what, wanted.until, wanted);
 
-// A folder shown through the API lists its messages only once Thunderbird has read its mbox, so the folder alone is not the signal.
-const folder_shown = (path) => ({ what: `${path} to show with its messages`, until: (state) => state.mail_tab?.folder === path && state.listed.length > 0, show: (state) => `folder ${state.mail_tab?.folder}, ${state.listed.length} listed`, timeout_ms: 10000 });
 async function show_folder(instance, path) {
   await instance.ask("show_folder", 20000, { path });
   return wait_for_state(instance, folder_shown(path));
 }
-// A main window the helper opened or closed: it counts when the window list shows it and, for a new one, gives it the focus that keys need.
-const window_has_focus = (id) => ({ what: `main window ${id} to open and take focus`, until: (state) => state.windows.some((window) => window.id === id && window.focused === true), timeout_ms: 15000 });
-const window_is_closed = (id) => ({ what: `main window ${id} to close`, until: (state) => !state.windows.some((window) => window.id === id) && state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 10000 });
-
 // Presses a key and returns the state. `wait` is a number of ms (the older fixed wait, still used by the sections not yet ported) or { what, until, ...options } for wait_state.
 async function key_and_state(instance, args, wait = 700) {
   await instance.press(args);
@@ -167,20 +152,6 @@ async function restart_app(instance, app, kind, label) {
   }
 }
 
-const first_selected = (state) => state.selected[0]?.header_id ?? null;
-const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-
-// Wait descriptions for key_and_state, one per kind of result the keys of the default section cause.
-const selects = (id) => ({ what: `the selection to reach ${id}`, until: (state) => first_selected(state) === id, show: (state) => `selected ${first_selected(state)}` });
-const at_bottom = { what: "the selection to reach the last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-1), show: (state) => `selected ${first_selected(state)}` };
-const at_top = { what: "the selection to reach the first row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed[0], show: (state) => `selected ${first_selected(state)}` };
-const leaves_row = (row) => ({ what: `the selection to leave ${row}`, until: (state) => first_selected(state) !== null && first_selected(state) !== row, show: (state) => `selected ${first_selected(state)}` });
-const listed_count = (count) => ({ what: `the list to show ${count} rows`, until: (state) => state.listed.length === count, show: (state) => `${state.listed.length} listed` });
-const pane_is = (pane, visible) => ({ what: `the ${pane} pane to be ${visible ? "shown" : "hidden"}`, until: (state) => state.mail_tab?.[`${pane}_pane_visible`] === visible, show: (state) => `message/folder pane ${state.mail_tab?.message_pane_visible}/${state.mail_tab?.folder_pane_visible}` });
-const flag_becomes = (id, name, value) => ({ what: `${name} of ${id} to become ${value}`, until: (state) => state.flags[id]?.[name] === value, show: (state) => `${name} ${state.flags[id]?.[name]}` });
-// A compose window opens late: the subject and the quote arrive after the window, and Thunderbird can take many seconds.
-const compose_opens = (tab_is_ready) => ({ what: "a compose window with its content", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some(tab_is_ready)), timeout_ms: 15000 });
-
 // Waits until the fixture message `header_id` has loaded in the pane and the status bar is blank again. The pane has no helper state for a load in progress, but the helper's body script reports 1.5 s after a document loads, with the start of its text, and a fixture body names its own message. So the wait first takes a report from that message's document, and only then compares the status bar text area with a blank stretch of the same bar. Before the load, that bar can be blank too, before "Loading Message..." shows.
 async function wait_message_loaded(instance, header_id) {
   const body_names_it = `Body of ${header_id.replace("@fixture.invalid", "")}.`;
@@ -200,9 +171,6 @@ async function close_compose(instance) {
 async function wait_for_clipboard(instance, what) {
   return (await wait_for(instance, what, () => instance.ask("read_clipboard"), (reply) => (reply.text ?? "").trim() !== "")).text ?? "";
 }
-
-// A collapsed thread root selects its whole thread and an open one selects only itself, so the selection count shows a fold of the selected root.
-const thread_shows = (open) => ({ what: `the selected thread to ${open ? "open" : "close"}`, until: (state) => (open ? state.selected.length === 1 : state.selected.length > 1), show: (state) => `${state.selected.length} selected` });
 
 // The barrier's own check, on the fold path, whose background command is longer than the flip: a fold pressed before the barrier must have landed when the barrier returns. A miss means the barrier is too weak for the negative checks that rely on it.
 async function measure_barrier(instance) {
@@ -271,8 +239,6 @@ async function run_threads(instance, { app, kind, shot }) {
   await reaches(["g", "g"], COLLAPSED_ROWS[0]);
 }
 
-// A hash of the bottom 80 px of the window, where the panel and the toasts draw, without the scrollbar strip. The mode label sits in it too and stays the same while the mode does. Higher up a message pane can still be loading.
-const HUD_REGION = "0,640 1260x80";
 async function hud_pixels(instance, name, region = HUD_REGION) {
   const { createHash } = await import("node:crypto");
   const { readFileSync } = await import("node:fs");
@@ -296,25 +262,6 @@ async function settled_state(instance, selection_of) {
 
 // The hash of a region of the window as a pixel poll reads it: `wait_pixels` polls `until` on each hash, 100 ms apart. Like the state waits, a ceiling ends it with the last hash and the check after it judges. A poll records no FAIL of its own, because every caller follows it with a check of the hash.
 const wait_pixels = (instance, what, name, region, until, options) => wait_for(instance, what, () => hud_pixels(instance, name, region), until, { step_ms: 100, soft: true, ...options });
-// A hash that has not moved between two reads in a row, so the region is done drawing. It reads the region again and again, so build one per poll.
-const holds_twice = () => {
-  let last = null;
-  return (now) => {
-    const held = now === last;
-    last = now;
-    return held;
-  };
-};
-// The region draws something other than `baseline` and holds it. A panel or toast is shown when this ends before the ceiling.
-const drawn_since = (baseline) => {
-  const held = holds_twice();
-  return (now) => held(now) && now !== baseline;
-};
-const back_to = (baseline) => (now) => now === baseline;
-
-// The region the root key list and the command line list fill: it is about twelve rows tall above the status bar, taller than the strip of a toast.
-const KEY_LIST_REGION = "0,300 1260x420";
-
 // Opens the command line with `keys` and returns once its panel has drawn and held still. A key typed before the page has the focus is dropped, and the focus comes in the same step as the prompt, so the drawn panel is the ready signal.
 // A window that has just opened can drop the key before its key runtime is live, so `attempts` presses the keys again while nothing has drawn.
 // The panel of an earlier line can still be on its way out, so the baseline is read once the region holds still.
@@ -335,8 +282,6 @@ async function press_in_command_line(instance, keys, region = KEY_LIST_REGION) {
   return { before, after: await wait_pixels(instance, `the command line to draw the result of ${keys.join(" ")}`, `${instance.app}_cmdline_after`, region, drawn_since(before), { timeout_ms: 5000 }) };
 }
 
-// Escape until an Escape changes nothing: the first hides the list, the second closes the line, the third goes to the mail list, where it does nothing. The line is closed when no pixel moves for `QUIET_AFTER_ESCAPE_MS` after an Escape, which is a negative read and keeps that fixed window.
-const QUIET_AFTER_ESCAPE_MS = 500;
 async function close_command_line(instance) {
   let now = await hud_pixels(instance, `${instance.app}_cmdline_close`, KEY_LIST_REGION);
   for (let count = 0; count < 3; count++) {
@@ -350,9 +295,6 @@ async function close_command_line(instance) {
     now = await wait_pixels(instance, "the command line to hold still after Escape", `${instance.app}_cmdline_close`, KEY_LIST_REGION, holds_twice(), { timeout_ms: 2000 });
   }
 }
-
-// The toast time of the e2e profile (`E2E_SETTINGS`), and the time a toast needs to be gone with some margin. Nothing shows that no toast is up, so a read that needs none waits this long after the last toast key.
-const TOAST_EXPIRY_MS = E2E_SETTINGS.toast_error_ms + 500;
 
 // Reads the toast strip before the key, while a toast shows and again after it expired. A toast is proven by the strip differing while it shows and matching the strip from before once the toast time is over.
 // Earlier toasts expire first, because the strip from before would hold them. A key that expects no toast (`expect_toast: false`) reads the strip after a fixed margin, since nothing shows that a toast is not coming.
@@ -1272,19 +1214,6 @@ const label_reference = {};
 const THEMED_LABEL = "oasis_sol";
 const MODE_LABEL_KINDS = { mode_label_badge: { desertbird_settings: { mode_indicator_style: "badge" } }, mode_label_off: { desertbird_settings: { mode_indicator: "off" } }, mode_label_themed: { desertbird_settings: { mode_indicator_style: "badge", theme: THEMED_LABEL } } };
 
-// The colors of a grim ppm capture (P6: a three line text header, then raw RGB) as a map from "#rrggbb" to its pixel count.
-function ppm_colors(path) {
-  const ppm = readFileSync(path);
-  let body = 0;
-  for (let newlines = 0; newlines < 3; body++) if (ppm[body] === 10) newlines++;
-  const counts = new Map();
-  for (let at = body; at + 2 < ppm.length; at += 3) {
-    const color = `#${ppm.subarray(at, at + 3).toString("hex")}`;
-    counts.set(color, (counts.get(color) ?? 0) + 1);
-  }
-  return counts;
-}
-const luminance_of = (color) => [1, 3, 5].map((at) => parseInt(color.slice(at, at + 2), 16) / 255).reduce((sum, channel, index) => sum + [0.2126, 0.7152, 0.0722][index] * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4), 0);
 async function run_mode_label(instance, { app, kind, shot }) {
   const { createHash } = await import("node:crypto");
   const { readFileSync } = await import("node:fs");
@@ -1656,9 +1585,6 @@ async function run_cmdline_launch(instance, { app, kind, shot }) {
   await close_command_line(instance);
 }
 
-// The sort a typed command left, as a wait.
-const sorted_by = (sort_type, sort_order) => ({ what: `sort ${sort_type} ${sort_order} to take effect`, until: (state) => state.mail_tab?.sort_type === sort_type && state.mail_tab?.sort_order === sort_order, show: (state) => `sort ${state.mail_tab?.sort_type} ${state.mail_tab?.sort_order}` });
-
 async function run_cmdline(instance, { app, kind, shot }) {
   const selection_of = (state) => state.selected.map((message) => message.header_id).join(",");
   const return_key = ["-k", "Return"];
@@ -1909,26 +1835,12 @@ async function run_view_settings(instance, check_in) {
   check(app, kind, "the view keys changed no mail", instance.exited() === null);
 }
 
-const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
-const main_window_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs ?? [];
-const active_index = (state) => main_window_tabs(state).findIndex((tab) => tab.active);
-const PAINT_MARGIN_MS = 2000;
-// The address book and the calendar paint later than an own page. At 2000 ms on Thunderbird the click landed before the grid was ready.
-const CHROME_TAB_MARGIN_MS = 3000;
-const tab_count_is = (count) => ({ what: `${count} tab${count === 1 ? "" : "s"} in the main window`, until: (state) => main_window_tabs(state).length === count, show: (state) => `${main_window_tabs(state).length} tabs`, timeout_ms: 10000 });
-const active_is = (index) => ({ what: `tab ${index} to be active`, until: (state) => active_index(state) === index, show: (state) => `active index ${active_index(state)}` });
-// The new tab is the last one. A tab that reports no status counts as loaded, and a loaded page can still be unpainted, so callers add `PAINT_MARGIN_MS` where a click or a pixel read follows.
-const last_tab_loaded = (count) => ({ what: `tab ${count} to open and finish loading`, until: (state) => main_window_tabs(state).length === count && main_window_tabs(state).at(-1).raw?.status !== "loading", show: (state) => `tabs ${main_window_tabs(state).length}, last ${main_window_tabs(state).at(-1)?.raw?.status}`, timeout_ms: 15000 });
-
 // One screenshot with its report line. The shot rule: the worker reads every one.
 async function page_shot(instance, name, line) {
   const path = await instance.shot(`${instance.app}_${name}`);
   report.shots.push({ app: instance.app, kind: instance.kind, path, name, line });
   return path;
 }
-
-// The own_pages kind installs a copy of the xpi that opens its options or help page when the helper add-on sends the page name.
-const OPEN_OWN_PAGES_SCRIPT = `messenger.runtime.onMessageExternal.addListener((page) => (page === "help" ? messenger.tabs.create({ url: messenger.runtime.getURL("help/help.html") }) : messenger.runtime.openOptionsPage()).then(() => true));\n`;
 
 // DesertBird's own pages run the message keys themselves: q closes the page tab, and q typed in an option input stays text.
 async function run_own_pages(instance) {
@@ -2294,60 +2206,8 @@ async function run_mail_account(instance) {
   check(app, kind, "the app survived", instance.exited() === null);
 }
 
-// Quick replies. The seeded slots are in the xpi this kind installs (see `seed_storage`). g r 1 opens a reply with the slot text. The run checks that the quote survives and records where the text, the quote and the signature land.
-const QUICK_REPLY_SEED = ["Quick reply one.\nSecond & <b>line</b>.", "", "", "", "", "", "", "", ""];
-
-// A copy of the xpi whose background page writes the given records to `storage.local` at start, since the helper add-on cannot write another add-on's storage.
-function seed_storage(xpi, work_dir, records, extra_script = "") {
-  const stage = join(work_dir, "seed_stage");
-  rmSync(stage, { recursive: true, force: true });
-  mkdirSync(stage, { recursive: true });
-  execFileSync("unzip", ["-q", xpi, "-d", stage]);
-  appendFileSync(join(stage, "background.js"), `\nmessenger.storage.local.set(${JSON.stringify(records)});\n${extra_script}`);
-  const seeded = join(work_dir, "desertbird_seeded.xpi");
-  rmSync(seeded, { force: true });
-  execFileSync("zip", ["-qr", seeded, "."], { cwd: stage });
-  return seeded;
-}
-
-// The external editor kind: the native host from a DesertFox install, reached through a desertbird_host manifest in the session's own HOME, runs a fake editor that rewrites the scratch file. Nothing is written outside the work directory.
-const EDITED_TEXT = "Edited by the e2e editor.";
-const DESERTFOX_HOST = process.env.E2E_DESERTFOX_HOST ?? join(process.env.HOME ?? "", ".local/share/desertfox/desertfox-host");
-
-// The HTML kinds: Markdown the user writes, with a bold word, markup that must not turn live and tag text that must stay text.
-const EDITED_MARKDOWN = "**Edited** by the e2e editor.\n\n<img src=\"x\" onerror=\"document.title='hit'\"> [a link](javascript:alert(1)) &lt;b&gt;kept as text&lt;/b&gt;\n";
-
 // A 1x1 PNG for the draft image measurement.
 const PIXEL_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
-function install_editor_host(work_dir, kind) {
-  const home = join(work_dir, "home");
-  const manifests = join(home, ".mozilla", "native-messaging-hosts");
-  mkdirSync(manifests, { recursive: true });
-  writeFileSync(join(manifests, "desertbird_host.json"), JSON.stringify({ name: "desertbird_host", description: "DesertBird e2e editor host", path: DESERTFOX_HOST, type: "stdio", allowed_extensions: ["desertbird@uhs-robert"] }));
-  const config = join(home, ".config", "desertfox");
-  mkdirSync(config, { recursive: true });
-  if (kind in COMPOSE_EDITOR_HTML_KINDS) {
-    const markdown_file = join(home, "edited.md");
-    writeFileSync(markdown_file, EDITED_MARKDOWN);
-    // A JSON array of strings is a valid TOML array.
-    writeFileSync(join(config, "editor.toml"), `argv = ${JSON.stringify(["cp", markdown_file, "{file}"])}\n`);
-    return;
-  }
-  // The scratch path holds no space, so `$1` goes unquoted and the TOML string needs no escape.
-  writeFileSync(join(config, "editor.toml"), `argv = ["sh", "-c", "echo ${EDITED_TEXT} > $1", "sh", "{file}"]\n`);
-}
-
-// The HTML kinds and the layout each tests: a reply below the quote (Thunderbird's default), and a reply above the quote with the signature above it too.
-const COMPOSE_EDITOR_HTML_KINDS = { compose_editor_html: "below", compose_editor_html_top: "above" };
-
-// The image a stored draft gives back: a draft with a data image Thunderbird embeds is saved and opened again, and a NOTE records the `src` of each image. The external editor keeps only the image sources its allowlist names.
-// The compose helpers below share these. A reply to inbox-s2 is loaded once its subject, its quote and its signature are in.
-const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
-const reply_is_loaded = (tab) => Boolean(tab.subject) && tab.is_plain !== null && (tab.body ?? "").includes("Body of inbox-s2.") && (tab.body ?? "").includes("E2E signature line");
-// The mail window has the focus and a mail tab, so F6 reaches the thread list.
-const mail_window_ready = { what: "the mail window to have a mail tab and the focus", until: (state) => state.mail_tab !== null && state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 10000 };
-const selects_inbox_s2 = selects("inbox-s2@fixture.invalid");
 
 // Puts the focus in the thread list, selects inbox-s2 and presses `r`. Returns the state once the reply has loaded.
 async function reply_to_inbox_s2(instance, { focus_list = false } = {}) {
