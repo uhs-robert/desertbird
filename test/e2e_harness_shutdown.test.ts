@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -54,4 +54,15 @@ test("a restart that begins during a shutdown starts no new app", { timeout: 30_
   } finally {
     await release_all();
   }
+});
+
+// A child process, so this file keeps its one shutdown and the lifecycle handlers stay out of the test runner.
+test("install_lifecycle with announce false prints nothing when the run closes", { timeout: 30_000 }, () => {
+  const script = `
+    import { install_lifecycle } from ${JSON.stringify(join(import.meta.dirname, "..", "tools", "e2e", "harness.mjs"))};
+    const finish = install_lifecycle({ dir: "/nowhere", close: () => "closed" }, { announce: false });
+    finish(true);
+    console.log("finished");`;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
+  assert.equal(run.stdout, "finished\n", run.stderr);
 });
