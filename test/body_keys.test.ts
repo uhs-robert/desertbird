@@ -550,7 +550,6 @@ test("keys typed between f and the parent's labels run nothing: f c c in one bur
     assert.deepEqual(window.press("c"), { cancelled: true, stopped: true });
     window.press("c");
     window.press("j");
-    assert.equal(window.press("Escape").cancelled, false, "the hold keeps only plain keys back");
     assert.deepEqual(sent.filter((message) => (message as { type?: string }).type === "body.invoke"), [], "no command ran");
     assert.deepEqual(window.scrolls, []);
     answer(5);
@@ -567,13 +566,24 @@ test("with no answer from the parent the hold ends after 1.5 s", async (context)
     const { window } = await started(undefined, false, () => new Promise(() => {}));
     window.press("f");
     window.press("j");
+    assert.equal(window.press("Escape").cancelled, false, "the hold keeps only plain keys back");
     context.mock.timers.tick(1500);
     window.press("j");
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
 });
 
+test("a scroll right after f drops the pending pick but keeps the hold, so c c before the labels runs nothing", async (context) => {
+    context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const { window, sent } = await started(undefined, false, () => new Promise(() => {}));
+    window.press("f");
+    window.fire("scroll");
+    window.press("c");
+    window.press("c");
+    assert.deepEqual(sent.filter((message) => (message as { type?: string }).type === "body.invoke"), []);
+});
+
 test("a pick cancelled before the parent answers draws no labels on a late -1 or failure", async () => {
-    for (const cancel of ["scroll", "blur", "pointerdown", "keymap gone", "keymap changed"] as const) {
+    for (const cancel of ["scroll", "blur", "pointerdown", "Escape", "keymap gone", "keymap changed"] as const) {
         for (const fails of [false, true]) {
             let answer: (count: number) => void = () => {};
             let fail: (error: Error) => void = () => {};
@@ -582,6 +592,7 @@ test("a pick cancelled before the parent answers draws no labels on a late -1 or
             window.press("f");
             if (cancel === "keymap gone") change(undefined);
             else if (cancel === "keymap changed") change(record());
+            else if (cancel === "Escape") window.press("Escape");
             else window.fire(cancel);
             if (fails) fail(new Error("no hints"));
             else answer(-1);

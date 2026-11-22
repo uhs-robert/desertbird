@@ -98,15 +98,16 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     const root_element = window.document.documentElement;
     // Read once per document: each message loads the script anew, so a theme change shows on the next message.
     let hint_colors = "background: #ffd33d !important;";
-    // Also the identity of the newest pick: a cancel or a keymap change resets it, and a late answer of that pick then draws nothing.
     let hold_until = 0;
+    // The pick whose answer is still out. A cancel, Escape or a keymap change clears it and leaves the hold: a late answer then draws nothing, and keys typed before the parent's labels still run nothing. Only the answer of this pick ends the hold early, else the 1.5 s do.
+    let asked = 0;
     const hints = create_hint_session(window, open_pick, () => hint_colors, (text) => void runtime.sendMessage({ type: "body.yank", text }).catch(log_error));
-    const cancel = () => ((hold_until = 0), hints.cancel());
+    const cancel = () => ((asked = 0), hints.cancel());
 
     // `parent_pick` labels the header and the body as one set, and the parent then takes the keys. Plain keys typed before its labels show would run as commands here, so they are dropped until the answer, at most 1.5 s. The parent answers once its labels show, and they own the keys from then. An answer below 0 or a failure means the parent cannot read this body, and the body labels itself.
     function pick(action: HintAction | undefined): void {
-        const held = (hold_until = Date.now() + 1500);
-        const answered = (count: number) => held === hold_until && ((hold_until = 0), count < 0 && hints.begin(action));
+        const held = (asked = hold_until = Date.now() + 1500);
+        const answered = (count: number) => held === asked && ((hold_until = 0), count < 0 && hints.begin(action));
         void parent_pick(action).then(answered, () => answered(-1));
     }
 
@@ -151,7 +152,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         if (token === null) return;
         if (hold_until > Date.now() && is_plain_printable(token)) return void (event.preventDefault(), event.stopPropagation());
         // Escape ends a half-typed sequence or count and goes on to Thunderbird, which may use it.
-        if (token === "<Escape>") return reset_sequence();
+        if (token === "<Escape>") return ((asked = 0), reset_sequence());
         const result = matcher.feed(NORMAL_MODE, token);
         report(result.kind_ === "pending" ? result.typed_ : []);
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
@@ -170,7 +171,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
             log_error(error);
             matcher = null;
         }
-        hold_until = 0;
+        asked = 0;
         if (matcher) root_element.setAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE, "");
         else {
             root_element.removeAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE);

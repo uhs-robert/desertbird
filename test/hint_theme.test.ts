@@ -28,6 +28,9 @@ test("the themed hints fill in the colors of the setting at each pick, and pass 
     await hints!.sendEnter({ windowId: 4 });
     await hints!.pick({ windowId: 4, action: "yank" });
     assert.deepEqual(calls, [["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_sol")) }], ["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_moonlight")) }], ["enter", { windowId: 4 }], ["pick", { windowId: 4, action: "yank", colors: hint_label_colors(resolve_theme("oasis_moonlight")) }]]);
+    calls.length = 0;
+    await hints!.pick({ windowId: 4, tabId: 7, place: "message" });
+    assert.deepEqual(calls, [["pick", { windowId: 4, place: "message", tabId: 7, colors: hint_label_colors(resolve_theme("oasis_moonlight")) }]], "a message pick carries the tab of the body that asked, or the parent answers 0");
     assert.equal(themed_hints(undefined, async () => name), undefined, "no Experiment, no hints");
 });
 
