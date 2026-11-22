@@ -369,6 +369,8 @@ export interface HintLabelColors {
 /** Labels the targets of the front tab of the window: the mail tab, or the window and the readable page of any other tab. The answer is how many it labelled, and with none no hint mode starts. The typed label, Escape and the end of the labels are the parent's own, so no further call is needed. */
 export interface HintsPickArgs {
     windowId: number;
+    /** With `place`: the tab of the body that asked. A pick finds another tab in front (the user switched while the request was on its way) and answers 0. */
+    tabId?: number;
     colors: HintLabelColors;
     /** What a typed label does. Absent means `activate`. */
     action?: HintAction;

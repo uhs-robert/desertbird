@@ -41,6 +41,12 @@
                 "optional": true,
                 "description": "What a typed label does: focus the target, click it, or copy its address or text. The text to copy is read from the page by the add-on (in the page's own process for a web page), never passed in."
               },
+              "tabId": {
+                "type": "integer",
+                "minimum": 0,
+                "optional": true,
+                "description": "With place: the tab of the message body that asked. When another tab is in front by the time the call arrives, the answer is 0 and nothing is labelled."
+              },
               "place": {
                 "type": "string",
                 "enum": ["message"],

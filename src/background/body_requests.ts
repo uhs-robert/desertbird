@@ -69,13 +69,13 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         return {};
     }
 
-    // One label set over the header and the body. The action passes the command's own validator, as from any other source. -1 hands the labels back to the body script.
+    // One label set over the header and the body. The action passes the command's own validator, as from any other source. -1 hands the labels back to the body script. The tab goes along: the theme read and the trip to the parent take time, and the parent answers 0 when another tab is in front by then.
     async function hints_pick(request: Partial<BodyHintsRequest>, sender: Sender): Promise<number> {
         const command = deps.registry.get("hint.pick");
         const checked = command && check_args(command, { action: request.action });
-        const window_id = sender.tab?.windowId;
-        if (!checked?.ok || window_id === undefined || !deps.hints?.pick) return -1;
-        return deps.hints.pick({ windowId: window_id, action: checked.args["action"] as HintAction, place: "message" });
+        const { id: tab_id, windowId: window_id } = sender.tab ?? {};
+        if (!checked?.ok || tab_id === undefined || window_id === undefined || !deps.hints?.pick) return -1;
+        return deps.hints.pick({ windowId: window_id, tabId: tab_id, action: checked.args["action"] as HintAction, place: "message" });
     }
 
     // The text is of a link in a mail, which the user chose with a label. An empty one would clear the clipboard.

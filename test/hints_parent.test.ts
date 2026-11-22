@@ -40,9 +40,10 @@ test("the body hints request checks the action with the command's validator, nam
     const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {}, hints });
     assert.equal(await handle({ type: "body.hints", windowId: 99 }, { tab: { id: 5, windowId: 9 } }), 4);
     assert.equal(await handle({ type: "body.hints", action: "yank" }, { tab: { id: 5, windowId: 9 } }), 4);
-    assert.deepEqual(asked, [{ windowId: 9, action: "activate", place: "message" }, { windowId: 9, action: "yank", place: "message" }], "the default action comes from the params, and the window from the sender");
+    assert.deepEqual(asked, [{ windowId: 9, tabId: 5, action: "activate", place: "message" }, { windowId: 9, tabId: 5, action: "yank", place: "message" }], "the default action comes from the params, and the window and tab from the sender");
     assert.equal(await handle({ type: "body.hints", action: "run" }, { tab: { id: 5, windowId: 9 } }), -1, "an action outside the enum asks nothing");
     assert.equal(await handle({ type: "body.hints" }, {}), -1, "a sender with no window asks nothing");
+    assert.equal(await handle({ type: "body.hints" }, { tab: { windowId: 9 } }), -1, "a sender with no tab asks nothing");
     assert.equal(asked.length, 2);
     const without = create_body_requests({ registry, api, allowed: new Set(), run: async () => {} });
     assert.equal(await without({ type: "body.hints" }, { tab: { id: 5, windowId: 9 } }), -1, "no hints Experiment: the body labels itself");
@@ -58,7 +59,7 @@ test("hints.sendEnter presses Enter through the text input processor in the name
     globals["Ci"] = { nsITextInputProcessor: {} };
     try {
         const { get_hints_api } = await import("../src/chrome/parent_hints.ts");
-        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === window ? { id: 7 } : null) }, messageManager: { convert: () => null } } };
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === window ? { id: 7 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: () => null } } };
         const { sendEnter } = get_hints_api(context).hints;
         await sendEnter({ windowId: 7 });
         assert.deepEqual(events, ["down Enter", "up Enter"]);
@@ -91,7 +92,7 @@ test("hints.pick labels a mail tab, takes the keys on the window root ahead of t
     const platform = stub_platform([main]);
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
-        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === main ? { id: 7 } : null) }, messageManager: { convert: () => null } } };
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === main ? { id: 7 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: () => null } } };
         const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
         assert.equal(await get_hints_api(context).hints.pick({ windowId: 7, colors }), 1);
         assert.ok(added.includes("root keydown"), "the keys go to the window root");
@@ -122,7 +123,7 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
     const platform = stub_platform([main, message_window]);
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
-        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === main ? { id: 7 } : candidate === message_window ? { id: 9 } : null) }, messageManager: { convert: () => null } } };
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === main ? { id: 7 } : candidate === message_window ? { id: 9 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: () => null } } };
         const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
         const { pick } = get_hints_api(context).hints;
         assert.equal(await pick({ windowId: 7, colors }), 3);
@@ -190,7 +191,7 @@ function message_setup() {
     const tab = { mode: { name: "mail3PaneTab" } };
     const main = { ...window_like("main", []), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } }, document: { ...make_document("main", []), activeElement: message_browser as unknown, hasFocus: () => has_focus, getElementById: () => ({ currentTabInfo: tab }) } };
     const message_window = { ...window_like("message window", []), document: { ...make_document("message window", []), hasFocus: () => true, getElementById: () => null } };
-    return { heard, added, drawn_in, removed, log, reply, link, messagepane, main, message_window, queued, set_focus: (value: boolean) => void (has_focus = value) };
+    return { heard, added, drawn_in, removed, log, reply, link, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
 }
 
 test("hints.pick at the message labels the header and the body in one set, and the Enter of a body link waits for the end of the key and for the focus", async () => {
@@ -202,10 +203,10 @@ test("hints.pick at the message labels the header and the body in one set, and t
     globals["Ci"] = { nsITextInputProcessor: {} };
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
-        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : candidate === setup.message_window ? { id: 9 } : null) }, messageManager: { convert: () => null } } };
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : candidate === setup.message_window ? { id: 9 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: (candidate: unknown) => (candidate === setup.tab ? { id: 5 } : null) } } };
         const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
         const { pick } = get_hints_api(context).hints;
-        assert.equal(await pick({ windowId: 7, colors, place: "message" }), 2);
+        assert.equal(await pick({ windowId: 7, tabId: 5, colors, place: "message" }), 2);
         assert.deepEqual(setup.drawn_in, ["message", "body"], "the header labels sit in about:message and the link label in the mail");
         for (const heard of ["root keydown", "message MsgLoading", "body scroll", "body pointerdown", "message scroll", "main TabSelect"]) assert.ok(setup.added.includes(heard), heard);
         // The link has the second label. The pick focuses it at once and queues the Enter out of the key's own handling.
@@ -216,14 +217,20 @@ test("hints.pick at the message labels the header and the body in one set, and t
         setup.queued.shift()!();
         assert.deepEqual(events, ["down Enter"]);
         // The focus left the link before the queued Enter ran: no key.
-        await pick({ windowId: 7, colors, place: "message" });
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         press("s");
         setup.messagepane["contentDocument"] = { activeElement: { matches: () => false } };
         setup.queued.shift()!();
         assert.deepEqual(events, ["down Enter"], "the Enter goes only where the pick put the focus");
+        // The focus moved to another link of the mail: no key either, the Enter belongs to the picked link.
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
+        press("s");
+        setup.messagepane["contentDocument"] = { activeElement: { matches: (selector: string) => selector === "a[href], button" } };
+        setup.queued.shift()!();
+        assert.deepEqual(events, ["down Enter"], "the Enter goes only to the picked link");
         setup.messagepane["contentDocument"] = { activeElement: setup.link };
         // A header control is clicked.
-        await pick({ windowId: 7, colors, place: "message" });
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         press("a");
         assert.deepEqual(setup.log.at(-1), "click reply");
         shutdown();
@@ -234,31 +241,48 @@ test("hints.pick at the message labels the header and the body in one set, and t
     }
 });
 
-test("hints.pick at the message ends on another message loading, on a window blur only when the window lost the focus, and on a new pick", async () => {
+test("hints.pick at the message removes every listener it added on each way it ends, and a window blur ends it only when the window lost the focus", async () => {
     const setup = message_setup();
     const platform = stub_platform([setup.main]);
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
-        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : null) }, messageManager: { convert: () => null } } };
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: (candidate: unknown) => (candidate === setup.tab ? { id: 5 } : null) } } };
         const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
         const { pick } = get_hints_api(context).hints;
-        await pick({ windowId: 7, colors, place: "message" });
-        setup.heard.get("message MsgLoading")!();
-        assert.deepEqual(setup.removed, ["message", "body"]);
-        assert.ok(!setup.heard.has("root keydown"), "the keys go back to the window");
-        setup.removed.length = 0;
-        await pick({ windowId: 7, colors, place: "message" });
+        // Counts each listener's adds against its removes, so a listener added twice or left behind shows.
+        const live = () => {
+            const balance = new Map<string, number>();
+            for (const entry of setup.added) balance.set(entry.replace(" -", " "), (balance.get(entry.replace(" -", " ")) ?? 0) + (entry.includes(" -") ? -1 : 1));
+            return [...balance].filter(([, count]) => count !== 0).map(([key, count]) => `${key} ${count}`).sort();
+        };
+        const one_set = ["root keydown", "main scroll", "message scroll", "body scroll", "main pointerdown", "message pointerdown", "body pointerdown", "main blur", "main TabSelect", "message MsgLoading"].map((key) => `${key} 1`).sort();
+        const press = (key: string) => setup.heard.get("root keydown")!({ key, ctrlKey: false, altKey: false, metaKey: false, preventDefault() {}, stopPropagation() {} } as never);
+        const ends: [string, () => void][] = [
+            ["another message loading", () => setup.heard.get("message MsgLoading")!()],
+            ["a tab switch", () => setup.heard.get("main TabSelect")!()],
+            ["a scroll of the body", () => setup.heard.get("body scroll")!()],
+            ["a click in the header", () => setup.heard.get("message pointerdown")!()],
+            ["a typed label", () => press("a")],
+            ["Escape", () => press("Escape")],
+            ["a window that lost the focus", () => (setup.set_focus(false), setup.heard.get("main blur")!(), setup.set_focus(true))],
+        ];
+        for (const [name, end] of ends) {
+            await pick({ windowId: 7, tabId: 5, colors, place: "message" });
+            assert.deepEqual(live(), one_set, name);
+            end();
+            assert.deepEqual([...new Set(setup.removed)].sort(), ["body", "message"], name);
+            assert.deepEqual(live(), [], name);
+            setup.removed.length = 0;
+        }
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         setup.heard.get("main blur")!();
         assert.deepEqual(setup.removed, [], "a blur inside the window (the chrome took the focus) keeps the labels");
-        setup.set_focus(false);
-        setup.heard.get("main blur")!();
+        // Two tabs: the second pick ends the first one's labels and listeners.
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         assert.deepEqual(setup.removed, ["message", "body"]);
-        setup.removed.length = 0;
-        // Two tabs: the second pick ends the first one's labels.
-        await pick({ windowId: 7, colors, place: "message" });
-        await pick({ windowId: 7, colors, place: "message" });
-        assert.deepEqual(setup.removed, ["message", "body"]);
+        assert.deepEqual(live(), one_set, "a second pick");
         shutdown();
+        assert.deepEqual(live(), [], "shutdown");
     } finally {
         platform.restore();
     }
@@ -269,17 +293,20 @@ test("hints.pick at the message answers 0 when the focus left the body, and -1 f
     const platform = stub_platform([setup.main, setup.message_window]);
     try {
         const { get_hints_api } = await import("../src/chrome/parent_hints.ts");
-        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : candidate === setup.message_window ? { id: 9 } : null) }, messageManager: { convert: () => null } } };
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : candidate === setup.message_window ? { id: 9 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: (candidate: unknown) => (candidate === setup.tab ? { id: 5 } : null) } } };
         const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
         const { pick } = get_hints_api(context).hints;
         const focus_before = setup.main.document.activeElement;
         setup.main.document.activeElement = { id: "threadTree" };
-        assert.equal(await pick({ windowId: 7, colors, place: "message" }), 0);
+        assert.equal(await pick({ windowId: 7, tabId: 5, colors, place: "message" }), 0);
         setup.main.document.activeElement = focus_before;
+        assert.equal(await pick({ windowId: 7, tabId: 6, colors, place: "message" }), 0, "the body that asked is in another tab than the one shown now");
         setup.messagepane["isRemoteBrowser"] = true;
+        assert.equal(await pick({ windowId: 7, tabId: 5, colors, place: "message" }), -1, "a remote body");
+        setup.messagepane["isRemoteBrowser"] = false;
         setup.messagepane["contentDocument"] = null;
-        assert.equal(await pick({ windowId: 7, colors, place: "message" }), -1);
-        assert.equal(await pick({ windowId: 9, colors, place: "message" }), -1, "a message window keeps the body's own labels");
+        assert.equal(await pick({ windowId: 7, tabId: 5, colors, place: "message" }), -1, "a body with no document the parent can read");
+        assert.equal(await pick({ windowId: 9, tabId: 5, colors, place: "message" }), -1, "a message window keeps the body's own labels");
         assert.deepEqual(setup.drawn_in, []);
     } finally {
         platform.restore();

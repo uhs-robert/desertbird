@@ -114,7 +114,6 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
 }
 
 // The message header of `about:message`: its controls, one label per address pill and tag, and the attachment items. A pill holds an address book button and a split button holds its main button and a menu marker, so the inner button of a pill and the outer split button are left out. A split button pick then runs the main action, and a pill pick opens its address menu.
-// The selector is built inside the function, since a template at the top would stay in the page actor's bundle, which shares this file and never labels a message.
 const NOT_IN_HEADER = ".header-recipient button, [is=toolbarbutton-menu-button]";
 
 const pick_header = (element: TargetElement): void => {
@@ -124,9 +123,10 @@ const pick_header = (element: TargetElement): void => {
 };
 
 /** The targets of a message that holds the focus, in the reading pane or a message tab: the header of `message` (`about:message`) first, then the links and fields of the mail in `body`. A link or button of the mail is focused and then `open` presses a trusted Enter, so Thunderbird's check for a link that lies about its address still runs. */
-export const collect_message_targets = (message: TargetWindow, body: TargetWindow, open: () => void): PickTarget[] => [
+export const collect_message_targets = (message: TargetWindow, body: TargetWindow, open: (element: TargetElement) => void): PickTarget[] => [
+    // The selector is built here, since a template at the top would stay in the page actor's bundle, which shares this file and never labels a message.
     ...on_screen(message, `${CONTROLS}, li.header-recipient, li.tag, #attachmentList richlistitem`, (element) => !element.matches(NOT_IN_HEADER), pick_header, (element) => element.emailAddress ?? yank_text(element), (element) => (element.matches("richlistitem") ? pick_header(element) : element.focus())),
-    ...on_screen(body, CLICKABLE, () => true, (element) => (element.focus(), element.matches(OPENABLE) && open()), yank_text, (element) => element.focus()),
+    ...on_screen(body, CLICKABLE, () => true, (element) => (element.focus(), element.matches(OPENABLE) && open(element)), yank_text, (element) => element.focus()),
 ];
 
 /** The controls on screen in one document, shadow roots included (the mail tab's scan leaves them out: its documents are large). The page actor's hint module labels a web page with these alone. */
