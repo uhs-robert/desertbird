@@ -550,18 +550,45 @@ test("keys typed between f and the parent's labels run nothing: f c c in one bur
     assert.deepEqual(window.press("c"), { cancelled: true, stopped: true });
     window.press("c");
     window.press("j");
-    answer(5);
-    await settle();
-    // The parent's labels end on the first c and swallow it, so the second c reaches the body inside the hold.
-    window.press("c");
+    assert.equal(window.press("Escape").cancelled, false, "the hold keeps only plain keys back");
     assert.deepEqual(sent.filter((message) => (message as { type?: string }).type === "body.invoke"), [], "no command ran");
     assert.deepEqual(window.scrolls, []);
-    assert.equal(window.press("Escape").cancelled, false, "the hold keeps only plain keys back");
-    context.mock.timers.tick(1500);
+    answer(5);
+    await settle();
+    // The parent's labels own the keys before it answers, so a key that reaches the body after the answer came after the labels ended.
     window.press("j");
     window.press("c");
-    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after 1.5 s");
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again once the parent answered, long before 1.5 s");
     assert.deepEqual(sent.filter((message) => (message as { type?: string }).type === "body.invoke"), [invoked("msg.new")]);
+});
+
+test("with no answer from the parent the hold ends after 1.5 s", async (context) => {
+    context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const { window } = await started(undefined, false, () => new Promise(() => {}));
+    window.press("f");
+    window.press("j");
+    context.mock.timers.tick(1500);
+    window.press("j");
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
+});
+
+test("a pick cancelled before the parent answers draws no labels on a late -1 or failure", async () => {
+    for (const cancel of ["scroll", "blur", "pointerdown", "keymap gone", "keymap changed"] as const) {
+        for (const fails of [false, true]) {
+            let answer: (count: number) => void = () => {};
+            let fail: (error: Error) => void = () => {};
+            const { window, change } = await started(undefined, false, () => new Promise((resolve, reject) => ((answer = resolve), (fail = reject))));
+            window.elements = [new StubElement()];
+            window.press("f");
+            if (cancel === "keymap gone") change(undefined);
+            else if (cancel === "keymap changed") change(record());
+            else window.fire(cancel);
+            if (fails) fail(new Error("no hints"));
+            else answer(-1);
+            await settle();
+            assert.equal(window.appended.length, 0, `${cancel}, ${fails ? "a failure" : "-1"}`);
+        }
+    }
 });
 
 test("the parent's answer 0 (the focus left the body on the way) draws nothing here, and -1 or a failure labels the body itself", async () => {

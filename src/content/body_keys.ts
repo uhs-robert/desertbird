@@ -76,6 +76,8 @@ const ACTIONS: Record<string, Action> = {
 
 type TreeField = "message_tree" | "own_tree";
 
+const log_error = (error: unknown) => console.error("desertbird message keys:", error);
+
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
 /** The scroll step in the stored settings, or the default when it is absent or below 1. */
@@ -91,19 +93,21 @@ function tree_of_record(record: unknown, tree_field: TreeField): { version: numb
 }
 
 /** Starts the keys of one message document. `open_pick` runs on a picked link or button. A yank sends the text to the background, which owns the clipboard. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
-export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch((error: unknown) => console.error("desertbird message keys:", error)), tree_field: TreeField = "message_tree", parent_pick: (action: HintAction | undefined) => Promise<number> = async () => -1): Promise<void> {
+export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch(log_error), tree_field: TreeField = "message_tree", parent_pick: (action: HintAction | undefined) => Promise<number> = async () => -1): Promise<void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
     // Read once per document: each message loads the script anew, so a theme change shows on the next message.
     let hint_colors = "background: #ffd33d !important;";
+    // Also the identity of the newest pick: a cancel or a keymap change resets it, and a late answer of that pick then draws nothing.
     let hold_until = 0;
-    const hints = create_hint_session(window, open_pick, () => hint_colors, (text) => void runtime.sendMessage({ type: "body.yank", text }).catch((error: unknown) => console.error("desertbird message keys:", error)));
+    const hints = create_hint_session(window, open_pick, () => hint_colors, (text) => void runtime.sendMessage({ type: "body.yank", text }).catch(log_error));
+    const cancel = () => ((hold_until = 0), hints.cancel());
 
-    // `parent_pick` labels the header and the body as one set, and the parent then takes the keys. Plain keys typed before its labels show would run as commands here, so they are dropped for 1.5 s from the key, as the chrome runtime holds them after its own `f`. An answer below 0 or a failure means the parent cannot read this body, and the body labels itself.
+    // `parent_pick` labels the header and the body as one set, and the parent then takes the keys. Plain keys typed before its labels show would run as commands here, so they are dropped until the answer, at most 1.5 s. The parent answers once its labels show, and they own the keys from then. An answer below 0 or a failure means the parent cannot read this body, and the body labels itself.
     function pick(action: HintAction | undefined): void {
-        hold_until = Date.now() + 1500;
-        const label_here = () => ((hold_until = 0), hints.begin(action));
-        void parent_pick(action).then((count) => count < 0 && label_here(), label_here);
+        const held = (hold_until = Date.now() + 1500);
+        const answered = (count: number) => held === hold_until && ((hold_until = 0), count < 0 && hints.begin(action));
+        void parent_pick(action).then(answered, () => answered(-1));
     }
 
     const context: BodyContext = { window, step_px: MESSAGE_SCROLL_STEP_PX, finder: create_finder(window), hints, pick };
@@ -127,7 +131,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
             const count = typed_count ?? step.invocation.count ?? 1;
             if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count, step.invocation.args ?? {});
             // The background checks the command and its args again. A refusal there is shown as a notification.
-            else if (step.runs_in === "background") runtime.sendMessage({ type: "body.invoke", command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count }).catch((error: unknown) => console.error("desertbird message keys:", error));
+            else if (step.runs_in === "background") runtime.sendMessage({ type: "body.invoke", command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count }).catch(log_error);
         }
     }
 
@@ -163,20 +167,21 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         try {
             matcher = tree && matcher_for_tree(tree);
         } catch (error) {
-            console.error("desertbird message keys:", error);
+            log_error(error);
             matcher = null;
         }
+        hold_until = 0;
         if (matcher) root_element.setAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE, "");
         else {
             root_element.removeAttribute(BODY_SCRIPT_LIVE_ATTRIBUTE);
-            context.hints.cancel();
+            cancel();
         }
         report([]);
     }
 
     window.addEventListener("keydown", on_keydown, true);
     // The labels sit at fixed places. They end when the page moves under them, the window loses the focus or a click lands elsewhere.
-    for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, () => context.hints.cancel(), true);
+    for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, cancel, true);
     // A half-typed `d` must not wait across a tab switch, or `d`, `J`, `K`, `d` trashes a message.
     window.addEventListener("blur", reset_sequence, true);
     runtime.onMessage.addListener((message) => {
