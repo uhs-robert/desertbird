@@ -6,6 +6,7 @@ import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/
 import { compile_tab_keymap, message_background_commands } from "../src/background/commands/tab_keymaps.ts";
 import { compile_effective_keymap } from "../src/background/config/keymap.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
+import type { HintAction } from "../src/shared/protocol.ts";
 
 const VIEWPORT = 600;
 const PAGE_HEIGHT = 5000;
@@ -177,13 +178,16 @@ function record() {
     return { message_tree: { version: COMPILED_KEYMAP_VERSION, root } };
 }
 
-async function started(stored: Record<string, unknown> = { [KEYMAP_STORAGE_KEY]: record() }, own_page = false) {
+async function started(stored: Record<string, unknown> = { [KEYMAP_STORAGE_KEY]: record() }, own_page = false, parent_pick?: (action: HintAction | undefined) => Promise<number>) {
     const window = new StubWindow();
     const { storage, change } = stub_storage(stored);
     const { runtime, sent, reports, receive } = stub_runtime();
-    await (own_page ? start_body_script(window, storage, runtime, (element) => element.click()) : start_body_script(window, storage, runtime));
+    await (own_page ? start_body_script(window, storage, runtime, (element) => element.click()) : start_body_script(window, storage, runtime, undefined, "message_tree", parent_pick));
     return { window, change, sent, reports, receive };
 }
+
+/** The answer of the parent's pick, or of the default that sends every pick back to the body, arrives after the key. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 test("j and k scroll by a fixed line step and are cancelled", async () => {
     const { window } = await started();
@@ -462,6 +466,7 @@ test("f labels the links on screen and the typed label focuses the link and asks
     const links = [new StubElement(), new StubElement({ top: 40, left: 10, width: 50, height: 12 }), new StubElement({ top: 9000, left: 0, width: 50, height: 12 }), new StubElement({ top: 20, left: 0, width: 0, height: 0 })];
     window.elements = links;
     assert.deepEqual(window.press("f"), { cancelled: true, stopped: true });
+    await settle();
     const labels = window.appended[0]!.children.map((node) => node.textContent);
     assert.deepEqual(labels, ["A", "S"], "only the two links that are visible on screen get a label");
     assert.deepEqual(window.press("s"), { cancelled: true, stopped: true });
@@ -478,6 +483,7 @@ test("a label of two letters needs both, a wrong letter or a key that is not a l
     const links = Array.from({ length: 12 }, (_, index) => new StubElement({ top: index * 20, left: 0, width: 50, height: 12 }));
     window.elements = links;
     window.press("f");
+    await settle();
     assert.equal(window.appended[0]!.children.length, 12);
     window.press("a");
     assert.equal(links.every((link) => link.focuses === 0), true, "one letter of two picks nothing");
@@ -485,9 +491,11 @@ test("a label of two letters needs both, a wrong letter or a key that is not a l
     window.press("s", { shiftKey: true, key: "S" });
     assert.deepEqual(links.map((link) => link.focuses), [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "a capital letter counts as the lower case one");
     window.press("f");
+    await settle();
     window.press("1");
     assert.equal(window.appended[1]!.removed, true, "a key that is not a letter cancels");
     window.press("f");
+    await settle();
     window.press("q");
     assert.equal(window.appended[2]!.removed, true, "a letter that starts no label cancels");
     assert.equal(links.reduce((total, link) => total + link.focuses, 0), 1);
@@ -497,11 +505,13 @@ test("Escape cancels the labels and is cancelled itself, and f with nothing to l
     const { window } = await started();
     window.elements = [new StubElement()];
     window.press("f");
+    await settle();
     assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
     assert.equal(window.appended[0]!.removed, true);
     assert.equal(window.press("Escape").cancelled, false, "outside hint mode Escape goes on to Thunderbird");
     window.elements = [];
     window.press("f");
+    await settle();
     assert.equal(window.press("j").cancelled, true);
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "j scrolls, so no hint mode swallowed it");
 });
@@ -511,15 +521,72 @@ test("on an own page the pick clicks the element by script and asks the backgrou
     const button = new StubElement();
     window.elements = [button];
     window.press("f");
+    await settle();
     window.press("a");
     assert.deepEqual([button.focuses, button.clicks], [1, 1]);
     assert.deepEqual(sent, []);
+});
+
+test("with the parent's pick, f asks it for one label set and draws nothing in the body", async (context) => {
+    context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    const asked: (HintAction | undefined)[] = [];
+    const { window } = await started(undefined, false, async (action) => (asked.push(action), 3));
+    window.elements = [new StubElement()];
+    window.press("f");
+    await settle();
+    context.mock.timers.tick(1500);
+    window.press(";");
+    window.press("y");
+    await settle();
+    assert.deepEqual(asked, [undefined, "yank"], "f leaves the default to the validator, ; y names the yank");
+    assert.equal(window.appended.length, 0, "the parent draws the labels");
+});
+
+test("keys typed between f and the parent's labels run nothing: f c c in one burst opens no compose", async (context) => {
+    context.mock.timers.enable({ apis: ["Date"], now: 1000 });
+    let answer: (count: number) => void = () => {};
+    const { window, sent } = await started(undefined, false, () => new Promise((resolve) => (answer = resolve)));
+    window.press("f");
+    assert.deepEqual(window.press("c"), { cancelled: true, stopped: true });
+    window.press("c");
+    window.press("j");
+    answer(5);
+    await settle();
+    // The parent's labels end on the first c and swallow it, so the second c reaches the body inside the hold.
+    window.press("c");
+    assert.deepEqual(sent.filter((message) => (message as { type?: string }).type === "body.invoke"), [], "no command ran");
+    assert.deepEqual(window.scrolls, []);
+    assert.equal(window.press("Escape").cancelled, false, "the hold keeps only plain keys back");
+    context.mock.timers.tick(1500);
+    window.press("j");
+    window.press("c");
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after 1.5 s");
+    assert.deepEqual(sent.filter((message) => (message as { type?: string }).type === "body.invoke"), [invoked("msg.new")]);
+});
+
+test("the parent's answer 0 (the focus left the body on the way) draws nothing here, and -1 or a failure labels the body itself", async () => {
+    for (const [name, parent_pick, labelled] of [
+        ["0", async () => 0, false],
+        ["-1", async () => -1, true],
+        ["a failure", async () => Promise.reject(new Error("no hints")), true],
+    ] as const) {
+        const { window } = await started(undefined, false, parent_pick);
+        window.elements = [new StubElement()];
+        window.press("f");
+        await settle();
+        assert.equal(window.appended.length, labelled ? 1 : 0, name);
+        if (!labelled) continue;
+        // The labels take the next key at once: the hold ended with the answer.
+        window.press("a");
+        assert.equal(window.elements[0]!.focuses, 1, name);
+    }
 });
 
 test("after a pick the picked link has the focus and Enter is not cancelled, since no message key binds it", async () => {
     const { window } = await started();
     window.elements = [new StubElement()];
     window.press("f");
+    await settle();
     window.press("a");
     assert.equal(window.elements[0]!.focuses, 1, "the picked link has the focus");
     assert.deepEqual(window.press("Enter"), { cancelled: false, stopped: false });
@@ -536,6 +603,7 @@ test("a hidden, faded, stacked, disabled-by-selector or off-screen link gets no 
     const cover = new StubElement({ top: 400, left: 10, width: 80, height: 14 });
     window.elements = [bank, hidden, faded, gone, covered, cover];
     window.press("f");
+    await settle();
     const labelled = window.appended[0]!.children.length;
     assert.equal(labelled, 2, "the bank link (a hidden link above it does not hide it) and the top one of the two stacked links");
     window.press("a");
@@ -547,6 +615,7 @@ test("the labels sit in a closed shadow root of a container with its own importa
     const { window } = await started();
     window.elements = [new StubElement()];
     window.press("f");
+    await settle();
     const container = window.appended[0]!;
     assert.equal(container.shadow_mode, "closed");
     assert.match(container.style.cssText, /position: fixed !important/);
@@ -560,6 +629,7 @@ test("the labels end on scroll, blur, pointerdown and when the keymap record goe
         const { window } = await started();
         window.elements = [new StubElement()];
         window.press("f");
+        await settle();
         window.fire(type);
         assert.equal(window.appended[0]!.removed, true, type);
         assert.equal(window.press("a").cancelled, true, "a is swallowed as a plain key and picks nothing");
@@ -568,6 +638,7 @@ test("the labels end on scroll, blur, pointerdown and when the keymap record goe
     const { window, change } = await started();
     window.elements = [new StubElement()];
     window.press("f");
+    await settle();
     change(undefined);
     assert.equal(window.appended[0]!.removed, true);
     assert.equal(window.press("a").cancelled, false, "with no tree no key is touched");
@@ -577,6 +648,7 @@ test("with the labels up and the keymap record gone, a key still reaches the lab
     const { window } = await started();
     window.elements = [new StubElement(), new StubElement({ top: 40, left: 10, width: 50, height: 12 })];
     window.press("f");
+    await settle();
     assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
 });
 

@@ -41,6 +41,12 @@
                 "optional": true,
                 "description": "What a typed label does: focus the target, click it, or copy its address or text. The text to copy is read from the page by the add-on (in the page's own process for a web page), never passed in."
               },
+              "place": {
+                "type": "string",
+                "enum": ["message"],
+                "optional": true,
+                "description": "Label the header and body of the message that holds the focus, in the reading pane or a message tab, as one set. The answer is 0 when the focus is not in a message body and -1 when the body is not readable or the window has no tabs."
+              },
               "colors": {
                 "type": "object",
                 "description": "The label box and letter colors as #rrggbb for each color scheme. The parent uses the scheme Thunderbird itself shows.",

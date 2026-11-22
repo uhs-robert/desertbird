@@ -154,3 +154,14 @@ test("focus, activate and yank each run their own act on the picked target", () 
         assert.deepEqual(state.copied, copied, action);
     }
 });
+
+test("a target that left its document (another message loaded) is not acted on", () => {
+    const { host, press } = fake_host();
+    const { window } = fake_window("only");
+    const acted: string[] = [];
+    const [target] = targets_in(window, 1, acted);
+    (target!.element as { isConnected?: boolean }).isConnected = false;
+    start_pick(host, [target!], SCHEME);
+    press("a");
+    assert.deepEqual(acted, []);
+});

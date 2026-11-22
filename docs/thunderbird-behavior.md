@@ -447,7 +447,7 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 
 ### Message header controls
 
-Measured with the probe job `header_ids` (`ONLY=header_ids node tools/measure/run.mjs <app>`) on Thunderbird 153.7.0 ESR and Betterbird 153.7.0. The fixture message has a Cc line with two addresses, the tag Important, one attachment and a body link. The job lists the elements under `#messageHeader` and `#attachmentView` of `about:message`, first in the reading pane and then in a message tab, with the default header layout and the light theme. Both places gave the same list. In a message tab the tab's `browser` is `#messagepane`, and `chromeBrowser` holds `about:message`. `#messagepane` was not remote and its document was readable in both places, on both apps.
+Measured with the probe job `header_ids` (`ONLY=header_ids node tools/measure/run.mjs <app>`) on Thunderbird 153.7.0 ESR and Betterbird 153.7.0. The fixture message has a Cc line with two addresses, the tag Important, two attachments and a body link. A first run with one attachment gave the same list, apart from the attachment bar rows noted below. The job lists the elements under `#messageHeader` and `#attachmentView` of `about:message`, first in the reading pane and then in a message tab, with the default header layout and the light theme. Both places gave the same list. In a message tab the tab's `browser` is `#messagepane`, and `chromeBrowser` holds `about:message`. `#messagepane` was not remote and its document was readable in both places, on both apps.
 
 | Element | Kind | Shown | Notes |
 | --- | --- | --- | --- |
@@ -464,12 +464,20 @@ Measured with the probe job `header_ids` (`ONLY=header_ids node tools/measure/ru
 | `#disableDarkReader` | `input type=checkbox` | no | `#darkReaderToggle` shows only with a dark color scheme and the pref `mail.dark-reader.show-toggle` (stylesheet `messageHeader.css`). Its `click` listener flips `mail.dark-reader.enabled` |
 | `#encryptionTechBtn` | `button` | hidden | Signed or encrypted mail only |
 | `#attachmentToggle` | `button type=checkbox` | yes | |
-| `#attachmentName` | `label role=button` | yes | |
-| `#attachmentSaveAllSingle` | split button | yes | `#attachmentSaveAllMultiple` with two or more attachments |
+| `#attachmentName` | `label role=button` | with one attachment | Hidden with two or more |
+| `#attachmentSaveAllSingle`, `#attachmentSaveAllMultiple` | split buttons | one of them | Single with one attachment, Multiple with two or more |
 | `#attachmentList richlistitem.attachmentItem` | `richlistitem role=option` | no | The list is collapsed until `#attachmentToggle` opens it |
 | list header rows (`List-Help`, `Archived-At`, ...) | `div is=multi-url-header-row` | no | Empty for this message. The `Website` row holds an `a` on Betterbird and a `span.text-link` on Thunderbird |
 
 The two apps differ only in `#showCustomHeaders` and the element in the `Website` row. The screenshots `header_pane.png` and `header_tab.png` of the job show the same header on both apps.
+
+The e2e piece `message/header_hints` then ran `f` from the body on both apps, with the dark scheme:
+
+- The `hints` Experiment's capture listener on the main window's `windowRoot` sees a key of the body before the body script's capture listener on the body window, in the reading pane and in a message tab. `j` typed while the labels showed ended them and scrolled nothing.
+- `#messagepane.ownerGlobal` read from the Experiment was `undefined`, and the pick failed. `ownerDocument.defaultView` gives `about:message`.
+- A script `click()` on `#hdrReplyToSenderButton` opens a compose window. On `#otherActionsButton` it opens the More menu, and on a `li.header-recipient` the address menu (shots `header_hints_more`, `header_hints_address`). On `#disableDarkReader` it switched the body to its own light colors, and a second click switched it back. A click on the inner main button of a split button (Reply All) was not run.
+- `#attachmentToggle` opens the list, selects the first attachment and moves the focus into the list.
+- `#otherActionsButton` has text (More), so a yank labels it. The other toolbar buttons have none.
 
 
 ## Unsubscribe

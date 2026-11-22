@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
-import { collect_page_targets, collect_targets, collect_window_targets } from "../src/chrome/hint_targets.ts";
+import { collect_message_targets, collect_page_targets, collect_targets, collect_window_targets } from "../src/chrome/hint_targets.ts";
 import type { HintMailPane } from "../src/chrome/hint_targets.ts";
 
 const CONTROLS = "button:not([disabled]), toolbarbutton:not([disabled]), tab, [role=button], input:not([type=hidden]):not([disabled])";
@@ -29,7 +29,7 @@ function fake_window(by_selector: Record<string, FakeElement[]>) {
             contains: () => true,
             focus: () => each.log!.push("focus"),
             click: () => each.log!.push("click"),
-            matches: (selector: string) => selector.startsWith(`${CONTROLS}, `) || selector.split(", ").includes(each.name.split(" ")[0]!),
+            matches: (selector: string) => selector.startsWith(`${CONTROLS}, `) || selector.replace(/:not\([^)]*\)/g, "").split(", ").includes(each.name.split(" ")[0]!),
             querySelector: (selector: string) => each.parts?.[selector] ?? null,
             closest: (selector: string) => (selector === "tabs" ? tabs : selector === "#folderTree, tbody" && each.inside_row ? each : null),
         });
@@ -282,4 +282,65 @@ test("a shadow root that answers a hit with its own host ends the descent", () =
     const root = root_of("host", `<button id="inner">In</button>`);
     (root as unknown as { elementFromPoint: unknown }).elementFromPoint = () => window.document.getElementById("host");
     assert.deepEqual(ids(), []);
+});
+
+test("a check box or a radio button is clicked by a pick, and a text field still takes the focus", () => {
+    const { page, log } = shadow_page(`<input id="check" type="checkbox"><input id="radio" type="radio"><input id="text">`);
+    for (const target of collect_window_targets(page as never)) target.act();
+    assert.deepEqual(log, ["click check", "click radio", "focus text"]);
+});
+
+// The header of about:message as the probe listed it (docs/thunderbird-behavior.md, "Message header controls"), cut to one of each kind.
+const HEADER_HTML = `<toolbarbutton id="reply"></toolbarbutton>
+<toolbarbutton id="reply_all" is="toolbarbutton-menu-button" type="menu"><toolbarbutton id="reply_all_main" class="toolbarbutton-menubutton-button"></toolbarbutton></toolbarbutton>
+<toolbarbutton id="more" type="menu"></toolbarbutton>
+<button id="star" role="checkbox"></button>
+<ul><li id="from" class="header-recipient">Fixture Sender<button id="address_book"></button></li></ul>
+<ul><li id="tag" class="tag" tabindex="0">Important</li></ul>
+<input id="dark" type="checkbox">
+<button id="hidden"></button>
+<richlistbox id="attachmentList"><richlistitem id="item">note.txt</richlistitem></richlistbox>`;
+
+function message_fixture() {
+    const message = shadow_page(HEADER_HTML);
+    const body = shadow_page(`<p>Text <a id="link" href="https://example.org/one">a link</a></p><button id="body_button">Go</button><input id="body_field">`);
+    const item = message.window.document.getElementById("item")!;
+    Object.assign(message.window.document.getElementById("from")!, { emailAddress: "sender@example.org" });
+    Object.defineProperty(item, "control", { value: { selectItem: (picked: Element) => message.log.push(`select ${picked.id}`), focus: () => message.log.push("focus list") } });
+    let opened = 0;
+    const targets = collect_message_targets(message.page as never, body.page as never, () => opened++);
+    const by_id = (id: string) => targets.find((target) => (target.element as unknown as Element).id === id)!;
+    return { message, body, targets, by_id, opened: () => opened };
+}
+
+test("a message labels its header first and then the body, with one label per pill and per split button, and none for a hidden control", () => {
+    const { targets, message, body } = message_fixture();
+    assert.deepEqual(targets.map((target) => [(target.element as unknown as Element).id, (target.window as unknown) === message.page ? "header" : "body"]), [
+        ["reply", "header"], ["reply_all_main", "header"], ["more", "header"], ["star", "header"], ["from", "header"], ["tag", "header"], ["dark", "header"], ["item", "header"],
+        ["link", "body"], ["body_button", "body"], ["body_field", "body"],
+    ]);
+    message.window.close();
+    body.window.close();
+});
+
+test("a header pick clicks a control, a split button's main part and the dark switch, focuses a tag, and selects an attachment in its focused list", () => {
+    const { by_id, message } = message_fixture();
+    for (const id of ["reply", "reply_all_main", "more", "star", "from", "tag", "dark", "item"]) by_id(id).act();
+    assert.deepEqual(message.log, ["click reply", "click reply_all_main", "click more", "click star", "click from", "focus tag", "click dark", "select item", "focus list"]);
+    message.log.length = 0;
+    by_id("item").focus();
+    by_id("star").focus();
+    assert.deepEqual(message.log, ["select item", "focus list", "focus star"], "the focus action on an attachment is its pick too");
+    message.window.close();
+});
+
+test("a body pick focuses its target and asks for the Enter only on a link or a button, and a yank copies the address of a link or a pill, else the text", () => {
+    const { by_id, body, opened } = message_fixture();
+    for (const id of ["link", "body_button", "body_field"]) by_id(id).act();
+    assert.deepEqual(body.log, ["focus link", "focus body_button", "focus body_field"], "no script click: Thunderbird's link check needs the real Enter");
+    assert.equal(opened(), 2);
+    by_id("link").focus();
+    assert.equal(opened(), 2, "the focus action opens nothing");
+    assert.deepEqual(["link", "from", "tag", "reply"].map((id) => by_id(id).text), ["https://example.org/one", "sender@example.org", "Important", ""]);
+    body.window.close();
 });

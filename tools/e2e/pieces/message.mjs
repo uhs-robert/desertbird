@@ -168,30 +168,34 @@ async function run_message_scripts(instance, ctx) {
     await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   }
 
-  // Hints: f labels the link on screen, the typed label opens it in one step (the Experiment sends a trusted Enter), and the link target at the bottom of the mail scrolls into view.
+  // Hints: f labels the header and the links on screen in one set, the typed label opens a link in one step (the Experiment sends a trusted Enter), and the link target at the bottom of the mail scrolls into view.
+  const body_links = BODY_LINK_LABELS[app];
   await show_in_pane("reading-html");
   let hint_body = body_state(await instance.ask("state"));
   check(app, kind, "hints: the html message starts at the top", hint_body.scroll_y === 0, `scrollY ${hint_body.scroll_y}`);
   await instance.press(["f"]);
   await sleep(800);
-  await shot("hint_labels", "reading pane with the hint label on the link");
+  await shot("hint_labels", "reading pane with the hint labels on the header and the links");
   // The label wears the theme: the box is the brand color of the scheme the message shows, and the fixed yellow of the fallback is gone.
   const { resolve_theme: message_theme } = await import("../../../src/background/theme/palette.ts");
   const { DEFAULT_THEME } = await import("../../../src/shared/theme_choice.ts");
   const message_colors = ppm_colors(await instance.shot_region(`${app}_${kind}_hint_labels_raw`, "0,0 1280x720", "ppm"));
   const default_theme = message_theme(DEFAULT_THEME);
   check(app, kind, "hints: the message label is drawn in the theme color and not the fallback yellow", (message_colors.has(default_theme.dark.primary) || message_colors.has(default_theme.light.primary)) && !message_colors.has("#ffd33d"), `dark ${default_theme.dark.primary} ${message_colors.get(default_theme.dark.primary) ?? 0} px, light ${default_theme.light.primary} ${message_colors.get(default_theme.light.primary) ?? 0} px`);
-  hint_body = body_state(await key_and_state(instance, ["a"], scroll_is("f a to scroll the page to the link target", (current) => current.scroll_y > 2 * current.inner_height)));
-  check(app, kind, "hints: f then a opens the link in one step, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
+  await instance.press([body_links.jump[0]]);
+  hint_body = body_state(await key_and_state(instance, [body_links.jump[1]], scroll_is("the link label to scroll the page to the link target", (current) => current.scroll_y > 2 * current.inner_height)));
+  check(app, kind, "hints: f then the link label opens the link in one step, so the page scrolls to its target", hint_body.scroll_y > 2 * hint_body.inner_height, `scrollY ${hint_body.scroll_y}, innerHeight ${hint_body.inner_height}`);
   // An external link whose text names another address. The pick sends a trusted Enter, so Thunderbird's own click handling runs and warns about such a link. The shot hint_external_pick shows the Link Mismatch dialog when it works, and the pane stays on the message. A script click skips the warning (see the probe below).
   const href_before = hint_body.href;
   const windows_before = (await instance.ask("state")).windows.length;
+  // The body drops plain keys for 1.5 s after f, while the parent draws the labels.
+  await sleep(HINT_HOLD_MS);
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], scrolls_near(0));
   await instance.press(["f"]);
   await sleep(800);
-  await shot("hint_labels_two", "reading pane with two hint labels, one on each link");
-  await instance.press(["s"]);
+  await shot("hint_labels_two", "reading pane with the header labels and one label on each link");
+  for (const letter of body_links.external) await instance.press([letter]);
   await sleep(2500);
   await shot("hint_external_pick", "reading pane after the one-step pick of the external link: the Link Mismatch dialog shows");
   state = await instance.ask("state");
@@ -307,6 +311,11 @@ async function run_message_scripts(instance, ctx) {
   await wait_for_state(instance, window_of_type("messageDisplay", false));
   check(app, kind, "the app survived", instance.exited() === null);
 }
+
+// The header labels come first, so the two links of reading-html take the last two labels: Reply, Reply All, Forward, Archive, Spam, Delete, Headers (Betterbird only), More, the star, the sender and the recipient, then the links. Read from the shots of each app.
+const HINT_HOLD_MS = 1600;
+
+const BODY_LINK_LABELS = { betterbird: { jump: "sd", external: "sf" }, thunderbird: { jump: "ss", external: "sd" } };
 
 export const pieces = ["message", "message_remote"].map((kind) => ({
   kind,

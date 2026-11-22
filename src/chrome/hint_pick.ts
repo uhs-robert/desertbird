@@ -31,7 +31,7 @@ export interface PickKeyEvent {
 export interface PickHost {
     /** Calls the listener with each key until the returned function is called. It must see the key before the key runtime does, or a hint letter would run as a command. */
     on_key(listener: (event: PickKeyEvent) => void): () => void;
-    /** Calls the listener when the labels no longer sit on their targets: a scroll or a click in any of the documents, the window losing the focus, a tab change. */
+    /** Calls the listener when the labels no longer sit on their targets: a scroll or a click in any of the documents, the window losing the focus, a tab change, another message loading. */
     on_disturb(listener: () => void): () => void;
     /** Puts the text on the system clipboard. */
     copy(text: string): void;
@@ -100,6 +100,8 @@ export function start_pick(host: PickHost, targets: readonly PickTarget[], schem
         if (picked < 0) return;
         const target = picks[picked]!;
         end();
+        // A message that loaded after the labels drew left the old target out of its document.
+        if (target.element.isConnected === false) return;
         if (action === "yank") host.copy(target.text);
         else if (action === "focus") target.focus();
         else target.act();

@@ -108,7 +108,7 @@ async function run_job(job) {
   const out_dir = join(run_dir, "out");
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
   mkdirSync(out_dir, { recursive: true });
-  write_fixtures(profile_dir, { big: !!job.big });
+  write_fixtures(profile_dir, { big: !!job.big, header: true });
 
   const prefs = { ...BASE_PREFS, "mail.server.server1.directory": join(profile_dir, "Mail", "Local Folders") };
   if (job.no_identity) for (const name of Object.keys(prefs)) if (name.includes("identit")) delete prefs[name];

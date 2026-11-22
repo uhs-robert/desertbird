@@ -1,6 +1,6 @@
 // What a hint can point at in the front tab, and what picking it does. In a mail tab it reads the main window and the `about:3pane` and `about:message` documents inside it, and names Thunderbird members only through the interfaces below. Any other tab offers the controls of the window and of its own page.
 
-import { is_on_screen } from "../shared/hint_view.ts";
+import { CLICKABLE, OPENABLE, is_on_screen } from "../shared/hint_view.ts";
 import type { HintElement, HintWindow } from "../shared/hint_view.ts";
 import type { PickTarget } from "./hint_pick.ts";
 
@@ -17,6 +17,10 @@ interface TargetElement extends HintElement {
     querySelector(selector: string): TargetElement | null;
     /** Chrome code sees closed roots through this one. */
     openOrClosedShadowRoot?: ShadowSide | null;
+    /** Set on an address pill of the message header. Its text holds the name, the address and the address book button's text run together. */
+    emailAddress?: string;
+    /** Set on an item of a list box: the box, which holds the selection. */
+    control?: { selectItem(item: TargetElement): void; focus(): void };
 }
 
 interface TargetNode {
@@ -47,7 +51,8 @@ const THREAD_ROWS = "#threadTree tbody tr";
 // Any `contenteditable` but `false` makes an editor: the bare attribute, `true` and `plaintext-only`. A web page writes all three.
 const EDITABLE = "[contenteditable]:not([contenteditable=false])";
 const PAGE_CONTROLS = `${CONTROLS}, a[href], select:not([disabled]), textarea:not([disabled]), search-textbox, ${EDITABLE}, summary, checkbox:not([disabled]), radio:not([disabled]), menulist:not([disabled]), richlistitem, [role=link], [role=tab], [role=checkbox], [role=switch], [role=radio], [role=option], [role=treeitem], [role=menuitem]`;
-const FIELDS = `input, select, textarea, search-textbox, ${EDITABLE}`;
+// A checkbox or a radio is no field: a pick clicks it, as for the day/night switch of the message header.
+const FIELDS = `input:not([type=checkbox], [type=radio]), select, textarea, search-textbox, ${EDITABLE}`;
 
 const pick_control = (element: TargetElement): void => {
     if (element.matches(FIELDS)) element.focus();
@@ -107,6 +112,22 @@ export function collect_targets(main: TargetWindow, pane: HintMailPane): PickTar
         ...(message ? controls_outside_rows(message) : []),
     ];
 }
+
+// The message header of `about:message`: its controls, one label per address pill and tag, and the attachment items. A pill holds an address book button and a split button holds its main button and a menu marker, so the inner button of a pill and the outer split button are left out. A split button pick then runs the main action, and a pill pick opens its address menu.
+// The selector is built inside the function, since a template at the top would stay in the page actor's bundle, which shares this file and never labels a message.
+const NOT_IN_HEADER = ".header-recipient button, [is=toolbarbutton-menu-button]";
+
+const pick_header = (element: TargetElement): void => {
+    if (element.matches("li.tag")) element.focus();
+    else if (element.matches("richlistitem")) (element.control!.selectItem(element), element.control!.focus());
+    else pick_control(element);
+};
+
+/** The targets of a message that holds the focus, in the reading pane or a message tab: the header of `message` (`about:message`) first, then the links and fields of the mail in `body`. A link or button of the mail is focused and then `open` presses a trusted Enter, so Thunderbird's check for a link that lies about its address still runs. */
+export const collect_message_targets = (message: TargetWindow, body: TargetWindow, open: () => void): PickTarget[] => [
+    ...on_screen(message, `${CONTROLS}, li.header-recipient, li.tag, #attachmentList richlistitem`, (element) => !element.matches(NOT_IN_HEADER), pick_header, (element) => element.emailAddress ?? yank_text(element), (element) => (element.matches("richlistitem") ? pick_header(element) : element.focus())),
+    ...on_screen(body, CLICKABLE, () => true, (element) => (element.focus(), element.matches(OPENABLE) && open()), yank_text, (element) => element.focus()),
+];
 
 /** The controls on screen in one document, shadow roots included (the mail tab's scan leaves them out: its documents are large). The page actor's hint module labels a web page with these alone. */
 export const collect_window_targets = (window: TargetWindow): PickTarget[] => on_screen(window, PAGE_CONTROLS, () => true, pick_control, yank_text, (element) => element.focus(), true);

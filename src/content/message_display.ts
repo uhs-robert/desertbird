@@ -5,4 +5,4 @@ import type { BodyRuntime, BodyStorage, BodyWindow } from "./body_keys.ts";
 
 declare const browser: { storage: { local: Pick<BodyStorage, "get">; onChanged: BodyStorage["onChanged"] }; runtime: BodyRuntime };
 
-start_body_script(window as unknown as BodyWindow, { get: (key) => browser.storage.local.get(key), onChanged: browser.storage.onChanged }, browser.runtime).catch((error: unknown) => console.error("desertbird message keys:", error));
+start_body_script(window as unknown as BodyWindow, { get: (key) => browser.storage.local.get(key), onChanged: browser.storage.onChanged }, browser.runtime, undefined, "message_tree", (action) => browser.runtime.sendMessage({ type: "body.hints", action }) as Promise<number>).catch((error: unknown) => console.error("desertbird message keys:", error));

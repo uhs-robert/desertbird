@@ -17,7 +17,7 @@ Each run uses a new profile, a new `HOME` and a new headless `labwc` display, so
 | --- | --- |
 | `run.mjs` | Builds the profile and the xpi, starts the session and the app, serves the add-on's requests (real key presses, screenshots, results) |
 | `session.mjs` | The headless `labwc` display and the `wtype` keyboard. It stops its processes by process group |
-| `fixtures.mjs` | The mbox files: an Inbox of 60 messages with threads, and 50 folders of 100 messages |
+| `fixtures.mjs` | The mbox files: an Inbox of 60 messages with threads, 50 folders of 100 messages, and the Header folder of one message with Cc, a tag and two attachments for the job `header_ids` (the e2e kinds leave it out unless they ask for it) |
 | `fetch_thunderbird.sh` | Downloads the pinned Thunderbird tarball into its own directory and checks the published SHA-256 |
 | `probe/background.js` | The scenarios. `run.mjs` runs each one as a job |
 | `probe/experiment/` | The Experiment: typed verbs for key reports, focus, thread view state, the overlay mounts and the round trip. It has no eval, no free-string verb and no free URL |
