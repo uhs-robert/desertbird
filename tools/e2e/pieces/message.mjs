@@ -188,8 +188,6 @@ async function run_message_scripts(instance, ctx) {
   // An external link whose text names another address. The pick sends a trusted Enter, so Thunderbird's own click handling runs and warns about such a link. The shot hint_external_pick shows the Link Mismatch dialog when it works, and the pane stays on the message. A script click skips the warning (see the probe below).
   const href_before = hint_body.href;
   const windows_before = (await instance.ask("state")).windows.length;
-  // The body drops plain keys for 1.5 s after f, while the parent draws the labels.
-  await sleep(HINT_HOLD_MS);
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], scrolls_near(0));
   await instance.press(["f"]);
@@ -313,7 +311,6 @@ async function run_message_scripts(instance, ctx) {
 }
 
 // The header labels come first, so the two links of reading-html take the last two labels: Reply, Reply All, Forward, Archive, Spam, Delete, Headers (Betterbird only), More, the star, the sender and the recipient, then the links. Read from the shots of each app.
-const HINT_HOLD_MS = 1600;
 
 const BODY_LINK_LABELS = { betterbird: { jump: "sd", external: "sf" }, thunderbird: { jump: "ss", external: "sd" } };
 
