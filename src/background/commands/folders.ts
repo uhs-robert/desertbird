@@ -1,5 +1,5 @@
 import { open_folder } from "../handlers/folder_open.ts";
-import type { FolderApi } from "../handlers/folder_open.ts";
+import type { FolderApi, FolderFocusApi } from "../handlers/folder_open.ts";
 import { jump_to_mark, set_mark } from "../handlers/folder_marks.ts";
 import { collapse_folder } from "../handlers/folder_collapse.ts";
 import type { CollapseApi } from "../handlers/folder_collapse.ts";
@@ -21,7 +21,7 @@ export const folders: CommandGroup = {
             bridge: true,
             runs_in: "background",
             label: "Open a folder",
-            intent: "Show a folder by its special use or its path. The shown account comes first.",
+            intent: "Show a folder by its special use or its path. The message list takes the focus. The shown account comes first.",
             params: [
                 {
                     name: "special",
@@ -43,7 +43,8 @@ export const folders: CommandGroup = {
                 },
                 ACCOUNT_PARAM,
             ],
-            run: scoped<FolderApi>(open_folder),
+            needs: ["app.paneFocus"],
+            run: scoped<FolderFocusApi>(open_folder),
         },
         "folder.collapse": {
             bridge: true,
@@ -54,9 +55,9 @@ export const folders: CommandGroup = {
             run: scoped<CollapseApi>(collapse_folder),
         },
         "mark.set": { bridge: false, runs_in: "background", label: "Set a mark", intent: "Remember the shown folder under a one-key slot.", params: [SLOT_PARAM], run: scoped<FolderApi>(set_mark) },
-        "mark.jump": { bridge: true, runs_in: "background", label: "Jump to a mark", intent: "Show the folder a slot remembers.", params: [SLOT_PARAM], run: scoped<FolderApi>(jump_to_mark) },
-        "jump.back": { bridge: true, runs_in: "background", label: "Back in folder history", intent: "Show the folder shown before this one. A count goes that many folders back.", count: "repeat", run: scoped<FolderApi>(jump_back) },
-        "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back.", count: "repeat", run: scoped<FolderApi>(jump_forward) },
+        "mark.jump": { bridge: true, runs_in: "background", label: "Jump to a mark", intent: "Show the folder a slot remembers. The message list takes the focus.", needs: ["app.paneFocus"], params: [SLOT_PARAM], run: scoped<FolderFocusApi>(jump_to_mark) },
+        "jump.back": { bridge: true, runs_in: "background", label: "Back in folder history", intent: "Show the folder shown before this one. The message list takes the focus. A count goes that many folders back.", count: "repeat", needs: ["app.paneFocus"], run: scoped<FolderFocusApi>(jump_back) },
+        "jump.forward": { bridge: true, runs_in: "background", label: "Forward in folder history", intent: "Show the next folder in the history, after a jump back. The message list takes the focus.", count: "repeat", needs: ["app.paneFocus"], run: scoped<FolderFocusApi>(jump_forward) },
     }),
     normal_keys: {
         gi: { id: "folder.open", args: { special: "inbox" }, label: "Inbox" },

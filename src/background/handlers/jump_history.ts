@@ -1,8 +1,8 @@
 import { ignore_refusal } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { MailFolder } from "./displayed_folder.ts";
-import { active_mail_tab, find_folder, show_folder } from "./folder_open.ts";
-import type { FolderApi, FolderScope } from "./folder_open.ts";
+import { active_mail_tab, find_folder, show_folder_and_focus_threads } from "./folder_open.ts";
+import type { FolderApi, FolderFocusScope } from "./folder_open.ts";
 import { modify_folder_state } from "./folder_state.ts";
 import type { FolderRef } from "./folder_state.ts";
 
@@ -44,7 +44,7 @@ export function start_jump_history(api: FolderApi): void {
 }
 
 /** Moves `count` entries along the history, over entries whose folder is gone, and as far as the history reaches. */
-async function jump(scope: FolderScope, step: 1 | -1): Promise<void> {
+async function jump(scope: FolderFocusScope, step: 1 | -1): Promise<void> {
     await modify_folder_state(scope.api, async (state) => {
         const { entries, cursor } = state.history;
         let target: { at: number; folder: MailFolder } | undefined;
@@ -60,7 +60,7 @@ async function jump(scope: FolderScope, step: 1 | -1): Promise<void> {
         const tab = await active_mail_tab(scope);
         own_jump = { tab_id: tab.id, ref: { account_id: target.folder.accountId, path: target.folder.path } };
         try {
-            await show_folder(scope, target.folder, tab);
+            await show_folder_and_focus_threads(scope, target.folder, tab);
         } finally {
             own_jump = undefined;
         }
@@ -68,5 +68,5 @@ async function jump(scope: FolderScope, step: 1 | -1): Promise<void> {
     });
 }
 
-export const jump_back = (scope: FolderScope): Promise<void> => jump(scope, -1);
-export const jump_forward = (scope: FolderScope): Promise<void> => jump(scope, 1);
+export const jump_back = (scope: FolderFocusScope): Promise<void> => jump(scope, -1);
+export const jump_forward = (scope: FolderFocusScope): Promise<void> => jump(scope, 1);

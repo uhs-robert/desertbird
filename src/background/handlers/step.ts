@@ -3,7 +3,7 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { ViewRow } from "../../shared/protocol.ts";
 import type { MailFolder } from "./displayed_folder.ts";
-import { active_mail_tab, show_folder } from "./folder_open.ts";
+import { active_mail_tab, show_folder_and_focus_threads } from "./folder_open.ts";
 import type { FolderApi } from "./folder_open.ts";
 import type { MessageHeader } from "./message.ts";
 import { select_row } from "./thread_view.ts";
@@ -76,7 +76,7 @@ async function show_first_unread(scope: StepScope, folder: MailFolder): Promise<
     // With no wait, a page can come back empty while the search goes on.
     while (page.messages[0] === undefined && page.id) page = await scope.api.messages.continueList(page.id);
     if (page.messages[0] === undefined) throw new RuntimeRefusal("No unread mail.");
-    await show_folder(scope, folder);
+    await show_folder_and_focus_threads(scope, folder);
     await select_row(scope, { id: page.messages[0].id });
 }
 
