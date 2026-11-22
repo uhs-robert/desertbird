@@ -30,7 +30,10 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
         return { index, id: index + 100, depth: 0, collapsed: false, unread: marked?.unread === true, flags: (marked?.flagged ? 0x4 : 0) | (marked?.attachment ? 0x10000000 : 0) };
     });
     const folders = options.folders ?? [{ id: "f1", unread: 0 }];
-    const app = { viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current: options.current, rows: rows.slice(first, last + 1) }) };
+    const app = {
+        viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current: options.current, rows: rows.slice(first, last + 1) }),
+        paneFocus: async ({ pane }: { pane: string }) => (calls.push(`focus ${pane}`), true),
+    };
     const mailTabs = {
         query: async () => [{ id: 9, displayedFolder: { id: options.shown ?? "f1", accountId: "a", path: "/x" } }],
         update: async (_tab: number, update: { displayedFolder: { id: string } }) => void calls.push(`show ${update.displayedFolder.id}`),
@@ -117,13 +120,13 @@ test("] U with no unread row left goes to the next folder that has unread mail, 
     const folders: FolderSpec[] = [{ id: "a", unread: 2 }, { id: "b", unread: 0 }, { id: "c", unread: 9, special: ["trash"] }, { id: "d", unread: 4, virtual: true }, { id: "e", unread: 1 }];
     const fake = step_fake({ rows: 3, current: 1, folders, shown: "b" });
     await fake.run("step.unread", { direction: "next", scope: "all_folders" });
-    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query e", "show e", "select 9 900"]);
+    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query e", "show e", "focus threads", "select 9 900"]);
     const wrap = step_fake({ rows: 3, current: 1, folders, shown: "e" });
     await wrap.run("step.unread", { direction: "next", scope: "all_folders" });
-    assert.deepEqual(wrap.calls().filter((call) => !call.startsWith("info")), ["query a", "show a", "select 9 900"]);
+    assert.deepEqual(wrap.calls().filter((call) => !call.startsWith("info")), ["query a", "show a", "focus threads", "select 9 900"]);
     const back = step_fake({ rows: 3, current: 1, folders, shown: "e" });
     await back.run("step.unread", { direction: "previous", scope: "all_folders" });
-    assert.deepEqual(back.calls().filter((call) => !call.startsWith("info")), ["query a", "show a", "select 9 900"]);
+    assert.deepEqual(back.calls().filter((call) => !call.startsWith("info")), ["query a", "show a", "focus threads", "select 9 900"]);
 });
 
 test("] U prefers an unread row in the shown folder to any other folder", async () => {
@@ -145,20 +148,20 @@ test("] U refuses when no folder has unread mail, and ] u never leaves the folde
 test("] U in an empty folder with no current row still goes to a folder with unread mail", async () => {
     const fake = step_fake({ rows: 0, current: -1, folders: [{ id: "a", unread: 0 }, { id: "b", unread: 3 }], shown: "a" });
     await fake.run("step.unread", { direction: "next", scope: "all_folders" });
-    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query b", "show b", "select 9 900"]);
+    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query b", "show b", "focus threads", "select 9 900"]);
 });
 
 test("] U goes on to the next page when the first one comes back empty", async () => {
     const fake = step_fake({ rows: 3, current: 1, folders: [{ id: "a", unread: 0 }, { id: "b", unread: 3 }], shown: "a", empty_first_page: true });
     await fake.run("step.unread", { direction: "next", scope: "all_folders" });
-    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query b", "continueList", "show b", "select 9 900"]);
+    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query b", "continueList", "show b", "focus threads", "select 9 900"]);
 });
 
 test("] U skips root folders and folders whose unread count Thunderbird cannot read", async () => {
     const folders: FolderSpec[] = [{ id: "r", unread: 0, root: true }, { id: "a", unread: 0 }, { id: "b", unread: 9, broken: true }, { id: "c", unread: 2 }];
     const fake = step_fake({ rows: 3, current: 1, folders, shown: "a" });
     await fake.run("step.unread", { direction: "next", scope: "all_folders" });
-    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query c", "show c", "select 9 900"]);
+    assert.deepEqual(fake.calls().filter((call) => !call.startsWith("info")), ["query c", "show c", "focus threads", "select 9 900"]);
     assert.equal(fake.calls().includes("info r"), false);
 });
 

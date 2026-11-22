@@ -233,3 +233,63 @@ test("--account refuses a name two accounts share and takes their id", async () 
     await run(api, "folder.open", { folder: "/Inbox", account: "a2" });
     assert.deepEqual(updates(calls), ["mailTabs.update 1 a2:/Inbox"]);
 });
+
+// The fake's `paneFocus` always succeeds and logs nothing, so a test swaps in a recorder that shares the call log.
+function record_pane_focus(api: RouterApi, calls: string[], result = true): void {
+    api.app!.paneFocus = async ({ pane }) => (calls.push(`paneFocus ${pane}`), result);
+}
+const display_and_focus = (calls: string[]) => calls.filter((call) => call.startsWith("mailTabs.update") || call.startsWith("paneFocus"));
+
+test("folder.open focuses the thread list after the folder shows, for every way to name it", async () => {
+    for (const args of [{ special: "trash" }, { folder: "/Work/Plans" }, { special: "inbox", account: "a1" }]) {
+        const { api, calls } = fake_api({ folders: FOLDERS, displayed: FOLDERS[2] as MailFolder });
+        record_pane_focus(api, calls);
+        await run(api, "folder.open", args);
+        const shown = display_and_focus(calls);
+        assert.equal(shown.length, 2, JSON.stringify(args));
+        assert.match(shown[0] as string, /^mailTabs\.update/);
+        assert.equal(shown[1], "paneFocus threads");
+    }
+});
+
+test("folder.open focuses nothing when it refuses, and ignores a refused focus", async () => {
+    const missing = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder });
+    record_pane_focus(missing.api, missing.calls);
+    await run(missing.api, "folder.open", { folder: "/Nope" });
+    assert.deepEqual(display_and_focus(missing.calls), []);
+    const refused = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder });
+    record_pane_focus(refused.api, refused.calls, false);
+    await run(refused.api, "folder.open", { special: "trash" });
+    assert.deepEqual(display_and_focus(refused.calls), ["mailTabs.update 1 a1:/Trash", "paneFocus threads"]);
+    assert.deepEqual(notifications(refused.calls), []);
+});
+
+test("folder.open still focuses the thread list after the swallowed first-display error", async () => {
+    const { api, calls } = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder, first_display_error: "An unexpected error occurred" });
+    record_pane_focus(api, calls);
+    await run(api, "folder.open", { special: "trash" });
+    assert.deepEqual(display_and_focus(calls), ["mailTabs.update 1 a1:/Trash", "paneFocus threads"]);
+    assert.deepEqual(notifications(calls), []);
+});
+
+test("mark.jump focuses the thread list after the folder shows", async () => {
+    const jumped = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder });
+    await run(jumped.api, "mark.set", { slot: "i" });
+    await run(jumped.api, "folder.open", { special: "trash" });
+    record_pane_focus(jumped.api, jumped.calls);
+    await run(jumped.api, "mark.jump", { slot: "i" });
+    assert.deepEqual(display_and_focus(jumped.calls).slice(-2), ["mailTabs.update 1 a1:/Inbox", "paneFocus threads"]);
+});
+
+test("jump.back and jump.forward focus the thread list after the folder shows", async () => {
+    const { api, calls } = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder });
+    start_jump_history(api);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await run(api, "folder.open", { special: "trash" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    record_pane_focus(api, calls);
+    await run(api, "jump.back");
+    assert.deepEqual(display_and_focus(calls).slice(-2), ["mailTabs.update 1 a1:/Inbox", "paneFocus threads"]);
+    await run(api, "jump.forward");
+    assert.deepEqual(display_and_focus(calls).slice(-2), ["mailTabs.update 1 a1:/Trash", "paneFocus threads"]);
+});

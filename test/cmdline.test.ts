@@ -321,6 +321,16 @@ test("a runtime refusal of the command ends in a notification, after the line cl
     assert.ok(calls.includes("notify There is no tag named Nonesuch."));
 });
 
+test(":open focuses the thread list after the line closed, so the restored focus does not undo it", async () => {
+    const { api, calls, service } = service_setup();
+    api.app!.paneFocus = async ({ pane }) => (calls.push(`paneFocus ${pane}`), true);
+    service.begin(3, { message_ids: [], text: "" });
+    await ask(service, { type: "cmdline.run", windowId: 3, text: "open /Archive" });
+    await settle();
+    const order = calls.filter((call) => call === "overlay.unmount 3" || call.startsWith("mailTabs.update") || call.startsWith("paneFocus"));
+    assert.deepEqual(order, ["overlay.unmount 3", "mailTabs.update 1 f1", "paneFocus threads"]);
+});
+
 test("close drops the session and unmounts, and an unmount event from the Experiment drops it too", async () => {
     const { service, calls } = service_setup();
     service.begin(3, { message_ids: [], text: "" });

@@ -1,5 +1,8 @@
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
+import { ignore_refusal } from "../../shared/swallow.ts";
+import { focus_pane } from "./app.ts";
+import type { AppHandlerApi } from "./app.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { is_first_display_error, while_loading } from "./loading.ts";
 import type { HandlerScope } from "./message.ts";
@@ -23,6 +26,8 @@ export interface FolderApi extends SpecialFolderApi, FolderStateApi, AccountsApi
 }
 
 export type FolderScope = HandlerScope<FolderApi>;
+export type FolderFocusApi = FolderApi & AppHandlerApi;
+export type FolderFocusScope = HandlerScope<FolderFocusApi>;
 
 // The command's `archive` is the API's `archives`.
 const SPECIAL_USE: Record<string, SpecialUse> = { inbox: "inbox", trash: "trash", drafts: "drafts", sent: "sent", archive: "archives", junk: "junk" };
@@ -42,6 +47,12 @@ export async function show_folder(scope: FolderScope, folder: MailFolder, tab?: 
         // Thunderbird throws on the first display of a folder it has not read yet, although the folder shows. The text alone proves nothing, so the tab must show the folder or still be loading it.
         if (!is_first_display_error(error) || !(await is_showing_or_loading(scope, folder))) throw error;
     }
+}
+
+/** Shows the folder, then moves keyboard focus to its thread list: a key that jumps to a folder asks to work in its messages. A hidden list refuses the focus, and the folder still shows. Folder search uses `show_folder` alone, to keep the folder pane focused. */
+export async function show_folder_and_focus_threads(scope: FolderFocusScope, folder: MailFolder, tab?: FolderMailTab): Promise<void> {
+    await show_folder(scope, folder, tab);
+    await ignore_refusal(focus_pane(scope, { pane: "threads" }));
 }
 
 async function is_showing_or_loading(scope: FolderScope, folder: MailFolder): Promise<boolean> {
@@ -76,18 +87,18 @@ export async function find_folder(api: FolderApi, account_id: string, path: stri
     return (await api.folders.query({ accountId: account_id, path }))[0];
 }
 
-export async function open_folder(scope: FolderScope, args: CheckedArgs): Promise<void> {
+export async function open_folder(scope: FolderFocusScope, args: CheckedArgs): Promise<void> {
     const tab = await active_mail_tab(scope);
     const account_id = tab.displayedFolder?.accountId;
     // An omitted optional string reaches the handler as the empty text.
     const account_name = String(args.account ?? "");
     const named = account_name === "" ? undefined : await account_id_named(scope.api, account_name);
     const special = String(args.special ?? "");
-    if (special !== "") return show_folder(scope, await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, named ?? account_id, named !== undefined), tab);
+    if (special !== "") return show_folder_and_focus_threads(scope, await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, named ?? account_id, named !== undefined), tab);
     const path = String(args.folder);
     if (path === "") throw new RuntimeRefusal("Name a folder.");
     // A named account is the only place to look: the same path in another account is a different folder.
     const folder = named === undefined ? await folder_by_path(scope, path, account_id) : (await scope.api.folders.query({ accountId: named, path }))[0];
     if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path}${named === undefined ? "" : ` in account ${account_name}`}.`);
-    return show_folder(scope, folder, tab);
+    return show_folder_and_focus_threads(scope, folder, tab);
 }

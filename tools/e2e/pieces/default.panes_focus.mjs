@@ -151,6 +151,12 @@ async function run_panes_focus(instance, ctx) {
   await instance.press(["-k", "Escape"]);
   await sleep(800);
 
+  // g i opens the Inbox and moves the focus to its thread list, also from the folder pane: Down moves the selection and not the folder.
+  await keys(["g", "f"]);
+  state = await keys(["j"], { what: "j to open a folder below the Inbox", until: (current) => ![null, "/Inbox", account_folder].includes(folder_of(current)), show: (current) => `folder ${folder_of(current)}` });
+  await keys(["g", "i"], folder_lands_on("/Inbox"));
+  await list_moved("g i from the folder pane opens the Inbox and focuses its thread list: Down moves the selection", first_selected(await keys(["g", "g"], at_top)));
+
   const list_before = first_selected(await keys(["g", "e"]));
   state = await down(leaves_row(list_before));
   check(app, kind, "g e puts the focus in the thread list: Down moves the selection and not the folder", first_selected(state) !== list_before && folder_of(state) === "/Inbox", `selected ${list_before} then ${first_selected(state)}, folder ${folder_of(state)}`);
