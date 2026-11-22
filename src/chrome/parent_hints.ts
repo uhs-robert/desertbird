@@ -132,12 +132,15 @@ function pick_in_message(main: PickMainWindow, scheme: HintLabelScheme, action: 
     // A remote body (a feed shown as a web page): the body script labels it alone.
     if (pane.isRemoteBrowser || !pane.contentDocument) return -1;
     const message = pane.ownerDocument.defaultView;
-    // The Enter waits for the end of the key that picked, and goes only where the pick put the focus.
-    const open = () => void main.setTimeout(() => focus_is_picked_target(main as unknown as EnterWindow) && press_enter(main as unknown as EnterWindow), 0);
+    // The Enter waits for the end of the key that picked, and goes only to the picked element while it holds the focus.
+    const open = (picked: unknown) => void main.setTimeout(() => focus_chain(main.document as unknown as FocusDocument).at(-1) === picked && focus_is_picked_target(main as unknown as EnterWindow) && press_enter(main as unknown as EnterWindow), 0);
     return start_pick(pick_host(main, [main, message, pane.contentWindow], message), collect_message_targets(message, pane.contentWindow, open), scheme, action);
 }
 
-export function get_hints_api(context: ExtensionContext) {
+/** The tab manager maps a tab of `tabmail` to its MailExtension tab id. */
+type HintsContext = ExtensionContext & { extension: { tabManager: { getWrapper(tab: unknown): { id: number } | null } } };
+
+export function get_hints_api(context: HintsContext) {
     return {
         hints: {
             sendEnter: guard("hints.sendEnter", ({ windowId }: HintsSendEnterArgs): void => {
@@ -146,7 +149,7 @@ export function get_hints_api(context: ExtensionContext) {
                 if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
-            pick: guard("hints.pick", async ({ windowId, colors, action, place }: HintsPickArgs): Promise<number> => {
+            pick: guard("hints.pick", async ({ windowId, tabId, colors, action, place }: HintsPickArgs): Promise<number> => {
                 const main = window_with_id(context, windowId) as unknown as PickMainWindow | null;
                 const tabmail = (main?.document.getElementById("tabmail") ?? null) as TabmailLike | null;
                 const tab = tabmail?.currentTabInfo as FrontTab | null | undefined;
@@ -154,7 +157,8 @@ export function get_hints_api(context: ExtensionContext) {
                 if (place && main && !tab) return -1;
                 if (!main || !tab) throw new Error(`no tab in window ${windowId}`);
                 const scheme = main.matchMedia("(prefers-color-scheme: light)").matches ? colors.light : colors.dark;
-                if (place) return pick_in_message(main, scheme, action);
+                // The body that asked lost the front to another tab on the way, so the key is stale.
+                if (place) return context.extension.tabManager.getWrapper(tab)?.id === tabId ? pick_in_message(main, scheme, action) : 0;
                 const pane = front_about_3pane(tabmail) as (HintMailPane & ListenerTarget) | null;
                 if (pane) {
                     const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;

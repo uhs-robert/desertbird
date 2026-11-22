@@ -46,7 +46,7 @@ test("the schema functions and events equal the parent exports", async () => {
     const folderpane_parent = await import("../src/chrome/parent_folderpane.ts");
     const app_parent = await import("../src/chrome/parent_app.ts");
     const zoom_parent = await import("../src/chrome/parent_zoom.ts");
-    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context), ...app_parent.get_app_api(context), ...zoom_parent.get_zoom_api(context) } as Record<string, Record<string, unknown>>;
+    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context as never), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context), ...app_parent.get_app_api(context), ...zoom_parent.get_zoom_api(context) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
