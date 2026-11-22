@@ -155,7 +155,22 @@ async function run_panes_focus(instance, ctx) {
   await keys(["g", "f"]);
   state = await keys(["j"], { what: "j to open a folder below the Inbox", until: (current) => ![null, "/Inbox", account_folder].includes(folder_of(current)), show: (current) => `folder ${folder_of(current)}` });
   await keys(["g", "i"], folder_lands_on("/Inbox"));
-  await list_moved("g i from the folder pane opens the Inbox and focuses its thread list: Down moves the selection", first_selected(await keys(["g", "g"], at_top)));
+  const row_after_gi = first_selected(await keys(["g", "g"], at_top));
+  const after_gi = first_selected(await down(leaves_row(row_after_gi)));
+  state = await instance.ask("state");
+  check(app, kind, "g i from the folder pane opens the Inbox and focuses its thread list: Down moves the selection and not the folder", after_gi !== row_after_gi && after_gi !== null && folder_of(state) === "/Inbox", `selected ${row_after_gi} then ${after_gi}, folder ${folder_of(state)}`);
+  // :open ends with the focus in the thread list too, although the command line gave the focus back to the folder pane first.
+  await keys(["g", "f"]);
+  await keys(["j"], { what: "j to open a folder below the Inbox", until: (current) => ![null, "/Inbox", account_folder].includes(folder_of(current)), show: (current) => `folder ${folder_of(current)}` });
+  await instance.press([":"]);
+  await sleep(1200);
+  await instance.press(["open /Inbox"]);
+  await instance.press(["-k", "Return"]);
+  await wait_for_state(instance, folder_lands_on("/Inbox"));
+  const row_after_open = first_selected(await keys(["g", "g"], at_top));
+  const after_open = first_selected(await down(leaves_row(row_after_open)));
+  state = await instance.ask("state");
+  check(app, kind, ":open /Inbox from the folder pane focuses the thread list: Down moves the selection and not the folder", after_open !== row_after_open && after_open !== null && folder_of(state) === "/Inbox", `selected ${row_after_open} then ${after_open}, folder ${folder_of(state)}`);
 
   const list_before = first_selected(await keys(["g", "e"]));
   state = await down(leaves_row(list_before));
