@@ -21,7 +21,7 @@ if (!app_binary || !existsSync(app_binary)) throw new Error(`no app binary at ${
 
 // A job is one scenario in a fresh profile. variant changes the manifest, big adds the 10,000-message folder,
 // no_identity leaves the account without an identity, host_manifests writes the native host manifests into the job's HOME.
-const SCENARIOS = ["env", "api_presence", "rtt", "key_latency", "threads", "query", "focus_targets", "keys_thread", "keys_pane", "keys_tab", "keys_window", "message_pane", "message_process", "window_types", "compose", "overlay", "filter", "tabs_remove", "tabs_remove_only_tab", "zoom"];
+const SCENARIOS = ["env", "api_presence", "rtt", "key_latency", "threads", "query", "focus_targets", "keys_thread", "keys_pane", "keys_tab", "keys_window", "message_pane", "message_process", "window_types", "compose", "overlay", "filter", "tabs_remove", "tabs_remove_only_tab", "zoom", "header_ids"];
 const JOBS = [
   ...SCENARIOS.map((name) => ({ name, only: name })),
   { name: "query_large", only: "query_large", big: true },

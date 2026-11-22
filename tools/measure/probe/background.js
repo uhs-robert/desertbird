@@ -828,6 +828,25 @@ async function scenario_zoom() {
   return { presence, steps };
 }
 
+// The controls under the message header and attachment area, on a message with a Cc line, a tag and an attachment.
+async function scenario_header_ids() {
+  const folders = await messenger.folders.query({});
+  const folder = folders.find((candidate) => candidate.name === "Header");
+  const tab_id = await show_folder(folder);
+  const message = await by_header_id("header-0@fixture.invalid");
+  await messenger.messages.update(message.id, { tags: ["$label1"], flagged: false });
+  await messenger.mailTabs.setSelectedMessages(tab_id, [message.id]);
+  await sleep(2000);
+  const out = { pane: await messenger.probe.header_dump("pane") };
+  await post("/shot", { name: "header_pane" });
+  const opened = await messenger.messageDisplay.open({ location: "tab", messageId: message.id, active: true });
+  await sleep(2000);
+  out.tab = await messenger.probe.header_dump("tab");
+  await post("/shot", { name: "header_tab" });
+  await messenger.tabs.remove(opened.id);
+  return out;
+}
+
 async function start() {
   await log("background up");
   for (let attempt = 0; attempt < 300; attempt++) {
@@ -865,6 +884,7 @@ async function start() {
     tabs_remove: scenario_tabs_remove,
     tabs_remove_only_tab: scenario_tabs_remove_only_tab,
     zoom: scenario_zoom,
+    header_ids: scenario_header_ids,
   };
   for (const [name, scenario] of Object.entries(scenarios)) await record(name, scenario);
   await post("/done", {});

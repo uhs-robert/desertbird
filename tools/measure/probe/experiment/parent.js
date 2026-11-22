@@ -168,6 +168,46 @@ var probe = class extends ExtensionAPI {
       };
     }
 
+    // Header probe: every element a hint could label under the header and the attachment area, with what decides whether it shows.
+    const HEADER_SELECTOR = "button, toolbarbutton, input, select, a, [role=button], [role=checkbox], [tabindex], li.header-recipient, li.tag, richlistitem, label.text-link, .text-link";
+    function header_dump(where) {
+      const win = main_windows()[0];
+      const tabmail = win.document.getElementById("tabmail");
+      const message_window = where === "pane" ? about3pane(win).messageBrowser.contentWindow : tabmail.currentTabInfo.chromeBrowser.contentWindow;
+      const doc = message_window.document;
+      const pane = doc.getElementById("messagepane");
+      const rows = [];
+      for (const root_id of ["messageHeader", "attachmentView"]) {
+        const root = doc.getElementById(root_id);
+        if (!root) { rows.push({ root: root_id, missing: true }); continue; }
+        for (const element of root.querySelectorAll(HEADER_SELECTOR)) {
+          const rect = element.getBoundingClientRect();
+          const style = message_window.getComputedStyle(element);
+          rows.push({
+            root: root_id,
+            id: element.id,
+            local_name: element.localName,
+            is: element.getAttribute("is") ?? "",
+            classes: element.getAttribute("class") ?? "",
+            role: element.getAttribute("role") ?? "",
+            type: element.getAttribute("type") ?? "",
+            hidden: !!element.hidden,
+            on_screen: rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && element.checkVisibility(),
+            text: (element.getAttribute("label") ?? element.getAttribute("aria-label") ?? element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40),
+            shadow: !!element.shadowRoot,
+          });
+        }
+      }
+      return {
+        where,
+        tab_mode: tabmail.currentTabInfo.mode.name,
+        document: doc.documentURI,
+        tab_browser_id: tabmail.currentTabInfo.browser?.id ?? null,
+        messagepane: { remote: !!pane?.isRemoteBrowser, readable: !!pane?.contentDocument },
+        rows,
+      };
+    }
+
     const BOX_CSS = "position: fixed; left: 360px; width: 700px; bottom: 100px; height: 90px; z-index: 100000; border: 3px solid red; background: white;";
 
     const api = {
@@ -347,6 +387,7 @@ var probe = class extends ExtensionAPI {
           win.ZoomManager.setZoomForBrowser(win.getBrowser(), level);
           return zoom_describe(where);
         },
+        async header_dump(where) { return header_dump(where); },
         async noop() {},
         async console_tail() { return console_lines.splice(0); },
         onKey: new ExtensionCommon.EventManager({

@@ -75,6 +75,36 @@ function big_text() {
   return entries.join("");
 }
 
+// One message for the header probe: a Cc line, a link in the body and one attachment. The probe adds a tag through the API.
+function header_text() {
+  return [
+    `From header@fixture.invalid ${new Date(BASE_TIME_S * 1000).toUTCString()}`,
+    "X-Mozilla-Status: 0001",
+    "X-Mozilla-Status2: 00000000",
+    "Message-ID: <header-0@fixture.invalid>",
+    `Date: ${new Date(BASE_TIME_S * 1000).toUTCString().replace("GMT", "+0000")}`,
+    "From: Fixture Sender <header@fixture.invalid>",
+    "To: Local <local@fixture.invalid>",
+    "Cc: Copy One <copy1@fixture.invalid>, Copy Two <copy2@fixture.invalid>",
+    "Subject: Header 0",
+    "MIME-Version: 1.0",
+    'Content-Type: multipart/mixed; boundary="probe-boundary"',
+    "",
+    "--probe-boundary",
+    "Content-Type: text/html; charset=UTF-8",
+    "",
+    '<html><body><p>Body of header-0 with <a href="https://example.invalid/one">a link</a>.</p></body></html>',
+    "--probe-boundary",
+    'Content-Type: text/plain; name="note.txt"',
+    'Content-Disposition: attachment; filename="note.txt"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    Buffer.from("attachment text\n").toString("base64"),
+    "--probe-boundary--",
+    "",
+  ].join("\n") + "\n";
+}
+
 // big adds one folder of 10,000 messages. It stays out of the other runs so their counts stay at 5,000 in the 50 folders.
 export function write_fixtures(profile_dir, { big = false } = {}) {
   const folder_dir = join(profile_dir, "Mail", "Local Folders");
@@ -82,6 +112,7 @@ export function write_fixtures(profile_dir, { big = false } = {}) {
   writeFileSync(join(folder_dir, "Inbox"), inbox_text());
   writeFileSync(join(folder_dir, "Trash"), "");
   writeFileSync(join(folder_dir, "Html"), mbox_entry({ id: "html-0", subject: "Html 0", from: "html@fixture.invalid", time_s: BASE_TIME_S, unread: false, starred: false, references: [], body: "<html><body><p>Body of <b>html-0</b>.</p></body></html>", html: true }));
+  writeFileSync(join(folder_dir, "Header"), header_text());
   for (let folder = 0; folder < BULK_FOLDERS; folder++) writeFileSync(join(folder_dir, `Bulk${String(folder).padStart(2, "0")}`), bulk_text(folder));
   if (big) writeFileSync(join(folder_dir, "Big"), big_text());
   return folder_dir;
