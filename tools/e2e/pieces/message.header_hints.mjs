@@ -27,7 +27,6 @@ async function run_header_hints(instance, ctx) {
   // Presses the keys that start a pick and waits for the labels to draw. Returns the pixels before and with the labels.
   const show_labels = async (keys = ["f"]) => {
     const before = await window_pixels("the window before the labels", holds_twice());
-    hold_from = Date.now();
     for (const key of keys) await instance.press([key]);
     return { before, labelled: await window_pixels("the labels to draw", drawn_since(before)) };
   };
@@ -57,9 +56,7 @@ async function run_header_hints(instance, ctx) {
   state = await instance.ask("state");
   check(app, kind, "header hints: j and Escape with the labels up scroll nothing and flag nothing", body_state(state).scroll_y === scroll_before && !flagged(state), `scrollY ${scroll_before} then ${body_state(state).scroll_y}, flagged ${flagged(state)}`);
   await shot("header_hints_ended", "after j and Escape: no labels left");
-  await hold_over();
-  // The whole gesture in one burst. The body holds plain keys from f until its 1.5 s are over, so neither c opens a compose window.
-  hold_from = Date.now();
+  // The whole gesture in one burst. The body drops plain keys from f until the parent answers, and the parent answers once its labels own the keys, so neither c opens a compose window.
   await instance.press(["fcc"]);
   await sleep(3000);
   state = await instance.ask("state");
@@ -67,16 +64,13 @@ async function run_header_hints(instance, ctx) {
   // Both c can land before the labels draw, and the body drops them, so the labels may still show. Escape ends them.
   await instance.press(["-k", "Escape"]);
   await sleep(500);
-  await hold_over();
 
   // The star of the header flags the shown message.
   await pick(labels.star);
   state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
   check(app, kind, "header hints: the star label flags the message", flagged(state), `flagged ${flagged(state)}`);
-  await hold_over();
   await pick(labels.star);
   await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", false));
-  await hold_over();
 
   // The day/night switch: the body turns light, and a second pick turns it back.
   const dark_body = await window_pixels("the dark body to hold still", holds_twice());
@@ -85,11 +79,9 @@ async function run_header_hints(instance, ctx) {
   const light_body = await window_pixels("the body after the switch", holds_twice());
   await shot("header_hints_dark_switch", "after the day/night switch label: the body shows its own light colors");
   check(app, kind, "header hints: the day/night switch label changes the body", light_body !== dark_body, "the window did not change");
-  await hold_over();
   await pick(labels.dark);
   const back = await window_pixels("the body to turn dark again", back_to(dark_body));
   check(app, kind, "header hints: a second pick of the switch turns the body back", back === dark_body, "the window differs from the start");
-  await hold_over();
 
   // More opens its menu. Escape closes it, and the keys go on in the body.
   await pick(labels.more);
@@ -97,7 +89,6 @@ async function run_header_hints(instance, ctx) {
   await shot("header_hints_more", "after the More label: the More menu is open");
   await instance.press(["-k", "Escape"]);
   await sleep(800);
-  await hold_over();
   const top = body_state(await instance.ask("state")).scroll_y;
   state = await key_and_state(instance, ["j"], scroll_is("j to scroll the body after the menu", (body) => body.scroll_y > top));
   check(app, kind, "header hints: after More and Escape, j scrolls the body", body_state(state).scroll_y > top, `scrollY ${top} then ${body_state(state).scroll_y}`);
@@ -110,7 +101,6 @@ async function run_header_hints(instance, ctx) {
   await shot("header_hints_address", "after the sender label: the address menu is open");
   await instance.press(["-k", "Escape"]);
   await sleep(800);
-  await hold_over();
 
   // ; y labels only the targets with text. On the tag it copies the tag's name.
   await instance.ask("clear_clipboard");
@@ -120,7 +110,6 @@ async function run_header_hints(instance, ctx) {
   await sleep(800);
   const clipboard = (await instance.ask("read_clipboard")).text;
   check(app, kind, "header hints: ; y on the tag copies its name", clipboard === "Important", `clipboard ${JSON.stringify(clipboard)}`);
-  await hold_over();
 
   // Reply opens a compose window.
   await pick(labels.reply);
@@ -129,25 +118,24 @@ async function run_header_hints(instance, ctx) {
   await instance.ask("close_compose");
   await wait_for_state(instance, window_of_type("messageCompose", false));
   await sleep(800);
-  await hold_over();
 
   // The attachment toggle opens the list and Thunderbird puts the focus in it, with the first attachment selected. Back in the body, the label of the second attachment selects that one.
   await pick(labels.attachment_toggle);
   await sleep(1000);
-  await hold_over();
   await instance.press(["-M", "shift", "-k", "F6", "-m", "shift"]);
   await sleep(300);
   await instance.press(["-k", "F6"]);
   await sleep(500);
-  const list_shown = await window_pixels("the attachment list to hold still", holds_twice());
+  // Only the second item's own box: the pick also moves the focus into the list, which redraws the first item, so a whole-window change would pass with the wrong selection.
+  const second_item = (name, until) => wait_pixels(instance, name, `${app}_header_hints_${name.replaceAll(" ", "_")}`, SECOND_ATTACHMENT_REGION[app], until, { timeout_ms: 5000 });
+  const unselected = await second_item("the second attachment to hold still", holds_twice());
   await show_labels();
   await shot("header_hints_attachment_labels", "f with the attachment list open: a label on each attachment");
   for (const letter of labels.second_attachment) await instance.press([letter]);
   await sleep(800);
-  const item_picked = await window_pixels("the second attachment to show as selected", holds_twice());
+  const selected = await second_item("the second attachment to show as selected", drawn_since(unselected));
   await shot("header_hints_attachment", "after the label of the second attachment: it is selected and the list has the focus");
-  check(app, kind, "header hints: the label of the second attachment changes the selection in the list", item_picked !== list_shown, "the window did not change");
-  await hold_over();
+  check(app, kind, "header hints: the label of the second attachment selects it", selected !== unselected, "the second attachment's box did not change");
 
   // A message tab: the star flags the tab's message, and the body link opens in one step.
   await instance.ask(`select:${HEADER_ID}`, 30000);
@@ -160,15 +148,12 @@ async function run_header_hints(instance, ctx) {
   await shot("header_hints_tab", "f in a message tab: the same labels over the header and the body link");
   await instance.press(["-k", "Escape"]);
   await sleep(500);
-  await hold_over();
   await pick(labels.star);
   state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
   check(app, kind, "header hints: in a message tab the star label flags the tab's message", flagged(state), `flagged ${flagged(state)}`);
-  await hold_over();
   await pick(labels.link);
   state = await wait_for_state(instance, scroll_is("the link to scroll to the end of the mail", (body) => body.scroll_y > 2 * body.inner_height));
   check(app, kind, "header hints: in a message tab the body link label opens the link in one step", body_state(state).scroll_y > 2 * body_state(state).inner_height, `scrollY ${body_state(state).scroll_y}`);
-  await hold_over();
   await instance.ask("reset_tabs");
   await sleep(800);
 
@@ -177,7 +162,6 @@ async function run_header_hints(instance, ctx) {
   await instance.ask("open_message_window");
   await wait_for_state(instance, body_reports("the message window", window_requested, in_window));
   await sleep(500);
-  hold_from = Date.now();
   await instance.press(["f"]);
   await sleep(800);
   await shot("header_hints_window", "f in a message window: one label, on the body link");
@@ -196,11 +180,7 @@ const MESSAGE_HINT_LABELS = {
 
 const WINDOW_REGION = "0,0 1280x720";
 
-// The body holds plain keys for 1.5 s after f (`parent_pick` in src/content/body_keys.ts), counted from that key.
-const HINT_HOLD_MS = 1600;
-
-let hold_from = 0;
-
-const hold_over = () => sleep(Math.max(0, HINT_HOLD_MS - (Date.now() - hold_from)));
+// The box of the second attachment in the open list, inside its selection frame. Read from the shots of each app.
+const SECOND_ATTACHMENT_REGION = { betterbird: "484,668 160x22", thunderbird: "786,668 158x22" };
 
 export const piece = { kind: "message", section: "header_hints", profile_kind: "message_header", deadline_s: LONG_PIECE_DEADLINE_S, run: run_header_hints };
