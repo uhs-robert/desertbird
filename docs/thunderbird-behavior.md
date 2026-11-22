@@ -445,6 +445,33 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 - A hint pick focuses the link and the Experiment then sends the Enter. A real Enter on the focused link reached Thunderbird's own click handling: for a link whose text names `bank.example` and whose address is `127.0.0.1`, Thunderbird showed its Link Mismatch dialog (read from the e2e screenshot), as a mouse click does. A script `click()` is an untrusted event and skips that handling, measured with the e2e probe `hints: click() on the external link` (a content script clicks the same link): on Thunderbird 153.7.0 ESR and on Betterbird the pane went straight to the link address (an error page for the closed port) and no Link Mismatch dialog showed. So the pick focuses the link and the `hints` Experiment presses a trusted Enter (a `nsITextInputProcessor` key press in the window), which Thunderbird handles as a click. The e2e shot `hint_external_pick` shows the Link Mismatch dialog after the one-step pick on both apps. A link to a place in the same message scrolled to its target on Enter. Opening an external link in the system browser was not measured and is a hand check.
 
 
+### Message header controls
+
+Measured with the probe job `header_ids` (`ONLY=header_ids node tools/measure/run.mjs <app>`) on Thunderbird 153.7.0 ESR and Betterbird 153.7.0. The fixture message has a Cc line with two addresses, the tag Important, one attachment and a body link. The job lists the elements under `#messageHeader` and `#attachmentView` of `about:message`, first in the reading pane and then in a message tab, with the default header layout and the light theme. Both places gave the same list. In a message tab the tab's `browser` is `#messagepane`, and `chromeBrowser` holds `about:message`. `#messagepane` was not remote and its document was readable in both places, on both apps.
+
+| Element | Kind | Shown | Notes |
+| --- | --- | --- | --- |
+| `#hdrReplyToSenderButton` | `toolbarbutton` | yes | Reply |
+| `#hdrDummyReplyButton`, `#hdrReplyButton` | `toolbarbutton` | hidden | |
+| `#hdrReplyAllButton` | `toolbarbutton is=toolbarbutton-menu-button type=menu` | yes | Holds an inner `toolbarbutton.toolbarbutton-menubutton-button` (the main action, also shown) and a `dropmarker` |
+| `#hdrReplyListButton`, `#hdrFollowupButton` | split buttons as above | hidden | Shown for list mail and news |
+| `#hdrForwardButton`, `#hdrArchiveButton`, `#hdrJunkButton`, `#hdrTrashButton` | `toolbarbutton` | yes | |
+| `#showCustomHeaders` | `toolbarbutton` | yes | Betterbird only (Headers) |
+| `#otherActionsButton` | `toolbarbutton type=menu` | yes | More |
+| `#starMessageButton` | `button role=checkbox` | yes | |
+| `li.header-recipient` (`#fromRecipient0`, `#toRecipient0`, `#ccRecipient0`, ...) | `li is=header-recipient` | yes | One per address. Each holds a `button.recipient-address-book-button` |
+| `li.tag` | `li` | yes | No id |
+| `#disableDarkReader` | `input type=checkbox` | no | `#darkReaderToggle` shows only with a dark color scheme and the pref `mail.dark-reader.show-toggle` (stylesheet `messageHeader.css`). Its `click` listener flips `mail.dark-reader.enabled` |
+| `#encryptionTechBtn` | `button` | hidden | Signed or encrypted mail only |
+| `#attachmentToggle` | `button type=checkbox` | yes | |
+| `#attachmentName` | `label role=button` | yes | |
+| `#attachmentSaveAllSingle` | split button | yes | `#attachmentSaveAllMultiple` with two or more attachments |
+| `#attachmentList richlistitem.attachmentItem` | `richlistitem role=option` | no | The list is collapsed until `#attachmentToggle` opens it |
+| list header rows (`List-Help`, `Archived-At`, ...) | `div is=multi-url-header-row` | no | Empty for this message. The `Website` row holds an `a` on Betterbird and a `span.text-link` on Thunderbird |
+
+The two apps differ only in `#showCustomHeaders` and the element in the `Website` row. The screenshots `header_pane.png` and `header_tab.png` of the job show the same header on both apps.
+
+
 ## Unsubscribe
 
 Not measured yet. The design rests on these calls, and each is a hand check:

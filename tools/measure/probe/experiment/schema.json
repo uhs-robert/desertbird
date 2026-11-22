@@ -20,6 +20,7 @@
       { "name": "zoom_open", "type": "function", "async": true, "description": "Opens a tab of a fixed kind in the main window.", "parameters": [{ "name": "kind", "type": "string", "enum": ["calendar", "tasks", "addressbook", "settings"] }] },
       { "name": "zoom_read", "type": "function", "async": true, "description": "Describes getBrowser() and its zoom in the main window or the newest message window.", "parameters": [{ "name": "where", "type": "string", "enum": ["main", "message_window"] }] },
       { "name": "zoom_set", "type": "function", "async": true, "parameters": [{ "name": "where", "type": "string", "enum": ["main", "message_window"] }, { "name": "level", "type": "number" }] },
+      { "name": "header_dump", "type": "function", "async": true, "description": "Lists the controls under #messageHeader and #attachmentView of the message in the mail tab pane or the front message tab.", "parameters": [{ "name": "where", "type": "string", "enum": ["pane", "tab"] }] },
       { "name": "noop", "type": "function", "async": true, "parameters": [] }
     ],
     "events": [
