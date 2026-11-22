@@ -22,7 +22,7 @@ export const reading: CommandGroup = {
             runs_in: "message",
             bridge: true,
             label: "Pick a link",
-            intent: "Label the links on screen, then open, focus or copy one.",
+            intent: "Label the header and links, then open, focus or copy one.",
             count: "ignore",
             params: [{ name: "action", type: "enum", values: ["activate", "focus", "yank"], default: "activate", short: { focus: "f", yank: "y" }, description: { focus: "Focus the link.", yank: "Copy the address of the link, else its text." } }],
         },

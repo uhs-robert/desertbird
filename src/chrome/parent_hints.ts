@@ -5,11 +5,12 @@ import type { FocusDocument } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
 import { HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
-import type { HintsPickArgs, HintsSendEnterArgs } from "../shared/protocol.ts";
-import { collect_page_targets, collect_targets } from "./hint_targets.ts";
+import type { HintAction, HintLabelScheme, HintsPickArgs, HintsSendEnterArgs } from "../shared/protocol.ts";
+import { collect_message_targets, collect_page_targets, collect_targets } from "./hint_targets.ts";
 import type { HintMailPane } from "./hint_targets.ts";
 import { end_pick, start_pick } from "./hint_pick.ts";
 import type { PickHost, PickKeyEvent } from "./hint_pick.ts";
+import { OPENABLE } from "../shared/hint_view.ts";
 import type { HintWindow } from "../shared/hint_view.ts";
 import { front_about_3pane } from "./view.ts";
 import type { TabmailLike } from "./view.ts";
@@ -31,10 +32,7 @@ export interface EnterWindow {
 
 const WINDOW_TYPES = ["mail:3pane", "mail:messageWindow"];
 
-// What the Enter may land on, the same as the body script's pick. The focus can move between the pick and this call (a pane chord, a tab switch), and an Enter then would act on the mail window's own interface.
-const OPENABLE = "a[href], button";
-
-/** Whether the focus sits on a link or a button inside the message document, the one the pick focused. */
+/** Whether the focus sits on a link or a button inside the message document, the one the pick focused. The focus can move between the pick and the Enter (a pane chord, a tab switch), and an Enter then would act on the mail window's own interface. */
 function focus_is_picked_target(window: EnterWindow): boolean {
     const chain = focus_chain(window.document);
     return chain.some((node) => node.id === "messagepane") && chain.at(-1)?.matches?.(OPENABLE) === true;
@@ -70,6 +68,16 @@ interface PickMainWindow extends ListenerTarget, HintWindow {
         documentElement: { setAttribute(name: string, value: string): void; removeAttribute(name: string): void };
     };
     matchMedia(query: string): { matches: boolean };
+    setTimeout(callback: () => void, ms: number): unknown;
+}
+
+/** The `#messagepane` browser of the message that holds the focus. Its document is `about:message`, in the reading pane and in a message tab alike. */
+interface MessagePane {
+    id: "messagepane";
+    isRemoteBrowser?: boolean;
+    contentDocument?: unknown;
+    contentWindow: HintWindow & ListenerTarget;
+    ownerDocument: { defaultView: HintWindow & ListenerTarget };
 }
 
 /** The browser of a tab that is not the mail tab. A remote page has no `contentDocument` the parent can read. */
@@ -97,7 +105,7 @@ function listen(target: ListenerTarget, type: string, listener: (event: never) =
 // The clipboard service of the parent. The label is typed later, inside this Experiment, and the background cannot wait for that key. So the pick writes the text here when the label completes.
 const copy_to_clipboard = (text: string): void => Cc["@mozilla.org/widget/clipboardhelper;1"]!.getService(Ci["nsIClipboardHelper"]).copyString(text);
 
-function pick_host(main: PickMainWindow, documents: ListenerTarget[]): PickHost {
+function pick_host(main: PickMainWindow, documents: ListenerTarget[], message?: ListenerTarget): PickHost {
     return {
         copy: copy_to_clipboard,
         on_key(listener) {
@@ -110,10 +118,23 @@ function pick_host(main: PickMainWindow, documents: ListenerTarget[]): PickHost 
         on_disturb(listener) {
             // The blur lands on the focused element when focus moves inside the window too, so only a window that lost the focus counts.
             const on_blur = () => main.document.hasFocus() || listener();
-            const stops = [...documents.map((each) => listen(each, "scroll", listener)), ...documents.map((each) => listen(each, "pointerdown", listener)), listen(main, "blur", on_blur), listen(main, "TabSelect", listener)];
+            const stops = [...documents.map((each) => listen(each, "scroll", listener)), ...documents.map((each) => listen(each, "pointerdown", listener)), listen(main, "blur", on_blur), listen(main, "TabSelect", listener), ...(message ? [listen(message, "MsgLoading", listener)] : [])];
             return () => stops.forEach((stop) => stop());
         },
     };
+}
+
+/** Labels the header and body of the message whose body holds the focus. */
+function pick_in_message(main: PickMainWindow, scheme: HintLabelScheme, action: HintAction | undefined): number {
+    const pane = focus_chain(main.document as unknown as FocusDocument).find((node) => node.id === "messagepane") as MessagePane | undefined;
+    // The focus left the body during the trip from the body script, so the key no longer belongs to a message.
+    if (!pane) return 0;
+    // A remote body (a feed shown as a web page): the body script labels it alone.
+    if (pane.isRemoteBrowser || !pane.contentDocument) return -1;
+    const message = pane.ownerDocument.defaultView;
+    // The Enter waits for the end of the key that picked, and goes only where the pick put the focus.
+    const open = () => void main.setTimeout(() => focus_is_picked_target(main as unknown as EnterWindow) && press_enter(main as unknown as EnterWindow), 0);
+    return start_pick(pick_host(main, [main, message, pane.contentWindow], message), collect_message_targets(message, pane.contentWindow, open), scheme, action);
 }
 
 export function get_hints_api(context: ExtensionContext) {
@@ -125,12 +146,15 @@ export function get_hints_api(context: ExtensionContext) {
                 if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
-            pick: guard("hints.pick", async ({ windowId, colors, action }: HintsPickArgs): Promise<number> => {
+            pick: guard("hints.pick", async ({ windowId, colors, action, place }: HintsPickArgs): Promise<number> => {
                 const main = window_with_id(context, windowId) as unknown as PickMainWindow | null;
                 const tabmail = (main?.document.getElementById("tabmail") ?? null) as TabmailLike | null;
                 const tab = tabmail?.currentTabInfo as FrontTab | null | undefined;
+                // A message window has no tabs, and its body script keeps its own labels.
+                if (place && main && !tab) return -1;
                 if (!main || !tab) throw new Error(`no tab in window ${windowId}`);
                 const scheme = main.matchMedia("(prefers-color-scheme: light)").matches ? colors.light : colors.dark;
+                if (place) return pick_in_message(main, scheme, action);
                 const pane = front_about_3pane(tabmail) as (HintMailPane & ListenerTarget) | null;
                 if (pane) {
                     const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;

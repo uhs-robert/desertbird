@@ -372,6 +372,8 @@ export interface HintsPickArgs {
     colors: HintLabelColors;
     /** What a typed label does. Absent means `activate`. */
     action?: HintAction;
+    /** `message`: label the header and body of the message that holds the focus, in the mail tab's reading pane or a message tab. The answer is then 0 when the focus is no longer in a message body, and -1 when the parent cannot read the body or the window has no tabs (a message window), so the body script labels the body itself. */
+    place?: "message";
 }
 
 /** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */
@@ -385,6 +387,13 @@ export interface HintsApi {
 /** The body script asks for the Enter that opens the link its hint pick focused. The window comes from the sender, never from this message. */
 export interface BodyOpenLinkRequest {
     type: "body.open_link";
+}
+
+/** The body script asks the background for one label set over the message header and body. The background checks the action against the command's params, which fill in the default, and takes the window from the sender. The answer is the count of `hints.pick`, or -1 when the body script must label the body itself. */
+export interface BodyHintsRequest {
+    type: "body.hints";
+    /** Absent means the command's default, `activate`. */
+    action?: HintAction | undefined;
 }
 
 /** The body script asks the background to copy the address or text of the link its hint pick chose. */

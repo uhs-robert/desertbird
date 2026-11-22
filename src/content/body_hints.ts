@@ -1,17 +1,11 @@
-// Hint labels in the message: `f` labels the links and buttons on screen, the typed label focuses one, and Enter opens a link. The labels come from `../shared/hint_labels.ts`.
+// Hint labels of the body alone: `f` labels the links and buttons on screen, the typed label focuses one, and Enter opens a link. A message uses them when the parent cannot label its header and body together (a remote body, a message window), and the own pages always. The labels come from `../shared/hint_labels.ts`.
 
 import { hint_labels, labels_matching } from "../shared/hint_labels.ts";
-import { is_on_screen } from "../shared/hint_view.ts";
+import { CLICKABLE, OPENABLE, is_on_screen } from "../shared/hint_view.ts";
 import type { HintAction } from "../shared/protocol.ts";
 import type { HintElement, HintLabelNode, HintWindow } from "../shared/hint_view.ts";
 
 export type { HintDocument, HintElement, HintLabelNode, HintWindow } from "../shared/hint_view.ts";
-
-/** What a click can act on in a mail. Scripts never run in a mail, so there are no handlers to find. */
-const CLICKABLE = "a[href], button:not(:disabled), input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [role=button]";
-
-/** What a pick opens with an Enter. A form control only gets the focus, since Enter in a field would submit or break a line. */
-const OPENABLE = "a[href], button";
 
 // The host of the labels. Its own rules are inline and `!important`, so a style sheet of the mail cannot hide, move or fade it.
 const CONTAINER_STYLE = "all: initial !important; position: fixed !important; inset: 0 !important; pointer-events: none !important; z-index: 2147483647 !important; display: block !important; opacity: 1 !important; transform: none !important;";

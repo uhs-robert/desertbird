@@ -137,13 +137,14 @@ const mail_account_inbox = () =>
     .join("");
 
 // kind "owner" is the default plus the prefs a window a person looks at needs: no first-run policy tab. owner-test uses it.
+// kind "message_header" adds the Header folder (a message with Cc, a tag and an attachment) and the dark scheme.
 // kinds "quick_reply_plain" and "quick_reply_html" have an identity with a signature. kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
   rmSync(profile_dir, { recursive: true, force: true });
   mkdirSync(join(profile_dir, "extensions"), { recursive: true });
   // E2E_SCALE=1 adds the 10,000-message Big folder and keeps the 50 Bulk folders, for the step timing run.
   const scale = process.env.E2E_SCALE === "1";
-  const folder_dir = write_fixtures(profile_dir, { big: scale });
+  const folder_dir = write_fixtures(profile_dir, { big: scale, header: kind === "message_header" });
   writeFileSync(join(folder_dir, "Views"), views_text());
   write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
@@ -159,7 +160,9 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   // Kind "message_remote" lets mail load remote content. The others keep the default, which blocks it.
   const remote_prefs = kind === "message_remote" ? { "mailnews.message_display.disable_remote_image": false } : {};
   const owner_prefs = kind === "owner" ? OWNER_PREFS : {};
-  const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
+  // Kind "message_header" shows the dark scheme, the only one where the message header shows its day/night switch.
+  const header_prefs = kind === "message_header" ? THEME_PREFS.default_os_dark : {};
+  const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...header_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   return { profile_dir, folder_dir };
 }

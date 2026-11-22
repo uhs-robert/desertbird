@@ -1,7 +1,9 @@
 // The requests of the body script, which runs in a message document. A key of that document whose command lives in the background (`/` opens the command line) arrives here.
 
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
-import type { BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyYankRequest, HintsApi, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
+import type { BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { ThemedHints } from "./handlers/hint_window.ts";
 import { notify_refusal } from "./notify.ts";
 import type { NotificationsApi } from "./notify.ts";
 
@@ -15,8 +17,8 @@ export interface BodyRequestDeps {
     api: BodyRequestApi;
     /** The ids of the commands a message key binds. A request for any other command is dropped. */
     allowed: ReadonlySet<string>;
-    /** The Experiment that sends the Enter of a hint pick. Absent when it failed to load, and the pick then leaves the Enter to the user. */
-    hints?: Pick<HintsApi, "sendEnter"> | undefined;
+    /** The Experiment that labels a message and sends the Enter of a hint pick. Absent when it failed to load: the body script then labels the body itself and leaves the Enter to the user. */
+    hints?: Partial<ThemedHints> | undefined;
     /** Writes the text of a yank to the clipboard. Absent in a setup with no clipboard. */
     write_text?: ((text: string) => Promise<void>) | undefined;
     /** The hud, told which keys a message document has typed of a sequence. Absent in a setup with no hud. */
@@ -63,8 +65,17 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
 
     // The Enter goes to the window of the sender and no other, so a mail that fakes this message can at worst press Enter on its own link.
     async function open_link(sender: Sender): Promise<unknown> {
-        if (sender.tab?.windowId !== undefined) await deps.hints?.sendEnter({ windowId: sender.tab.windowId });
+        if (sender.tab?.windowId !== undefined) await deps.hints?.sendEnter?.({ windowId: sender.tab.windowId });
         return {};
+    }
+
+    // One label set over the header and the body. The action passes the command's own validator, as from any other source. -1 hands the labels back to the body script.
+    async function hints_pick(request: Partial<BodyHintsRequest>, sender: Sender): Promise<number> {
+        const command = deps.registry.get("hint.pick");
+        const checked = command && check_args(command, { action: request.action });
+        const window_id = sender.tab?.windowId;
+        if (!checked?.ok || window_id === undefined || !deps.hints?.pick) return -1;
+        return deps.hints.pick({ windowId: window_id, action: checked.args["action"] as HintAction, place: "message" });
     }
 
     // The text is of a link in a mail, which the user chose with a label. An empty one would clear the clipboard.
@@ -77,6 +88,8 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         const pending = read_pending(message);
         if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys, pending.tree ?? "message").then(() => ({}));
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
+        const hints = message as Partial<BodyHintsRequest> | null;
+        if (hints?.type === "body.hints") return hints_pick(hints, sender);
         const yanked = message as Partial<BodyYankRequest> | null;
         if (yanked?.type === "body.yank" && typeof yanked.text === "string") return yank({ type: "body.yank", text: yanked.text });
         const request = read_invoke(message);

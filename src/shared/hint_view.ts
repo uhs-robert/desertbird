@@ -11,7 +11,15 @@ export interface HintElement {
     /** Set on a link: the absolute address. */
     href?: string;
     textContent?: string | null;
+    /** False once the element left its document, as when another message replaced the one shown. */
+    isConnected?: boolean;
 }
+
+/** What a click can act on in a mail. Scripts never run in a mail, so there are no handlers to find. */
+export const CLICKABLE = "a[href], button:not(:disabled), input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [role=button]";
+
+/** What a pick in a mail opens with a trusted Enter. A form control only gets the focus, since Enter in a field would submit or break a line. */
+export const OPENABLE = "a[href], button";
 
 export interface HintLabelNode {
     textContent: string | null;
