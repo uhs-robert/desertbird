@@ -1,6 +1,6 @@
 // The message body scripts: the reading pane, find, hints, mail keys, tabs and windows. The remote piece runs the same checks with remote content allowed by the profile kind.
 
-import { sleep, first_selected, selects, flag_becomes, main_window_tabs, active_index, tab_count_is, active_is, ppm_colors } from "../predicates.mjs";
+import { sleep, first_selected, selects, flag_becomes, main_window_tabs, active_index, tab_count_is, active_is, ppm_colors, drawn_since, holds_twice } from "../predicates.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
 export const areas = ["message_body", "hints", "tabs", "mail_keys", "theme", "panes"];
@@ -35,10 +35,15 @@ const FOCUS_MOVE_MARGIN_MS = 1200;
 // `since` asks for a report sent after that time, so a report from before a key cannot pass.
 const body_focus_is = (focused, since = 0) => ({ what: `the focus to ${focused ? "be in" : "leave"} the body`, until: (state) => body_state(state).has_focus === focused && (body_state(state).reported_at ?? 0) >= since, show: (state) => `has_focus ${body_state(state).has_focus}, reported_at ${body_state(state).reported_at}`, timeout_ms: 5000 });
 
+// The whole screen: a menu of a message window draws anywhere over it.
+const SCREEN_REGION = "0,0 1280x720";
+// A point of plain text in the body of a message window, below its menus, read from the shots of both apps.
+const MESSAGE_WINDOW_BODY_POINT = [800, 600];
+
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 10000 });
 
 async function run_message_scripts(instance, ctx) {
-  const { report, check, note, open_inbox, wait_for_state, key_and_state } = ctx;
+  const { report, check, note, open_inbox, wait_for, wait_for_state, key_and_state, wait_pixels } = ctx;
   const app = instance.app;
   const kind = instance.kind;
   const shot = async (name, line) => { const path = await instance.shot(`${app}_${kind}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
@@ -307,6 +312,70 @@ async function run_message_scripts(instance, ctx) {
   await flag_keys(plain_id, false);
   state = await key_and_state(instance, ["J"], 1500);
   check(app, kind, "message window: J changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+  const message_window_id = state.windows.find((window) => window.type === "messageDisplay")?.id;
+  const main_window_id = state.windows.find((window) => window.type === "normal")?.id;
+
+  // The body runs the window tree, which leaves the pane chords to Thunderbird: Alt+H opens its Help menu. The message tree binds Alt+H to `pane.left`, so a body on that tree would swallow it and nothing would draw.
+  const screen_before = await wait_pixels(instance, "the screen to hold still before Alt+H", `${app}_${kind}_alt_h_before`, SCREEN_REGION, holds_twice(), { timeout_ms: 3000 });
+  await instance.press(["-M", "alt", "h", "-m", "alt"]);
+  const menu_drawn = await wait_pixels(instance, "Alt+H to open the Help menu", `${app}_${kind}_alt_h_after`, SCREEN_REGION, drawn_since(screen_before), { timeout_ms: 3000 });
+  await shot("message_window_alt_h", "message window body after Alt+H: Thunderbird's Help menu is open");
+  check(app, kind, "message window body runs the window tree: Alt+H, which only the message tree binds, reaches Thunderbird and opens its Help menu", menu_drawn !== screen_before);
+  // Escape would leave the menu bar active, and with no menu it would close the window. The first click ends the menu, the second puts the focus back in the body.
+  for (const _ of [1, 2]) {
+    await instance.click(...MESSAGE_WINDOW_BODY_POINT);
+    await sleep(500);
+  }
+
+  // A fresh report of the window's own document. A key in the header or a zoom moves nothing the report script listens to, and another window may have reported last.
+  const fresh_body = (window_id, what, until = () => true) =>
+    wait_for(
+      instance,
+      what,
+      async () => {
+        const since = Date.now();
+        await instance.ask("report_window", 20000, { windowId: window_id });
+        await sleep(200);
+        const current = await instance.ask("state");
+        return current.body?.window_id === window_id && (current.body.reported_at ?? 0) >= since ? current : { ...current, body: null };
+      },
+      (current) => current.body !== null && until(current.body),
+      { soft: true, step_ms: 100 },
+    );
+  const press_each = async (keys) => {
+    for (const key of keys) await instance.press([key]);
+  };
+  const tab_addresses = (current) => main_window_tabs(current).map((tab) => tab.raw?.url ?? tab.title ?? "");
+  // Message mode keeps the keys that act on the window or open in the main window: zoom, new message, help, options and the Thunderbird pages. `refocus` puts the focus back where the keys ran once the main window or a compose window took it.
+  const window_app_keys = async (where, pages, refocus) => {
+    const zoom_start = body_state(await fresh_body(message_window_id, `a report of the ${where}`)).inner_height;
+    // One press per key, as the zoom kind does: two keys in one wtype call ended the sequence after the first one in a message window.
+    await press_each(["z", "i"]);
+    let read = body_state(await fresh_body(message_window_id, `z i in the ${where} to zoom the message in`, (body) => body.inner_height < zoom_start));
+    check(app, kind, `${where}: z i zooms the message in`, read.inner_height < zoom_start, `innerHeight ${zoom_start} then ${read.inner_height}`);
+    await press_each(["z", "="]);
+    read = body_state(await fresh_body(message_window_id, `z = in the ${where} to reset the zoom`, (body) => body.inner_height === zoom_start));
+    check(app, kind, `${where}: z = resets the zoom`, read.inner_height === zoom_start, `innerHeight ${zoom_start} then ${read.inner_height}`);
+    state = await key_and_state(instance, ["c"], window_of_type("messageCompose", true));
+    check(app, kind, `${where}: c opens a new message`, state.windows.some((window) => window.type === "messageCompose"), JSON.stringify(state.windows.map((window) => window.type)));
+    await instance.ask("close_compose");
+    await wait_for_state(instance, window_of_type("messageCompose", false));
+    await refocus();
+    for (const [keys, page, is_page] of pages) {
+      await press_each(keys.slice(0, -1));
+      state = await key_and_state(instance, keys.slice(-1), { what: `${keys.join(" ")} in the ${where} to open the ${page} page in the main window`, until: (current) => tab_addresses(current).some(is_page) && current.windows.find((window) => window.id === main_window_id)?.focused === true, show: (current) => `main tabs ${tab_addresses(current).join(" ")}, windows ${JSON.stringify(current.windows.map((window) => [window.type, window.focused]))}`, timeout_ms: 15000 });
+      check(app, kind, `${where}: ${keys.join(" ")} opens the ${page} page in a tab of the main window and brings that window to the front`, tab_addresses(state).some(is_page) && state.windows.find((window) => window.id === main_window_id)?.focused === true, `main tabs ${tab_addresses(state).join(" ")}`);
+      await instance.ask("reset_tabs");
+      await wait_for_state(instance, tab_count_is(1));
+      await refocus();
+    }
+  };
+  const is_own_page = (fragment) => (address) => address.startsWith("moz-extension:") && address.includes(fragment);
+  const focus_message_window = async () => {
+    await instance.ask("focus_window", 20000, { windowId: message_window_id });
+    await sleep(800);
+  };
+  await window_app_keys("message window body", [[["g", "?"], "help", is_own_page("help/help.html")], [[",", "s"], "options", is_own_page("options")], [["g", "p", "c"], "config", (address) => address === "about:config"]], focus_message_window);
 
   // The header of the window runs the same message mode keys, from the pages bundle. F6 takes the focus out of the body. Only a report sent after F6 counts.
   const header_focus = async (where) => {
@@ -325,11 +394,17 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "message window header: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);
   const header_scroll = body_state(await instance.ask("state")).scroll_y;
-  for (const key of ["J", ":", "/", "H"]) await instance.press([key]);
+  for (const key of ["J", ":", "/", "H", "n", "N"]) await instance.press([key]);
   await sleep(1500);
   state = await instance.ask("state");
-  await shot("message_window_header_unbound", "message window header after J, :, / and H: nothing changed, no notification, no command line");
-  check(app, kind, "message window header: J, :, / and H do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
+  await shot("message_window_header_unbound", "message window header after J, :, /, H, n and N: nothing changed, no notification, no command line");
+  check(app, kind, "message window header: J, :, /, H, n and N do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
+  // The main window and a compose window take the focus from the header. The window gives it back to the header, else F6 moves it there again.
+  const focus_header = async () => {
+    await focus_message_window();
+    if (body_state(await fresh_body(message_window_id, "a report of the message window after it took the focus back")).has_focus !== false) await header_focus("message window again");
+  };
+  await window_app_keys("message window header", [[[",", "h"], "help", is_own_page("help/help.html")], [[",", "?"], "help", is_own_page("help/help.html")], [["g", "p", "a"], "add-ons", (address) => address === "about:addons"], [["g", "p", "t"], "themes", (address) => address === "about:addons"]], focus_header);
 
   // A second message window. Both hook the same pages bundle, which keeps one half-typed sequence: g in one window and g in the other must not make g g.
   const first_window_id = state.windows.find((window) => window.type === "messageDisplay")?.id;
@@ -355,8 +430,8 @@ async function run_message_scripts(instance, ctx) {
   await instance.press(["g"]);
   await sleep(1000);
   await shot("message_windows_g_g", "the second message window after g in the first window and g in this one: still scrolled");
-  state = await instance.ask("state");
-  check(app, kind, "two message windows: g in one and g in the other make no g g", body_state(state).window_id !== second_window_id || body_state(state).scroll_y === second_scroll, `window ${body_state(state).window_id}, scrollY ${second_scroll} then ${body_state(state).scroll_y}`);
+  state = await fresh_body(second_window_id, "a report of the second message window after g in each window");
+  check(app, kind, "two message windows: g in one and g in the other make no g g", body_state(state).window_id === second_window_id && body_state(state).scroll_y === second_scroll, `window ${body_state(state).window_id}, scrollY ${second_scroll} then ${body_state(state).scroll_y}`);
   await instance.press(["g"]);
   state = await key_and_state(instance, ["g"], scroll_is("g g in the second window to its top", (body) => body.window_id === second_window_id && body.scroll_y === 0));
   check(app, kind, "two message windows: g g in the second window goes to its top", body_state(state).scroll_y === 0, `scrollY ${body_state(state).scroll_y}`);
