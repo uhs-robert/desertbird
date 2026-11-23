@@ -12,13 +12,13 @@
 </p>
 
 <p align="center"><i>Desert the mouse. Run your mail with your keyboard. The keys teach themselves.</i></p>
-<p align="center">Vim keys for Thunderbird and Betterbird: a command line, a which-key popup and one registry that every key reads.</p>
+<p align="center">Vim keys for Thunderbird: a command line, a which-key popup and one registry that every key reads.</p>
 
 <!-- TODO image: docs/images/demo.gif, 800 px wide. Record a short demo in the mail tab: j and k down the thread list, a to archive, r to reply, the which-key popup after g, the command line with completion, and a theme switch. -->
 
 ## 🐦 What it is
 
-DesertBird puts Vim keys in Thunderbird and Betterbird. It works in the mail tab, the message pane, message windows and the compose window. Press `j` and `k` to move through the thread list, `a` to archive, `r` to reply and `f` to put a short label on each control and pick one by typing it. Press `:` to run any command by name, with completion.
+DesertBird puts Vim keys in Thunderbird (or Betterbird). It works in the mail tab, the message pane, message windows and the compose window. Press `j` and `k` to move through the thread list, `a` to archive, `r` to reply and `f` to put a short label on each control and pick one by typing it. Press `:` to run any command by name, with completion.
 
 Every command is defined once in a registry. Keys, the command line, completion and help all read that definition. DesertBird follows the design of [DesertFox](https://github.com/uhs-robert/desertfox), its Firefox sibling. Use DesertFox for the browser and DesertBird for mail.
 
