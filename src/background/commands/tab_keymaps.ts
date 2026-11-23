@@ -15,7 +15,7 @@ import type { KeymapTree } from "../../shared/protocol.ts";
  * What each kind of tab offers. A message document is the message pane, a message tab and a message window. An own page is the options or help page, which runs the body script and shows no message. A page tab is any other tab with a chrome page: calendar, tasks, chat, settings, the address book, `about:` pages and search results. A remote page (web content) takes the page tree too, and its runtime lets only `tab.close` run.
  * A message tab whose focus is outside the body is a message document with the find line cut out and the hint picks sent to the background by `page_message_tree`.
  * A message window (`window`, message mode) is a message document with no tab bar and no panes around it: it takes the message commands, the command line (`:`, `/`, `m t`, `m m`, `m c`), `q` and the `main` keys (zoom, new message, help, options and the Thunderbird pages), and the tab and pane keys stay unbound there. Its `/`, `n` and `N` find in the body, and do nothing from the header, as in a message tab. The body and the header of the window run its one tree.
- * A compose window (`compose`) is the body of a message being written. It takes only the commands of `COMPOSE_COMMANDS`, and no other, so the offered needs do not decide its keys. Close is not among them: `windows.remove` closes a window with unsaved text and no prompt (measured), so no key of this kind can discard a draft.
+ * A compose window (`compose`) is a message being written: its body and its address and subject fields. It takes only the commands of `COMPOSE_COMMANDS`, and no other, so the offered needs do not decide its keys.
  */
 export const TAB_KINDS = {
     message: ["message", "tab", "line", "body", "close", "pane", "main"],
@@ -27,8 +27,8 @@ export const TAB_KINDS = {
 
 export type TabKind = keyof typeof TAB_KINDS;
 
-/** The only commands a key of a compose window runs, by default or by a user key. Save and edit leave the window open, help opens a page in the main window, and zoom acts on the window. */
-export const COMPOSE_COMMANDS: ReadonlySet<string> = new Set(["compose.edit_external", "compose.save", "help.open", "zoom.by", "zoom.set"]);
+/** The only commands a key of a compose window runs, by default or by a user key. Save and edit leave the window open, help opens a page in the main window, and zoom acts on the window. Close and send go through Thunderbird's own commands, so a changed draft asks to save and a send runs Thunderbird's checks. */
+export const COMPOSE_COMMANDS: ReadonlySet<string> = new Set(["compose.edit_external", "compose.save", "compose.focus", "compose.close", "compose.send", "help.open", "zoom.by", "zoom.set"]);
 
 // Where a key comes from, in the order that decides a clash: the first layer with a key the tab can serve wins. The reading keys (`message_keys`) belong to the body script, so only a tab with a body takes them. The page keys come last, so a tab with a thread list keeps `j` for the list and the body script keeps `j` for scrolling.
 const LAYERS: { keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | undefined; needs: readonly TabNeed[]; only?: TabKind }[] = [

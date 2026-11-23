@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 446 (Mail tab 152, Message 98, Message window 80, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
+bound: 453 (Mail tab 152, Message 98, Message window 80, Compose window 20, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -589,7 +589,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 
 ### Compose window
 
-The body of a message being written, in normal mode (Escape enters it, `i` returns to typing). Ctrl+E edits in either mode. A key left out is not a key there, and no key closes the window. A binding on `i`, on Escape or on a chord has no effect.
+A message being written, in normal mode: the body and the To, Cc, Bcc and Subject fields share one mode (Escape enters it, `i` returns to typing). Ctrl+E edits in either mode. A key left out is not a key there. `q` closes through Thunderbird, which asks to save a changed draft. `g S` sends only while the `compose_send` setting is on. A binding on `i` or on Escape has no effect.
 
 #### Single keys
 
@@ -598,6 +598,18 @@ The body of a message being written, in normal mode (Escape enters it, `i` retur
 | `e` | `edit` |
 | `s` | `save` |
 | `?` | `help.open` |
+| `q` | `compose.close` |
+
+#### Go
+
+| Key | Command |
+| --- | --- |
+| `gt` | `compose.focus to` |
+| `gc` | `compose.focus cc` |
+| `gb` | `compose.focus bcc` |
+| `gs` | `compose.focus subject` |
+| `gm` | `compose.focus body` |
+| `gS` | `compose.send` |
 
 #### DesertBird
 

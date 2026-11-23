@@ -25,7 +25,7 @@ export const compose: CommandGroup = {
             intent: "Edit the message in the external editor.",
             run: scoped<EditExternalApi>(edit_external),
         },
-        // A save keeps the window open and leaves the text where it is. It has no close or send beside it, so no key of a compose window can discard a draft.
+        // A save keeps the window open and leaves the text where it is.
         "compose.save": {
             bridge: false,
             runs_in: "background",
@@ -35,11 +35,36 @@ export const compose: CommandGroup = {
             intent: "Save the message of the compose window as a draft. The window stays open.",
             run: scoped<SaveDraftApi>(save_draft),
         },
+        // The three below run in the chrome runtime of the compose window (`composewin`), which takes the leaf from its fixed table.
+        "compose.focus": {
+            bridge: false,
+            runs_in: "chrome",
+            needs: ["compose"],
+            label: "Go to field",
+            intent: "Move the focus to a field of the compose window. A hidden Cc or Bcc row shows.",
+            params: [{ name: "field", type: "enum", values: ["to", "cc", "bcc", "subject", "body"], description: { to: "Go to the To field.", cc: "Go to the Cc field and show its row.", bcc: "Go to the Bcc field and show its row.", subject: "Go to the subject.", body: "Go to the message body." } }],
+        },
+        // Thunderbird's own close command, so a changed draft asks to save. `windows.remove` would drop it with no prompt (measured).
+        "compose.close": { bridge: false, runs_in: "chrome", needs: ["compose"], label: "Close", intent: "Close the compose window. Thunderbird asks first when the draft has unsaved changes." },
+        "compose.send": {
+            bridge: false,
+            runs_in: "chrome",
+            needs: ["compose"],
+            label: "Send",
+            intent: "Send the message as Ctrl+Enter does. Thunderbird's checks and send confirm apply. Runs only while the compose_send setting is on.",
+        },
     }),
     compose_keys: {
         e: { id: "compose.edit_external", label: "Edit in external editor" },
         s: { id: "compose.save", label: "Save draft" },
         "?": { id: "help.open", label: "Open help" },
+        gt: { id: "compose.focus", args: { field: "to" }, label: "To" },
+        gc: { id: "compose.focus", args: { field: "cc" }, label: "Cc" },
+        gb: { id: "compose.focus", args: { field: "bcc" }, label: "Bcc" },
+        gs: { id: "compose.focus", args: { field: "subject" }, label: "Subject" },
+        gm: { id: "compose.focus", args: { field: "body" }, label: "Message body" },
+        gS: { id: "compose.send", label: "Send" },
+        q: { id: "compose.close", label: "Close" },
     },
     normal_keys: {
         r: { id: "msg.reply", args: { to: "sender" } },

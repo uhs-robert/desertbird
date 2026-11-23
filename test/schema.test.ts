@@ -22,7 +22,7 @@ interface Namespace {
     events?: SchemaNode[];
 }
 
-const PARENTS = ["keys", "overlay", "hints", "pages", "folderpane", "app", "zoom"];
+const PARENTS = ["keys", "overlay", "hints", "pages", "folderpane", "app", "zoom", "composewin"];
 const schema = PARENTS.flatMap((name) => JSON.parse(readFileSync(new URL(`../src/experiment/${name}.schema.json`, import.meta.url), "utf8")) as Namespace[]);
 const namespace_named = (name: string): Namespace => schema.find((entry) => entry.namespace === name)!;
 
@@ -46,7 +46,8 @@ test("the schema functions and events equal the parent exports", async () => {
     const folderpane_parent = await import("../src/chrome/parent_folderpane.ts");
     const app_parent = await import("../src/chrome/parent_app.ts");
     const zoom_parent = await import("../src/chrome/parent_zoom.ts");
-    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context as never), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context), ...app_parent.get_app_api(context), ...zoom_parent.get_zoom_api(context) } as Record<string, Record<string, unknown>>;
+    const composewin_parent = await import("../src/chrome/parent_composewin.ts");
+    const apis = { ...keys_parent.get_keys_api(context), ...overlay_parent.get_overlay_api(context as never), ...hints_parent.get_hints_api(context as never), ...pages_parent.get_pages_api(context), ...folderpane_parent.get_folderpane_api(context), ...app_parent.get_app_api(context), ...zoom_parent.get_zoom_api(context), ...composewin_parent.get_composewin_api(context) } as Record<string, Record<string, unknown>>;
     assert.deepEqual(Object.keys(apis).sort(), schema.map((entry) => entry.namespace).sort());
     for (const entry of schema) {
         const members = apis[entry.namespace]!;
@@ -59,6 +60,7 @@ test("the schema functions and events equal the parent exports", async () => {
     overlay_parent.shutdown();
     hints_parent.shutdown();
     pages_parent.shutdown();
+    composewin_parent.shutdown();
     platform.restore();
 });
 
@@ -88,7 +90,7 @@ test("only the trees are loose objects among the function parameters, and a comm
         });
     }
     // `root` is typed any inside the tree, so it sits under the same loose object.
-    assert.deepEqual(loose.sort(), ["keys.install.args.tree", "keys.install.args.tree.*", "keys.install.args.tree.root", "pages.install.args.messageTree", "pages.install.args.messageTree.*", "pages.install.args.messageTree.root", "pages.install.args.pageTree", "pages.install.args.pageTree.*", "pages.install.args.pageTree.root", "pages.install.args.typingTree", "pages.install.args.typingTree.*", "pages.install.args.typingTree.root", "pages.install.args.windowTree", "pages.install.args.windowTree.*", "pages.install.args.windowTree.root"]);
+    assert.deepEqual(loose.sort(), ["keys.install.args.tree", "keys.install.args.tree.*", "keys.install.args.tree.root", "pages.install.args.messageTree", "pages.install.args.messageTree.*", "pages.install.args.messageTree.root", "pages.install.args.pageTree", "pages.install.args.pageTree.*", "pages.install.args.pageTree.root", "pages.install.args.typingTree", "pages.install.args.typingTree.*", "pages.install.args.typingTree.root", "pages.install.args.windowTree", "pages.install.args.windowTree.*", "pages.install.args.windowTree.root", "composewin.install.args.composeTree", "composewin.install.args.composeTree.*", "composewin.install.args.composeTree.root"].sort());
 });
 
 test("the schema has no verb that runs a script, evaluates or opens a URL", () => {

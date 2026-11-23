@@ -3,7 +3,7 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
-import type { AppApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
+import type { AppApi, ComposewinApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
 import { COMPOSE_COMMANDS, compile_tab_keymap, compile_typing_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
 import { record_activation, tab_choices } from "./handlers/tabs.ts";
@@ -81,7 +81,7 @@ interface KeymapRecord {
     page_tree: KeymapTree;
     /** The keys of DesertBird's own pages (options, help): the page keys with find and hints. Their body script reads it from storage. */
     own_tree: KeymapTree;
-    /** The keys of the body of a compose window in normal mode. Its compose script reads it from storage. */
+    /** The keys of a compose window in normal mode. The `composewin` Experiment installs it. */
     compose_tree: KeymapTree;
     /** The keys that run while a text field has the focus. The `pages` Experiment installs it, and it also serves the text fields of the mail tab. */
     typing_tree: KeymapTree;
@@ -129,6 +129,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdlin
     app?: AppApi;
     overlay?: OverlayApi;
     pages?: PagesApi;
+    composewin?: ComposewinApi;
     hints?: HintsApi;
 }
 
@@ -182,11 +183,13 @@ async function load_record(): Promise<KeymapRecord> {
 async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
-    const { tree, page_tree, message_tree, window_tree, typing_tree } = await load_record();
-    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree]);
+    const { tree, page_tree, message_tree, window_tree, typing_tree, compose_tree } = await load_record();
+    const allow_send = (await config_store.read()).settings.compose_send;
+    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send]);
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
     await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), windowTree: page_message_tree(window_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
+    await messenger.composewin?.install({ composeTree: compose_tree, allowSend: allow_send });
     installed_tree_json = tree_json;
     // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
     hud.close_which_key();
@@ -355,7 +358,7 @@ messenger.overlay?.onClosed.addListener(({ windowId, surface, reason }) => {
 
 start_jump_history(messenger);
 
-// Registered at each start of this page, so compose windows opened from now on get Ctrl+E.
+// Registered at each start of this page, so compose windows opened from now on get Ctrl+E. The other keys of a compose window belong to the `composewin` Experiment.
 messenger.composeScripts.register({ js: [{ file: "content/compose_keys.js" }] }).catch(console.error);
 messenger.tabs.onRemoved.addListener((tab_id) => void external_editor.compose_gone(tab_id).catch(console.error));
 // A sent message closes its window too. Whichever event comes first orphans the job. A failed send keeps the window open, so it leaves the job alone.
@@ -375,6 +378,10 @@ const on_key_event = (event: KeysEvent) => {
 };
 messenger.keys?.onInvocation.addListener(on_key_event);
 messenger.pages?.onInvocation.addListener(on_key_event);
+// The compose tree holds only the compose commands. The check here keeps any other id out, whatever reaches the event.
+messenger.composewin?.onInvocation.addListener((event) => {
+    if ("args" in event && COMPOSE_COMMANDS.has(event.command)) router.run(event).catch(console.error);
+});
 
 // A half-typed sequence the key runtime cannot see end: a tab change, or the window losing the focus.
 messenger.tabs.onActivated.addListener(() => hud.close_which_key());
