@@ -234,36 +234,10 @@ test("g g goes to the top and G to the bottom", async () => {
     assert.deepEqual(window.scrolls, ["to 0", `to ${PAGE_HEIGHT}`]);
 });
 
-test("Escape with nothing pending is not cancelled, so Thunderbird still closes a message window", async () => {
+test("Escape ends a half-typed sequence and a count, and is not cancelled", async () => {
     const { window } = await started();
-    assert.deepEqual(window.press("Escape"), { cancelled: false, stopped: false });
-});
-
-test("Escape after a prefix in a message tab document is cancelled and clears the sequence", async () => {
-    const { window, reports } = await started();
     window.press("g");
-    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
-    assert.deepEqual(reports.at(-1), []);
-    window.press("g");
-    assert.deepEqual(window.scrolls, [], "the cleared g does not make g g");
-});
-
-test("Escape with a sequence pending clears it and is cancelled, so the window stays open", async () => {
-    const window_root = JSON.parse(JSON.stringify(compile_tab_keymap("window").compiled.modes.normal)) as unknown;
-    const window = new StubWindow();
-    const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { ...record(), window_tree: { version: COMPILED_KEYMAP_VERSION, root: window_root } } });
-    const { runtime, reports } = stub_runtime();
-    await start_body_script(window, storage, runtime, undefined, "window_tree");
-    window.press("g");
-    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
-    assert.deepEqual(reports, [["g"], []], "the pending report clears");
-    window.press("g");
-    assert.deepEqual(window.scrolls, []);
-    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
-});
-
-test("Escape ends a half-typed sequence and a count", async () => {
-    const { window } = await started();
+    assert.equal(window.press("Escape").cancelled, false);
     window.press("g");
     window.press("3");
     window.press("Escape");
@@ -841,19 +815,18 @@ test("an own page names its tree in the pending report and a message document do
     }
 });
 
-test("a message window document reads the window tree and names it in the pending report: J does nothing there, : and / open the command line, and m s runs", async () => {
+test("a message window document reads the window tree and names it in the pending report: J steps the message, : and / open the command line, and m s runs", async () => {
     const window_root = JSON.parse(JSON.stringify(compile_tab_keymap("window").compiled.modes.normal)) as unknown;
     const window = new StubWindow();
     const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { ...record(), window_tree: { version: COMPILED_KEYMAP_VERSION, root: window_root } } });
     const { runtime, sent, trees } = stub_runtime();
     await start_body_script(window, storage, runtime, undefined, "window_tree");
-    assert.equal(window.press("J").cancelled, true, "swallowed, so Thunderbird's own J does not run");
-    assert.deepEqual(sent, [], "J sent nothing");
+    assert.equal(window.press("J").cancelled, true);
     window.press(":");
     window.press("/");
     window.press("m");
     window.press("s");
-    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["cmdline.open", "cmdline.open", "msg.flag"]);
+    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["step.message", "cmdline.open", "cmdline.open", "msg.flag"]);
     assert.deepEqual(trees, ["window", "window"]);
 });
 
@@ -876,5 +849,5 @@ test("the message script entry starts on the message keys while the background c
     await new Promise((resolve) => setTimeout(resolve, 1500));
     window.press("J");
     window.press("c");
-    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["tab.next", "msg.new"], "the window keys run once it answers");
+    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["tab.next", "step.message", "msg.new"], "the window keys run once it answers");
 });

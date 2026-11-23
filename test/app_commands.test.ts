@@ -119,3 +119,30 @@ test("folder.collapse still focuses the folder pane when the folder script fails
         assert.deepEqual(calls, ["paneFocus folders"]);
     }
 });
+
+test("step.message runs the command for each direction and unread flag, and checks its args", async () => {
+    assert.equal(ok("step.message", { direction: "next" }), true);
+    assert.equal(ok("step.message", { direction: "previous", unread: true }), true);
+    assert.equal(ok("step.message", { direction: "sideways" }), false);
+    const fake = app_fake();
+    for (const [direction, unread] of [["next", false], ["previous", false], ["next", true], ["previous", true]] as const) await fake.run("step.message", { direction, unread }, 8);
+    assert.deepEqual(fake.calls, ["appCommand cmd_nextMsg", "appCommand cmd_previousMsg", "appCommand cmd_nextUnreadMsg", "appCommand cmd_previousUnreadMsg"]);
+});
+
+test("step.message refuses with a toast when the Experiment answers false, at either end or in a window with no list", async () => {
+    for (const [direction, unread, text] of [["next", false, "No later message here."], ["previous", false, "No earlier message here."], ["next", true, "No later unread message here."], ["previous", true, "No earlier unread message here."]] as const) {
+        const fake = app_fake(false);
+        await fake.run("step.message", { direction, unread }, 8);
+        assert.deepEqual(fake.calls.slice(1), [`notify ${text}`], `${direction} ${unread}`);
+    }
+});
+
+test("the window keys J, K, ] u and [ u step the message, and only a message window has them", () => {
+    const window_normal = default_keymap_of("window").normal ?? {};
+    assert.deepEqual(window_normal["J"], { id: "step.message", args: { direction: "next", unread: false }, label: "Next message" });
+    assert.deepEqual(window_normal["]u"], { id: "step.message", args: { direction: "next", unread: true }, label: "Unread" });
+    assert.equal(window_normal["]U"], undefined);
+    for (const kind of ["message", "own", "page"] as const) assert.equal((default_keymap_of(kind).normal?.["J"] as { id: string }).id, "tab.next", kind);
+    assert.equal((DEFAULT_KEYMAP.normal?.["]u"] as { id: string }).id, "step.unread");
+    assert.equal((DEFAULT_KEYMAP.normal?.["J"] as { id: string }).id, "tab.next");
+});

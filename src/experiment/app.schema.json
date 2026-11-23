@@ -163,7 +163,7 @@
         "name": "appCommand",
         "type": "function",
         "async": true,
-        "description": "Runs one of two Thunderbird commands by name. Answers false when Thunderbird has the command disabled.",
+        "description": "Runs one of five Thunderbird commands by name. Answers false when Thunderbird has the command disabled.",
         "parameters": [
           {
             "name": "args",
@@ -175,7 +175,11 @@
               "name": {
                 "type": "string",
                 "enum": [
-                  "cmd_openConversation"
+                  "cmd_openConversation",
+                  "cmd_nextMsg",
+                  "cmd_previousMsg",
+                  "cmd_nextUnreadMsg",
+                  "cmd_previousUnreadMsg"
                 ]
               }
             }

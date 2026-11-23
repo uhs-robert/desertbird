@@ -10,6 +10,8 @@ import type { FolderTreeLike, ThreadVerbPane } from "./view.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 import type { AppCommandArgs, AppOpenPageArgs, AppPaneFocusArgs, AppPaneResizeArgs } from "../shared/protocol.ts";
 
+declare const Ci: { nsMsgNavigationType: Record<string, number | undefined> };
+
 interface Controller {
     isCommandEnabled(name: string): boolean;
     doCommand(name: string): void;
@@ -33,14 +35,28 @@ interface AppPane extends ThreadVerbPane, ResizePane {
     browsingContext: { topChromeWindow: AppWindow };
 }
 
+interface StepView {
+    viewNavigate(motion: number, result_key: { value: number }, result_index: { value: number }, thread_index: { value: number }, wrap: boolean): void;
+}
+
 interface ControllerHolder {
     commandController?: Controller;
+    gViewWrapper?: { dbView?: StepView | null } | null;
+    gMessage?: { messageKey: number } | null;
 }
 
 const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
 
 // `about:3pane`, `about:message` of a message tab or window: each controller acts on its own page's message.
-const CONTROLLERS = { cmd_openConversation: (holder: ControllerHolder) => holder.commandController };
+
+// Thunderbird answers the step commands as enabled at the ends too (next and previous stay put, next unread wraps), so the view is asked first, with no wrap. The answer is the message key, and the all-ones key means none. The index is no help: previous unread with none left gives index 0 and no key. At the first or last message the view answers the shown message itself, which Thunderbird then ignores, so that is no row to step to either. The motion of `cmd_nextUnreadMsg` is `Ci.nsMsgNavigationType.nextUnreadMessage`, and `cmd_openConversation` has none.
+const NO_KEY = 0xffffffff;
+
+function view_has_row_to_step_to(holder: ControllerHolder, motion: number): boolean {
+    const key = { value: NO_KEY };
+    holder.gViewWrapper?.dbView?.viewNavigate(motion, key, { value: NO_KEY }, { value: NO_KEY }, false);
+    return key.value !== NO_KEY && key.value !== holder.gMessage?.messageKey;
+}
 
 function controller_holder_of(context: ExtensionContext, window_id: number): ControllerHolder | null | undefined {
     const is_window = (candidate: MainWindow) => context.extension.windowManager.getWrapper(candidate)?.id === window_id;
@@ -86,9 +102,10 @@ export function app_verbs(context: ExtensionContext) {
         }),
         appCommand: guard("app.appCommand", ({ windowId, name }: AppCommandArgs): boolean => {
             const holder = controller_holder_of(context, windowId);
-            const controller = holder && CONTROLLERS[name](holder);
+            const controller = holder && holder.commandController;
             if (!controller) throw new Error("the window shows no message");
-            const enabled = controller.isCommandEnabled(name);
+            const motion = Ci.nsMsgNavigationType[name.slice(4).replace("Msg", "Message")];
+            const enabled = controller.isCommandEnabled(name) && (motion === undefined || view_has_row_to_step_to(holder, motion));
             if (enabled) controller.doCommand(name);
             return enabled;
         }),

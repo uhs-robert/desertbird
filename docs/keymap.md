@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 437 (Mail tab 147, Message 98, Message window 76, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
+bound: 441 (Mail tab 147, Message 98, Message window 80, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -431,6 +431,8 @@ A message in a window of its own (message mode), in the body and in the header. 
 
 | Key | Command |
 | --- | --- |
+| `J` | `step.message --next --unread=false` |
+| `K` | `step.message --previous --unread=false` |
 | `j` | `message.scroll_down` |
 | `k` | `message.scroll_up` |
 | `<C-d>` | `message.half_page_down` |
@@ -556,6 +558,18 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `;f` | `hint.pick --focus` |
 | `;c` | `hint.pick` |
 | `;y` | `hint.pick --yank` |
+
+#### Next
+
+| Key | Command |
+| --- | --- |
+| `]u` | `step.message --next --unread` |
+
+#### Previous
+
+| Key | Command |
+| --- | --- |
+| `[u` | `step.message --previous --unread` |
 
 #### Delete
 

@@ -44,7 +44,7 @@ test("the page keys pass every key while the window root carries the hint marker
 });
 
 // A message window has no tabmail. The pages runtime hooks it too and reads its message from `messageBrowser` at key time.
-test("a message window header runs message mode: j scrolls the body, m s flags the window's message, J does nothing, and a key before about:message loads is safe", async () => {
+test("a message window header runs message mode: j scrolls the body, m s flags the window's message, J steps it, and a key before about:message loads is safe", async () => {
     const key_listeners: ((event: unknown) => void)[] = [];
     const header = { localName: "div" };
     const scrolled: number[] = [];
@@ -79,7 +79,7 @@ test("a message window header runs message mode: j scrolls the body, m s flags t
         press("m");
         press("s");
         assert.equal(press("J").cancelled, true);
-        assert.deepEqual(ran.filter((event) => event.command !== "pending").map((event) => [event.command, event.messageIds]), [["msg.flag", [77]]]);
+        assert.deepEqual(ran.filter((event) => event.command !== "pending").map((event) => [event.command, event.messageIds]), [["msg.flag", [77]], ["step.message", [77]]]);
         shutdown();
     } finally {
         platform.restore();

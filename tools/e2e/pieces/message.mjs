@@ -304,8 +304,8 @@ async function run_message_scripts(instance, ctx) {
   state = await flag_keys(plain_id, true);
   check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);
-  state = await key_and_state(instance, ["J"], 1500);
-  check(app, kind, "message window: J changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+  state = await key_and_state(instance, ["H"], 1500);
+  check(app, kind, "message window: H changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   const message_window_id = state.windows.find((window) => window.type === "messageDisplay")?.id;
   const main_window_id = state.windows.find((window) => window.type === "normal")?.id;
 
@@ -388,11 +388,11 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "message window header: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);
   const header_scroll = body_state(await instance.ask("state")).scroll_y;
-  for (const key of ["J", "/", "H", "n", "N"]) await instance.press([key]);
+  for (const key of ["/", "H", "n", "N"]) await instance.press([key]);
   await sleep(1500);
   state = await instance.ask("state");
-  await shot("message_window_header_unbound", "message window header after J, /, H, n and N: nothing changed, no notification, no command line");
-  check(app, kind, "message window header: J, /, H, n and N do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
+  await shot("message_window_header_unbound", "message window header after /, H, n and N: nothing changed, no notification, no command line");
+  check(app, kind, "message window header: /, H, n and N do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
   // The main window and a compose window take the focus from the header. The window gives it back to the header, else F6 moves it there again.
   const focus_header = async () => {
     await focus_message_window();

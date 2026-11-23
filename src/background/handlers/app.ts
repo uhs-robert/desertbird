@@ -31,3 +31,11 @@ export async function resize_pane(scope: AppScope, args: CheckedArgs): Promise<v
 
 // Past the end the focus just stays, with no toast: the key does nothing, as at the end of a list.
 export const focus_pane_beside = (side: "left" | "right") => async (scope: AppScope): Promise<void> => void (await scope.api.app.paneFocus({ windowId: scope.window_id, pane: side }));
+
+// The Experiment answers false for a window with no message list (an .eml) and at the first or last message, and never wraps.
+export async function step_message(scope: AppScope, args: CheckedArgs): Promise<void> {
+    const forward = args["direction"] === "next";
+    const unread = args["unread"] === true;
+    const name = unread ? (forward ? "cmd_nextUnreadMsg" : "cmd_previousUnreadMsg") : forward ? "cmd_nextMsg" : "cmd_previousMsg";
+    if (!(await scope.api.app.appCommand({ windowId: scope.window_id, name }))) throw new RuntimeRefusal(`No ${forward ? "later" : "earlier"} ${unread ? "unread " : ""}message here.`);
+}

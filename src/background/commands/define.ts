@@ -31,6 +31,8 @@ export interface CommandGroup {
     message_keys?: NonNullable<KeymapConfig["normal"]>;
     /** The keys of the body of a compose window in normal mode. They come before every other layer there. */
     compose_keys?: NonNullable<KeymapConfig["normal"]>;
+    /** Keys of a message window only. They come before every other layer there, so `J` steps the window's message where the mail tab's `J` switches tab. */
+    window_keys?: NonNullable<KeymapConfig["normal"]>;
     page_keys?: NonNullable<KeymapConfig["normal"]>;
     /** Keys that run while a text field has the focus, in the mail tab and in page tabs. Only chords belong here, since a plain key in a field is text. They are the `typing_tree` of the keymap record, apart from the other layers, so a key like `<Escape>` never reaches the normal-mode trees. */
     typing_keys?: NonNullable<KeymapConfig["normal"]>;
