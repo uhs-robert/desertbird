@@ -90,7 +90,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     let escaped_in_field = false;
     let hold_commands = new Set<string>();
     let hold_until = 0;
-    let hints_done_at_hold = 0;
+    // The picks ended when an f hold began, or null for a hold of the command line, which a hint pick never ends.
+    let hints_done_at_hold: number | null = 0;
     // Whether the last report left the panel open. The next key then reports its end, unless it extends the typed prefix.
     let key_list_shown = false;
 
@@ -117,7 +118,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         if (is_plain_printable(token) && deps.overlay_is_loading(window)) return void (event.preventDefault(), event.stopPropagation());
         if (hold_until > deps.now()) {
             // The hold ends when the focus is in a text field, which the overlay's browser counts as.
-            if (situation === "typing" || situation === "field" || deps.hints_done_of(window) !== hints_done_at_hold) hold_until = 0;
+            if (situation === "typing" || situation === "field" || hints_done_at_hold !== null && deps.hints_done_of(window) !== hints_done_at_hold) hold_until = 0;
             else if (situation !== "pass" && is_plain_printable(token)) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -159,7 +160,10 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
                     key_list_shown = true;
                     deps.emit({ command: "pending", keys: [], windowId: deps.window_id_of(window), source, root: true });
                 } else {
-                    if (hold_commands.has(step.invocation.id)) (hold_until = deps.now() + HOLD_MS), (hints_done_at_hold = deps.hints_done_of(window));
+                    if (hold_commands.has(step.invocation.id)) {
+                        hold_until = deps.now() + HOLD_MS;
+                        hints_done_at_hold = step.invocation.id.startsWith("hint.") ? deps.hints_done_of(window) : null;
+                    }
                     deps.emit({ command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count: count ?? 1, windowId: deps.window_id_of(window), messageIds: situation === "message" ? deps.message_ids_of(window) : [] });
                 }
             }

@@ -84,7 +84,7 @@ test("hints.pick labels a mail tab, takes the keys on the window root ahead of t
     const label_host: unknown[] = [];
     const shown = { top: 10, left: 10, width: 20, height: 10 };
     const button = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null };
-    const make_document = (matching: unknown[]) => ({ querySelectorAll: (selector: string) => (selector.startsWith("button") ? matching : []), elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => label_host.push("removed"), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: (child: unknown) => label_host.push(child), setAttribute() {}, removeAttribute() {} } });
+    const make_document = (matching: unknown[]) => ({ querySelectorAll: (selector: string) => (selector.startsWith("button") ? matching : []), elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => label_host.push("removed"), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: (child: unknown) => label_host.push(child), getAttribute: () => null, setAttribute() {}, removeAttribute() {} } });
     const window_like = (matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(matching) });
     const pane = { ...window_like([button]), ...listeners("pane"), messageBrowser: { contentWindow: null } };
     const main = { ...window_like([]), ...listeners("main"), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), document: { ...make_document([]), hasFocus: () => true, getElementById: () => ({ currentTabInfo: { mode: { name: "mail3PaneTab" }, chromeBrowser: { contentWindow: pane } } }) } };
@@ -114,7 +114,7 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
     const shown = { top: 10, left: 10, width: 20, height: 10 };
     // The page scan walks every element and keeps the ones that match, so this control matches the page selector and no field one.
     const control = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: (selector: string) => selector.startsWith("button"), closest: () => null };
-    const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove() {}, append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), setAttribute: (attribute: string) => void marks.add(attribute), removeAttribute: (attribute: string) => void marks.delete(attribute) } });
+    const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove() {}, append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), getAttribute: () => null, setAttribute: (attribute: string) => void marks.add(attribute), removeAttribute: (attribute: string) => void marks.delete(attribute) } });
     const window_like = (name: string, matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(name, matching), ...listeners(name) });
     const page = window_like("page", [control, control]);
     const tab: Record<string, unknown> = { mode: { name: "preferencesTab" }, browser: { contentDocument: page.document, contentWindow: page } };
@@ -178,7 +178,8 @@ function message_setup() {
     const shown = { top: 10, left: 10, width: 20, height: 10 };
     const log: string[] = [];
     const element = (name: string, openable: boolean) => ({ name, isConnected: true, getBoundingClientRect: () => shown, contains: () => true, focus: () => void log.push(`focus ${name}`), click: () => void log.push(`click ${name}`), matches: (selector: string) => openable && selector === "a[href], button", closest: () => null });
-    const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => void removed.push(name), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), setAttribute() {}, removeAttribute() {} } });
+    const attributes = new Map<string, string>();
+    const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => void removed.push(name), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), getAttribute: (name: string) => attributes.get(name) ?? null, setAttribute: (name: string, value: string) => void attributes.set(name, value), removeAttribute: (name: string) => void attributes.delete(name) } });
     const window_like = (name: string, matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(name, matching), ...listeners(name) });
     const reply = element("reply", false);
     const link = element("link", true);
@@ -194,7 +195,7 @@ function message_setup() {
     const main = { ...window_like("main", []), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } }, document: { ...make_document("main", []), activeElement: message_browser as unknown, hasFocus: () => has_focus, getElementById: () => ({ currentTabInfo: tab }) } };
     // A message window has no tabmail. Its about:message sits in `messageBrowser`, and the focus goes down through it to the body.
     const message_window = { ...window_like("message window", []), windowRoot: listeners("window root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: main.KeyboardEvent, messageBrowser: { contentWindow: message }, document: { ...make_document("message window", []), activeElement: message_browser as unknown, hasFocus: () => true, getElementById: () => null } };
-    return { heard, added, drawn_in, removed, log, reply, link, message, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
+    return { attributes, heard, added, drawn_in, removed, log, reply, link, message, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
 }
 
 test("hints.pick at the message labels the header and the body in one set, and the Enter of a body link waits for the end of the key and for the focus", async () => {
@@ -277,6 +278,16 @@ test("hints.pick at the message removes every listener it added on each way it e
             assert.deepEqual(live(), [], name);
             setup.removed.length = 0;
         }
+        // The key runtimes drop their f hold when this mark moves, so a cancel must move it as a pick does.
+        const done = () => Number(setup.attributes.get("data-desertbird-hints-done") ?? 0);
+        const done_before = done();
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
+        press("Escape");
+        assert.equal(done(), done_before + 1, "a cancel bumps the labels-done mark");
+        await pick({ windowId: 7, tabId: 5, colors, place: "message" });
+        press("a");
+        assert.equal(done(), done_before + 2, "a pick bumps it again");
+        setup.removed.length = 0;
         await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         setup.heard.get("main blur")!();
         assert.deepEqual(setup.removed, [], "a blur inside the window (the chrome took the focus) keeps the labels");

@@ -879,3 +879,14 @@ test("a hint key in a message tab holds the plain keys until its labels are done
     press(window, "y");
     assert.deepEqual(invocations().map((event) => event.command), ["hint.window", "hint.window"]);
 });
+
+test("a labels-done mark bumped during a command line hold does not end it", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    window.situation = "page";
+    press(window, ":");
+    window.hints_done++;
+    assert.equal(press(window, "j").cancelled, true, "the hold still swallows the key");
+    assert.deepEqual(invocations().map((event) => event.command), ["cmdline.open"]);
+});
