@@ -2,6 +2,7 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { OverlayApi } from "../../shared/protocol.ts";
 import type { CmdlineSessions } from "../cmdline/service.ts";
+import { MESSAGE_WINDOW_TYPE } from "../window_types.ts";
 import type { HandlerScope } from "./message.ts";
 
 export interface CmdlineApi {
@@ -10,7 +11,6 @@ export interface CmdlineApi {
     windows: { get(window_id: number): Promise<{ type?: string }> };
 }
 
-const MESSAGE_WINDOW_TYPE = "messageDisplay";
 
 /** Opens the command line over the window of the key press. The session is stored first, because the page asks for it as soon as it loads. */
 export async function open_cmdline(scope: HandlerScope<CmdlineApi>, args: CheckedArgs): Promise<void> {

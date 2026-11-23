@@ -5,6 +5,7 @@ import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation } from "../shared/protocol.ts";
 import type { ThemedHints } from "./handlers/hint_window.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
+import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import type { NotificationsApi } from "./notify.ts";
 
 export interface BodyRequestApi extends NotificationsApi {
@@ -29,7 +30,6 @@ export interface BodyRequestDeps {
     run(invocation: KeysInvocation): Promise<void>;
 }
 
-const MESSAGE_WINDOW_TYPE = "messageDisplay";
 const COMPOSE_WINDOW_TYPE = "messageCompose";
 const NO_COMMANDS: ReadonlySet<string> = new Set();
 

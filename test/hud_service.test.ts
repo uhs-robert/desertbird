@@ -369,11 +369,23 @@ test("a toast whose page is already mounted reports true", async () => {
 
 test("the toasts lift while the command line is open in the window and drop when it closes", async () => {
     const { hud, state } = setup();
+    await hud.track(1);
     assert.equal((await state()).lifted, false);
     hud.set_lifted(1, true);
     assert.equal((await state()).lifted, true);
     hud.set_lifted(1, false);
     assert.equal((await state()).lifted, false);
+});
+
+test("a command line opened and closed in a window the hud does not track, a message window, leaves no entry, so a later which-key prefix mounts nothing there", async () => {
+    const { hud, body_pending, log, timers } = setup({ which_key_delay_ms: 300 });
+    hud.set_lifted(5, true);
+    hud.set_lifted(5, false);
+    await body_pending(["g"], 5);
+    timers.advance(1000);
+    await settle();
+    assert.deepEqual(log, []);
+    assert.equal(timers.pending(), 0);
 });
 
 test("a lifting mount lifts the toasts, a plain one sets them down, and a failed mount undoes it", async () => {

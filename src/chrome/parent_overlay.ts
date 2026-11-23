@@ -188,7 +188,8 @@ function ensure_mode_label(context: ExtensionContext & { extension: OverlayExten
 
 function ensure_host(context: ExtensionContext & { extension: OverlayExtension }): OverlayHost {
     host ??= create_overlay_host<MainWindow>({
-        window_with_id: (window_id) => open_overlay_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
+        // The hud (toasts, which-key) draws in main windows only. A message window refuses it, so its toasts fall back to a system notification.
+        window_with_id: (window_id, surface) => (surface === "hud" ? open_main_windows() : open_overlay_windows()).find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
         create: (window, surface, window_id, click_through, on_not_ready) => create_overlay_element(window, context.extension, surface, window_id, click_through, on_not_ready),
         capture_focus: (window) => capture_focus(window.document),
         focus_thread_list(window) {

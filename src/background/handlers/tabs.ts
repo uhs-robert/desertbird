@@ -3,6 +3,7 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { AppApi } from "../../shared/protocol.ts";
 import type { HandlerScope } from "./message.ts";
 import { refused_as } from "../../shared/swallow.ts";
+import { MESSAGE_WINDOW_TYPE } from "../window_types.ts";
 
 type TabsScope = HandlerScope<TabsApi>;
 
@@ -38,7 +39,7 @@ export interface MainWindowApi {
     };
 }
 
-const WINDOWS_WITHOUT_TABS = new Set(["messageDisplay", "messageCompose"]);
+const WINDOWS_WITHOUT_TABS = new Set([MESSAGE_WINDOW_TYPE, "messageCompose"]);
 
 /** The window a page opened by the key goes to. A message window and a compose window have no tab bar, and `tabs.create` refuses their ids, so the page opens in the first main window, which comes to the front. Any other window is its own. */
 // Not `windows.getLastFocused`: Thunderbird ignores its `windowTypes` and answers the message window itself.
@@ -170,7 +171,7 @@ export async function move_tab(scope: TabsScope, args: CheckedArgs): Promise<voi
 
 // `tabs.remove` on the first tab does nothing and reports no error, also when it is the only tab (measured). So the handler does not call it there. A message window has one tab at index 0 and closes as a window. Other non-main windows (a compose window, a popup) take the tab path, so a key never discards a draft. On the main mail tab `q` has no tab to close, so it moves the focus to the thread list, which is where `q` leaves a message in the reading pane.
 export async function close_tab(scope: TabsScope): Promise<void> {
-    if (scope.window_id >= 0 && (await scope.api.windows.get(scope.window_id)).type === "messageDisplay") return scope.api.windows.remove(scope.window_id);
+    if (scope.window_id >= 0 && (await scope.api.windows.get(scope.window_id)).type === MESSAGE_WINDOW_TYPE) return scope.api.windows.remove(scope.window_id);
     const active = (await tabs_of_window(scope)).find((tab) => tab.active);
     if (active === undefined) throw new RuntimeRefusal("No tab is active.");
     if (active.index === 0) return void (await scope.api.app.paneFocus({ windowId: scope.window_id, pane: "threads" }));
