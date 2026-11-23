@@ -2,6 +2,8 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { AppApi, Pane, PaneResizeDirection } from "../../shared/protocol.ts";
 import type { HandlerScope } from "./message.ts";
+import { main_window_of } from "./tabs.ts";
+import type { MainWindowApi } from "./tabs.ts";
 
 export interface AppHandlerApi {
     app: AppApi;
@@ -13,8 +15,9 @@ export async function open_conversation(scope: AppScope): Promise<void> {
     if (!(await scope.api.app.appCommand({ windowId: scope.window_id, name: "cmd_openConversation" }))) throw new RuntimeRefusal("Thunderbird cannot open a conversation for this selection.");
 }
 
-export async function open_page(scope: AppScope, args: CheckedArgs): Promise<void> {
-    await scope.api.app.appOpenPage({ windowId: scope.window_id, page: args["page"] as "addons" | "themes" | "config" });
+// The page opens in a tab, so a key in a message window opens it in the main window.
+export async function open_page(scope: HandlerScope<AppHandlerApi & MainWindowApi>, args: CheckedArgs): Promise<void> {
+    await scope.api.app.appOpenPage({ windowId: await main_window_of(scope.api, scope.window_id), page: args["page"] as "addons" | "themes" | "config" });
 }
 
 export async function focus_pane(scope: AppScope, args: CheckedArgs): Promise<void> {

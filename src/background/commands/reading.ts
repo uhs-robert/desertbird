@@ -16,8 +16,9 @@ export const reading: CommandGroup = {
         "message.scroll_right": { runs_in: "message", bridge: true, label: "Scroll right", intent: "Scroll the message to the right.", count: "repeat" },
         "message.top": { runs_in: "message", bridge: true, label: "Go to top", intent: "Scroll to the top of the message." },
         "message.bottom": { runs_in: "message", bridge: true, label: "Go to bottom", intent: "Scroll to the bottom of the message." },
-        "message.find_next": { runs_in: "message", bridge: true, label: "Next match", intent: "Go to the next match of the last find, wrapping.", count: "ignore" },
-        "message.find_prev": { runs_in: "message", bridge: true, label: "Previous match", intent: "Go to the previous match of the last find, wrapping.", count: "ignore" },
+        // `n` and `N` follow the find line, which draws in the main window only, so they need `tab` as the key that opens it does.
+        "message.find_next": { runs_in: "message", bridge: true, needs: ["body", "tab"], label: "Next match", intent: "Go to the next match of the last find, wrapping.", count: "ignore" },
+        "message.find_prev": { runs_in: "message", bridge: true, needs: ["body", "tab"], label: "Previous match", intent: "Go to the previous match of the last find, wrapping.", count: "ignore" },
         "hint.pick": {
             runs_in: "message",
             bridge: true,

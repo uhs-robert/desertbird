@@ -14,7 +14,7 @@ export const compose: CommandGroup = {
             run: scoped(reply),
         },
         "msg.forward": { bridge: false, runs_in: "background", label: "Forward", intent: "Forward the selected message.", run: scoped(forward) },
-        "msg.new": { bridge: false, runs_in: "background", needs: ["tab"], label: "New message", intent: "Write a new message.", run: scoped(new_message) },
+        "msg.new": { bridge: false, runs_in: "background", needs: ["main"], label: "New message", intent: "Write a new message.", run: scoped(new_message) },
         // Ctrl+E in the compose body runs it through the compose script. It has no key in the mail window, which has no message being written.
         "compose.edit_external": {
             bridge: false,

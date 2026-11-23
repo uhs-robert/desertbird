@@ -10,6 +10,13 @@ import { help_groups } from "../src/help/model.ts";
 
 const all_entries = (keymap = DEFAULT_KEYMAP) => help_groups(registry, keymap).flatMap((group) => group.entries);
 
+// Window 4 is a main window and window 6 a message window. The first main window is 2.
+const windows_fake = (calls: string[], main_open = true) => ({
+    get: async (window_id: number) => ({ type: window_id === 6 ? "messageDisplay" : "normal" }),
+    getAll: async () => (main_open ? [{ id: 2 }] : []),
+    update: async (window_id: number) => void calls.push(`focus ${window_id}`),
+});
+
 test("every command of the registry has one help entry, whatever its group", () => {
     assert.deepEqual(all_entries().map((entry) => entry.id).sort(), registry.list().map((command) => command.id).sort());
 });
@@ -69,9 +76,12 @@ test("g? shows the root keys and the help page keeps no key outside a message", 
 
 test("options.open opens the options page", async () => {
     const calls: string[] = [];
-    const api = { notifications: { create: async () => "n" }, keys: undefined, runtime: { openOptionsPage: async () => void calls.push("openOptionsPage") } };
+    const api = { notifications: { create: async () => "n" }, keys: undefined, runtime: { openOptionsPage: async () => void calls.push("openOptionsPage") }, windows: windows_fake(calls) };
     await create_router(registry, api as unknown as RouterApi).run({ command: "options.open", args: {}, count: 1, windowId: 4, messageIds: [] });
     assert.deepEqual(calls, ["openOptionsPage"]);
+    calls.length = 0;
+    await create_router(registry, api as unknown as RouterApi).run({ command: "options.open", args: {}, count: 1, windowId: 6, messageIds: [] });
+    assert.deepEqual(calls, ["focus 2", "openOptionsPage"], "from a message window the main window comes to the front");
 });
 
 test("help.open opens the page in the key's window", async () => {
@@ -83,6 +93,7 @@ test("help.open opens the page in the key's window", async () => {
             create: async (properties: object) => void calls.push(`create ${JSON.stringify(properties)}`),
             update: async () => void calls.push("update"),
         },
+        windows: windows_fake(calls),
         notifications: { create: async () => "n" },
         keys: undefined,
     };
@@ -90,11 +101,38 @@ test("help.open opens the page in the key's window", async () => {
     assert.deepEqual(calls, ['query {"url":"moz-extension://x/help/help.html"}', 'create {"url":"moz-extension://x/help/help.html","windowId":4}']);
 });
 
+test("help.open from a message window, which has no tab bar, opens the page in the first main window and brings it to the front", async () => {
+    const calls: string[] = [];
+    const api = {
+        runtime: { getURL: (path: string) => `moz-extension://x/${path}` },
+        tabs: { query: async () => [], create: async (properties: object) => void calls.push(`create ${JSON.stringify(properties)}`), update: async () => void calls.push("update") },
+        windows: windows_fake(calls),
+        notifications: { create: async () => "n" },
+        keys: undefined,
+    };
+    await create_router(registry, api as unknown as RouterApi).run({ command: "help.open", args: {}, count: 1, windowId: 6, messageIds: [] });
+    assert.deepEqual(calls, ["focus 2", 'create {"url":"moz-extension://x/help/help.html","windowId":2}']);
+});
+
+test("help.open from a message window with no main window open refuses with a message", async () => {
+    const calls: string[] = [];
+    const api = {
+        runtime: { getURL: (path: string) => `moz-extension://x/${path}` },
+        tabs: { query: async () => [], create: async () => void calls.push("create"), update: async () => void calls.push("update") },
+        windows: windows_fake(calls, false),
+        notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n") },
+        keys: undefined,
+    };
+    await create_router(registry, api as unknown as RouterApi).run({ command: "help.open", args: {}, count: 1, windowId: 6, messageIds: [] });
+    assert.deepEqual(calls, ["notify No main window is open to show the page in."]);
+});
+
 test("help.open shows the tab that already holds the page", async () => {
     const calls: string[] = [];
     const api = {
         runtime: { getURL: (path: string) => `moz-extension://x/${path}` },
         tabs: { query: async () => [{ id: 9 }], create: async () => void calls.push("create"), update: async (id: number) => void calls.push(`update ${id}`) },
+        windows: windows_fake(calls),
         notifications: { create: async () => "n" },
         keys: undefined,
     };

@@ -2,6 +2,7 @@ import { focus_pane, focus_pane_beside, open_conversation, open_page, resize_pan
 import { undo } from "../handlers/undo.ts";
 import type { UndoApi } from "../handlers/undo.ts";
 import type { AppHandlerApi } from "../handlers/app.ts";
+import type { MainWindowApi } from "../handlers/tabs.ts";
 import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
@@ -44,9 +45,9 @@ export const app: CommandGroup = {
             runs_in: "background",
             label: "Open a Thunderbird page",
             intent: "Open the add-ons, themes or config page in a tab.",
-            needs: ["tab", "app.appOpenPage"],
+            needs: ["main", "app.appOpenPage"],
             params: [{ name: "page", type: "enum", values: ["addons", "themes", "config"], short: { addons: "a", themes: "t", config: "c" }, description: { addons: "Open the add-ons manager.", themes: "Open the themes page.", config: "Open the configuration editor." } }],
-            run: scoped<AppHandlerApi>(open_page),
+            run: scoped<AppHandlerApi & MainWindowApi>(open_page),
         },
         "pane.focus": {
             bridge: true,

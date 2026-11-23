@@ -62,7 +62,7 @@ test("the page tree reads the same command table: the keys that gain a place are
 });
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
-    for (const id of ids_under(root_of())) assert.ok(["tab", "page", "close"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
+    for (const id of ids_under(root_of())) assert.ok(["tab", "page", "close", "main"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
     for (const token of ["m", "d", "s", "F", "y", "]", "[", "o", "a", "r", "R", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
@@ -211,18 +211,22 @@ test("i is bound in the page tree alone, so the own and message trees and the ma
     assert.equal(ids_under(root_of()).includes("mode.escape"), false, "the typing layer stays out of the normal trees");
 });
 
-test("the message window tree holds the reading keys, the hint picks, the mail actions and q, and no tab, pane, folder, list, help or command line key", () => {
+test("the message window tree holds the reading keys, the hint picks, the mail actions, q, zoom, new message, help, options and the Thunderbird pages, and no tab, pane, folder, list, find or command line key", () => {
     const root = window_root();
     assert.deepEqual(
         [["j"], ["<C-d>"], ["g", "g"], ["G"], ["f"], [";", "y"], ["m", "s"], ["m", "r"], ["a"], ["d", "d"], ["r"], ["R"], ["g", "F"], ["y", "y"], ["u"], ["q"], ["<A-q>"]].map((tokens) => leaf_at(root, ...tokens)?.id),
         ["message.scroll_down", "message.half_page_down", "message.top", "message.bottom", "hint.pick", "hint.pick", "msg.flag", "msg.read", "msg.archive", "msg.delete", "msg.reply", "msg.reply", "msg.forward", "msg.yank", "msg.undo", "tab.close", "tab.close"],
     );
+    assert.deepEqual(
+        [["z", "i"], ["z", "o"], ["z", "="], ["c"], ["g", "?"], [",", "h"], [",", "?"], [",", "s"], ["g", "p", "a"], ["g", "p", "t"], ["g", "p", "c"]].map((tokens) => leaf_at(root, ...tokens)?.id),
+        ["zoom.by", "zoom.by", "zoom.set", "msg.new", "help.open", "help.open", "help.open", "options.open", "app.open_page", "app.open_page", "app.open_page"],
+    );
     const ids = new Set(ids_under(root));
-    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.|cmdline\.|search\.|help\.|options\.|zoom\.|app\.)/.test(id), id);
-    for (const id of ["msg.new", "msg.move", "msg.tag"]) assert.ok(!ids.has(id), id);
-    for (const token of ["J", "K", "<A-j>", "<A-k>", ":", "/", "H", "L", "c", "T", "o"]) assert.equal(root.children[token], undefined, token);
+    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.|cmdline\.|search\.|help\.whichkey$|message\.find_)/.test(id), id);
+    for (const id of ["msg.move", "msg.tag"]) assert.ok(!ids.has(id), id);
+    for (const token of ["J", "K", "<A-j>", "<A-k>", ":", "/", "H", "L", "T", "o", "n", "N"]) assert.equal(root.children[token], undefined, token);
     // A mail sequence the tree lacks ends in a leaf that runs nothing, so its tail never runs on its own.
-    for (const tokens of [["t", "0"], ["g", "f"], ["g", "?"], ["m", "t"], ["m", "m"], ["z", "i"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));
+    for (const tokens of [["t", "0"], ["g", "f"], ["m", "t"], ["m", "m"], ["z", "a"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));
     assert.deepEqual(((root.children["g"] as TreeBranch).children["f"] as { steps: unknown[] }).steps, []);
 });
 

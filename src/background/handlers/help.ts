@@ -1,8 +1,10 @@
 import type { HandlerScope } from "./message.ts";
+import { main_window_of } from "./tabs.ts";
+import type { MainWindowApi } from "./tabs.ts";
 
 export const HELP_PAGE = "help/help.html";
 
-export interface HelpApi {
+export interface HelpApi extends MainWindowApi {
     runtime: { getURL(path: string): string };
     tabs: {
         query(query: { url: string }): Promise<{ id?: number }[]>;
@@ -11,20 +13,22 @@ export interface HelpApi {
     };
 }
 
-/** Opens the help page in a tab of the key's window, or shows the tab that already holds it. */
+/** Opens the help page in a tab of the key's window, or of the main window for a key in a message window, or shows the tab that already holds it. */
 export async function open_help(scope: HandlerScope<HelpApi>): Promise<void> {
+    const window_id = await main_window_of(scope.api, scope.window_id);
     const url = scope.api.runtime.getURL(HELP_PAGE);
     const open_id = (await scope.api.tabs.query({ url }))[0]?.id;
     if (open_id !== undefined) await scope.api.tabs.update(open_id, { active: true });
-    else await scope.api.tabs.create({ url, ...(scope.window_id >= 0 && { windowId: scope.window_id }) });
+    else await scope.api.tabs.create({ url, ...(window_id >= 0 && { windowId: window_id }) });
 }
 
-export interface OptionsApi {
+export interface OptionsApi extends MainWindowApi {
     runtime: { openOptionsPage(): Promise<void> };
 }
 
-/** Opens the options page the manifest names. */
+/** Opens the options page the manifest names. Thunderbird puts it in a main window, which comes to the front for a key in a message window. */
 export async function open_options(scope: HandlerScope<OptionsApi>): Promise<void> {
+    await main_window_of(scope.api, scope.window_id);
     await scope.api.runtime.openOptionsPage();
 }
 

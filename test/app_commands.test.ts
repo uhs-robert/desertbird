@@ -12,12 +12,14 @@ function app_fake(command_enabled = true, pane_focused = true) {
     const calls: string[] = [];
     const app = {
         appCommand: async ({ name }: { name: string }) => (calls.push(`appCommand ${name}`), command_enabled),
-        appOpenPage: async ({ page }: { page: string }) => void calls.push(`appOpenPage ${page}`),
+        appOpenPage: async ({ windowId, page }: { windowId: number; page: string }) => void calls.push(`appOpenPage ${page}${windowId === 3 ? "" : ` in ${windowId}`}`),
         paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), pane_focused),
     };
     const notifications = { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") };
-    const api = { app, notifications } as unknown as RouterApi;
-    const run = (command: string, args: Record<string, unknown> = {}) => create_router(registry, api).run({ command, args: args as never, count: 1, windowId: 3, messageIds: [] });
+    // Window 3 is a main window, window 8 a message window.
+    const windows = { get: async (window_id: number) => ({ type: window_id === 8 ? "messageDisplay" : "normal" }), getAll: async () => [{ id: 3 }], update: async (window_id: number) => void calls.push(`focus ${window_id}`) };
+    const api = { app, notifications, windows } as unknown as RouterApi;
+    const run = (command: string, args: Record<string, unknown> = {}, window_id = 3) => create_router(registry, api).run({ command, args: args as never, count: 1, windowId: window_id, messageIds: [] });
     return { run, calls };
 }
 
@@ -54,6 +56,12 @@ test("each command calls only the chrome verb its needs lists", async () => {
     await fake.run("app.open_page", { page: "themes" });
     await fake.run("pane.focus", { pane: "message" });
     assert.deepEqual(fake.calls, ["appCommand cmd_openConversation", "appOpenPage themes", "paneFocus message"]);
+});
+
+test("app.open_page from a message window opens the page in the main window and brings it to the front", async () => {
+    const fake = app_fake();
+    await fake.run("app.open_page", { page: "config" }, 8);
+    assert.deepEqual(fake.calls, ["focus 3", "appOpenPage config"]);
 });
 
 test("msg.undo needs no chrome verb: it reads DesertBird's own log, not Thunderbird's undo", () => {

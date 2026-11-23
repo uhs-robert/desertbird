@@ -5,7 +5,7 @@ import type { CommandGroup } from "./define.ts";
 
 // The args and steps of DesertFox. `zM` and `zR` stay the thread folds of the mail tab, so only the lower-case keys zoom by half a step.
 export const zoom: CommandGroup = {
-    commands: needing("tab", {
+    commands: needing("main", {
         "zoom.by": {
             bridge: false,
             runs_in: "background",
