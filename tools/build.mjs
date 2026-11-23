@@ -28,7 +28,7 @@ const PARENT_MAX_BYTES = 27212;
 const PARENT_CEILING_BYTES = 40960;
 
 // `experiment/keys.js`, the key runtime that loads at startup. A verb module may not enter it (test/build.test.ts), so it stays near its measured size.
-const KEYS_MAX_BYTES = 24380;
+const KEYS_MAX_BYTES = 24892;
 const KEYS_CEILING_BYTES = 40960;
 
 // `experiment/app.js`, loaded on the first thread list, pane focus or app call.
@@ -48,7 +48,7 @@ const CONTENT_MAX_BYTES = 19186;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.
-const HINTS_MAX_BYTES = 17658;
+const HINTS_MAX_BYTES = 18170;
 const HINTS_CEILING_BYTES = 20480;
 
 // `content/compose_keys.js`, registered into every compose body.
@@ -56,7 +56,7 @@ const COMPOSE_MAX_BYTES = 3500;
 const COMPOSE_CEILING_BYTES = 8192;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
-const PAGES_MAX_BYTES = 27408;
+const PAGES_MAX_BYTES = 27920;
 const PAGES_CEILING_BYTES = 34816;
 
 // `content/page_keys.js`, the message key script that runs on the own pages (options, help).

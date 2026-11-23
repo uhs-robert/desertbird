@@ -131,7 +131,7 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
         assert.ok(added.includes("root keydown") && added.includes("page scroll"), "the keys come from the window root and a scroll of the page ends the labels");
         assert.deepEqual([...marks], ["data-desertbird-hints"], "the page keys see the marker and leave the keys to the labels");
         shutdown();
-        assert.deepEqual([...marks], [], "the end of the labels removes the marker");
+        assert.deepEqual([...marks], ["data-desertbird-hints-done"], "the end of the labels removes the live marker and leaves the labels-done mark");
         // A remote page: the parent cannot read its document, so only the window is labelled.
         tab["browser"] = { isRemoteBrowser: true, contentDocument: null, contentWindow: page };
         drawn_in.length = 0;

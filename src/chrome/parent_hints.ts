@@ -4,7 +4,7 @@ import { focus_chain } from "./focus.ts";
 import type { FocusDocument } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
-import { HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
+import { HINTS_DONE_ATTRIBUTE, HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 import type { HintAction, HintLabelScheme, HintsPickArgs, HintsSendEnterArgs } from "../shared/protocol.ts";
 import { collect_message_targets, collect_page_targets, collect_targets } from "./hint_targets.ts";
 import type { HintMailPane } from "./hint_targets.ts";
@@ -111,6 +111,9 @@ function listen(target: ListenerTarget, type: string, listener: (event: never) =
 // The clipboard service of the parent. The label is typed later, inside this Experiment, and the background cannot wait for that key. So the pick writes the text here when the label completes.
 const copy_to_clipboard = (text: string): void => Cc["@mozilla.org/widget/clipboardhelper;1"]!.getService(Ci["nsIClipboardHelper"]).copyString(text);
 
+// Counts across windows: a runtime only compares the value with the one it read when its hold began.
+let picks_ended = 0;
+
 function pick_host(main: PickMainWindow, documents: ListenerTarget[], message?: ListenerTarget): PickHost {
     return {
         copy: copy_to_clipboard,
@@ -119,7 +122,7 @@ function pick_host(main: PickMainWindow, documents: ListenerTarget[], message?: 
             const root = main.document.documentElement;
             root.setAttribute(HINTS_LIVE_ATTRIBUTE, "");
             const stop = listen(main.windowRoot ?? main, "keydown", listener as (event: PickKeyEvent) => void);
-            return () => (stop(), root.removeAttribute(HINTS_LIVE_ATTRIBUTE));
+            return () => (stop(), root.removeAttribute(HINTS_LIVE_ATTRIBUTE), root.setAttribute(HINTS_DONE_ATTRIBUTE, String(++picks_ended)));
         },
         on_disturb(listener) {
             // The blur lands on the focused element when focus moves inside the window too, so only a window that lost the focus counts.

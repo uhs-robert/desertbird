@@ -29,6 +29,8 @@ class FakeWindow implements KeyTarget {
     has_focus = true;
     /** The focus sits in a text field. */
     text_field = false;
+    /** The count of ended hint picks the runtime reads through `hints_done_of`. */
+    hints_done = 0;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
     selected = 0;
     rows = 10;
@@ -113,6 +115,7 @@ const tree = () => ({
             j: leaf("motion.down", "chrome"),
             k: leaf("motion.up", "chrome"),
             x: leaf("msg.archive", "background"),
+            f: leaf("hint.window", "background"),
             q: leaf("motion.sideways", "chrome"),
             ":": leaf("cmdline.open", "background"),
             ".": leaf("repeat.last", "chrome"),
@@ -154,6 +157,7 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         is_typing_target: (window, event) => is_typing_element(event.target as { localName: string }) || window.body_script_live,
         menu_takes_key: (window, key) => window.menu_keys && window.menu_keys.includes(key.toLowerCase()),
         overlay_is_loading: (window) => window.overlay_loading,
+        hints_done_of: (window) => window.hints_done,
         in_reading_pane: (window) => window.in_reading_pane,
         in_text_field: (window) => window.text_field,
         on_tab_select: (window, listener) => {
@@ -1543,4 +1547,25 @@ test("a mode that starts in another window clears the old window's mode first", 
     assert.deepEqual([modes, mode_windows], [["visual", "normal", "resize"], [7, 7, 8]], "window 7 is cleared, window 8 shows resize");
     press(second, "Escape");
     assert.deepEqual([modes.at(-1), mode_windows.at(-1)], ["normal", 8]);
+});
+
+test("f held the plain keys, and once its labels are done a second f emits a second hint.window", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["hint.window"]);
+    const window = windows[0]!;
+    press(window, "f");
+    assert.equal(press(window, "f").cancelled, true, "the hold swallows a key typed before the labels end");
+    window.hints_done++;
+    press(window, "f");
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["hint.window", "hint.window"]);
+});
+
+test("a labels-done mark from before the hold started does not end it", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["hint.window"]);
+    const window = windows[0]!;
+    window.hints_done = 3;
+    press(window, "f");
+    press(window, "f");
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["hint.window"]);
 });

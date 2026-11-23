@@ -53,6 +53,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
     on_window_blur(window: Window, listener: () => void): () => void;
     window_id_of(window: Window): number;
+    /** How many hint picks have ended in the window. A change since a hold began means the labels came and went, so the hold ends. */
+    hints_done_of(window: Window): number;
     /** Milliseconds, for the hold timeout. */
     now(): number;
     emit(event: KeysEvent): void;
@@ -81,6 +83,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let sequence_window: Window | null = null;
     let hold_commands = new Set<string>();
     let hold_until = 0;
+    let hints_done_at_hold = 0;
     // How many keys the last report held. Plain keys then report nothing, and an end is reported once.
     let was = 0;
     // Tells the background the keys typed so far, so it can list the keys that may follow. No keys means the sequence ended. A tab change or a window blur is not reported here: the background watches those.
@@ -129,7 +132,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (leaf.steps[0]?.invocation.id !== KEY_LIST) last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
-            if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) hold_until = deps.now() + HOLD_MS;
+            if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) (hold_until = deps.now() + HOLD_MS), (hints_done_at_hold = deps.hints_done_of(window));
             if (step.runs_in === "chrome") {
                 const anchor = visual_anchor;
                 run_motion(step.invocation.id, deps.folder_port_of(window) ?? (anchor < 0 ? port : { ...port, select: (index) => void (port.select_range(anchor, (visual_end = index)), (visual_marks = port.marks(anchor, index))) }), step_count);
@@ -156,7 +159,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (is_plain_printable(token) && deps.overlay_is_loading(window)) return swallow(event);
         // The hold ends when the focus is in a text field, which the overlay's browser counts as.
         if (hold_until > deps.now()) {
-            if (deps.is_typing_target(window, event)) hold_until = 0;
+            if (deps.is_typing_target(window, event) || deps.hints_done_of(window) !== hints_done_at_hold) hold_until = 0;
             else if (is_plain_printable(token)) {
                 swallow(event);
                 return;
