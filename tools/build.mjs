@@ -79,6 +79,10 @@ const ACTOR_PARENT_CEILING_BYTES = 9216;
 const ACTOR_HINTS_MAX_BYTES = 7680;
 const ACTOR_HINTS_CEILING_BYTES = 10240;
 
+// `experiment/filter.js`, the add-on's own quick filter for the list and date terms, loaded on the first `filter.set` call: the first `F m l` or `F m d`, typed or keyed. See docs/design.md, "Filter bundle".
+const FILTER_MAX_BYTES = 5632;
+const FILTER_CEILING_BYTES = 8192;
+
 // Reads this file for every `*_MAX_BYTES` const, so a new guard without a `*_CEILING_BYTES` fails the build.
 const own_source = readFileSync(fileURLToPath(import.meta.url), "utf8");
 for (const [, prefix, guard] of own_source.matchAll(/^const (\w+)_MAX_BYTES = (\d+);/gm)) {
@@ -107,7 +111,7 @@ const PARENTS = [
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
     { name: "zoom", entry: "src/chrome/parent_zoom.ts", max_bytes: ZOOM_MAX_BYTES },
     { name: "composewin", entry: "src/chrome/parent_composewin.ts", max_bytes: COMPOSEWIN_MAX_BYTES },
-    { name: "filter", entry: "src/chrome/parent_filter.ts" },
+    { name: "filter", entry: "src/chrome/parent_filter.ts", max_bytes: FILTER_MAX_BYTES },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,

@@ -17,6 +17,7 @@ const PAGES_MAX_BYTES = Number(/PAGES_MAX_BYTES = (\d+);/.exec(readFileSync(join
 const PAGE_KEYS_MAX_BYTES = Number(/PAGE_KEYS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const ZOOM_MAX_BYTES = Number(/ZOOM_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const COMPOSEWIN_MAX_BYTES = Number(/COMPOSEWIN_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const FILTER_MAX_BYTES = Number(/FILTER_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const COMPOSE_MAX_BYTES = Number(/COMPOSE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
@@ -104,7 +105,7 @@ test("each parent bundle stays within the size guard", () => {
     assert.ok(PARENT_MAX_BYTES > 0);
     for (const name of PARENT_NAMES) {
         const size = readFileSync(join(out_dir, `experiment/${name}.js`)).length;
-        const max_bytes = { app: APP_MAX_BYTES, keys: KEYS_MAX_BYTES, folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES, zoom: ZOOM_MAX_BYTES, composewin: COMPOSEWIN_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
+        const max_bytes = { app: APP_MAX_BYTES, keys: KEYS_MAX_BYTES, folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES, zoom: ZOOM_MAX_BYTES, composewin: COMPOSEWIN_MAX_BYTES, filter: FILTER_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
         assert.ok(size <= max_bytes, `${name}.js is ${size} bytes, over ${max_bytes}`);
     }
 });

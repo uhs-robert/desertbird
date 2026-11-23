@@ -268,6 +268,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `experiment/zoom.js` | 3544 | 6144 |
 | `experiment/composewin.js` | 10752 | 15360 |
+| `experiment/filter.js` | 5632 | 8192 |
 | `content/message_display.js` | 19698 | 24576 |
 | `experiment/hints.js` | 18170 | 20480 |
 | `experiment/pages.js` | 27920 | 34816 |
@@ -398,7 +399,7 @@ The keys are a tab kind of their own, `compose`, with a tree of its own (`compos
 
 ### Filter bundle
 
-`experiment/filter.js` is the Experiment API `filter`, loaded on the first `F m l` or `F m d`. No key waits on it in the key runtime, so the admission rule keeps it out of `keys.js`, and `app.js` had no room left. Its first measured size was 4292 bytes as written.
+`experiment/filter.js` is the Experiment API `filter`, loaded on the first `F m l` or `F m d`. No key waits on it in the key runtime, so the admission rule keeps it out of `keys.js`, and `app.js` had no room left. Its first measured size was 4292 bytes as written. The guard is that plus 20 percent, rounded up to a 512-byte step: 5632, with a ceiling of 8192. It has had no raise.
 
 ### Compose window bundle
 
