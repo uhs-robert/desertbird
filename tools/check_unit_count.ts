@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const TEST_GLOB = "test/**/*.test.ts";
-/** A full run takes about 30 s. */
+/** A full run takes 30 to 50 s. */
 export const RUN_LIMIT_MS = 5 * 60_000;
 
 export type ShortFile = { readonly file: string; readonly expected: number; readonly reported: number };
@@ -61,9 +61,9 @@ export function run_with_limit(command: string, args: readonly string[], cwd: st
             // The group is already gone.
         }
     };
-    // A detached group misses the terminal's Ctrl+C, so pass interrupts on.
+    // The detached run leaves the terminal's session and misses its Ctrl+C and hangup, so pass those and SIGTERM on. A SIGKILL or a crash of this script still orphans the run.
     const forward = (signal: NodeJS.Signals) => kill_group(signal);
-    process.on("SIGINT", forward).on("SIGTERM", forward);
+    process.on("SIGINT", forward).on("SIGTERM", forward).on("SIGHUP", forward);
     let timed_out = false;
     const timer = setTimeout(() => {
         timed_out = true;
@@ -72,7 +72,7 @@ export function run_with_limit(command: string, args: readonly string[], cwd: st
     return new Promise((done) => {
         child.on("close", (code) => {
             clearTimeout(timer);
-            process.off("SIGINT", forward).off("SIGTERM", forward);
+            process.off("SIGINT", forward).off("SIGTERM", forward).off("SIGHUP", forward);
             done({ status: timed_out ? 1 : (code ?? 1), timed_out });
         });
     });
