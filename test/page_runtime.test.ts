@@ -435,6 +435,19 @@ test("a message window header takes the message mode tree: j scrolls, m s flags,
     assert.ok(pending().filter((event) => event.keys.length > 0).every((event) => event.source === "window"));
 });
 
+test("Escape in a message window is cancelled while a sequence is pending, and passes when nothing is", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    window.message_window = true;
+    assert.deepEqual(press(window, "Escape"), { cancelled: false, stopped: false });
+    press(window, "g");
+    assert.deepEqual(press(window, "Escape"), { cancelled: true, stopped: true });
+    assert.equal(reports(events).at(-1), "");
+    assert.deepEqual(press(window, "Escape"), { cancelled: false, stopped: false });
+});
+
 test("a message tab keeps the message tree in a main window while a message window runs message mode", () => {
     const { windows, runtime, invocations } = setup(2);
     runtime.install(tree());
