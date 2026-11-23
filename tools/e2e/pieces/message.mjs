@@ -299,14 +299,13 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
-  // Message mode has no command line until it can draw there: `/` and `:` are unbound, swallowed with no notification, and the keys of the window stay as they were.
+  // `/` is unbound in message mode, since find is not checked in a message window: it is swallowed with no notification and no line, and the keys of the window stay as they were. The command line itself is the piece `message/window_cmdline`.
   await instance.press(["/"]);
-  await instance.press([":"]);
   await sleep(1500);
-  await shot("message_window_slash", "message window after / and : (no notification, no command line)");
+  await shot("message_window_slash", "message window after / (no notification, no command line)");
   const before_refusal = body_state(await instance.ask("state")).scroll_y;
   const after_refusal = body_state(await key_and_state(instance, ["j"], scroll_is("j to scroll the message window one line", (current) => near(current.scroll_y - before_refusal, LINE_STEP_PX)))).scroll_y;
-  check(app, kind, "message window: / and : open no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
+  check(app, kind, "message window: / opens no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
   state = await flag_keys(plain_id, true);
   check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);
@@ -394,11 +393,11 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "message window header: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);
   const header_scroll = body_state(await instance.ask("state")).scroll_y;
-  for (const key of ["J", ":", "/", "H", "n", "N"]) await instance.press([key]);
+  for (const key of ["J", "/", "H", "n", "N"]) await instance.press([key]);
   await sleep(1500);
   state = await instance.ask("state");
-  await shot("message_window_header_unbound", "message window header after J, :, /, H, n and N: nothing changed, no notification, no command line");
-  check(app, kind, "message window header: J, :, /, H, n and N do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
+  await shot("message_window_header_unbound", "message window header after J, /, H, n and N: nothing changed, no notification, no command line");
+  check(app, kind, "message window header: J, /, H, n and N do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
   // The main window and a compose window take the focus from the header. The window gives it back to the header, else F6 moves it there again.
   const focus_header = async () => {
     await focus_message_window();

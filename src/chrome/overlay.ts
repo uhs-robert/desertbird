@@ -74,7 +74,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
             const window_id = checked_window_id(args);
             if (!is_surface(args.surface)) throw new Error(`unknown surface ${String(args.surface)}`);
             const window = deps.window_with_id(window_id);
-            if (window === null) throw new Error(`no main window has id ${window_id}`);
+            if (window === null) throw new Error(`no window has id ${window_id}`);
             // A second mount replaces the first, so the page starts clean and one window never holds two of a surface.
             const earlier = mounted.get(window)?.get(args.surface);
             if (earlier) take_down(window, earlier);

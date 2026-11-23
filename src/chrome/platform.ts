@@ -45,9 +45,20 @@ export function load_platform(): Platform {
     };
 }
 
+export const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
+
 export const open_windows = (type: string): MainWindow[] => Array.from(Services.wm.getEnumerator(type));
 
 export const open_main_windows = (): MainWindow[] => open_windows(MAIN_WINDOW_TYPE);
+
+/** The windows that can show the overlay: the main windows and the standalone message windows. */
+export const open_overlay_windows = (): MainWindow[] => [...open_main_windows(), ...open_windows(MESSAGE_WINDOW_TYPE)];
+
+/** What a chrome window is, read from its window type. A window with no tab bar is not a message window by that alone: a compose window has none either. */
+export function window_kind_of(window: MainWindow): "main" | "message" | "other" {
+    const type = window.document.documentElement?.getAttribute?.("windowtype");
+    return type === MAIN_WINDOW_TYPE ? "main" : type === MESSAGE_WINDOW_TYPE ? "message" : "other";
+}
 
 export const tabmail_of = (window: MainWindow): TabmailLike | null => window.document.getElementById("tabmail") as TabmailLike | null;
 

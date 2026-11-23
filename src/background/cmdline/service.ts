@@ -5,6 +5,8 @@ import { check_args } from "../../../vendor/desertfox/registry/check_args.ts";
 import { parse_command_line } from "../../../vendor/desertfox/registry/command_line.ts";
 import type { Registry } from "../../../vendor/desertfox/registry/define.ts";
 import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult, CmdlineSearchNote, CmdlineWidgets, JsonValue, KeysInvocation, OverlayApi, SearchDirection, StatusWidget } from "../../shared/protocol.ts";
+import { offered_in } from "../commands/tab_keymaps.ts";
+import type { TabKind } from "../commands/tab_keymaps.ts";
 import type { SearchService } from "../search/service.ts";
 import { create_completer } from "./completion.ts";
 import type { CmdlineHistory } from "./history.ts";
@@ -17,6 +19,8 @@ export interface CmdlineSession {
     text: string;
     /** Set when the line is a search line. The page then shows the `/` or `?` prompt and sends keystrokes as `cmdline.search_type`. */
     search?: SearchDirection;
+    /** Set when the window is not a main window tab: the line then lists and runs only the commands that kind offers. A main window has none, and every command is open to it. */
+    kind?: Extract<TabKind, "window">;
 }
 
 /** The part of the service a command handler uses. */
@@ -80,12 +84,13 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
     const committing = new Set<CmdlineSession>();
     const complete = create_completer(deps.registry, deps.sources);
 
-    async function parse_and_check(text: string): Promise<CmdlineRunResult | { ok: true; id: string; args: Record<string, JsonValue> }> {
+    async function parse_and_check(text: string, kind: CmdlineSession["kind"]): Promise<CmdlineRunResult | { ok: true; id: string; args: Record<string, JsonValue> }> {
         const parsed = parse_command_line(deps.registry, text);
         if (parsed.kind === "error") return { ok: false, message: parsed.error };
         if (parsed.kind === "help") return { ok: false, message: parsed.usage };
         const command = deps.registry.get(parsed.invocation.id);
         if (command === undefined) return { ok: false, message: `unknown command "${parsed.invocation.id}"` };
+        if (kind !== undefined && !offered_in(kind, command)) return { ok: false, message: `${command.label} is not available in a message window.` };
         if (command.runs_in !== "background") return { ok: false, message: `${command.label} runs on a key in the mail window and cannot run from the command line.` };
         if (has_source(parsed.invocation.args)) return { ok: false, message: "@sources are not supported here, quote text that starts with @" };
         const checked = check_args(command, parsed.invocation.args);
@@ -128,7 +133,7 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
         sessions.delete(window_id);
         // Not awaited: the write may be slow or fail, and the line runs either way.
         deps.history.record(text).catch((error: unknown) => console.error("desertbird:", error));
-        const checked = await parse_and_check(text);
+        const checked = await parse_and_check(text, session.kind);
         if (!checked.ok || !("id" in checked)) {
             // A line that is not a command keeps the line open, so the session comes back.
             if (!sessions.has(window_id)) sessions.set(window_id, session);
@@ -163,7 +168,7 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
                 case "cmdline.close":
                     return close(request.windowId).then(() => ({}));
                 case "cmdline.complete":
-                    return session ? complete(request.text, request.caret, { window_id: request.windowId, message_ids: session.message_ids }) : Promise.reject(new RuntimeRefusal("The command line is not open."));
+                    return session ? complete(request.text, request.caret, { window_id: request.windowId, message_ids: session.message_ids, ...(session.kind && { kind: session.kind }) }) : Promise.reject(new RuntimeRefusal("The command line is not open."));
                 case "cmdline.search_type":
                     return session?.search ? deps.search.type(request.windowId, request.text) : Promise.reject(new RuntimeRefusal("The search line is not open."));
                 case "cmdline.search_commit":

@@ -1,6 +1,6 @@
 # Overlay pages
 
-The command line page and the hud page. The `overlay` Experiment mounts it as a remote `browser` element at the bottom of the main window (`src/chrome/parent_overlay.ts`). It is an ordinary extension page: it reads keys, draws, and sends messages to the background. It parses, completes and runs nothing itself.
+The command line page and the hud page. The `overlay` Experiment mounts it as a remote `browser` element at the bottom of a main window or a standalone message window (`src/chrome/parent_overlay.ts`). It is an ordinary extension page: it reads keys, draws, and sends messages to the background. It parses, completes and runs nothing itself.
 
 | File | Role |
 | --- | --- |

@@ -115,7 +115,7 @@ test("mount refuses a surface off the list, a window id that is not a window and
     assert.throws(() => host.mount({ windowId: -1, surface: "cmdline" }), /window id/);
     assert.throws(() => host.mount({ windowId: 1.5, surface: "cmdline" }), /window id/);
     assert.throws(() => host.mount({ windowId: "1" as unknown as number, surface: "cmdline" }), /window id/);
-    assert.throws(() => host.mount({ windowId: 9, surface: "cmdline" }), /no main window/);
+    assert.throws(() => host.mount({ windowId: 9, surface: "cmdline" }), /no window has id 9/);
     assert.deepEqual(log, []);
 });
 
@@ -321,4 +321,35 @@ test("a second mount's late callback does not close the first mount's replacemen
     assert.equal(log.length, before);
     windows.get(1)!.not_ready[1]!();
     assert.ok(log.includes("closed 1 not_ready"));
+});
+
+// Window 1 is a main window and window 2 a message window: the host treats both alike, one table entry per window.
+test("a main window and a message window each hold a command line, and each closes on its own", () => {
+    const { windows, log, host } = setup();
+    windows.get(2)!.held_focus = "message pane";
+    host.mount({ windowId: 1, surface: "cmdline" });
+    host.mount({ windowId: 2, surface: "cmdline" });
+    for (const listener of [...windows.get(2)!.escape_listeners]) listener();
+    assert.deepEqual(log, ["create cmdline@1", "create cmdline@2", "remove cmdline@2", "restore message pane", "closed 2"]);
+    assert.deepEqual([windows.get(1)!.boxes, windows.get(2)!.boxes], [["cmdline@1"], []]);
+    assert.equal(windows.get(1)!.escape_listeners.size, 1);
+});
+
+test("a message window that closes with its line open leaves the line of the main window and moves no focus", () => {
+    const { windows, log, host } = setup();
+    host.mount({ windowId: 1, surface: "cmdline" });
+    host.mount({ windowId: 2, surface: "cmdline" });
+    for (const listener of [...windows.get(2)!.unload_listeners]) listener();
+    assert.deepEqual(log, ["create cmdline@1", "create cmdline@2", "remove cmdline@2", "closed 2"]);
+    assert.deepEqual(windows.get(1)!.boxes, ["cmdline@1"]);
+    host.unmount({ windowId: 2, surface: "cmdline" });
+    assert.equal(log.length, 4, "an unmount for the closed window does nothing");
+});
+
+test("the element the line took the focus from is gone when it closes, so the window falls back to the thread list, which a message window lacks, and the keys stay where Thunderbird put them", () => {
+    const { windows, log, host } = setup();
+    windows.get(2)!.held_focus = null;
+    host.mount({ windowId: 2, surface: "cmdline" });
+    host.unmount({ windowId: 2, surface: "cmdline" });
+    assert.deepEqual(log, ["create cmdline@2", "remove cmdline@2", "focus list of 2"]);
 });
