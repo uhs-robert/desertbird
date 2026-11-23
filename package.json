@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && node tools/build.mjs",
     "lint": "eslint",
-    "unit": "npm run --silent unit:file -- \"test/**/*.test.ts\"",
+    "unit": "node --no-warnings tools/check_unit_count.ts",
     "unit:file": "node --test --test-timeout=30000 --test-force-exit --no-warnings",
     "test": "npm run --silent check",
     "e2e": "node tools/e2e/run.mjs",
