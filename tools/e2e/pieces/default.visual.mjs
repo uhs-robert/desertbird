@@ -88,9 +88,11 @@ async function run_visual(instance, ctx) {
   check(app, kind, "the first Space keeps the read row selected", same(ids(state.selected), [rows[0]]), `selected ${ids(state.selected).join(" ")}`);
   state = await keys(["j", "j"], 700);
   check(app, kind, "in a pick of one row, j moves only the cursor", same(ids(state.selected), [rows[0]]), `selected ${ids(state.selected).join(" ")}`);
+  await shot("pick_cursor_unselected", "a pick of row 0 with the cursor on unselected row 2");
   await keys(["space"], selects_rows([rows[0], rows[2]]));
   const picked = ids((await keys(["j", "j", "space"], selects_rows([rows[0], rows[2], rows[4]]))).selected);
   check(app, kind, "Space picks three rows apart", same(picked, [rows[0], rows[2], rows[4]]), `selected ${picked.join(" ")}`);
+  await shot("pick_cursor_selected", "a pick of rows 0, 2 and 4 with the cursor on selected row 4");
   // The folder contents and the listed rows come from different calls, so the wait needs both before `rows` is read from the list.
   state = await keys(["a"], { what: "a to archive the three picked rows", until: (current) => picked.every((id) => !current.folders["/Inbox"]?.includes(id) && !current.listed.includes(id)) && current.selected.length > 0, timeout_ms: 10000 });
   const picked_left = picked.filter((id) => state.folders["/Inbox"]?.includes(id));

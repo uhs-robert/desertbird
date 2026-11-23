@@ -1225,6 +1225,49 @@ test("a second visual mode never unselects a row selected before it opened", () 
     assert.deepEqual(window.chosen, [1, 3, 4, 5]);
 });
 
+test("Space that leaves visual mode clears `.`, so a dot after it archives nothing", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "x");
+    press(window, "v");
+    press(window, " ");
+    press(window, ".");
+    assert.equal(emitted.length, 1);
+});
+
+test("a message inserted above a selected row ends visual mode, so the old base row never selects another message", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 5;
+    press(window, " ");
+    press(window, "k");
+    press(window, "k");
+    press(window, "v");
+    // New mail sorts at row 4: the picked message moves to row 6, the same key now sits there, and row 5 holds another message.
+    window.chosen = [6];
+    window.key_overrides = { 4: 99, 5: 4, 6: 5 };
+    press(window, "j");
+    assert.deepEqual(window.chosen, [4], "visual mode ended, and with the pick gone j selects the row");
+});
+
+test("a message inserted inside an upward range, below the cursor, ends visual mode", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 5;
+    press(window, "v");
+    press(window, "k");
+    press(window, "k");
+    // New mail sorts at row 4: Thunderbird keeps the selected messages, now at rows 3, 5 and 6, and the anchor's message moves to row 6.
+    window.chosen = [3, 5, 6];
+    window.key_overrides = { 4: 99, 5: 4, 6: 5 };
+    press(window, "k");
+    assert.equal(modes.at(-1), "normal");
+    assert.deepEqual(window.chosen, [3, 5, 6], "the stale anchor selected no range, and k moved only the cursor");
+});
+
 test("visual mode is not a command that `.` replays", () => {
     const { windows, runtime } = setup();
     runtime.install(tree());

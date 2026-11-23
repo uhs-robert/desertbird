@@ -583,6 +583,7 @@ Measured with `tools/measure` (headless, a fresh profile, an Inbox of 10 collaps
 - A new message never changes a kept selection. The view follows the selected messages, so their rows and the current row shift when a message sorts above them.
 - Collapsing a thread keeps a multi-selection only when the lowest selected row is outside that thread. A selected reply inside it drops out with no event and a stale pane. When the lowest selected row is in the thread, the thread root alone replaces the selection.
 - Deleting a selected row from outside the list (`messages.delete`) collapses the selection to one row at the lowest selected index, after the call returns. Deleting an unselected row leaves it.
+- The current row has its own mark, read from the `tree-listbox.css` of Betterbird 153.7.0esr-bb13 and seen in the end-to-end run's screenshots in table view, light and dark. The `currentIndex` setter moves the `current` class to the row. While the list body has the focus (`:focus` or `:focus-within`), a current row that is not selected gets a 1px dashed outline in the selection color. With two or more rows selected (`multi-selected` on the table), a current row that is selected gets a 1px dashed outline in the selected text color. A current row that is the only selected row gets none. Without the focus in the list body, neither outline draws. Card view marks the current row only with a background 10 percent toward the selection color, against 15 percent for a selected row. Not measured: card view on screen.
 
 ## Panes, undo and pages
 
