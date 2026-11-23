@@ -309,6 +309,8 @@ node tools/measure/run.mjs thunderbird
 
 See [`tools/measure/README.md`](../tools/measure/README.md). A full run takes about 35 minutes per app. Results are JSON files and screenshots in `$MEASURE_DIR/run/<app>/<job>/out/`.
 
+Run before the `experiment/composewin.js` guard and ceiling were set (guard 10240, ceiling 15360, bundle 9884 bytes): the full job list on Betterbird 153.7.0 (`node tools/measure/run.mjs betterbird /usr/bin/betterbird`) ran all 25 jobs to the end in about 55 minutes. The one job that ends the app, `reply_no_identity`, crashed with SIGSEGV as before. Thunderbird was not run (the compose window hook is measured on Betterbird alone).
+
 ## Phase 1
 
 Facts measured while the end-to-end tests ran on Thunderbird 153.7 ESR and Betterbird, with the same result on both unless noted.
