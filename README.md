@@ -49,13 +49,13 @@ Not yet. DesertBird is in daily use by its author and is not yet published on ad
 
 ### From source
 
-Run `just build` (or `npm run build`). It writes an unsigned `dist/desertbird.xpi`. Install that file in Thunderbird or Betterbird. See [AGENTS.md](AGENTS.md) for the build and check commands.
+Run `just build` (or `npm run build`). It writes an unsigned `dist/desertbird.xpi`. Install that file in Thunderbird or Betterbird. The file is unsigned and uses an Experiment, so set `xpinstall.signatures.required` to false and `extensions.experiments.enabled` to true, as the [measurement setup](docs/thunderbird-behavior.md#setup) does. See [AGENTS.md](AGENTS.md) for the build and check commands.
 
 ### Native host (optional)
 
 The native host is the [DesertFox](https://github.com/uhs-robert/desertfox) host. You do not need it. Every key, the command line, the options page and the key editor work without it.
 
-Thunderbird does not let extensions start programs, so the host adds two things: editing a message in your own editor, and the bridge that lets a desktop bar or a script talk to Thunderbird. The setup is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
+The host adds two things: editing a message in your own editor, which goes through the host verbs `editor_start` and `editor_collect` (see [Principles](docs/design.md#principles)), and the bridge that lets a desktop bar or a script talk to Thunderbird. The setup is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
 
 ## 🚀 Try it
 
@@ -70,7 +70,8 @@ DesertBird and tbkeys both put custom keys into Thunderbird. They differ in what
 | Feature | DesertBird | tbkeys |
 | --- | --- | --- |
 | Key sequences | ✅ | ✅ |
-| Plain keys in the main window and the compose window | ✅ | ✅ |
+| Plain keys in the main window | ✅ | ✅ |
+| Plain keys in the compose window | ✅ | ❌ |
 | Keys in standalone message windows | ✅ | ❌ |
 | Key popup (which-key) | ✅ | ➖ |
 | Command line with completion | ✅ | ➖ |
@@ -87,6 +88,7 @@ Sources, read in November 2026: the tbkeys [README](https://github.com/wshanks/t
 
 - Key sequences and plain keys: the README says tbkeys "uses Mousetrap to bind key sequences to custom commands", and its default main window keys are modeled on GMail.
 - Windows: the README has separate fields for the main window and the compose window, and says "Key bindings do not fire in other windows."
+- Compose: the README says "Key bindings do not fire in text input fields unless the first key combo includes a modifier other than `shift`", and a compose body is a text field. DesertBird has a normal mode there (see [docs/keymap.md](docs/keymap.md)).
 - Format: bindings are a JSON object in the preferences pane, and a value that matches no command prefix is run as eval code.
 - Eval: the README says tbkeys-lite is "a version of tbkeys with the ability to execute arbitrary javascript removed" and is the version published on Thunderbird's Add-ons page. The main tbkeys installs from a `tbkeys.xpi` file.
 - Experiment: the README says tbkeys asks for permission to "Have full, unrestricted access to Thunderbird, and your computer" because it injects a key listener, and that its logic is a MailExtension experiment. DesertBird uses an Experiment for the same reason (see [docs/design.md](docs/design.md#principles)).
