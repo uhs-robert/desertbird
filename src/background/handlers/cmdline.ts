@@ -11,7 +11,6 @@ export interface CmdlineApi {
     windows: { get(window_id: number): Promise<{ type?: string }> };
 }
 
-
 /** Opens the command line over the window of the key press. The session is stored first, because the page asks for it as soon as it loads. */
 export async function open_cmdline(scope: HandlerScope<CmdlineApi>, args: CheckedArgs): Promise<void> {
     if (scope.window_id < 0) throw new RuntimeRefusal("This window cannot show the command line.");
