@@ -151,8 +151,13 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         const token = event_to_token(event);
         if (token === null) return;
         if (hold_until > Date.now() && is_plain_printable(token)) return void (event.preventDefault(), event.stopPropagation());
-        // Escape ends a half-typed sequence or count and goes on to Thunderbird, which may use it.
-        if (token === "<Escape>") return ((asked = 0), reset_sequence());
+        // Escape ends a half-typed sequence or count. With a sequence pending it is cancelled too, or Thunderbird closes a message window under the open panel. With none pending it goes on to Thunderbird, which may use it.
+        if (token === "<Escape>") {
+            const was_pending = reported !== "";
+            asked = 0;
+            reset_sequence();
+            return was_pending ? (event.preventDefault(), event.stopPropagation()) : undefined;
+        }
         const result = matcher.feed(NORMAL_MODE, token);
         report(result.kind_ === "pending" ? result.typed_ : []);
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.

@@ -234,10 +234,22 @@ test("g g goes to the top and G to the bottom", async () => {
     assert.deepEqual(window.scrolls, ["to 0", `to ${PAGE_HEIGHT}`]);
 });
 
-test("Escape ends a half-typed sequence and a count, and is not cancelled", async () => {
+test("Escape with nothing pending is not cancelled, so Thunderbird still closes a message window", async () => {
+    const { window } = await started();
+    assert.deepEqual(window.press("Escape"), { cancelled: false, stopped: false });
+});
+
+test("Escape with a sequence pending clears it and is cancelled, so the window stays open", async () => {
     const { window } = await started();
     window.press("g");
-    assert.equal(window.press("Escape").cancelled, false);
+    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
+    window.press("g");
+    assert.deepEqual(window.scrolls, []);
+    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
+});
+
+test("Escape ends a half-typed sequence and a count", async () => {
+    const { window } = await started();
     window.press("g");
     window.press("3");
     window.press("Escape");

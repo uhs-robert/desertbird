@@ -135,6 +135,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         for (const each of [matcher, message_matcher, window_matcher, typing_matcher]) each === active || each.reset();
         if (sequence_window !== window) active.reset();
         sequence_window = window;
+        const sequence_open = key_list_shown;
         const result = active.feed(NORMAL_MODE, token);
         const source = situation !== "message" ? "page" : in_window ? "window" : "message";
         if (result.kind_ === "pending") {
@@ -143,7 +144,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         } else if (!(result.kind_ === "match" && result.leaf.steps.some((step) => step.invocation.id === KEY_LIST))) end_key_list(window);
         // Thunderbird binds single keys of its own in a message tab (`j` is junk), so a plain key stops here whether or not it matched.
         if (result.kind_ === "no_match") {
-            if (situation === "message" && is_plain_printable(token)) (event.preventDefault(), event.stopPropagation());
+            // Escape under an open sequence in a message window is cancelled: Thunderbird would close the window.
+            if (situation === "message" && (is_plain_printable(token) || in_window && sequence_open && token === "<Escape>")) (event.preventDefault(), event.stopPropagation());
             return;
         }
         if (result.kind_ === "match") {
