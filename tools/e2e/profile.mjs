@@ -91,13 +91,13 @@ function views_text() {
   return entries.join("");
 }
 
-// The Lists folder serves the list and date filters (F m l, F m d), in profile kind "lists" only, so the folder pane of every other piece stays as it was. Seven single messages on three days, from two mailing lists and none. Every date sits near noon UTC, so the day is the same in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
+// The Lists folder serves the list and date filters (F m l, F m d), in profile kind "lists" only, so the folder pane of every other piece stays as it was. Seven single messages on three days, from two mailing lists and none. Every message is sent at 12:00 UTC plus its index in minutes, so the messages of one UTC day share a local day in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
 const LISTS_MAIL = [
-  ["dev", 3, 11], ["dev", 3, 12], ["ops", 3, 13], ["dev", 4, 12], ["ops", 5, 12], [null, 5, 13], ["dev", 6, 12],
+  ["dev", 3], ["dev", 3], ["ops", 3], ["dev", 4], ["ops", 5], [null, 5], ["dev", 6],
 ];
 function lists_text() {
-  return LISTS_MAIL.map(([list, day, hour], index) => {
-    const time = new Date(Date.UTC(2026, 1, day, hour)).toUTCString();
+  return LISTS_MAIL.map(([list, day], index) => {
+    const time = new Date(Date.UTC(2026, 1, day, 12, index)).toUTCString();
     const unread = index === 3 || index === 6;
     return [
       `From l${index}@fixture.invalid ${time}`,
