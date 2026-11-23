@@ -46,7 +46,7 @@ async function collect() {
     const entry = { id: window.id, type: window.type, focused: window.focused, tabs: [] };
     for (const tab of window.tabs ?? []) {
       const detail = window.type === "messageCompose" ? await browser.compose.getComposeDetails(tab.id).catch(() => null) : null;
-      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null, is_plain: detail?.isPlainText ?? null, html: detail?.body ?? null });
+      entry.tabs.push({ raw: tab, id: tab.id, index: tab.index, active: tab.active, type: tab.type, title: tab.title, identity_id: detail?.identityId ?? null, subject: detail?.subject ?? null, body: detail?.plainTextBody ?? detail?.body ?? null, is_plain: detail?.isPlainText ?? null, to: detail?.to ?? null, cc: detail?.cc ?? null, bcc: detail?.bcc ?? null, html: detail?.body ?? null });
     }
     state.windows.push(entry);
   }
@@ -276,6 +276,10 @@ async function poll_forever() {
         await post({ seq: command.seq, raw: await save_draft_raw() });
       } else if (command.name === "draft_round_trip") {
         await post({ seq: command.seq, body: await draft_round_trip(command.args.body).catch((error) => `error: ${error.message}`) });
+      } else if (command.name === "make_contacts") {
+        const [book] = await browser.addressBooks.list();
+        for (const first of ["Alice", "Alina", "Alison"]) await browser.contacts.create(book.id, { FirstName: first, LastName: "Fixture", DisplayName: `${first} Fixture`, PrimaryEmail: `${first.toLowerCase()}@fixture.invalid` });
+        await post({ seq: command.seq, made: true });
       } else if (command.name === "close_compose") {
         await close_compose_windows();
         await post({ seq: command.seq, closed: true });
