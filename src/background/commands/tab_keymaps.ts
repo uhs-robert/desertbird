@@ -13,7 +13,7 @@ import type { KeymapTree } from "../../shared/protocol.ts";
 
 /**
  * What each kind of tab offers. A message document is the message pane, a message tab and a message window. An own page is the options or help page, which runs the body script and shows no message. A page tab is any other tab with a chrome page: calendar, tasks, chat, settings, the address book, `about:` pages and search results. A remote page (web content) takes the page tree too, and its runtime lets only `tab.close` run.
- * A message tab whose focus is outside the body is a message document with the find line cut out by `page_message_tree`.
+ * A message tab whose focus is outside the body is a message document with the find line cut out and the hint picks sent to the background by `page_message_tree`.
  */
 export const TAB_KINDS = {
     message: ["message", "tab", "body"],
@@ -117,18 +117,24 @@ export function message_background_commands(): Set<string> {
     return new Set(registry.list().filter((command) => command.runs_in === "background" && tab_needs_of(command).every((need) => (TAB_KINDS.message as readonly TabNeed[]).includes(need))).map((command) => command.id));
 }
 
-// Find in the message needs the body script, which a message tab with the focus outside the body does not run. The reading steps that need it (`hint.pick`, `message.find_next`) do nothing in the chrome, and the key that opens the line on `find ` is dropped here, so no line opens for a find that cannot run.
-const is_find_line = (step: { invocation: { id: string; args?: Record<string, unknown> } }) => step.invocation.id === "cmdline.open" && String(step.invocation.args?.["text"] ?? "").startsWith("find ");
+type TreeStep = { invocation: { id: string; args?: Record<string, unknown> }; runs_in?: string };
+type TreeNode = { children?: Record<string, TreeNode>; steps?: TreeStep[] };
 
-/** The message tree for a message tab with the focus outside the body: the message keys without the key that opens the find line. */
+// Find in the message needs the body script, which a message tab with the focus outside the body does not run. `message.find_next` does nothing in the chrome, and the key that opens the line on `find ` is dropped here, so no line opens for a find that cannot run.
+const is_find_line = (step: TreeStep) => step.invocation.id === "cmdline.open" && String(step.invocation.args?.["text"] ?? "").startsWith("find ");
+
+// A pick from the header goes to the background as `hint.window`, with the action of the key, and labels the header and body of the message in front as one set, as a pick from the body does.
+const header_pick = (step: TreeStep): TreeStep => (step.invocation.id === "hint.pick" ? { ...step, invocation: { ...step.invocation, id: "hint.window" }, runs_in: "background" } : step);
+
+/** The message tree for a message tab with the focus outside the body: the message keys without the key that opens the find line, and with every hint pick sent to the background. */
 export function page_message_tree(message_tree: KeymapTree): KeymapTree {
-    const root: KeymapTree["root"] = JSON.parse(JSON.stringify(message_tree.root));
-    const strip = (node: { children?: Record<string, { steps?: { invocation: { id: string; args?: Record<string, unknown> } }[]; children?: object }> }): void => {
+    const root: TreeNode = JSON.parse(JSON.stringify(message_tree.root));
+    const rewrite = (node: TreeNode): void => {
         for (const [token, child] of Object.entries(node.children ?? {})) {
             if (child.steps?.some(is_find_line)) delete node.children![token];
-            else strip(child as typeof node);
+            else (child.steps &&= child.steps.map(header_pick), rewrite(child));
         }
     };
-    strip(root as Parameters<typeof strip>[0]);
-    return { version: message_tree.version, root };
+    rewrite(root);
+    return { version: message_tree.version, root: root as KeymapTree["root"] };
 }

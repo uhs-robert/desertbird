@@ -119,7 +119,7 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
     const page = window_like("page", [control, control]);
     const tab: Record<string, unknown> = { mode: { name: "preferencesTab" }, browser: { contentDocument: page.document, contentWindow: page } };
     const main = { ...window_like("main", [control]), windowRoot: listeners("root"), matchMedia: () => ({ matches: false }), document: { ...make_document("main", [control]), hasFocus: () => true, getElementById: () => ({ currentTabInfo: tab }) } };
-    const message_window = { ...window_like("message window", []), document: { ...make_document("message window", []), hasFocus: () => true, getElementById: () => null } };
+    const message_window = { ...window_like("message window", []), matchMedia: () => ({ matches: false }), document: { ...make_document("message window", []), hasFocus: () => true, getElementById: () => null } };
     const platform = stub_platform([main, message_window]);
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
@@ -159,7 +159,7 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
         assert.equal(await pick({ windowId: 7, colors }), 1);
         assert.deepEqual(drawn_in, ["main"]);
         shutdown();
-        await assert.rejects(pick({ windowId: 9, colors }), /no tab in window 9/, "a message window has no tab to label");
+        await assert.rejects(pick({ windowId: 9, colors }), /no tab in window 9/, "a message window with no about:message has nothing to label");
     } finally {
         platform.restore();
     }
@@ -182,16 +182,19 @@ function message_setup() {
     const window_like = (name: string, matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(name, matching), ...listeners(name) });
     const reply = element("reply", false);
     const link = element("link", true);
-    const message = window_like("message", [reply]);
+    const messagepane: Record<string, unknown> = { id: "messagepane", contentDocument: { activeElement: link } };
+    const message_like = window_like("message", [reply]);
+    const message = { ...message_like, document: { ...message_like.document, getElementById: (id: string) => (id === "messagepane" ? messagepane : null) } };
     const body = window_like("body", [link]);
-    const messagepane: Record<string, unknown> = { id: "messagepane", contentDocument: { activeElement: link }, contentWindow: body, ownerDocument: { defaultView: message } };
+    Object.assign(messagepane, { contentWindow: body, ownerDocument: { defaultView: message } });
     const message_browser = { id: "messageBrowser", contentDocument: { activeElement: messagepane } };
     const queued: (() => void)[] = [];
     let has_focus = true;
-    const tab = { mode: { name: "mail3PaneTab" } };
+    const tab: { mode: { name: string }; chromeBrowser?: unknown } = { mode: { name: "mail3PaneTab" } };
     const main = { ...window_like("main", []), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } }, document: { ...make_document("main", []), activeElement: message_browser as unknown, hasFocus: () => has_focus, getElementById: () => ({ currentTabInfo: tab }) } };
-    const message_window = { ...window_like("message window", []), document: { ...make_document("message window", []), hasFocus: () => true, getElementById: () => null } };
-    return { heard, added, drawn_in, removed, log, reply, link, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
+    // A message window has no tabmail. Its about:message sits in `messageBrowser`, and the focus goes down through it to the body.
+    const message_window = { ...window_like("message window", []), windowRoot: listeners("window root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: main.KeyboardEvent, messageBrowser: { contentWindow: message }, document: { ...make_document("message window", []), activeElement: message_browser as unknown, hasFocus: () => true, getElementById: () => null } };
+    return { heard, added, drawn_in, removed, log, reply, link, message, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
 }
 
 test("hints.pick at the message labels the header and the body in one set, and the Enter of a body link waits for the end of the key and for the focus", async () => {
@@ -288,7 +291,7 @@ test("hints.pick at the message removes every listener it added on each way it e
     }
 });
 
-test("hints.pick at the message answers 0 when the focus left the body, and -1 for a remote body or a window with no tabs", async () => {
+test("hints.pick at the message answers 0 when the focus left the body or its tab left the front, and -1 for a body the parent cannot read", async () => {
     const setup = message_setup();
     const platform = stub_platform([setup.main, setup.message_window]);
     try {
@@ -306,9 +309,76 @@ test("hints.pick at the message answers 0 when the focus left the body, and -1 f
         setup.messagepane["isRemoteBrowser"] = false;
         setup.messagepane["contentDocument"] = null;
         assert.equal(await pick({ windowId: 7, tabId: 5, colors, place: "message" }), -1, "a body with no document the parent can read");
-        assert.equal(await pick({ windowId: 9, tabId: 5, colors, place: "message" }), -1, "a message window keeps the body's own labels");
+        assert.equal(await pick({ windowId: 9, tabId: 5, colors, place: "message" }), -1, "a remote body in a message window");
         assert.deepEqual(setup.drawn_in, []);
+        setup.message_window.document.activeElement = { id: "other" };
+        assert.equal(await pick({ windowId: 9, colors, place: "message" }), 0, "the focus left the body of a message window");
     } finally {
+        platform.restore();
+    }
+});
+
+const message_context = (setup: ReturnType<typeof message_setup>) => ({ extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === setup.main ? { id: 7 } : candidate === setup.message_window ? { id: 9 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: (candidate: unknown) => (candidate === setup.tab ? { id: 5 } : null) } } });
+const message_colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
+
+test("hints.pick with no place in a message tab labels its header and body in one set, and only the header of a body the parent cannot read", async () => {
+    const setup = message_setup();
+    // The focus sits in the header, outside the body: the header keys send hint.window, which names no place.
+    setup.main.document.activeElement = { id: "messageBrowser", contentDocument: { activeElement: setup.reply } };
+    Object.assign(setup.tab, { mode: { name: "mailMessageTab" }, chromeBrowser: { contentWindow: setup.message } });
+    const platform = stub_platform([setup.main]);
+    try {
+        const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
+        const { pick } = get_hints_api(message_context(setup)).hints;
+        assert.equal(await pick({ windowId: 7, colors: message_colors, action: "focus" }), 2);
+        assert.deepEqual(setup.drawn_in, ["message", "body"]);
+        for (const heard of ["root keydown", "message MsgLoading", "body scroll", "main TabSelect"]) assert.ok(setup.added.includes(heard), heard);
+        shutdown();
+        for (const unreadable of [{ isRemoteBrowser: true }, { isRemoteBrowser: false, contentDocument: null }]) {
+            Object.assign(setup.messagepane, unreadable);
+            setup.drawn_in.length = 0;
+            setup.added.length = 0;
+            assert.equal(await pick({ windowId: 7, colors: message_colors }), 1, JSON.stringify(unreadable));
+            assert.deepEqual(setup.drawn_in, ["message"], "the header alone");
+            assert.ok(!setup.added.includes("body scroll"));
+            shutdown();
+        }
+    } finally {
+        platform.restore();
+    }
+});
+
+test("hints.pick in a message window labels the header and the body from the body and from no place, and the Enter of a body link goes to that window", async () => {
+    const setup = message_setup();
+    const events: string[] = [];
+    const platform = stub_platform([setup.main, setup.message_window]);
+    const globals = globalThis as Record<string, unknown>;
+    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransactionForTests: (window: unknown) => window === setup.message_window, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup() {} }) } };
+    globals["Ci"] = { nsITextInputProcessor: {} };
+    try {
+        const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
+        const { pick } = get_hints_api(message_context(setup)).hints;
+        // The window has no tab the tab manager knows, so the tab check is skipped.
+        assert.equal(await pick({ windowId: 9, tabId: 12, colors: message_colors, place: "message" }), 2);
+        assert.deepEqual(setup.drawn_in, ["message", "body"]);
+        for (const heard of ["window root keydown", "message MsgLoading", "body scroll", "message window blur"]) assert.ok(setup.added.includes(heard), heard);
+        assert.ok(!setup.added.includes("root keydown"), "the main window keeps its keys");
+        setup.heard.get("window root keydown")!({ key: "s", ctrlKey: false, altKey: false, metaKey: false, preventDefault() {}, stopPropagation() {} } as never);
+        assert.deepEqual(setup.log, ["focus link"]);
+        setup.queued.shift()!();
+        assert.deepEqual(events, ["down Enter"], "the Enter goes to the message window");
+        setup.drawn_in.length = 0;
+        assert.equal(await pick({ windowId: 9, colors: message_colors }), 2, "no place: the same set");
+        assert.deepEqual(setup.drawn_in, ["message", "body"]);
+        // A pick in the main window ends the labels left up in the message window.
+        setup.removed.length = 0;
+        await pick({ windowId: 7, tabId: 5, colors: message_colors, place: "message" });
+        assert.deepEqual(setup.removed, ["message", "body"]);
+        assert.ok(setup.added.includes("window root -keydown"));
+        shutdown();
+    } finally {
+        delete globals["Cc"];
+        delete globals["Ci"];
         platform.restore();
     }
 });

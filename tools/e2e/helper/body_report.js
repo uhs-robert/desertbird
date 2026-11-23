@@ -18,6 +18,8 @@ function report() {
       selection: String(window.getSelection()),
       // The start of the text, so a wait can tell which message the document shows. A fixture body names its own message.
       text_start: (document.body?.innerText ?? "").slice(0, 200),
+      // Whether the focus sits in this document, so a check can tell the body from the header around it.
+      has_focus: document.hasFocus(),
     })
     .catch(() => {});
 }
@@ -32,6 +34,7 @@ window.addEventListener("scroll", () => {
     report();
   }, 100);
 });
+for (const type of ["focus", "blur"]) window.addEventListener(type, () => setTimeout(report, 100));
 // The marker lands after DesertBird reads its keymap, so the first report waits for it.
 setTimeout(report, 1500);
 

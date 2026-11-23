@@ -387,14 +387,16 @@ test("in a message tab a plain key with no binding is cancelled, so Thunderbird'
     assert.equal(invocations().length, 0);
 });
 
-test("in a message tab the find key opens no line, and the picks that need the body script run nothing", () => {
+test("in a message tab the find key opens no line, and f sends hint.window with the tab's message and holds the plain keys", () => {
     const { windows, runtime, invocations } = setup();
-    runtime.install(tree());
+    runtime.install(tree(), ["hint.window"]);
     const window = windows[0]!;
     window.situation = "message";
     assert.equal(press(window, "/").cancelled, true);
-    press(window, "f");
-    assert.deepEqual(invocations().map((event) => event.command), []);
+    press(window, ";");
+    press(window, "y");
+    assert.equal(press(window, "a").cancelled, true, "the hold swallows a key typed before the labels take the keys");
+    assert.deepEqual(invocations().map((event) => [event.command, event.args, event.messageIds]), [["hint.window", { action: "yank" }, [42]]]);
 });
 
 test("the page tree and the message tree keep separate half-typed sequences", () => {

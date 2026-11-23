@@ -374,7 +374,7 @@ export interface HintsPickArgs {
     colors: HintLabelColors;
     /** What a typed label does. Absent means `activate`. */
     action?: HintAction;
-    /** `message`: label the header and body of the message that holds the focus, in the mail tab's reading pane or a message tab. The answer is then 0 when the focus is no longer in a message body, and -1 when the parent cannot read the body or the window has no tabs (a message window), so the body script labels the body itself. */
+    /** `message`: label the header and body of the message that holds the focus, in the mail tab's reading pane, a message tab or a message window. The answer is then 0 when the focus is no longer in a message body, and -1 when the parent cannot read the body, so the body script labels the body itself. */
     place?: "message";
 }
 
