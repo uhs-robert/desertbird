@@ -249,7 +249,11 @@ test("Escape after a prefix in a message tab document is cancelled and clears th
 });
 
 test("Escape with a sequence pending clears it and is cancelled, so the window stays open", async () => {
-    const { window, reports } = await started();
+    const window_root = JSON.parse(JSON.stringify(compile_tab_keymap("window").compiled.modes.normal)) as unknown;
+    const window = new StubWindow();
+    const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { ...record(), window_tree: { version: COMPILED_KEYMAP_VERSION, root: window_root } } });
+    const { runtime, reports } = stub_runtime();
+    await start_body_script(window, storage, runtime, undefined, "window_tree");
     window.press("g");
     assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
     assert.deepEqual(reports, [["g"], []], "the pending report clears");
