@@ -83,8 +83,9 @@ async function draft_round_trip(body) {
 
 // Archive or delete what the mail tab has selected, through the API. It measures what Thunderbird leaves selected afterwards, independent of the keys.
 async function act_on_selected(name) {
-  // The first main window, so a message window in front does not hide the mail tab.
-  const [main_window] = await browser.windows.getAll({ windowTypes: ["normal"] });
+  // A main window by its type, the focused one when there are several, so a message window in front does not hide the mail tab.
+  const main_windows = await browser.windows.getAll({ windowTypes: ["normal"] });
+  const main_window = main_windows.find((window) => window.focused) ?? main_windows[0];
   const [mail_tab] = await browser.mailTabs.query({ active: true, windowId: main_window.id });
   const ids = (await all_messages(await browser.mailTabs.getSelectedMessages(mail_tab.id))).map((message) => message.id);
   if (name === "api_archive") await browser.messages.archive(ids);

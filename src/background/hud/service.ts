@@ -203,7 +203,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             if (event.root) return show_root(event.windowId, source);
             await on_pending(event.windowId, event.keys, source);
         },
-        // Only a tracked main window has a hud page to mount. A standalone message window is not one, so its reports are dropped.
+        // Only a tracked main window has a hud page to mount. The overlay host refuses the hud in a message window and `set_lifted` makes no entry for it, so its reports are dropped.
         on_body_pending: async (window_id, keys, source) => (windows.has(window_id) ? on_pending(window_id, keys, source) : undefined),
         async toast(window_id, text, is_error) {
             if (deps.overlay === undefined || window_id < 0) return false;
@@ -216,12 +216,14 @@ export function create_hud_service(deps: HudDeps): HudService {
             await changed(window_id);
             if (hud.mounted) return true;
             hud.toasts.dismiss(id);
-            // A message window cannot mount the page. Left in the table, it would let its header's prefixes through to mount attempts. A main window tracked during the mount keeps its entry.
+            // A window that cannot mount the page (a message window) must not stay in the table, or its prefixes would reach mount attempts. A main window tracked during the mount keeps its entry.
             if (!hud.tracked && windows.get(window_id) === hud) windows.delete(window_id);
             return false;
         },
         set_lifted(window_id, lifted) {
-            const hud = hud_of(window_id);
+            // The command line opens in a message window too, which has no hud: it gets no entry here.
+            const hud = windows.get(window_id);
+            if (hud === undefined) return;
             hud.lifted = lifted;
             void changed(window_id);
         },
