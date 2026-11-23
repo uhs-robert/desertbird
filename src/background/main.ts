@@ -24,7 +24,7 @@ import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/sto
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
 import { start_jump_history } from "./handlers/jump_history.ts";
-import { create_body_requests, refused_outside_main_window } from "./body_requests.ts";
+import { create_body_requests } from "./body_requests.ts";
 import type { BodyRequestApi } from "./body_requests.ts";
 import { notify_refusal, notify_result } from "./notify.ts";
 import { create_new_mail_notifier } from "./new_mail_notify.ts";
@@ -365,10 +365,7 @@ create_new_mail_notifier(messenger, async () => (await config_store.read()).sett
 const on_key_event = (event: KeysEvent) => {
     if ("mode" in event) hud.on_keys_event(event).then(() => bridge.mode_changed(), console.error);
     else if ("keys" in event) hud.on_keys_event(event).catch(console.error);
-    else
-        refused_outside_main_window(registry, messenger, event.command, event.windowId)
-            .then((refused) => (refused ? undefined : router.run(event)))
-            .catch(console.error);
+    else router.run(event).catch(console.error);
 };
 messenger.keys?.onInvocation.addListener(on_key_event);
 messenger.pages?.onInvocation.addListener(on_key_event);

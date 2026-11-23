@@ -31,7 +31,7 @@ export interface BodyRequestDeps {
 const MAIN_WINDOW_TYPE = "normal";
 const MESSAGE_WINDOW_TYPE = "messageDisplay";
 
-/** Whether the command needs the overlay and the window is no main window, which has none. Then it tells the user so, and the caller drops the command rather than let it fail in the Experiment. The body script and the header of a message window both pass here. */
+/** Whether the command needs the overlay and the window is no main window, which has none. Then it tells the user so, and the caller drops the command rather than let it fail in the Experiment. The body script passes here: a message window document runs the message tree, whose keys can open the line, until the background answers `body.tree`. */
 export async function refused_outside_main_window(registry: Registry, api: NotificationsApi & Pick<BodyRequestApi, "windows">, command: string, window_id: number): Promise<boolean> {
     if (registry.get(command)?.needs?.includes("overlay.mount") !== true || (await api.windows.get(window_id)).type === MAIN_WINDOW_TYPE) return false;
     await notify_refusal(api, "The command line is not available in a message window. Open the message in a tab to use it.");
