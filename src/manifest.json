@@ -13,6 +13,13 @@
         "scripts": ["vendor/turndown/turndown.js", "vendor/marked/marked.umd.js", "background.js"],
         "persistent": true
     },
+    "icons": { "48": "icons/desertbird.svg", "96": "icons/desertbird.svg" },
+    "browser_action": {
+        "default_title": "DesertBird",
+        "default_icon": "icons/desertbird.svg",
+        "default_popup": "popup/popup.html",
+        "default_windows": ["normal"]
+    },
     "options_ui": {
         "page": "options/options.html",
         "open_in_tab": true

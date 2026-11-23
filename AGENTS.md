@@ -26,6 +26,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Hud in the background: which-key panel, toasts, mode label | [`src/background/hud/README.md`](src/background/hud/README.md) |
 | Bridge to the native host: the `bridge` setting, the never-list, the port and its frames | [`src/background/bridge/README.md`](src/background/bridge/README.md) |
 | Theme: the `theme` setting, role colors for pages, mode label colors | [`src/background/theme/README.md`](src/background/theme/README.md) |
+| Toolbar button: the bird icon and its popup (Options, Help, Show keys) | [`src/popup/README.md`](src/popup/README.md) |
 | Help page generated from the registry | [`src/help/README.md`](src/help/README.md) |
 | Default keys of each tab kind, generated (never edit by hand) | [`docs/keymap.md`](docs/keymap.md) |
 | End-to-end run in Thunderbird and Betterbird | [`tools/e2e/README.md`](tools/e2e/README.md) |
