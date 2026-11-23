@@ -155,7 +155,8 @@ test("a record of version 14, with no window tree, is rebuilt with one, and the 
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; window_tree?: { root: unknown } };
     assert.equal(record.record_version, 16);
     assert.match(JSON.stringify(record.window_tree?.root), /msg\.flag/);
-    assert.doesNotMatch(JSON.stringify(record.window_tree?.root), /tab\.next|pane\.focus|cmdline\.open/);
+    assert.match(JSON.stringify(record.window_tree?.root), /cmdline\.open/);
+    assert.doesNotMatch(JSON.stringify(record.window_tree?.root), /tab\.next|pane\.focus/);
     assert.equal(window_installs.length, 1);
     const installed = JSON.stringify((window_installs[0] as { root: unknown }).root);
     assert.match(installed, /hint\.window/);

@@ -439,12 +439,22 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 - Not measured: a folder renamed or deleted on a server, and a first display on a real IMAP folder.
 ### Find, hints and the command line from a message
 
-- The command line opens in a main window only. `overlay.mount` looks the window up among the `mail:3pane` windows, so a standalone message window has none. A message tab and the reading pane sit in a main window, so the line opens there. In a message window `/` refuses with a notification.
+- The command line opens in a main window and in a standalone message window. `overlay.mount` looks the window up among the `mail:3pane` and `mail:messageWindow` windows. A message tab and the reading pane sit in a main window, so the line opens there. Measurements for a message window are under "The command line in a message window".
 - The body script reaches the background with `runtime.sendMessage`, and the background reaches the script with `tabs.sendMessage` on the front tab of the window. Both worked in the pane and in a message tab. The sender of a message from the script carries `tab.id` and `tab.windowId`. The background takes the window and the messages (`messageDisplay.getDisplayedMessages`) from the sender.
 - The find is `window.find` in the message document. It selects the match and scrolls to it. The `wrapAround` flag measured as no help in a message tab (the search stopped at the last match), so the script wraps itself: at the end of the matches it moves the selection to the far end and searches again.
 - Where the focus lands after the line closes: in a message tab `window.focus()` from the script puts it back in the message, so `n` and `N` work at once. In the reading pane the overlay returns the focus to the thread list, and `window.focus()` did not move it into the message. `F6` does.
 - A hint pick focuses the link and the Experiment then sends the Enter. A real Enter on the focused link reached Thunderbird's own click handling: for a link whose text names `bank.example` and whose address is `127.0.0.1`, Thunderbird showed its Link Mismatch dialog (read from the e2e screenshot), as a mouse click does. A script `click()` is an untrusted event and skips that handling, measured with the e2e probe `hints: click() on the external link` (a content script clicks the same link): on Thunderbird 153.7.0 ESR and on Betterbird the pane went straight to the link address (an error page for the closed port) and no Link Mismatch dialog showed. So the pick focuses the link and the `hints` Experiment presses a trusted Enter (a `nsITextInputProcessor` key press in the window), which Thunderbird handles as a click. The e2e shot `hint_external_pick` shows the Link Mismatch dialog after the one-step pick on both apps. A link to a place in the same message scrolled to its target on Enter. Opening an external link in the system browser was not measured and is a hand check.
 
+
+### The command line in a message window
+
+Measured with the e2e piece `message/window_cmdline` on Betterbird 153.7.0 and Thunderbird 153.7.0 ESR, the same on both, with a window opened from the list of the Reading folder.
+
+- The overlay draws in a message window. The box is `position: fixed` at the bottom of the window document, over the message, with the completion list above the input line. A main window with its own line open draws its line at the same time, and closing one leaves the other.
+- Escape from the line: the first Escape hides the completion list and the second closes the line. A further Escape reaches Thunderbird, which closes a message window on an Escape that no line takes. A test that presses Escape until nothing changes closes the window.
+- Focus after the line closes needs no fallback. The focus capture takes the `messagepane` browser when the body had the focus, and the header element when the header had it, and both take the focus back. This holds after a command ran, after Escape, with the focus in the header, and when the message under the line changed (a message archived through the API while the line was open: the window shows the next message and `j` still scrolls it after two Escapes). No case left the keyboard stranded.
+- What the window shows after the shown message leaves its folder (archive, delete, move to a folder, each from a window opened from the list): the window stays open and shows the next message of the list, and the line is gone with the command. For the last message of the list the window closes, with an open line too. No case left a blank window.
+- The mode label of the main window does not draw in a message window: no `-- NORMAL --` shows there.
 
 ### Message header controls
 

@@ -24,7 +24,7 @@ import type { NotificationsApi } from "./notify.ts";
 import type { ScopedContext } from "./commands/index.ts";
 
 // An intersection, not an interface that extends each part: the parts share `folders`, `messages` and `mailTabs` with different members.
-export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & FollowupApi & QuickReplyApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "app"> & Pick<UndoApi, "undo"> & WhichKeyApi & {
+export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & FollowupApi & QuickReplyApi & AttachmentsApi & Pick<UnsubscribeApi, "windows"> & { windows: { get(window_id: number): Promise<{ type?: string }> } } & { messages: Pick<UnsubscribeApi["messages"], "getFull"> } & FolderApi & Omit<ThreadViewApi, "app"> & Pick<UndoApi, "undo"> & WhichKeyApi & {
     /** Absent when the Experiment failed to load. */
     keys: KeysApi | undefined;
     app: AppApi | undefined;

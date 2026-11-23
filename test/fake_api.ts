@@ -41,6 +41,8 @@ interface FakeOptions {
     storage?: Record<string, unknown>;
     /** `mailTabs.update` of a displayed folder throws this after it showed the folder, as Thunderbird does on the first display of a folder. */
     first_display_error?: string;
+    /** The type `windows.get` answers per window id. A window not listed is a main window. */
+    window_types?: Record<number, string>;
 }
 
 /** A recording fake of the API subset. `calls` holds one line per call, in order. */
@@ -140,7 +142,7 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 },
             },
         },
-        windows: { openDefaultBrowser: async (url) => void calls.push(`windows.openDefaultBrowser ${url}`) },
+        windows: { openDefaultBrowser: async (url) => void calls.push(`windows.openDefaultBrowser ${url}`), get: async (id) => ({ type: options.window_types?.[id] ?? "normal" }) },
         downloads: {
             download: async (download) => {
                 calls.push(`download ${download.filename} saveAs=${download.saveAs} ${download.conflictAction}`);

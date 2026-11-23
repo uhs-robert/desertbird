@@ -8,7 +8,7 @@ import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
 import { claim_id_when_page_ready, create_overlay_host, on_escape_key } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
-import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
+import { guard, load_platform, open_main_windows, open_overlay_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import type { KeydownEvent } from "./runtime.ts";
 import { front_about_3pane } from "./view.ts";
@@ -188,7 +188,7 @@ function ensure_mode_label(context: ExtensionContext & { extension: OverlayExten
 
 function ensure_host(context: ExtensionContext & { extension: OverlayExtension }): OverlayHost {
     host ??= create_overlay_host<MainWindow>({
-        window_with_id: (window_id) => open_main_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
+        window_with_id: (window_id) => open_overlay_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
         create: (window, surface, window_id, click_through, on_not_ready) => create_overlay_element(window, context.extension, surface, window_id, click_through, on_not_ready),
         capture_focus: (window) => capture_focus(window.document),
         focus_thread_list(window) {

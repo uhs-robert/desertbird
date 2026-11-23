@@ -12,6 +12,8 @@ import { flag_alternatives, usage_line } from "../../../vendor/desertfox/registr
 import { rank } from "../../../vendor/desertfox/score.ts";
 import type { Candidate } from "../../../vendor/desertfox/score.ts";
 import type { CmdlineRow } from "../../shared/protocol.ts";
+import { offered_in } from "../commands/tab_keymaps.ts";
+import type { TabKind } from "../commands/tab_keymaps.ts";
 import type { TabChoice } from "../handlers/tabs.ts";
 import type { FolderChoice, FolderQuery } from "./folder_rows.ts";
 
@@ -125,7 +127,7 @@ function args_of(command: Command): string {
 // The vendored key labels read one keymap, and take the line's mode plus `browser`. Both trees go in as those two modes, so one pass reads the mail keys and the message keys, and a key in both counts once.
 const both_trees = (trees: KeyTrees) => ({ modes: { normal: trees.mail, browser: trees.message } }) as unknown as CompiledKeymap;
 
-export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number, session: { window_id: number; message_ids: number[] }) => Promise<Completion> {
+export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number, session: { window_id: number; message_ids: number[]; kind?: TabKind }) => Promise<Completion> {
     let labeled: { trees: KeyTrees; labels: Map<string, string> } | undefined;
     async function command_keys(): Promise<Map<string, string>> {
         const trees = await sources.key_trees();
@@ -134,10 +136,10 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
     }
 
     // Only commands that run in the background can run from the line, and a hidden command stays typeable but unlisted.
-    const listed = (keys: Map<string, string>) =>
+    const listed = (keys: Map<string, string>, kind: TabKind | undefined) =>
         registry
             .list()
-            .filter((command) => command.runs_in === "background" && command.completion !== "hidden")
+            .filter((command) => command.runs_in === "background" && command.completion !== "hidden" && (kind === undefined || offered_in(kind, command)))
             .map((command): Row => {
                 const name = command.name ?? command.id;
                 return { name, insert: command.params?.length ? `${name} ` : name, description: first_sentence(command.intent), args: args_of(command), usage: usage_line(command), also_named: command.name ? [command.id] : [], ...(keys.has(command.id) && { keys: keys.get(command.id) ?? "" }), keywords: [...(command.aliases ?? []), command.label] };
@@ -162,9 +164,13 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
     }
 
     return async (text, caret, session) => {
-        const context = cursor_context(text, caret, (word) => registry.find(word));
+        // A command the kind does not offer is no command here, so its flags and values never list.
+        const context = cursor_context(text, caret, (word) => {
+            const found = registry.find(word);
+            return found !== undefined && (session.kind === undefined || offered_in(session.kind, found)) ? found : undefined;
+        });
         if (context.kind === "none") return NOTHING;
-        if (context.kind === "command") return finish(context, listed(await command_keys()));
+        if (context.kind === "command") return finish(context, listed(await command_keys(), session.kind));
         if (context.kind === "flag") return finish(context, flag_rows(context.command, context.typed), context.command);
         const param = context.kind === "flag_value" ? context.param : context.position === 0 ? first_word_param(context.command) : undefined;
         const lists_values = param !== undefined && (is_dynamic_values(param.values) || static_values(param) !== undefined);

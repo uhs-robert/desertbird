@@ -4,7 +4,6 @@ import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation } from "../shared/protocol.ts";
 import type { ThemedHints } from "./handlers/hint_window.ts";
-import { notify_refusal } from "./notify.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import type { NotificationsApi } from "./notify.ts";
 
@@ -30,17 +29,9 @@ export interface BodyRequestDeps {
     run(invocation: KeysInvocation): Promise<void>;
 }
 
-const MAIN_WINDOW_TYPE = "normal";
 const MESSAGE_WINDOW_TYPE = "messageDisplay";
 const COMPOSE_WINDOW_TYPE = "messageCompose";
 const NO_COMMANDS: ReadonlySet<string> = new Set();
-
-/** Whether the command needs the overlay and the window is no main window, which has none. Then it tells the user so, and the caller drops the command rather than let it fail in the Experiment. The body script passes here: a message window document runs the message tree, whose keys can open the line, until the background answers `body.tree`. */
-export async function refused_outside_main_window(registry: Registry, api: NotificationsApi & Pick<BodyRequestApi, "windows">, command: string, window_id: number): Promise<boolean> {
-    if (registry.get(command)?.needs?.includes("overlay.mount") !== true || (await api.windows.get(window_id)).type === MAIN_WINDOW_TYPE) return false;
-    await notify_refusal(api, "The command line is not available in a message window. Open the message in a tab to use it.");
-    return true;
-}
 
 function read_invoke(message: unknown): BodyInvokeRequest | undefined {
     const request = message as Partial<Record<string, unknown>> | null;
@@ -69,7 +60,7 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         // A window that is gone or cannot be read has no commands: the check never falls back to the larger set.
         if (window_type === undefined) return {};
         const is_compose = window_type === COMPOSE_WINDOW_TYPE;
-        if (!(is_compose ? deps.compose_allowed ?? NO_COMMANDS : deps.allowed).has(request.command) || (await refused_outside_main_window(deps.registry, deps.api, request.command, window_id))) return {};
+        if (!(is_compose ? deps.compose_allowed ?? NO_COMMANDS : deps.allowed).has(request.command)) return {};
         // A page of the add-on is a tab with no message, and a compose window shows none. The call may refuse for a page, and the key then runs with no messages.
         const message_ids = is_compose ? [] : (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch((error: unknown) => (console.error("desertbird body request:", error), []))).map((message) => message.id);
         await deps.run({ command: request.command, args: request.args, count: request.count, windowId: window_id, messageIds: message_ids });

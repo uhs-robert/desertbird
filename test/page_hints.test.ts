@@ -54,7 +54,7 @@ test("a message window header runs message mode: j scrolls the body, m s flags t
         windowRoot: { addEventListener: (_type: string, listener: (event: unknown) => void) => void key_listeners.push(listener), removeEventListener() {} },
         addEventListener() {},
         removeEventListener() {},
-        document: { activeElement: header, documentElement: { hasAttribute: () => false }, querySelectorAll: () => [], getElementById: () => null, hasFocus: () => true },
+        document: { activeElement: header, documentElement: { hasAttribute: () => false, getAttribute: (name: string) => (name === "windowtype" ? "mail:messageWindow" : null) }, querySelectorAll: () => [], getElementById: () => null, hasFocus: () => true },
     };
     const platform = stub_platform([window]);
     try {

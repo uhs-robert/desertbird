@@ -186,8 +186,8 @@ test("a long folder list ranks in full and keeps the best rows only", async () =
 
 // --- the service
 
-function service_setup(options: { experiment?: boolean; read_widgets?: (window_id: number) => Promise<StatusWidget[]> } = {}) {
-    const { api, calls } = fake_api({ experiment: options.experiment ?? true, messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [{ id: "f1", accountId: "a1", path: "/Archive" }] });
+function service_setup(options: { experiment?: boolean; read_widgets?: (window_id: number) => Promise<StatusWidget[]>; window_types?: Record<number, string> } = {}) {
+    const { api, calls } = fake_api({ experiment: options.experiment ?? true, ...(options.window_types && { window_types: options.window_types }), messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders: [{ id: "f1", accountId: "a1", path: "/Archive" }] });
     const ran: KeysInvocation[] = [];
     const recorded: string[] = [];
     const router = create_router(registry, api);
@@ -218,6 +218,20 @@ test("the open key stores the selection and mounts the overlay", async () => {
     const { calls, router } = service_setup();
     await router.run({ command: "cmdline.open", args: { text: "tag " }, count: 1, windowId: 3, messageIds: [5] });
     assert.deepEqual(calls, ['cmdline.begin 3 {"message_ids":[5],"text":"tag "}', "overlay.mount 3 cmdline"]);
+});
+
+test("the open key in a message window stores the window kind, and in a main window stores none", async () => {
+    const { calls, router } = service_setup({ window_types: { 7: "messageDisplay" } });
+    await router.run({ command: "cmdline.open", args: { text: "move " }, count: 1, windowId: 7, messageIds: [5] });
+    await router.run({ command: "cmdline.open", args: { text: "move " }, count: 1, windowId: 3, messageIds: [5] });
+    assert.deepEqual(calls.filter((call) => call.startsWith("cmdline.begin")), ['cmdline.begin 7 {"message_ids":[5],"text":"move ","kind":"window"}', 'cmdline.begin 3 {"message_ids":[5],"text":"move "}']);
+});
+
+test("the open key refuses when the window cannot be read, and stores no session", async () => {
+    const { api, calls } = service_setup();
+    api.windows.get = async () => Promise.reject(new Error("no window"));
+    await create_router(registry, api).run({ command: "cmdline.open", args: {}, count: 1, windowId: 3, messageIds: [] });
+    assert.equal(calls.some((call) => call.startsWith("cmdline.begin") || call.startsWith("overlay.mount")), false);
 });
 
 test("the open key with no text opens an empty line", async () => {
@@ -311,6 +325,43 @@ test("run closes the overlay, then runs the command on the messages selected whe
     const order = calls.filter((call) => call.startsWith("overlay.unmount") || call.startsWith("messages.update"));
     assert.deepEqual(order, ["overlay.unmount 3", 'messages.update 5 {"tags":["$label1"]}']);
     assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: false });
+});
+
+test("the line of a message window runs only the commands that window offers, and says so for the rest", async () => {
+    const { service, ran } = service_setup();
+    service.begin(3, { message_ids: [5], text: "", kind: "window" });
+    for (const text of ["sort --date", "open /Archive", "tab 2", "find hello", "filter --tag --tag=x"]) {
+        const result = await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text });
+        assert.equal(result.ok, false, text);
+        assert.match((result as { message: string }).message, /is not available in a message window/, text);
+    }
+    assert.deepEqual(await ask<CmdlineHello>(service, { type: "cmdline.hello", windowId: 3 }), { open: true, text: "", prompt: "caret" }, "a refused line stays open");
+    assert.deepEqual(await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text: "tag Important" }), { ok: true });
+    await settle();
+    assert.deepEqual(ran.map((invocation) => invocation.command), ["msg.tag"]);
+});
+
+test("the same typed commands run in a main window, which has no kind", async () => {
+    const { service } = service_setup();
+    for (const text of ["sort --date --ascending", "find hello"]) {
+        service.begin(3, { message_ids: [5], text: "" });
+        assert.deepEqual(await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text }), { ok: true }, text);
+    }
+});
+
+test("the list of a message window holds only the commands it offers, and a refused command lists no flags or values", async () => {
+    const { service } = service_setup();
+    service.begin(3, { message_ids: [5], text: "", kind: "window" });
+    const names = async (text: string) => (await ask<CmdlineCompletion>(service, { type: "cmdline.complete", windowId: 3, text, caret: text.length })).rows.map((row) => row.name);
+    const all = await names("");
+    for (const name of ["tag", "move", "copy", "msg.flag", "msg.archive"]) assert.ok(all.includes(name), name);
+    for (const name of ["sort", "open", "tab", "find", "filter", "search"]) assert.equal(all.includes(name), false, name);
+    assert.deepEqual(await names("sort "), []);
+    assert.deepEqual(await names("sort --"), []);
+    assert.ok((await names("move ")).includes("/Archive"));
+    service.begin(4, { message_ids: [5], text: "" });
+    const in_main = (await ask<CmdlineCompletion>(service, { type: "cmdline.complete", windowId: 4, text: "", caret: 0 })).rows.map((row) => row.name);
+    for (const name of ["sort", "open", "find"]) assert.ok(in_main.includes(name), name);
 });
 
 test("a runtime refusal of the command ends in a notification, after the line closed", async () => {

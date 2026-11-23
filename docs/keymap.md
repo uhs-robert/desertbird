@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 430 (Mail tab 147, Message 98, Message window 69, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
+bound: 434 (Mail tab 147, Message 98, Message window 73, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -448,6 +448,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `<C-l>` | `msg.open` |
 | `q` | `tab.close` |
 | `<A-q>` | `tab.close` |
+| `:` | `cmdline.open` |
 | `u` | `undo` |
 
 #### Go
@@ -491,6 +492,9 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `mu` | `msg.read --unread` |
 | `ms` | `msg.flag` |
 | `mj` | `msg.junk` |
+| `mt` | `cmdline.open 'tag '` |
+| `mm` | `cmdline.open 'move '` |
+| `mc` | `cmdline.open 'copy '` |
 
 #### Snooze
 

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
-import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, offered_in, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 
 const root_of = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("page", user).compiled.modes.normal as TreeBranch;
@@ -62,7 +62,7 @@ test("the page tree reads the same command table: the keys that gain a place are
 });
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
-    for (const id of ids_under(root_of())) assert.ok(["tab", "page", "close", "main"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
+    for (const id of ids_under(root_of())) assert.ok(["tab", "line", "page", "close", "main"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
     for (const token of ["m", "d", "s", "F", "y", "]", "[", "o", "a", "r", "R", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
@@ -211,7 +211,7 @@ test("i is bound in the page tree alone, so the own and message trees and the ma
     assert.equal(ids_under(root_of()).includes("mode.escape"), false, "the typing layer stays out of the normal trees");
 });
 
-test("the message window tree holds the reading keys, the hint picks, the mail actions, q, zoom, new message, help, options and the Thunderbird pages, and no tab, pane, folder, list, find or command line key", () => {
+test("the message window tree holds the reading keys, the hint picks, the mail actions, the command line with tag, move and copy, q, zoom, new message, help, options and the Thunderbird pages, and no tab, pane, folder, list or find key", () => {
     const root = window_root();
     assert.deepEqual(
         [["j"], ["<C-d>"], ["g", "g"], ["G"], ["f"], [";", "y"], ["m", "s"], ["m", "r"], ["a"], ["d", "d"], ["r"], ["R"], ["g", "F"], ["y", "y"], ["u"], ["q"], ["<A-q>"]].map((tokens) => leaf_at(root, ...tokens)?.id),
@@ -222,18 +222,23 @@ test("the message window tree holds the reading keys, the hint picks, the mail a
         ["zoom.by", "zoom.by", "zoom.set", "msg.new", "help.open", "help.open", "help.open", "options.open", "app.open_page", "app.open_page", "app.open_page"],
     );
     const ids = new Set(ids_under(root));
-    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.|cmdline\.|search\.|help\.whichkey$|message\.find_)/.test(id), id);
-    for (const id of ["msg.move", "msg.tag"]) assert.ok(!ids.has(id), id);
-    for (const token of ["J", "K", "<A-j>", "<A-k>", ":", "/", "H", "L", "T", "o", "n", "N"]) assert.equal(root.children[token], undefined, token);
+    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.|search\.|help\.whichkey$|message\.find_)/.test(id), id);
+    assert.deepEqual(
+        [[":"], ["m", "t"], ["m", "m"], ["m", "c"]].map((tokens) => [leaf_at(root, ...tokens)?.id, leaf_at(root, ...tokens)?.args]),
+        [["cmdline.open", undefined], ["cmdline.open", { text: "tag " }], ["cmdline.open", { text: "move " }], ["cmdline.open", { text: "copy " }]],
+    );
+    // The keys that open the line on a command the window cannot run stay out: find is not checked in a message window.
+    for (const token of ["J", "K", "<A-j>", "<A-k>", "/", "H", "L", "T", "o", "n", "N"]) assert.equal(root.children[token], undefined, token);
+    for (const tokens of [["t", "m"], ["t", "T"], ["F", "f"], ["s", "s"], [";", ";"]]) assert.equal(leaf_at(root, ...tokens)?.id ?? "none", "none", tokens.join(""));
     // A mail sequence the tree lacks ends in a leaf that runs nothing, so its tail never runs on its own.
-    for (const tokens of [["t", "0"], ["g", "f"], ["m", "t"], ["m", "m"], ["z", "a"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));
+    for (const tokens of [["t", "0"], ["g", "f"], ["z", "a"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));
     assert.deepEqual(((root.children["g"] as TreeBranch).children["f"] as { steps: unknown[] }).steps, []);
 });
 
 test("a user key reaches the message window only when its command can run there", () => {
-    const root = window_root({ X: { id: "msg.flag" }, Y: { id: "tab.next" }, Z: { id: "pane.focus", args: { pane: "folders" } }, W: { id: "cmdline.open", args: { text: "tag " } } });
-    assert.equal(leaf_at(root, "X")?.id, "msg.flag");
-    for (const token of ["Y", "Z", "W"]) assert.equal(root.children[token], undefined, token);
+    const root = window_root({ X: { id: "msg.flag" }, Y: { id: "tab.next" }, Z: { id: "pane.focus", args: { pane: "folders" } }, W: { id: "cmdline.open", args: { text: "tag " } }, V: { id: "cmdline.open", args: { text: "sort " } }, U: { id: "cmdline.open", args: { text: "find " } } });
+    for (const token of ["X", "W"]) assert.ok(leaf_at(root, token), token);
+    for (const token of ["Y", "Z", "V", "U"]) assert.equal(root.children[token], undefined, token);
 });
 
 test("the message window header tree sends hint picks to the background, as the message tab header does", () => {
@@ -246,4 +251,11 @@ test("the message window header tree sends hint picks to the background, as the 
 test("the message tab trees keep their tab, pane and command line keys", () => {
     const root = message_root();
     assert.deepEqual([["J"], ["H"], [":"], ["m", "t"], ["g", "f"], ["q"]].map((tokens) => leaf_at(root, ...tokens)?.id), ["tab.next", "pane.left", "cmdline.open", "cmdline.open", "pane.focus", "tab.close"]);
+});
+
+test("a kind offers a command when it offers every need of it, which is what the command line of a message window lists and runs", () => {
+    const offered = (id: string) => offered_in("window", registry.get(id) ?? {});
+    for (const id of ["msg.tag", "msg.move", "msg.copy", "msg.flag", "msg.archive", "tab.close", "cmdline.open", "help.open", "zoom.by", "message.scroll_down"]) assert.equal(offered(id), true, id);
+    for (const id of ["sort.set", "folder.open", "tab.switch", "search.message", "filter.set", "motion.down", "step.unread", "pane.focus"]) assert.equal(offered(id), false, id);
+    assert.equal(offered_in("message", registry.get("search.message") ?? {}), true);
 });

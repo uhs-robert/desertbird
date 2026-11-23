@@ -5,7 +5,7 @@ import { run_scroll, scroll_axis_of, scroll_focus, scroll_target } from "./page_
 import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
 import type { PageRuntime } from "./page_runtime.ts";
-import { MAIN_WINDOW_TYPE, guard, load_platform, open_windows, tabmail_of } from "./platform.ts";
+import { MAIN_WINDOW_TYPE, MESSAGE_WINDOW_TYPE, guard, load_platform, open_windows, tabmail_of, window_kind_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { MESSAGE_TAB_MODE, situation_of } from "./readable_focus.ts";
 import type { KeyTarget, WindowListener } from "./runtime.ts";
@@ -19,7 +19,6 @@ declare const Ci: { nsIResProtocolHandler: unknown };
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const MESSAGE_WINDOW_URL = "chrome://messenger/content/messageWindow.xhtml";
-const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/pages";
 const NO_WINDOW_ID = -1;
 
@@ -78,7 +77,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             const tab = front_tab_of(window);
             return situation_of(window.document, tab && { mode: tab.mode.name, browser_is_remote: tab.browser?.isRemoteBrowser === true }, event);
         },
-        is_message_window: (window) => !tabmail_of(window),
+        is_message_window: (window) => window_kind_of(window) === "message",
         overlay_is_loading: (window) => overlay_is_loading(window.document),
         blur_focused: (window) => actor?.blur(window) || blur_text_field(window.document),
         child: () => actor,
