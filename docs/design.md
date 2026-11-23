@@ -255,7 +255,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/app.js` | 10597 | 12800 |
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `experiment/zoom.js` | 3544 | 6144 |
-| `content/message_display.js` | 19186 | 24576 |
+| `content/message_display.js` | 19698 | 24576 |
 | `experiment/hints.js` | 18170 | 20480 |
 | `experiment/pages.js` | 27920 | 34816 |
 | `experiment/page_actor_child.sys.mjs` | 8704 | 11264 |
@@ -346,6 +346,7 @@ The zoom keys run in the mail tab, message documents, own pages, the page tabs a
 - Backspace in an open which-key (the back step in `matcher_for_tree`, clause: decides what happens to a key) made it 17733 once merged with main (459 over main's 17274). The guard rose by one 512-byte step to 18162.
 - One label set over the message header and body (`f` asks the parent for the labels, holds plain keys until they show and labels the body itself when the parent cannot, clause: decides what happens to a key) made it 18673 (518 over main's 18155). The selectors moved to `hint_view.ts` and the default action now comes from the validator, to stay within one step. The guard rose by one 512-byte step to 18674.
 - Message mode (the `body.tree` question, so the body of a message window runs the window tree; clause: decides what happens to a key) made it 18894 (224 over main's 18670). The guard rose by one 512-byte step to 19186. The switch to the window tree on a late answer, asked again each second while the background starts, made it 19115, under the same guard.
+- Cancelling Escape while a key sequence is pending, so Thunderbird does not close the message window under the which-key panel (clause: decides what happens to a key), made it 19268 (82 over main's 19186). The guard rose by one 512-byte step to 19698. The same change took `experiment/pages.js` to 27914, under its guard.
 
 ### Hints bundle
 
