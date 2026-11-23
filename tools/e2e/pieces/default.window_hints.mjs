@@ -67,11 +67,17 @@ async function run_window_hints(instance, ctx) {
   state = await wait_for_state(instance, folder_shown("/Reading"));
   check(app, kind, "window hints: the label of a folder row shows that folder", state.mail_tab?.folder === "/Reading", `displayed folder ${state.mail_tab?.folder}`);
   await shot("window_hints_folder", "the Reading folder shown after a folder hint, no labels left");
-  await hold_over();
   await show_labels();
   await instance.press([labels.folder_inbox]);
+  // The pick ends the labels, so the hold after `f` ends with them: an f at once, inside the 1.5 s, must label again. A held f would be swallowed and Escape would then change nothing.
+  hold_from = Date.now();
+  await instance.press(["f"]);
   state = await wait_for_state(instance, folder_shown("/Inbox"));
   check(app, kind, "window hints: the label of the Inbox row returns to the Inbox", state.mail_tab?.folder === "/Inbox", `displayed folder ${state.mail_tab?.folder}`);
+  const settled = await window_pixels("the window to hold still after the pick and f", holds_twice());
+  await instance.press(["-k", "Escape"]);
+  const escaped = await window_pixels("Escape to end the labels of the second f", drawn_since(settled), { timeout_ms: 3000 });
+  check(app, kind, "window hints: f typed at once after a pick shows labels again", escaped !== settled, `Escape ${escaped === settled ? "changed nothing, so no labels were up" : "ended the labels"}`);
   // `; ;` opens the command line with `hint ` typed. A flag and Enter run the window hint command, which labels the window.
   await hold_over();
   await instance.press([";"]);

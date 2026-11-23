@@ -26,6 +26,9 @@ export const BODY_SCRIPT_LIVE_ATTRIBUTE = "data-desertbird-keys";
 /** Set on the main window's root element while a hint pick of the `hints` Experiment shows labels. The page keys of `pages.js` listen on the same window root ahead of the pick, and they pass every key while it is set. A marker and not a call, because the two bundles share no state. */
 export const HINTS_LIVE_ATTRIBUTE = "data-desertbird-hints";
 
+/** Bumped on the main window's root element each time a hint pick ends, by a pick or a cancel, and never removed. The key runtimes of `keys.js` and `pages.js` read it to end their hold after `f`: the labels have taken and given back the keys, so a plain key is no longer a stray one. A counter and not a flag, so a runtime sees an end that happened after its own hold began. */
+export const HINTS_DONE_ATTRIBUTE = "data-desertbird-hints-done";
+
 /** The storage key of the settings the user changed. The body script reads its scroll step from here. */
 export const SETTINGS_STORAGE_KEY = "desertbird_settings";
 /** The command line history: a list of lines, oldest first. The background writes it and the command line page reads it. */

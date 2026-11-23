@@ -20,6 +20,8 @@ class FakeWindow {
     situation: Situation = "page";
     message_window = false;
     overlay_loading = false;
+    /** The count of ended hint picks the runtime reads through `hints_done_of`. */
+    hints_done = 0;
     /** Whether the page actor's child of the front tab takes the keys. */
     child_takes = false;
     pushed_insert: boolean[] = [];
@@ -73,6 +75,7 @@ function setup(window_count = 1) {
         situation_of: (window) => window.situation,
         is_message_window: (window) => window.message_window,
         overlay_is_loading: (window) => window.overlay_loading,
+        hints_done_of: (window) => window.hints_done,
         blur_focused: (window) => void window.blurs++,
         child: () => ({
             takes_keys: (window) => (window as FakeWindow).child_takes,
@@ -861,4 +864,18 @@ test("a new page in the front tab ends a half-typed sequence and its key list, a
     runtime.on_child_key(window, child_key("g"));
     assert.deepEqual(scrolls, []);
     assert.deepEqual(pending().map((event) => ("keys" in event ? event.keys.join("") : "")), ["g", "", "g"]);
+});
+
+test("a hint key in a message tab holds the plain keys until its labels are done, then a second one runs", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree(), ["hint.window"]);
+    const window = windows[0]!;
+    window.situation = "message";
+    press(window, ";");
+    press(window, "y");
+    assert.equal(press(window, ";").cancelled, true, "the hold swallows a key typed before the labels end");
+    window.hints_done++;
+    press(window, ";");
+    press(window, "y");
+    assert.deepEqual(invocations().map((event) => event.command), ["hint.window", "hint.window"]);
 });

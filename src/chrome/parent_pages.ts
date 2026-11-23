@@ -1,6 +1,6 @@
 // The parent script of the `pages` API. It hooks the main windows and the message windows. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `pages`: `getAPI(context)` returns `get_pages_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { blur_text_field, focus_chain, overlay_is_loading } from "./focus.ts";
+import { blur_text_field, focus_chain, hints_done, overlay_is_loading } from "./focus.ts";
 import { run_scroll, scroll_axis_of, scroll_focus, scroll_target } from "./page_actions.ts";
 import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
@@ -111,6 +111,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             window.addEventListener("blur", on_blur, true);
             return () => window.removeEventListener("blur", on_blur, true);
         },
+        hints_done_of: (window) => hints_done(window.document),
         now: () => Date.now(),
         window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {

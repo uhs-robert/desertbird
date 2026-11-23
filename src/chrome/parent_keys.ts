@@ -1,6 +1,6 @@
 // The parent script of the `keys` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `keys`: `getAPI(context)` returns `get_keys_api(context)` and `onShutdown` calls `shutdown()`.
 
-import { focused_pane, in_reading_pane, in_text_field, is_typing, menu_takes_key, overlay_is_loading } from "./focus.ts";
+import { focused_pane, hints_done, in_reading_pane, in_text_field, is_typing, menu_takes_key, overlay_is_loading } from "./focus.ts";
 import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { create_runtime } from "./runtime.ts";
@@ -50,6 +50,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             window.addEventListener("TabSelect", listener, true);
             return () => window.removeEventListener("TabSelect", listener, true);
         },
+        hints_done_of: (window: MainWindow) => hints_done(window.document),
         now: () => Date.now(),
         on_window_blur(window, listener) {
             // The blur lands on the focused element when the whole window deactivates, so the target does not tell a window blur from a focus move inside it. Focus does.
