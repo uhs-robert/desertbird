@@ -4,7 +4,9 @@ import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import { while_loading } from "../src/background/handlers/loading.ts";
+import { keep_filters } from "../src/background/handlers/view.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
+import { APPLIED_FILTERS_STORAGE_KEY } from "../src/shared/protocol.ts";
 import type { RouterApi } from "../src/background/router.ts";
 import { tab_kind } from "../src/chrome/view.ts";
 import { read_rows, scroll_row } from "../src/chrome/view_verbs.ts";
@@ -295,7 +297,7 @@ test("F s flips only the star and keeps the other filters", async () => {
 /** A fake whose messages.get answers from `messages`, with the selection `ids`. */
 // The remembered filter is keyed by tab id and lives for the process, so each fake gets a tab of its own.
 let next_tab_id = 100;
-function by_message_fake(messages: Record<number, Record<string, unknown>>, ids: number[], earlier?: unknown) {
+function by_message_fake(messages: Record<number, Record<string, unknown>>, ids: number[], earlier?: unknown, own: string[] = [], gate?: Promise<void>) {
     const calls: string[] = [];
     const tab_id = next_tab_id++;
     const mailTabs = {
@@ -304,10 +306,11 @@ function by_message_fake(messages: Record<number, Record<string, unknown>>, ids:
         setQuickFilter: async (_id: number, filter: unknown) => void calls.push(JSON.stringify(filter)),
     };
     const notices: string[] = [];
-    const api = { mailTabs, messages: { get: async (id: number) => ({ id, ...messages[id] }), tags: { list: async () => [] } }, notifications: { create: async (_id: string, notification: { message: string }) => (notices.push(notification.message), "n1") }, keys: undefined } as unknown as RouterApi;
+    const api = { mailTabs, identities: { list: async () => own.map((email) => ({ email })) }, messages: { get: async (id: number) => (await gate, { id, ...messages[id] }), tags: { list: async () => [] } }, notifications: { create: async (_id: string, notification: { message: string }) => (notices.push(notification.message), "n1") }, keys: undefined } as unknown as RouterApi;
     const router = create_router(registry, api);
+    const router_run = (command: string, args: Record<string, string>) => router.run({ command, args, count: 1, windowId: 3, messageIds: [] });
     const run = (field: string) => router.run({ command: "filter.by", args: { field }, count: 1, windowId: 3, messageIds: ids });
-    return { run, calls, notices, earlier: async () => earlier === undefined || (await router.run({ command: "filter.set", args: { state: earlier as string }, count: 1, windowId: 3, messageIds: [] })) };
+    return { run, calls, notices, router_run, earlier: async () => earlier === undefined || (await router.run({ command: "filter.set", args: { state: earlier as string }, count: 1, windowId: 3, messageIds: [] })) };
 }
 
 const SAMPLE = { author: "Ann Lee <ann@example.org>", subject: "Re: Fwd: Budget plan", recipients: ["Bob <bob@example.org>", "cy@example.org"], tags: ["$label1"] };
@@ -353,4 +356,64 @@ test("filter.by refuses a text field for several messages, ORs their tags, and r
     const none = by_message_fake({}, []);
     await none.run("from");
     assert.deepEqual(none.notices, ["No message is selected."]);
+});
+
+test("filter.by strips list tags and reply markers of any case from the subject", async () => {
+    const cases: Record<string, string> = { "[dev] Re: foo": "foo", "RE: FWD: foo": "foo", "Aw: foo": "foo", "Sv: Antw: foo": "foo", "Re[2]: foo": "foo", "[a] [b] Wg: foo": "foo", "Re : foo bar": "foo bar" };
+    for (const [subject, expected] of Object.entries(cases)) {
+        const { run, calls } = by_message_fake({ 1: { subject } }, [1]);
+        await run("subject");
+        assert.deepEqual(calls, [JSON.stringify({ text: { text: expected, subject: true } })], subject);
+    }
+});
+
+test("filter.by recipient skips the user's own addresses, looks at Cc, and falls back to the first recipient", async () => {
+    const picks = [
+        [{ recipients: ["Me <ME@example.org>", "Bob <bob@example.org>"] }, "bob@example.org"],
+        [{ recipients: ["me@example.org"], ccList: ["Cy <cy@example.org>"] }, "cy@example.org"],
+        [{ recipients: ["me@example.org"] }, "me@example.org"],
+    ] as const;
+    for (const [message, expected] of picks) {
+        const { run, calls } = by_message_fake({ 1: message }, [1], undefined, ["me@example.org"]);
+        await run("recipient");
+        assert.deepEqual(calls, [JSON.stringify({ text: { text: expected, recipients: true } })], expected);
+    }
+});
+
+test("filter.by keeps tags when a text field comes and keeps the text when the tag comes", async () => {
+    const { run, calls } = by_message_fake({ 1: SAMPLE }, [1]);
+    await run("tag");
+    await run("from");
+    await run("tag");
+    assert.deepEqual(calls, [
+        '{"tags":{"mode":"any","tags":{"$label1":true}}}',
+        '{"tags":{"mode":"any","tags":{"$label1":true}},"text":{"text":"ann@example.org","author":true}}',
+        '{"tags":{"mode":"any","tags":{"$label1":true}},"text":{"text":"ann@example.org","author":true}}',
+    ]);
+});
+
+test("filter.by reads the remembered filter after the message arrives, so a filter set meanwhile stays", async () => {
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const { run, calls, router_run } = by_message_fake({ 1: SAMPLE }, [1], undefined, [], gate);
+    const pending = run("from");
+    await router_run("filter.set", { state: "toggle_starred" });
+    open();
+    await pending;
+    assert.equal(calls.at(-1), '{"flagged":true,"text":{"text":"ann@example.org","author":true}}');
+});
+
+test("filter.by waits for the stored filters to load before it reads the remembered one", async () => {
+    let release: (stored: Record<string, unknown>) => void = () => undefined;
+    const storage = { get: () => new Promise<Record<string, unknown>>((resolve) => (release = resolve)), set: async () => undefined };
+    keep_filters(storage);
+    const fake = by_message_fake({ 1: SAMPLE }, [1]);
+    const tab_id = next_tab_id - 1;
+    const pending = fake.run("from");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(fake.calls, []);
+    release({ [APPLIED_FILTERS_STORAGE_KEY]: { [tab_id]: { unread: true } } });
+    await pending;
+    assert.deepEqual(fake.calls, ['{"unread":true,"text":{"text":"ann@example.org","author":true}}']);
+    keep_filters(undefined);
 });

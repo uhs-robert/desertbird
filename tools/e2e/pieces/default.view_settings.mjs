@@ -47,7 +47,7 @@ async function run_view_settings(instance, ctx) {
   await instance.ask("api_view", 20000, { filter: {} });
   state = await wait_for_state(instance, listed_count(6));
   check(app, kind, "clearing with {} restores 6 rows", state.listed.length === 6);
-  // F m f, s and t read (F m r has no row count to show here, since every Views message has the same recipient, and the unit tests cover it) the selected message. Each sender and subject in the folder is its own, so one row stays, and the two tagged rows stay for the tag. The sender names hold spaces, so the sender row also shows that a name with spaces matches.
+  // F m f, s and t read (F m r has no row count to show here, since every Views message has the same recipient, and the unit tests cover it) the selected message. Each sender and subject in the folder is its own, so one row stays, and the two tagged rows stay for the tag. The sender names hold spaces, so the sender row also shows that the address matches a header with a spaced name.
   const rows = state.listed;
   const select_row = async (header_id) => {
     await instance.press(["g"]);

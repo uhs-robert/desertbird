@@ -4,6 +4,7 @@ import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { while_loading } from "./loading.ts";
 import { require_messages } from "./each_message.ts";
 import type { MailFolder } from "./displayed_folder.ts";
+import type { IdentityApi } from "./identity.ts";
 import type { HandlerScope, MessageHeader } from "./message.ts";
 import { APPLIED_FILTERS_STORAGE_KEY } from "../../shared/protocol.ts";
 
@@ -36,6 +37,7 @@ export interface MailTabUpdate {
 }
 
 export interface ViewApi {
+    identities?: IdentityApi["identities"];
     messages?: { get(id: number): Promise<MessageHeader>; tags: { list(): Promise<{ key: string; tag: string }[]> } };
     mailTabs: {
         query(query: { windowId: number; active: true }): Promise<MailTab[]>;
@@ -136,35 +138,50 @@ export async function search_threads(scope: ViewScope, args: CheckedArgs): Promi
     await apply_filter(scope.api.mailTabs, tab.id, { text: { text: args["query"] as string, subject: true, author: true } });
 }
 
-const bare_address = (mailbox: string): string => mailbox.match(/<([^>]+)>/)?.[1] ?? mailbox.trim();
+const bare_address = (mailbox: string): string => (mailbox.match(/<([^>]+)>/)?.[1] ?? mailbox).trim();
 
-// A reply prefix would hide the first message of the conversation, which has none.
-const without_reply_prefix = (subject: string): string => subject.replace(/^(\s*(re|fwd?|aw)\s*:)+/i, "").trim();
+// A leading list tag or reply marker (Re, Fwd, Aw, Sv, Antw, Wg, with a count as in `Re[2]:`) would hide the first message of the conversation, which has none.
+const without_reply_prefix = (subject: string): string => subject.replace(/^(\s*(\[[^\]]*\]|(re|fwd?|aw|sv|antw|wg)\s*(\[\d+\])?\s*:))+/i, "").trim();
+
+// The first To or Cc address that is not one of the user's own, since the user is on most of the mail and a filter on it shows everything. A message sent only to the user's own addresses falls back to its first recipient.
+async function chosen_recipient(scope: ViewScope, message: MessageHeader): Promise<string> {
+    const all = [...(message.recipients ?? []), ...(message.ccList ?? [])].map(bare_address);
+    const own = new Set((await scope.api.identities?.list())?.map((identity) => identity.email.toLowerCase()));
+    return all.find((address) => !own.has(address.toLowerCase())) ?? all[0] ?? "";
+}
+
+// Each text field names the quick filter flag it sets and how to read its value from the message.
+const TEXT_FIELDS: Record<string, { flag: "author" | "subject" | "recipients"; value(scope: ViewScope, message: MessageHeader): Promise<string> | string }> = {
+    from: { flag: "author", value: (_scope, message) => bare_address(message.author ?? "") },
+    subject: { flag: "subject", value: (_scope, message) => without_reply_prefix(message.subject ?? "") },
+    recipient: { flag: "recipients", value: chosen_recipient },
+};
 
 // A text filter holds one string and Thunderbird ANDs its words, so only one message can supply it. Tags are the one field that can match any of several messages.
-async function filter_of_message(scope: ViewScope, field: string, base: QuickFilter): Promise<QuickFilter> {
+// The remembered filter is read only after the message arrives, so a filter set while the read was in flight stays.
+async function filter_of_message(scope: ViewScope, tab_id: number, field: string): Promise<QuickFilter> {
     const messages = scope.api.messages;
     if (messages === undefined) throw new RuntimeRefusal("This window cannot read messages.");
     const ids = require_messages(scope.message_ids);
     if (field !== "tag" && ids.length > 1) throw new RuntimeRefusal("Select one message.");
     const selected = await Promise.all(ids.map((id) => messages.get(id)));
+    await filters_ready();
+    const { show: _hidden, ...base } = remembered_filter(tab_id);
     if (field === "tag") {
         const keys = selected.flatMap((message) => message.tags ?? []);
         if (keys.length === 0) throw new RuntimeRefusal("The selected message has no tag.");
         return { ...base, tags: { mode: "any", tags: Object.fromEntries(keys.map((key) => [key, true as const])) } };
     }
-    const [message] = selected as [MessageHeader];
-    const text = { from: message.author ?? "", subject: without_reply_prefix(message.subject ?? ""), recipient: message.recipients?.[0] ?? "" }[field]!;
-    const value = field === "subject" ? text : bare_address(text);
-    if (value === "") throw new RuntimeRefusal(`The selected message has no ${field}.`);
-    return { ...base, text: { text: value, ...(field === "from" ? { author: true as const } : field === "subject" ? { subject: true as const } : { recipients: true as const }) } };
+    const { flag, value } = TEXT_FIELDS[field]!;
+    const text = await value(scope, selected[0]!);
+    if (text === "") throw new RuntimeRefusal(`The selected message has no ${field}.`);
+    return { ...base, text: { text, [flag]: true } };
 }
 
 // The filter is added to the remembered one, as the live search does. The hidden-bar marker goes because the user should see a filter that narrows the list.
 export async function filter_by_message(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    const { show: _hidden, ...current } = remembered_filter(tab.id);
-    await apply_filter(scope.api.mailTabs, tab.id, await filter_of_message(scope, args["field"] as string, current));
+    await apply_filter(scope.api.mailTabs, tab.id, await filter_of_message(scope, tab.id, args["field"] as string));
 }
 
 // A view grouped by its sort column cannot group by size or by read state. Thunderbird swaps in date without an error, so the handler refuses first.
