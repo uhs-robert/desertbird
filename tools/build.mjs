@@ -56,8 +56,8 @@ const COMPOSE_MAX_BYTES = 4012;
 const COMPOSE_CEILING_BYTES = 8192;
 
 // `experiment/composewin.js`, the key runtime of the compose windows. See docs/design.md, "Compose window bundle".
-const COMPOSEWIN_MAX_BYTES = 8192;
-const COMPOSEWIN_CEILING_BYTES = 8192;
+const COMPOSEWIN_MAX_BYTES = 10240;
+const COMPOSEWIN_CEILING_BYTES = 15360;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
 const PAGES_MAX_BYTES = 27920;
