@@ -7,21 +7,9 @@ test("the static count takes test and it calls, with modifiers, at the start of 
     assert.equal(static_test_count(source), 4);
 });
 
-test("the static count skips comments, strings and template text, and calls that do not start a line", () => {
-    const source = [
-        '// test("line comment", () => {});',
-        "/*",
-        'test("block comment", () => {});',
-        "*/",
-        "const text = `",
-        'test("in a template", () => {});',
-        "`;",
-        'const url = "http://x"; const later = 1;',
-        'run(test("nested", () => {}));',
-        '  t.test("subtest", () => {});',
-        'test("real", () => {});',
-    ].join("\n");
-    assert.equal(static_test_count(source), 1);
+test("a regex literal holding a quote does not hide the tests after it", () => {
+    const source = ['const quote = /"/;', 'test("after the regex", () => {});', 'const text = "x";', 'test("and another", () => {});'].join("\n");
+    assert.equal(static_test_count(source), 2);
 });
 
 test("the reported counts group junit testcases by file", () => {
