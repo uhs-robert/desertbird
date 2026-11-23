@@ -1,4 +1,4 @@
-// f with the focus in a message body: one label set over the message header and the body, in the reading pane and a message tab. A message window keeps the body's own labels.
+// f with the focus in a message body: one label set over the message header and the body, in the reading pane, a message tab and a message window. In a message tab f with the focus in the header labels the same set.
 
 import { sleep, selects, flag_becomes, main_window_tabs, holds_twice, drawn_since, back_to } from "../predicates.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
@@ -17,6 +17,8 @@ const body_reports = (what, since, from_target) => ({ what: `the document of ${w
 const in_pane = (state, body) => body.tab_id === state.mail_tab?.id && (body.text_start ?? "").includes(" of header-0.");
 const in_tab = (state, body) => body.tab_id === main_window_tabs(state).find((tab) => tab.type === "messageDisplay")?.id;
 const in_window = (state, body) => body.window_id === state.windows.find((window) => window.type === "messageDisplay")?.id;
+
+const body_focus_is = (focused) => ({ what: `the focus to ${focused ? "enter" : "leave"} the body`, until: (state) => body_state(state).has_focus === focused, show: (state) => `has_focus ${body_state(state).has_focus}`, timeout_ms: 5000 });
 
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 15000 });
 
@@ -154,20 +156,64 @@ async function run_header_hints(instance, ctx) {
   await pick(labels.link);
   state = await wait_for_state(instance, scroll_is("the link to scroll to the end of the mail", (body) => body.scroll_y > 2 * body.inner_height));
   check(app, kind, "header hints: in a message tab the body link label opens the link in one step", body_state(state).scroll_y > 2 * body_state(state).inner_height, `scrollY ${body_state(state).scroll_y}`);
+  await pick(labels.star);
+  await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", false));
+
+  // The header of a message tab: F6 takes the focus out of the body, and the header keys of the pages bundle send hint.window, which labels the same set.
+  await instance.press(["-k", "F6"]);
+  state = await wait_for_state(instance, body_focus_is(false));
+  check(app, kind, "header hints: F6 takes the focus out of the message tab's body", body_state(state).has_focus === false, `has_focus ${body_state(state).has_focus}`);
+  await shot("header_hints_tab_header_focus", "message tab after F6: the focus sits in the header, no labels");
+  await show_labels();
+  await shot("header_hints_tab_header", "f in a message tab with the focus in the header: the same labels over the header and the body");
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
+  // The pages bundle holds plain keys from f until the labels take them, so neither c opens a compose window.
+  await instance.press(["fcc"]);
+  await sleep(3000);
+  state = await instance.ask("state");
+  check(app, kind, "header hints: f c c in one burst from the header opens no compose window", !state.windows.some((window) => window.type === "messageCompose"), JSON.stringify(state.windows.map((window) => window.type)));
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
+  await pick(labels.star);
+  state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
+  check(app, kind, "header hints: from the header of a message tab the star label flags the message", flagged(state), `flagged ${flagged(state)}`);
+  // The pages bundle holds plain keys for 1.5 s after f, past the end of the labels, so the next f waits it out.
+  await sleep(1600);
+  await pick(labels.star);
+  await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", false));
   await instance.ask("reset_tabs");
   await sleep(800);
 
-  // A message window keeps the body's own labels: the only label is the body link.
+  // A message window: f from the body labels the header and the body as one set.
   const window_requested = Date.now();
   await instance.ask("open_message_window");
   await wait_for_state(instance, body_reports("the message window", window_requested, in_window));
   await sleep(500);
-  await instance.press(["f"]);
-  await sleep(800);
-  await shot("header_hints_window", "f in a message window: one label, on the body link");
-  state = await key_and_state(instance, ["a"], scroll_is("f a to scroll the message window to the end", (body) => body.scroll_y > 2 * body.inner_height));
-  check(app, kind, "header hints: a message window keeps the body labels, so f a opens the body link", body_state(state).scroll_y > 2 * body_state(state).inner_height, `scrollY ${body_state(state).scroll_y}`);
+  await show_labels();
+  await shot("header_hints_window", "f in a message window: labels over the header buttons, the star, the addresses, the tag, the attachment bar and the body link");
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
+  await pick(labels.star);
+  state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
+  check(app, kind, "header hints: in a message window the star label flags the message", flagged(state), `flagged ${flagged(state)}`);
+  await pick(labels.star);
+  await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", false));
+  await pick(labels.link);
+  state = await wait_for_state(instance, scroll_is("the link to scroll the message window to the end", (body) => body.scroll_y > 2 * body.inner_height));
+  check(app, kind, "header hints: in a message window the body link label opens the link in one step", body_state(state).scroll_y > 2 * body_state(state).inner_height, `scrollY ${body_state(state).scroll_y}`);
+  // The window closes with its labels up. f in the main window then starts a new set there.
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], scroll_is("g g to the top of the message window", (body) => body.scroll_y === 0));
+  await show_labels();
   await instance.ask("close_message_windows");
+  await wait_for_state(instance, window_of_type("messageDisplay", false));
+  await sleep(800);
+  await shot("header_hints_after_window_close", "the main window after the message window closed with its labels up");
+  await show_labels();
+  await shot("header_hints_main_after_close", "f in the main window after the message window closed with its labels up: a new set");
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
   note(app, kind, "header hints: labels used", JSON.stringify(labels));
   check(app, kind, "the app survived the header hint checks", instance.exited() === null);
 }

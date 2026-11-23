@@ -48,7 +48,7 @@ const CONTENT_MAX_BYTES = 18674;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.
-const HINTS_MAX_BYTES = 17146;
+const HINTS_MAX_BYTES = 17658;
 const HINTS_CEILING_BYTES = 20480;
 
 // `content/compose_keys.js`, registered into every compose body.

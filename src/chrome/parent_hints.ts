@@ -14,6 +14,7 @@ import { OPENABLE } from "../shared/hint_view.ts";
 import type { HintWindow } from "../shared/hint_view.ts";
 import { front_about_3pane } from "./view.ts";
 import type { TabmailLike } from "./view.ts";
+import { MESSAGE_TAB_MODE } from "./readable_focus.ts";
 
 declare const Services: { wm: { getEnumerator(type: string | null): Iterable<EnterWindow> } };
 declare const Cc: Record<string, { createInstance(iface: unknown): TextInputProcessor; getService(iface: unknown): { copyString(text: string): void } }>;
@@ -69,7 +70,12 @@ interface PickMainWindow extends ListenerTarget, HintWindow {
     };
     matchMedia(query: string): { matches: boolean };
     setTimeout(callback: () => void, ms: number): unknown;
+    /** Set in a message window, which has no tabmail: the browser of its `about:message`. */
+    messageBrowser?: { contentWindow?: MessageDocument | null };
 }
+
+/** `about:message`: the header of a message, and the `#messagepane` browser that holds its body. */
+type MessageDocument = HintWindow & ListenerTarget & { document: HintWindow["document"] & { getElementById(id: string): unknown } };
 
 /** The `#messagepane` browser of the message that holds the focus. Its document is `about:message`, in the reading pane and in a message tab alike. */
 interface MessagePane {
@@ -77,7 +83,7 @@ interface MessagePane {
     isRemoteBrowser?: boolean;
     contentDocument?: unknown;
     contentWindow: HintWindow & ListenerTarget;
-    ownerDocument: { defaultView: HintWindow & ListenerTarget };
+    ownerDocument: { defaultView: MessageDocument };
 }
 
 /** The browser of a tab that is not the mail tab. A remote page has no `contentDocument` the parent can read. */
@@ -124,17 +130,19 @@ function pick_host(main: PickMainWindow, documents: ListenerTarget[], message?: 
     };
 }
 
-/** Labels the header and body of the message whose body holds the focus. */
-function pick_in_message(main: PickMainWindow, scheme: HintLabelScheme, action: HintAction | undefined): number {
-    const pane = focus_chain(main.document as unknown as FocusDocument).find((node) => node.id === "messagepane") as MessagePane | undefined;
-    // The focus left the body during the trip from the body script, so the key no longer belongs to a message.
-    if (!pane) return 0;
-    // A remote body (a feed shown as a web page): the body script labels it alone.
-    if (pane.isRemoteBrowser || !pane.contentDocument) return -1;
-    const message = pane.ownerDocument.defaultView;
+/** The `about:message` in front: a message tab's, or a message window's. Null for any other tab. */
+function message_document_of(main: PickMainWindow, tab: FrontTab | null | undefined): MessageDocument | null {
+    if (!tab) return main.messageBrowser?.contentWindow ?? null;
+    return tab.mode.name === MESSAGE_TAB_MODE ? ((tab.chromeBrowser?.contentWindow as MessageDocument | null | undefined) ?? null) : null;
+}
+
+/** Labels the header of `message` and its body, or the header alone when the body is remote (a feed shown as a web page) or not loaded. */
+function pick_in_message(main: PickMainWindow, message: MessageDocument, scheme: HintLabelScheme, action: HintAction | undefined): number {
+    const pane = message.document.getElementById("messagepane") as MessagePane | null;
+    const body = pane && !pane.isRemoteBrowser && pane.contentDocument ? pane.contentWindow : null;
     // The Enter waits for the end of the key that picked, and goes only to the picked element while it holds the focus.
     const open = (picked: unknown) => void main.setTimeout(() => focus_chain(main.document as unknown as FocusDocument).at(-1) === picked && focus_is_picked_target(main as unknown as EnterWindow) && press_enter(main as unknown as EnterWindow), 0);
-    return start_pick(pick_host(main, [main, message, pane.contentWindow], message), collect_message_targets(message, pane.contentWindow, open), scheme, action);
+    return start_pick(pick_host(main, [main, message, ...(body ? [body] : [])], message), collect_message_targets(message, body, open), scheme, action);
 }
 
 /** The tab manager maps a tab of `tabmail` to its MailExtension tab id. */
@@ -153,16 +161,22 @@ export function get_hints_api(context: HintsContext) {
                 const main = window_with_id(context, windowId) as unknown as PickMainWindow | null;
                 const tabmail = (main?.document.getElementById("tabmail") ?? null) as TabmailLike | null;
                 const tab = tabmail?.currentTabInfo as FrontTab | null | undefined;
-                // A message window has no tabs, and its body script keeps its own labels.
-                if (place && main && !tab) return -1;
-                if (!main || !tab) throw new Error(`no tab in window ${windowId}`);
+                if (!main) throw new Error(`no window ${windowId}`);
                 const scheme = main.matchMedia("(prefers-color-scheme: light)").matches ? colors.light : colors.dark;
-                // The body that asked lost the front to another tab on the way, so the key is stale.
-                if (place) return context.extension.tabManager.getWrapper(tab)?.id === tabId ? pick_in_message(main, scheme, action) : 0;
+                if (place) {
+                    const pane = focus_chain(main.document as unknown as FocusDocument).find((node) => node.id === "messagepane") as MessagePane | undefined;
+                    // The focus left the body during the trip from the body script, or the body that asked lost the front to another tab on the way (a message window has one message and no tabs), so the key is stale.
+                    if (!pane || (tabmail && context.extension.tabManager.getWrapper(tab)?.id !== tabId)) return 0;
+                    // The body script labels a body the parent cannot read itself.
+                    return pane.isRemoteBrowser || !pane.contentDocument ? -1 : pick_in_message(main, pane.ownerDocument.defaultView, scheme, action);
+                }
+                const message = message_document_of(main, tab);
+                if (message) return pick_in_message(main, message, scheme, action);
+                if (!tab) throw new Error(`no tab in window ${windowId}`);
                 const pane = front_about_3pane(tabmail) as (HintMailPane & ListenerTarget) | null;
                 if (pane) {
-                    const message = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
-                    return start_pick(pick_host(main, [main, pane, ...(message ? [message] : [])]), collect_targets(main, pane), scheme, action);
+                    const reading = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
+                    return start_pick(pick_host(main, [main, pane, ...(reading ? [reading] : [])]), collect_targets(main, pane), scheme, action);
                 }
                 const browser = tab.browser ?? tab.chromeBrowser;
                 const actor = browser?.isRemoteBrowser ? browser.browsingContext?.currentWindowGlobal?.getExistingActor("DesertBirdPage") : undefined;

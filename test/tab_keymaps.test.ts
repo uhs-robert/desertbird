@@ -157,6 +157,25 @@ test("the message tree for a message tab keeps the message keys and drops the ke
     assert.deepEqual(leaf_at(full.root as TreeBranch, "j"), leaf_at(kept, "j"));
 });
 
+test("the message tree for a message tab sends every hint pick to the background as hint.window with the key's action, a user key's too", () => {
+    const tree_with = (user?: Parameters<typeof compile_tab_keymap>[1]) => page_message_tree({ version: 1, root: JSON.parse(JSON.stringify(message_root(user))) } as never).root as unknown as TreeBranch;
+    const step_at = (root: TreeBranch, ...tokens: string[]) => {
+        let node: TreeNode | undefined = root;
+        for (const token of tokens) node = node?.kind === "branch" ? node.children[token] : undefined;
+        return node?.kind === "leaf" ? node.steps : undefined;
+    };
+    const kept = tree_with({ F: { id: "hint.pick", args: { action: "yank" } } });
+    assert.deepEqual([["f"], [";", "f"], [";", "c"], [";", "y"], ["F"]].map((tokens) => step_at(kept, ...tokens)?.map((step) => [step.invocation.id, step.invocation.args, step.runs_in])), [
+        [["hint.window", undefined, "background"]],
+        [["hint.window", { action: "focus" }, "background"]],
+        [["hint.window", { action: "activate" }, "background"]],
+        [["hint.window", { action: "yank" }, "background"]],
+        [["hint.window", { action: "yank" }, "background"]],
+    ]);
+    assert.ok(!ids_under(kept).includes("hint.pick"), "no pick is left for the chrome, where it does nothing");
+    assert.equal(leaf_at(message_root(), "f")?.id, "hint.pick", "the body keeps its own pick");
+});
+
 test("a group need joins the capability needs of a command and does not replace them", () => {
     const grouped = needing("message", { a: { bridge: false, runs_in: "background", label: "A", intent: "A.", needs: ["hints.pick"], run: async () => {} }, b: { bridge: false, runs_in: "background", label: "B", intent: "B.", needs: ["tab", "app.paneFocus"], run: async () => {} } });
     assert.deepEqual(grouped["a"]?.needs, ["message", "hints.pick"]);
