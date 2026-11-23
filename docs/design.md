@@ -137,7 +137,7 @@ The table has 42 rows. 27 run without the Experiment (26 Standard and one Standa
 
 ## Toolbar button
 
-The manifest has a `browser_action` for the mail tab toolbar (`default_windows` is `normal` only, so message windows have none), titled DesertBird, with the bird icon `src/icons/desertbird.svg`, which is also the manifest icon at 48 and 96. The click opens a small popup page (`src/popup/`) with three entries that run existing commands: Options (`options.open`), Help (`help.open`) and Show keys (`help.whichkey`). The popup has no tab, so it sends one `popup.run` message and the background runs the command through the router in the last focused main window. The background accepts only those three ids and only from the popup page. No setting, bundle guard or chrome verb changes.
+The manifest has a `browser_action` for the mail tab toolbar (`default_windows` is `normal` only, so message windows have none), titled DesertBird, with the bird icon `src/icons/desertbird.svg`, which is also the manifest icon at 48 and 96. The click opens a small popup page (`src/popup/`) with two entries that run existing commands: Options (`options.open`) and Help (`help.open`). A Show keys entry (`help.whichkey`) is left out: the which-key panel it opens from the popup does not close on the next key. The popup has no tab, so it sends one `popup.run` message and the background runs the command through the router in the last focused main window. The background accepts only those two ids and only from the popup page. No setting, bundle guard or chrome verb changes.
 
 ## Store rules
 
