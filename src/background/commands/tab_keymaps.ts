@@ -15,18 +15,24 @@ import type { KeymapTree } from "../../shared/protocol.ts";
  * What each kind of tab offers. A message document is the message pane, a message tab and a message window. An own page is the options or help page, which runs the body script and shows no message. A page tab is any other tab with a chrome page: calendar, tasks, chat, settings, the address book, `about:` pages and search results. A remote page (web content) takes the page tree too, and its runtime lets only `tab.close` run.
  * A message tab whose focus is outside the body is a message document with the find line cut out and the hint picks sent to the background by `page_message_tree`.
  * A message window (`window`, message mode) is a message document with no tab bar and no panes around it: it takes the message commands, `q` and the `main` keys (zoom, new message, help, options and the Thunderbird pages), and the tab, pane and command line keys stay unbound there. `n` and `N` stay unbound too, since find needs the line. The body and the header of the window run its one tree.
+ * A compose window (`compose`) is the body of a message being written. It takes only the commands of `COMPOSE_COMMANDS`, and no other, so the offered needs do not decide its keys. Close is not among them: `windows.remove` closes a window with unsaved text and no prompt (measured), so no key of this kind can discard a draft.
  */
 export const TAB_KINDS = {
     message: ["message", "tab", "body", "close", "pane", "main"],
     own: ["tab", "body", "close", "main"],
     page: ["tab", "page", "typing", "close", "main"],
     window: ["message", "body", "close", "main"],
+    compose: ["compose", "main"],
 } as const satisfies Record<string, readonly TabNeed[]>;
 
 export type TabKind = keyof typeof TAB_KINDS;
 
+/** The only commands a key of a compose window runs, by default or by a user key. Save and edit leave the window open, help opens a page in the main window, and zoom acts on the window. */
+export const COMPOSE_COMMANDS: ReadonlySet<string> = new Set(["compose.edit_external", "compose.save", "help.open", "zoom.by", "zoom.set"]);
+
 // Where a key comes from, in the order that decides a clash: the first layer with a key the tab can serve wins. The reading keys (`message_keys`) belong to the body script, so only a tab with a body takes them. The page keys come last, so a tab with a thread list keeps `j` for the list and the body script keeps `j` for scrolling.
-const LAYERS: { keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | undefined; needs: readonly TabNeed[] }[] = [
+const LAYERS: { keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | undefined; needs: readonly TabNeed[]; only?: TabKind }[] = [
+    { keys_of: (group) => group.compose_keys, needs: [], only: "compose" },
     { keys_of: (group) => group.message_keys, needs: ["body"] },
     { keys_of: (group) => group.normal_keys, needs: [] },
     { keys_of: (group) => group.page_keys, needs: [] },
@@ -48,16 +54,17 @@ function invocation_needs(invocation: Invocation): TabNeed[] {
 
 const needs_of_binding = (binding: Exclude<KeyBinding, null>): TabNeed[] => (Array.isArray(binding) ? binding : [binding]).flatMap(invocation_needs);
 
-const is_served = (binding: Exclude<KeyBinding, null>, extra: readonly TabNeed[], offers: readonly TabNeed[]): boolean => [...extra, ...needs_of_binding(binding)].every((need) => offers.includes(need));
+const is_served = (binding: Exclude<KeyBinding, null>, extra: readonly TabNeed[], offers: readonly TabNeed[], kind?: TabKind): boolean =>
+    (kind !== "compose" || (Array.isArray(binding) ? binding : [binding]).every((invocation) => COMPOSE_COMMANDS.has(invocation.id))) && [...extra, ...needs_of_binding(binding)].every((need) => offers.includes(need));
 
 const merged = (keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | undefined): NonNullable<KeymapConfig["normal"]> => Object.assign({}, ...Object.values(GROUPS).map((group) => keys_of(group)));
 
 /** The default keys of a tab kind: every key whose command the kind can serve, with the label of its binding. */
 export function default_keymap_of(kind: TabKind): KeymapConfig {
     const normal: NonNullable<KeymapConfig["normal"]> = {};
-    for (const layer of LAYERS) {
+    for (const layer of LAYERS.filter((candidate) => candidate.only === undefined || candidate.only === kind)) {
         for (const [keys, binding] of Object.entries(merged(layer.keys_of))) {
-            if (binding && !(keys in normal) && is_served(binding, layer.needs, TAB_KINDS[kind])) normal[keys] = binding;
+            if (binding && !(keys in normal) && is_served(binding, layer.needs, TAB_KINDS[kind], kind)) normal[keys] = binding;
         }
     }
     return { normal, group_names: GROUP_NAMES };
@@ -65,7 +72,7 @@ export function default_keymap_of(kind: TabKind): KeymapConfig {
 
 /** The default keys with the user's bindings on top. A binding goes in when its command can run in the kind. A `null` goes through, and the compiler removes the key it names, however spelled. */
 export function keymap_of(kind: TabKind, user: KeymapConfig["normal"] = {}): KeymapConfig {
-    const kept = Object.entries(user ?? {}).filter(([, binding]) => binding === null || is_served(binding, [], TAB_KINDS[kind]));
+    const kept = Object.entries(user ?? {}).filter(([, binding]) => binding === null || is_served(binding, [], TAB_KINDS[kind], kind));
     return { normal: { ...default_keymap_of(kind).normal, ...Object.fromEntries(kept) }, group_names: GROUP_NAMES };
 }
 

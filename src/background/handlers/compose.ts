@@ -35,6 +35,21 @@ export async function new_message(scope: HandlerScope): Promise<void> {
     await scope.api.compose.beginNew();
 }
 
+export interface SaveDraftApi {
+    windows: { get(window_id: number, options: { populate: true }): Promise<{ type?: string; tabs?: { id?: number }[] }> };
+    compose: { saveMessage(tab_id: number, options: { mode: "draft" }): Promise<unknown> };
+}
+
+// The window is the compose window of the key. `saveMessage` keeps it open and leaves the text in it.
+export async function save_draft(scope: HandlerScope<SaveDraftApi>): Promise<void> {
+    const window = await scope.api.windows.get(scope.window_id, { populate: true });
+    // `:save` from the command line of a main window would save its mail tab, so it refuses as `:edit` does.
+    if (window.type !== "messageCompose") throw new RuntimeRefusal("Save works only in a compose window. Press s in normal mode in the message body.");
+    const tab_id = window.tabs?.[0]?.id;
+    if (tab_id === undefined) throw new RuntimeRefusal("The compose window has no message to save.");
+    await scope.api.compose.saveMessage(tab_id, { mode: "draft" });
+}
+
 export interface EditExternalApi {
     external_editor: Pick<ExternalEditor, "open">;
 }

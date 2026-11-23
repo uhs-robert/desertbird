@@ -52,7 +52,7 @@ const HINTS_MAX_BYTES = 18170;
 const HINTS_CEILING_BYTES = 20480;
 
 // `content/compose_keys.js`, registered into every compose body.
-const COMPOSE_MAX_BYTES = 3500;
+const COMPOSE_MAX_BYTES = 4012;
 const COMPOSE_CEILING_BYTES = 8192;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.

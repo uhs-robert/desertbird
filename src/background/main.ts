@@ -5,7 +5,7 @@ import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { AppApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
-import { compile_tab_keymap, compile_typing_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
+import { COMPOSE_COMMANDS, compile_tab_keymap, compile_typing_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
 import { record_activation, tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -64,7 +64,7 @@ const UNDO_RETRY_DELAYS_MS = [500, 1000, 1500];
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
 // The record is derived from the user's keymap and the source hash, and an old record is rebuilt on read, so the bump moves no user data.
-const KEYMAP_RECORD_VERSION = 15;
+const KEYMAP_RECORD_VERSION = 16;
 
 interface KeymapRecord {
     record_version: number;
@@ -79,6 +79,8 @@ interface KeymapRecord {
     page_tree: KeymapTree;
     /** The keys of DesertBird's own pages (options, help): the page keys with find and hints. Their body script reads it from storage. */
     own_tree: KeymapTree;
+    /** The keys of the body of a compose window in normal mode. Its compose script reads it from storage. */
+    compose_tree: KeymapTree;
     /** The keys that run while a text field has the focus. The `pages` Experiment installs it, and it also serves the text fields of the mail tab. */
     typing_tree: KeymapTree;
 }
@@ -140,7 +142,7 @@ async function hash_of(value: unknown): Promise<string> {
 
 function is_current_record(value: unknown, source_hash: string): value is KeymapRecord {
     const record = value as Partial<KeymapRecord> | null | undefined;
-    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.window_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION && record.own_tree?.version === COMPILED_KEYMAP_VERSION && record.typing_tree?.version === COMPILED_KEYMAP_VERSION;
+    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.window_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION && record.own_tree?.version === COMPILED_KEYMAP_VERSION && record.compose_tree?.version === COMPILED_KEYMAP_VERSION && record.typing_tree?.version === COMPILED_KEYMAP_VERSION;
 }
 
 function tree_of(result: CompileResult): KeymapTree {
@@ -153,7 +155,7 @@ function tree_of(result: CompileResult): KeymapTree {
 function compile_record(source_hash: string, config: Config): KeymapRecord {
     const mail = compile_effective_keymap(config.user_keymap, config.setting_overrides);
     // The message tree ends every mail sequence, the user's included, so it reads this mail tree. The source hash already covers the user's mail keys.
-    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_tab_keymap("message", config.user_keymap.normal, mail.compiled.modes.normal)), window_tree: tree_of(compile_tab_keymap("window", config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_tab_keymap("page", config.user_keymap.normal)), own_tree: tree_of(compile_tab_keymap("own", config.user_keymap.normal, mail.compiled.modes.normal)), typing_tree: tree_of(compile_typing_keymap(config.user_keymap.normal)) };
+    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_tab_keymap("message", config.user_keymap.normal, mail.compiled.modes.normal)), window_tree: tree_of(compile_tab_keymap("window", config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_tab_keymap("page", config.user_keymap.normal)), own_tree: tree_of(compile_tab_keymap("own", config.user_keymap.normal, mail.compiled.modes.normal)), compose_tree: tree_of(compile_tab_keymap("compose", config.user_keymap.normal, mail.compiled.modes.normal)), typing_tree: tree_of(compile_typing_keymap(config.user_keymap.normal)) };
 }
 
 // Registered before the listener below, so the store has dropped its copy by the time an install reads it.
@@ -167,7 +169,7 @@ let installed_tree_json: string | undefined;
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: keymap_of("message", config.user_keymap.normal), window: keymap_of("window", config.user_keymap.normal), page: keymap_of("page", config.user_keymap.normal), own: keymap_of("own", config.user_keymap.normal), typing: compile_typing_keymap(config.user_keymap.normal).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: keymap_of("message", config.user_keymap.normal), window: keymap_of("window", config.user_keymap.normal), page: keymap_of("page", config.user_keymap.normal), own: keymap_of("own", config.user_keymap.normal), compose: keymap_of("compose", config.user_keymap.normal), typing: compile_typing_keymap(config.user_keymap.normal).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);
@@ -333,7 +335,7 @@ const bridge = create_bridge_port({
 });
 
 const compose_requests = create_compose_requests((window_id) => router.run({ command: "compose.edit_external", args: {}, count: 1, windowId: window_id, messageIds: [] }));
-const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
+const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), compose_allowed: COMPOSE_COMMANDS, which_key: hud, run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
 
 // The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
 messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? compose_requests(message, sender) ?? body_requests(message, sender));

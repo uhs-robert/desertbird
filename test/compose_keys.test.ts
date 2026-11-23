@@ -4,8 +4,18 @@ import { start_compose_keys } from "../src/content/compose_edit_key.ts";
 import type { ComposeKeyEvent, ComposeStorage } from "../src/content/compose_edit_key.ts";
 import { create_mode_label } from "../src/content/compose_mode_label.ts";
 import type { LabelDocument, LabelState } from "../src/content/compose_mode_label.ts";
+import { mark_steps } from "../src/background/config/keymap.ts";
+import { compile_tab_keymap } from "../src/background/commands/tab_keymaps.ts";
+import { KEYMAP_STORAGE_KEY } from "../src/shared/protocol.ts";
 
-async function setup(has_focus = true, external_editor: unknown = true) {
+// The tree the background stores for a compose window, compiled from the real defaults.
+function stored_record(user: Parameters<typeof compile_tab_keymap>[1] = {}) {
+    const root = JSON.parse(JSON.stringify(compile_tab_keymap("compose", user).compiled.modes.normal));
+    mark_steps(root);
+    return { compose_tree: { version: 1, root } };
+}
+
+async function setup(has_focus = true, record: unknown = stored_record()) {
     const sent: unknown[] = [];
     const modes: LabelState[] = [];
     let key_listener: ((event: ComposeKeyEvent) => void) | undefined;
@@ -13,7 +23,7 @@ async function setup(has_focus = true, external_editor: unknown = true) {
     let capture = false;
     let storage_listener: Parameters<ComposeStorage["onChanged"]["addListener"]>[0] | undefined;
     const storage: ComposeStorage = {
-        get: async (key) => ({ [key]: external_editor === null ? undefined : { external_editor } }),
+        get: async (key) => ({ [key]: record }),
         onChanged: { addListener: (added) => void (storage_listener = added) },
     };
     await start_compose_keys(
@@ -28,199 +38,257 @@ async function setup(has_focus = true, external_editor: unknown = true) {
         has_focus,
         storage,
     );
-    const set_setting = (value: boolean, area = "local") => storage_listener!({ desertbird_settings: { newValue: { external_editor: value } } }, area);
     const press = (key: string, modifiers: Partial<ComposeKeyEvent> = {}) => {
         const event = { key, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false, isComposing: false, cancelled: false, stopped: false, preventDefault() { this.cancelled = true; }, stopPropagation() { this.stopped = true; }, ...modifiers };
         key_listener!(event);
         return event;
     };
-    return { sent, modes, press, set_setting, capture: () => capture, focus: () => plain_listeners.focus!(), blur: () => plain_listeners.blur!() };
+    const change_record = (value: unknown, area = "local") => storage_listener!({ [KEYMAP_STORAGE_KEY]: { newValue: value } }, area);
+    return { sent, modes, press, change_record, capture: () => capture, focus: () => plain_listeners.focus!(), blur: () => plain_listeners.blur!() };
 }
 
 const untouched = (event: { cancelled: boolean; stopped: boolean }) => !event.cancelled && !event.stopped;
+const taken = (event: { cancelled: boolean; stopped: boolean }) => event.cancelled && event.stopped;
+const invoke = (command: string, args: Record<string, unknown> = {}) => ({ type: "body.invoke", command, args, count: 1 });
+const last = (modes: LabelState[]) => modes.at(-1);
 
-test("Ctrl+E is taken and asks the background to edit, in the capture phase", async () => {
-    const { sent, press, capture } = await setup();
-    const event = press("e", { ctrlKey: true });
+test("Ctrl+E is taken and asks the background to edit, in the capture phase, in either mode", async () => {
+    const { sent, press, capture, modes } = await setup();
     assert.equal(capture(), true);
-    assert.ok(event.cancelled && event.stopped);
-    assert.deepEqual(sent, [{ type: "compose.edit" }]);
-});
-
-test("Ctrl+E with Caps Lock on counts", async () => {
-    const { sent, press } = await setup();
-    press("E", { ctrlKey: true });
-    assert.equal(sent.length, 1);
-});
-
-test("other keys and other chords pass to the editor", async () => {
-    const { sent, press } = await setup();
-    const passed = [press("e"), press("E", { shiftKey: true }), press("E", { ctrlKey: true, shiftKey: true }), press("e", { ctrlKey: true, altKey: true }), press("e", { ctrlKey: true, metaKey: true }), press("f", { ctrlKey: true }), press("e", { ctrlKey: true, isComposing: true })];
-    for (const event of passed) assert.ok(!event.cancelled && !event.stopped, event.key);
-    assert.deepEqual(sent, []);
+    assert.ok(taken(press("e", { ctrlKey: true })));
+    press("Escape");
+    assert.ok(taken(press("E", { ctrlKey: true })));
+    assert.deepEqual(sent, [{ type: "compose.edit" }, { type: "compose.edit" }]);
+    assert.equal(last(modes), "normal");
 });
 
 test("a held Ctrl+E asks once and still keeps the repeats from the editor", async () => {
     const { sent, press } = await setup();
     press("e", { ctrlKey: true });
-    const repeat = press("e", { ctrlKey: true, repeat: true });
-    assert.ok(repeat.cancelled);
+    assert.ok(taken(press("e", { ctrlKey: true, repeat: true })));
     assert.equal(sent.length, 1);
 });
 
-test("the label starts as insert with focus in the body and hidden without", async () => {
+test("every window opens in insert mode, with the label hidden while the body has no focus", async () => {
     assert.deepEqual((await setup(true)).modes, ["insert"]);
     assert.deepEqual((await setup(false)).modes, ["hidden"]);
 });
 
-test("focus out of the body hides the label, drops a pending one-shot and focus back shows insert", async () => {
+test("insert mode never swallows a typed character", async () => {
+    const { sent, press, modes } = await setup();
+    const typed = ["a", "e", "s", "i", "z", "?", "I", "O", " ", "é", "ß", "ü", "1", "/", ":", "q", "Dead", "Process", "Enter", "Backspace", "Delete", "Tab", "ArrowLeft"];
+    for (const key of typed) assert.ok(untouched(press(key, { shiftKey: key !== key.toLowerCase() })), key);
+    // AltGr arrives as Ctrl and Alt together on some systems and types a character.
+    assert.ok(untouched(press("@", { ctrlKey: true, altKey: true })));
+    assert.ok(untouched(press("e", { ctrlKey: true, altKey: true })));
+    assert.deepEqual(sent, []);
+    assert.deepEqual(modes, ["insert"]);
+});
+
+test("Escape in insert mode enters normal mode and is taken, and `i` returns to insert and is taken", async () => {
+    const { press, modes } = await setup();
+    assert.ok(taken(press("Escape")));
+    assert.equal(last(modes), "normal");
+    assert.ok(taken(press("i")));
+    assert.equal(last(modes), "insert");
+    assert.ok(untouched(press("i")));
+});
+
+test("in normal mode a character key and the editing keys never reach the draft, bound or not", async () => {
+    const { sent, press } = await setup();
+    press("Escape");
+    for (const key of ["a", "x", "Z", " ", "1", "é", "ß", "Enter", "Backspace", "Delete", "/", "@"]) assert.ok(taken(press(key)), key);
+    assert.deepEqual(sent, []);
+});
+
+test("in normal mode the caret and focus keys pass", async () => {
+    const { press } = await setup();
+    press("Escape");
+    for (const key of ["ArrowUp", "ArrowLeft", "Home", "PageDown", "F6", "Shift", "CapsLock"]) assert.ok(untouched(press(key)), key);
+});
+
+test("in normal mode Tab and Shift+Tab never reach the draft, and in insert mode they pass", async () => {
+    const { press } = await setup();
+    assert.ok(untouched(press("Tab")));
+    press("Escape");
+    assert.ok(taken(press("Tab")));
+    assert.ok(taken(press("Tab", { shiftKey: true })));
+    press("i");
+    assert.ok(untouched(press("Tab", { shiftKey: true })));
+});
+
+test("chords pass untouched in normal mode", async () => {
+    const { sent, press } = await setup();
+    press("Escape");
+    for (const modifiers of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }, { ctrlKey: true, shiftKey: true }]) for (const key of ["Enter", "s", "i", "z", "w", "?"]) assert.ok(untouched(press(key, modifiers)), `${key} ${JSON.stringify(modifiers)}`);
+    assert.deepEqual(sent, []);
+});
+
+test("the default keys ask the background once each: e edits, s saves, ? opens help", async () => {
+    const { sent, press } = await setup();
+    press("Escape");
+    for (const key of ["e", "s", "?"]) assert.ok(taken(press(key, { shiftKey: key === "?" })), key);
+    assert.deepEqual(sent, [invoke("compose.edit_external"), invoke("compose.save"), invoke("help.open")]);
+});
+
+test("a bound key held down asks once and the repeats are taken", async () => {
+    const { sent, press } = await setup();
+    press("Escape");
+    press("s");
+    assert.ok(taken(press("s", { repeat: true })));
+    assert.equal(sent.length, 1);
+});
+
+test("a zoom sequence runs on its last key, and a key that continues no sequence runs nothing and is taken", async () => {
+    const { sent, press } = await setup();
+    press("Escape");
+    assert.ok(taken(press("z")));
+    assert.deepEqual(sent, []);
+    assert.ok(taken(press("i")));
+    assert.deepEqual(sent, [invoke("zoom.by", { delta: 0.1 })]);
+    press("z");
+    assert.ok(taken(press("x")));
+    // The pending key ended with the unbound one, so `s` is a plain key again.
+    press("s");
+    assert.deepEqual(sent.slice(1), [invoke("compose.save")]);
+});
+
+test("`i` in the middle of a sequence is a key of that sequence and does not enter insert mode", async () => {
+    const { modes, press } = await setup();
+    press("Escape");
+    press("z");
+    press("i");
+    assert.equal(last(modes), "normal");
+});
+
+test("Escape in normal mode ends a half-typed sequence and stays in normal mode", async () => {
+    const { sent, modes, press } = await setup();
+    press("Escape");
+    press("z");
+    assert.ok(taken(press("Escape")));
+    press("i");
+    assert.equal(last(modes), "insert");
+    assert.deepEqual(sent, []);
+});
+
+test("a key with no keymap record yet is held back and runs nothing, and the record that arrives binds it", async () => {
+    const { sent, press, change_record } = await setup(true, null);
+    press("Escape");
+    assert.ok(taken(press("s")));
+    assert.deepEqual(sent, []);
+    change_record(stored_record());
+    press("s");
+    assert.deepEqual(sent, [invoke("compose.save")]);
+});
+
+test("a record of another shape or another storage area changes nothing, and a user binding replaces the default", async () => {
+    const { sent, press, change_record } = await setup();
+    change_record({ compose_tree: null }, "sync");
+    press("Escape");
+    press("s");
+    assert.equal(sent.length, 1);
+    change_record(stored_record({ x: { id: "compose.save" } }));
+    press("x");
+    assert.deepEqual(sent.at(-1), invoke("compose.save"));
+    change_record("not a record");
+    sent.length = 0;
+    assert.ok(taken(press("s")));
+    assert.deepEqual(sent, []);
+});
+
+test("mode lifecycle: focus leaving the body hides the label and focus back shows the mode it had", async () => {
     const { sent, modes, press, blur, focus } = await setup();
-    press("o", { ctrlKey: true });
+    press("Escape");
+    blur();
+    assert.equal(last(modes), "hidden");
+    focus();
+    assert.equal(last(modes), "normal");
+    assert.ok(taken(press("a")));
+    press("i");
     blur();
     focus();
-    assert.deepEqual(modes, ["insert", "normal", "hidden", "insert"]);
-    assert.ok(untouched(press("e")));
+    assert.equal(last(modes), "insert");
+    assert.ok(untouched(press("s")));
     assert.deepEqual(sent, []);
 });
 
-test("in insert mode `e` and every other plain key pass to the editor", async () => {
-    const { sent, press } = await setup();
-    for (const key of ["e", "E", "o", "x", "Enter", "Tab"]) assert.ok(untouched(press(key)), key);
-    assert.deepEqual(sent, []);
-});
-
-test("Ctrl+O is taken in insert mode and makes the next key a normal-mode key", async () => {
-    const { modes, press } = await setup();
-    const event = press("o", { ctrlKey: true });
-    assert.ok(event.cancelled && event.stopped);
-    assert.deepEqual(modes, ["insert", "normal"]);
-});
-
-test("`e` after Ctrl+O asks the background to edit, takes the key and returns to insert", async () => {
-    const { sent, modes, press } = await setup();
-    press("o", { ctrlKey: true });
-    const event = press("e");
-    assert.ok(event.cancelled && event.stopped);
-    assert.deepEqual(sent, [{ type: "compose.edit" }]);
-    assert.deepEqual(modes, ["insert", "normal", "insert"]);
-    assert.ok(untouched(press("e")), "the one-shot is spent");
-    assert.equal(sent.length, 1);
-});
-
-test("any other key after Ctrl+O passes unchanged and returns to insert", async () => {
-    const { sent, modes, press } = await setup();
-    press("o", { ctrlKey: true });
-    assert.ok(untouched(press("x")));
-    assert.deepEqual(modes, ["insert", "normal", "insert"]);
-    assert.ok(untouched(press("e")));
-    assert.deepEqual(sent, []);
-});
-
-test("a lone modifier does not spend the one-shot", async () => {
-    const { sent, modes, press } = await setup();
-    press("o", { ctrlKey: true });
-    for (const key of ["Shift", "Control", "Alt", "Meta", "CapsLock"]) assert.ok(untouched(press(key, { shiftKey: key === "Shift" })), key);
-    assert.deepEqual(modes, ["insert", "normal"]);
-    press("e");
-    assert.equal(sent.length, 1);
-});
-
-test("`E` with Shift or `e` with a modifier is another key, with Caps Lock it counts", async () => {
-    const { sent, press } = await setup();
-    for (const modifiers of [{ shiftKey: true }, { altKey: true }, { metaKey: true }]) {
-        press("o", { ctrlKey: true });
-        assert.ok(untouched(press("E", modifiers)));
-    }
-    assert.deepEqual(sent, []);
-    press("o", { ctrlKey: true });
-    press("E");
-    assert.equal(sent.length, 1);
-});
-
-test("Escape in the body shows normal and passes to Thunderbird, and `e` then edits", async () => {
-    const { sent, modes, press } = await setup();
-    assert.ok(untouched(press("Escape")));
-    assert.deepEqual(modes, ["insert", "normal"]);
-    press("e");
-    assert.equal(sent.length, 1);
-});
-
-test("a second Escape returns to insert and passes", async () => {
-    const { modes, press } = await setup();
+test("mode lifecycle: focus leaving and returning drops a half-typed sequence", async () => {
+    const { sent, press, blur, focus } = await setup();
     press("Escape");
-    assert.ok(untouched(press("Escape")));
-    assert.deepEqual(modes, ["insert", "normal", "insert"]);
-});
-
-test("focus back into the body ends a pending normal mode", async () => {
-    const { sent, press, focus } = await setup();
-    press("o", { ctrlKey: true });
+    press("z");
+    blur();
     focus();
-    assert.ok(untouched(press("e")));
+    press("Escape");
+    press("i");
     assert.deepEqual(sent, []);
 });
 
-test("a held `e` after Ctrl+O asks once and keeps the repeats from the body", async () => {
-    const { sent, press } = await setup();
-    press("o", { ctrlKey: true });
-    press("e");
-    assert.ok(press("e", { repeat: true }).cancelled);
-    assert.ok(press("e", { repeat: true }).cancelled);
-    assert.equal(sent.length, 1);
-    assert.ok(untouched(press("e")), "a fresh press types again");
+test("mode lifecycle: s and Ctrl+S in normal mode keep it, with the focus bounce of a save, so the next plain key is cancelled and not typed", async () => {
+    const { sent, modes, press, blur, focus } = await setup();
+    press("Escape");
+    press("s");
+    blur();
+    focus();
+    assert.equal(last(modes), "normal");
+    assert.ok(taken(press("a")));
+    // Ctrl+S is Thunderbird's own save, which passes untouched and bounces the focus the same way.
+    assert.ok(untouched(press("s", { ctrlKey: true })));
+    blur();
+    focus();
+    assert.equal(last(modes), "normal");
+    assert.ok(taken(press("a")));
+    assert.deepEqual(sent, [invoke("compose.save")]);
 });
 
-test("a held Ctrl+O sets normal once and a composing key changes nothing", async () => {
+test("mode lifecycle: the external edit changes no mode", async () => {
     const { modes, press } = await setup();
-    press("o", { ctrlKey: true });
-    assert.ok(press("o", { ctrlKey: true, repeat: true }).cancelled);
-    assert.deepEqual(modes, ["insert", "normal"]);
-    assert.ok(untouched(press("e", { isComposing: true })));
-    assert.deepEqual(modes, ["insert", "normal"]);
-});
-
-test("Ctrl+E still edits in either mode and ends a pending one-shot", async () => {
-    const { sent, modes, press } = await setup();
-    press("o", { ctrlKey: true });
-    press("e", { ctrlKey: true });
-    assert.equal(sent.length, 1);
-    assert.deepEqual(modes, ["insert", "normal", "insert"]);
-    assert.ok(untouched(press("e")));
-    assert.equal(sent.length, 1);
-});
-
-test("with the setting off there is no label, no one-shot and `e` is a letter, but Ctrl+E still asks", async () => {
-    for (const value of [false, null, "yes"]) {
-        const { sent, modes, press } = await setup(true, value);
-        assert.deepEqual(modes, ["hidden"]);
-        assert.ok(untouched(press("Escape")));
-        assert.ok(press("o", { ctrlKey: true }).cancelled === false);
-        assert.ok(untouched(press("e")));
-        assert.deepEqual(sent, []);
-        assert.ok(press("e", { ctrlKey: true }).cancelled);
-        assert.equal(sent.length, 1);
-        assert.deepEqual(modes, ["hidden"]);
-    }
-});
-
-test("turning the setting on shows the label and arms the keys, and another area or key changes nothing", async () => {
-    const { sent, modes, press, set_setting } = await setup(true, false);
-    set_setting(true, "sync");
-    assert.deepEqual(modes, ["hidden"]);
-    set_setting(true);
-    assert.deepEqual(modes, ["hidden", "insert"]);
     press("Escape");
     press("e");
-    assert.equal(sent.length, 1);
+    assert.equal(last(modes), "normal");
 });
 
-test("turning the setting off in a one-shot hides the label and the next `e` is a letter", async () => {
-    const { sent, modes, press, set_setting } = await setup();
-    press("o", { ctrlKey: true });
-    set_setting(false);
-    assert.deepEqual(modes, ["insert", "normal", "hidden"]);
-    assert.ok(untouched(press("e")));
+test("mode lifecycle: a reply or forward window opens in insert before its body has focus, shows INSERT on the focus and types", async () => {
+    // The window opens and the editor takes the focus a moment later. Keys before it are the user's typing and nothing is swallowed.
+    const { modes, press, focus } = await setup(false);
+    assert.deepEqual(modes, ["hidden"]);
+    focus();
+    assert.equal(last(modes), "insert");
+    for (const key of [">", " ", "e", "s", "i", "z"]) assert.ok(untouched(press(key)), key);
+    assert.deepEqual(modes, ["hidden", "insert"]);
+});
+
+test("an IME composition is never touched: Escape and letters during it change no mode and run nothing", async () => {
+    const { sent, modes, press } = await setup();
+    for (const key of ["Escape", "Process", "a", "Enter"]) assert.ok(untouched(press(key, { isComposing: true })), key);
+    assert.deepEqual(modes, ["insert"]);
+    press("Escape");
+    for (const key of ["s", "Escape", "i", "Enter"]) assert.ok(untouched(press(key, { isComposing: true })), key);
+    assert.equal(last(modes), "normal");
     assert.deepEqual(sent, []);
+});
+
+test("the spell-check popup takes its own Escape and shows no key to the script, so the mode is as it was", async () => {
+    // The popup is chrome, and a key typed in it never reaches the content script: the script sees no event at all, and a blur and focus pair is the most it can see.
+    const { modes, press, blur, focus } = await setup();
+    press("a");
+    blur();
+    focus();
+    assert.deepEqual(modes, ["insert", "hidden", "insert"]);
+    assert.ok(untouched(press("a")));
+});
+
+test("no key of the compose tree reaches a close or a discard", async () => {
+    const forbidden = new Set(["tab.close", "window.close", "cmdline.open", "msg.delete", "msg.archive"]);
+    const ids = (node: unknown): string[] => {
+        const { children, steps } = node as { children?: Record<string, unknown>; steps?: { invocation: { id: string } }[] };
+        return [...(steps ?? []).map((step) => step.invocation.id), ...Object.values(children ?? {}).flatMap(ids)];
+    };
+    const user = { q: { id: "tab.close" }, "x x": { id: "msg.delete" }, y: { id: "cmdline.open" }, w: [{ id: "compose.save" }, { id: "tab.close" }] };
+    for (const record of [stored_record(), stored_record(user as never)]) assert.deepEqual(ids(record.compose_tree.root).filter((id) => forbidden.has(id)), []);
+    const { sent, press } = await setup(true, stored_record(user as never));
+    press("Escape");
+    for (const key of ["q", "x", "y", "w", "c", "d"]) press(key);
+    assert.deepEqual(sent.filter((message) => forbidden.has((message as { command: string }).command)), []);
 });
 
 test("the label is a style sheet on the document and adds no node", async () => {

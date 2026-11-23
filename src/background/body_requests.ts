@@ -18,6 +18,8 @@ export interface BodyRequestDeps {
     api: BodyRequestApi;
     /** The ids of the commands a message key binds. A request for any other command is dropped. */
     allowed: ReadonlySet<string>;
+    /** The ids a key of a compose window may run, instead of `allowed`. The sender's window type picks the set. */
+    compose_allowed?: ReadonlySet<string> | undefined;
     /** The Experiment that labels a message and sends the Enter of a hint pick. Absent when it failed to load: the body script then labels the body itself and leaves the Enter to the user. */
     hints?: Partial<ThemedHints> | undefined;
     /** Writes the text of a yank to the clipboard. Absent in a setup with no clipboard. */
@@ -30,6 +32,8 @@ export interface BodyRequestDeps {
 
 const MAIN_WINDOW_TYPE = "normal";
 const MESSAGE_WINDOW_TYPE = "messageDisplay";
+const COMPOSE_WINDOW_TYPE = "messageCompose";
+const NO_COMMANDS: ReadonlySet<string> = new Set();
 
 /** Whether the command needs the overlay and the window is no main window, which has none. Then it tells the user so, and the caller drops the command rather than let it fail in the Experiment. The body script passes here: a message window document runs the message tree, whose keys can open the line, until the background answers `body.tree`. */
 export async function refused_outside_main_window(registry: Registry, api: NotificationsApi & Pick<BodyRequestApi, "windows">, command: string, window_id: number): Promise<boolean> {
@@ -59,9 +63,15 @@ type Sender = { tab?: { id?: number; windowId?: number } };
 export function create_body_requests(deps: BodyRequestDeps): (message: unknown, sender: Sender) => Promise<unknown> | undefined {
     async function invoke(request: BodyInvokeRequest, sender: Sender): Promise<unknown> {
         const { id: tab_id, windowId: window_id } = sender.tab ?? {};
-        if (!deps.allowed.has(request.command) || tab_id === undefined || window_id === undefined || (await refused_outside_main_window(deps.registry, deps.api, request.command, window_id))) return {};
-        // A page of the add-on is a tab with no message. The call may refuse for it, and the key then runs with no messages.
-        const message_ids = (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch((error: unknown) => (console.error("desertbird body request:", error), []))).map((message) => message.id);
+        if (tab_id === undefined || window_id === undefined) return {};
+        // The window type of the sender picks the commands: a compose body runs the compose set and a message document the message set, never the other.
+        const window_type = (await ignore_refusal(deps.api.windows.get(window_id)))?.type;
+        // A window that is gone or cannot be read has no commands: the check never falls back to the larger set.
+        if (window_type === undefined) return {};
+        const is_compose = window_type === COMPOSE_WINDOW_TYPE;
+        if (!(is_compose ? deps.compose_allowed ?? NO_COMMANDS : deps.allowed).has(request.command) || (await refused_outside_main_window(deps.registry, deps.api, request.command, window_id))) return {};
+        // A page of the add-on is a tab with no message, and a compose window shows none. The call may refuse for a page, and the key then runs with no messages.
+        const message_ids = is_compose ? [] : (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch((error: unknown) => (console.error("desertbird body request:", error), []))).map((message) => message.id);
         await deps.run({ command: request.command, args: request.args, count: request.count, windowId: window_id, messageIds: message_ids });
         return {};
     }

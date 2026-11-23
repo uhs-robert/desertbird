@@ -1,5 +1,5 @@
-import { edit_external, forward, new_message, reply } from "../handlers/compose.ts";
-import type { EditExternalApi } from "../handlers/compose.ts";
+import { edit_external, forward, new_message, reply, save_draft } from "../handlers/compose.ts";
+import type { EditExternalApi, SaveDraftApi } from "../handlers/compose.ts";
 import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
 
@@ -19,12 +19,28 @@ export const compose: CommandGroup = {
         "compose.edit_external": {
             bridge: false,
             runs_in: "background",
+            needs: ["compose"],
             name: "edit",
             label: "Edit in external editor",
             intent: "Edit the message in the external editor.",
             run: scoped<EditExternalApi>(edit_external),
         },
+        // A save keeps the window open and leaves the text where it is. It has no close or send beside it, so no key of a compose window can discard a draft.
+        "compose.save": {
+            bridge: false,
+            runs_in: "background",
+            needs: ["compose"],
+            name: "save",
+            label: "Save draft",
+            intent: "Save the message of the compose window as a draft. The window stays open.",
+            run: scoped<SaveDraftApi>(save_draft),
+        },
     }),
+    compose_keys: {
+        e: { id: "compose.edit_external", label: "Edit in external editor" },
+        s: { id: "compose.save", label: "Save draft" },
+        "?": { id: "help.open", label: "Open help" },
+    },
     normal_keys: {
         r: { id: "msg.reply", args: { to: "sender" } },
         R: { id: "msg.reply", args: { to: "all" } },

@@ -81,27 +81,84 @@ async function run_compose_editor(instance, ctx) {
 
   // Normal mode. Each entry into the body is a fresh reply, so the fake editor's text shows only when `e` ran it.
   const reply_again = () => reply_to_inbox_s2(instance, ctx);
+  const body_grows = (before) => compose_opens((tab) => (tab.body ?? "").length > before.length);
   state = await reply_again();
   const plain_body = body_of(state);
-  state = await key_and_state(instance, ["e"], compose_opens((tab) => (tab.body ?? "").length > plain_body.length));
+  state = await key_and_state(instance, ["e"], body_grows(plain_body));
   check(app, kind, "e in insert mode types an e and runs no editor", body_of(state) === `e${plain_body}` || body_of(state).length === plain_body.length + 1, `body ${JSON.stringify(body_of(state))}`);
-  await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
-  report.shots.push({ app, kind, path: await instance.shot(`${app}_normal_label`), name: "normal_label", line: "compose window after Ctrl+O, label reads NORMAL" });
+  await instance.press(["-k", "Escape"]);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_normal_label`), name: "normal_label", line: "compose window after Escape, label reads NORMAL" });
   const body_before_x = body_of(state);
-  state = await key_and_state(instance, ["x"], compose_opens((tab) => (tab.body ?? "").length > body_before_x.length));
-  check(app, kind, "Ctrl+O then a key other than e passes that key to the body", body_of(state).includes("x") && !body_of(state).includes(EDITED_TEXT), `body ${JSON.stringify(body_of(state))}`);
-  report.shots.push({ app, kind, path: await instance.shot(`${app}_insert_label`), name: "insert_label", line: "compose window back in insert mode, label reads INSERT" });
-  await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
-  state = await key_and_state(instance, ["e"], editor_wrote_text);
-  check(app, kind, "Ctrl+O then e runs the editor and writes its text into the body", body_of(state).trim() === EDITED_TEXT, `body ${JSON.stringify(body_of(state))}`);
-  await close_compose(instance);
-  state = await reply_again();
+  await instance.press(["x"]);
+  await instance.press(["-k", "Return"]);
+  await sleep(800);
+  state = await instance.ask("state");
+  check(app, kind, "a letter and Enter typed in normal mode leave the body unchanged", body_of(state) === body_before_x, `body ${JSON.stringify(body_of(state))}`);
+  await instance.press(["q"]);
+  await sleep(800);
+  state = await instance.ask("state");
+  check(app, kind, "q in normal mode closes nothing", state.windows.some((window) => window.type === "messageCompose"));
+  const body_before_tab = body_of(state);
+  await instance.press(["-k", "Tab"]);
+  await instance.press(["-M", "shift", "-k", "Tab", "-m", "shift"]);
+  await sleep(800);
+  check(app, kind, "Tab and Shift+Tab in normal mode leave the body unchanged", body_of(await instance.ask("state")) === body_before_tab, `body ${JSON.stringify(body_of(await instance.ask("state")))}`);
+  await instance.press(["i"]);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_insert_label`), name: "insert_label", line: "compose window back in insert mode after i, label reads INSERT" });
+  state = await key_and_state(instance, ["x"], body_grows(body_before_x));
+  check(app, kind, "i returns to typing and the next letter types", body_of(state).includes("x"), `body ${JSON.stringify(body_of(state))}`);
   await instance.press(["-k", "Escape"]);
   state = await key_and_state(instance, ["e"], editor_wrote_text);
   check(app, kind, "Escape then e runs the editor and keeps the compose window open", body_of(state).trim() === EDITED_TEXT, `body ${JSON.stringify(body_of(state))}`);
+  await close_compose(instance);
+
+  // A quoted reply opens in insert mode, so the first typed letter reaches it.
+  state = await reply_again();
+  const fresh_body = body_of(state);
+  state = await key_and_state(instance, ["s"], body_grows(fresh_body));
+  check(app, kind, "a window that opens on a reply with quoted text types in insert mode", body_of(state).includes("s"), `body ${JSON.stringify(body_of(state))}`);
+  await close_compose(instance);
+
+  // s saves a draft and leaves the window open and in normal mode.
+  state = await reply_again();
+  const drafts_in = (state) => Object.entries(state.folders ?? {}).filter(([path]) => /Draft/i.test(path)).reduce((count, [, list]) => count + (Array.isArray(list) ? list.length : 0), 0);
+  const drafts_before = drafts_in(state);
+  await instance.press(["-k", "Escape"]);
+  state = await key_and_state(instance, ["s"], { what: "a saved draft", until: (state) => drafts_in(state) > drafts_before, timeout_ms: 15000 });
+  check(app, kind, "s in normal mode saves a draft and keeps the window open", drafts_in(state) === drafts_before + 1 && state.windows.some((window) => window.type === "messageCompose"), `drafts ${drafts_before} -> ${drafts_in(state)}`);
+  // A draft save moves the focus in Thunderbird. The mode does not depend on focus, so a letter typed after it is still cancelled.
+  await sleep(2500);
+  const body_after_save = body_of(await instance.ask("state"));
+  await instance.press(["x"]);
+  await sleep(800);
+  check(app, kind, "after the draft save the window stays in normal mode and a letter does not type", body_of(await instance.ask("state")) === body_after_save, `body ${JSON.stringify(body_of(await instance.ask("state")))}`);
+  // Ctrl+S is Thunderbird's own save and moves the focus the same way, so normal mode must hold through it too.
+  await instance.press(["-M", "ctrl", "s", "-m", "ctrl"]);
+  await sleep(2500);
+  await instance.press(["x"]);
+  await sleep(800);
+  check(app, kind, "after Ctrl+S in normal mode a letter still does not type", body_of(await instance.ask("state")) === body_after_save, `body ${JSON.stringify(body_of(await instance.ask("state")))}`);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_after_save`), name: "after_save", line: "compose window after s and a typed letter, label still reads NORMAL" });
+
+  // The zoom keys work from normal mode: the body text grows, so the pixels of its region change.
+  const zoom_region = "20,150 400x200";
+  const before_zoom = await ctx.hud_pixels(instance, `${app}_compose_zoom_before`, zoom_region);
+  await instance.press(["z"]);
+  await instance.press(["m"]);
+  const after_zoom = await ctx.wait_pixels(instance, "the compose body to zoom", `${app}_compose_zoom_after`, zoom_region, (hash) => hash !== before_zoom, { timeout_ms: 5000 });
+  check(app, kind, "z m in normal mode zooms the compose body", after_zoom !== before_zoom);
+  report.shots.push({ app, kind, path: await instance.shot(`${app}_zoomed`), name: "zoomed", line: "compose window after z m" });
+  await instance.press(["z"]);
+  await instance.press(["="]);
+  await close_compose(instance);
+
+  // The draft that holds the editor's text must hold no label either.
+  state = await reply_again();
+  await instance.press(["-k", "Escape"]);
+  state = await key_and_state(instance, ["e"], editor_wrote_text);
 
   // The label must not reach the body or a saved draft.
-  await instance.press(["-M", "ctrl", "o", "-m", "ctrl"]);
+  await instance.press(["-k", "Escape"]);
   const draft = await instance.ask("save_draft_raw", 30000);
   state = await instance.ask("state");
   const label_pattern = /-- (INSERT|NORMAL) --/;
@@ -109,6 +166,14 @@ async function run_compose_editor(instance, ctx) {
   await sleep(500);
   report.shots.push({ app, kind, path: await instance.shot(`${app}_unfocused_label`), name: "unfocused_label", line: "compose window with focus out of the body, no label" });
   check(app, kind, "the mode label is in neither the body nor the saved draft", !label_pattern.test(compose_tab(state)?.html ?? "") && !label_pattern.test(body_of(state)) && !label_pattern.test(draft.raw ?? "") && (draft.raw ?? "").includes(EDITED_TEXT), `draft ${JSON.stringify((draft.raw ?? "").slice(-300))}`);
+  await close_compose(instance);
+  // ? opens the help page in a tab of the main window, since the compose window has no tab bar.
+  state = await reply_again();
+  await instance.press(["-k", "Escape"]);
+  const main_tabs = (state) => state.windows.find((window) => window.type === "normal")?.tabs.length ?? 0;
+  const tabs_before = main_tabs(await instance.ask("state"));
+  state = await key_and_state(instance, ["?"], { what: "the help tab in the main window", until: (state) => main_tabs(state) > tabs_before, timeout_ms: 8000 });
+  check(app, kind, "? in normal mode opens the help page in the main window", main_tabs(state) > tabs_before, `tabs ${tabs_before} -> ${main_tabs(state)}`);
   await close_compose(instance);
   state = await instance.ask("state");
   check(app, kind, "the app survived the external editor", instance.exited() === null && !state.windows.some((window) => window.type === "messageCompose"));
