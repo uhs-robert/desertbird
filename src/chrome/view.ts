@@ -79,7 +79,7 @@ export interface ListPort extends ViewPort {
     select_rows(rows: number[], current: number): void;
     /** Adds the row to the selection or takes it out, and makes it the current row. A collapsed thread goes in or out whole. */
     toggle(index: number): void;
-    /** Moves the current row and leaves the selection as it is. */
+    /** Moves the current row and leaves the selection as it is. It also focuses the list body: Thunderbird draws its current row mark and its selection colors only while the body has the focus. */
     move_cursor(index: number): void;
     /** The view and the message keys at the rows. Equal marks mean the list shows the same messages there, so a row inserted or removed above one of them shifts it. */
     marks(rows: number[]): unknown[];
@@ -119,7 +119,7 @@ export function create_list_port(about_3pane: About3PaneLike, message_id_of: Mes
             tree.currentIndex = current;
         },
         toggle: (index) => tree.toggleSelectionAtIndex?.(index),
-        move_cursor: (index) => void (tree.currentIndex = index),
+        move_cursor: (index) => void ((tree.currentIndex = index), tree.table?.body?.focus?.()),
         selected_message_ids() {
             const headers = about_3pane.gDBView?.getSelectedMsgHdrs() ?? [];
             return headers.map(message_id_of).filter((id) => id !== null);

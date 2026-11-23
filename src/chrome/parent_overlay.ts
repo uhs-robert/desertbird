@@ -4,6 +4,7 @@
 import { HUD_BOX_ID, HUD_BROWSER_ID, MODE_LABEL_ID, OVERLAY_BOX_ID, OVERLAY_BROWSER_ID, OVERLAY_LOADING_ID } from "./overlay_id.ts";
 import { capture_focus, in_text_field } from "./focus.ts";
 import { hook_page_focus } from "./page_focus.ts";
+import { register_cursor_sheet } from "./cursor_sheet.ts";
 import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
 import { claim_id_when_page_ready, create_overlay_host, on_escape_key } from "./overlay.ts";
@@ -46,6 +47,7 @@ const closed_listeners = new Set<(closed: OverlayClosed) => void>();
 let host: OverlayHost | null = null;
 let mode_label: ModeLabel | null = null;
 let stop_page_focus: (() => void) | null = null;
+let remove_cursor_sheet: (() => void) | null = null;
 
 interface OverlayElement {
     id: string;
@@ -223,6 +225,7 @@ function ensure_host(context: ExtensionContext & { extension: OverlayExtension }
 export function get_overlay_api(context: ExtensionContext & { extension: OverlayExtension }) {
     // getAPI is lazy: this hook starts only because the background touches `messenger.overlay` at load.
     stop_page_focus ??= hook_page_focus();
+    remove_cursor_sheet ??= register_cursor_sheet();
     return {
         overlay: {
             mount: guard("overlay.mount", (args: OverlayMountArgs): void => ensure_host(context).mount(args)),
@@ -250,5 +253,7 @@ export function shutdown(): void {
     mode_label = null;
     stop_page_focus?.();
     stop_page_focus = null;
+    remove_cursor_sheet?.();
+    remove_cursor_sheet = null;
     closed_listeners.clear();
 }

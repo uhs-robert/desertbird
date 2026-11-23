@@ -3,13 +3,15 @@
 export interface PlatformStub {
     window_listeners: Map<string, { chromeURLs: string[]; onLoadWindow(window: unknown): void; onUnloadWindow(window: unknown): void }>;
     register_calls: number;
+    /** The style sheets registered through the style sheet service, by URI spec. */
+    sheets: string[];
     restore(): void;
 }
 
 export class StubExtensionError extends Error {}
 
 export function stub_platform(main_windows: unknown[] = []): PlatformStub {
-    const stub: PlatformStub = { window_listeners: new Map(), register_calls: 0, restore: () => {} };
+    const stub: PlatformStub = { window_listeners: new Map(), register_calls: 0, sheets: [], restore: () => {} };
     const modules: Record<string, Record<string, unknown>> = {
         "resource://gre/modules/ExtensionCommon.sys.mjs": {
             ExtensionCommon: {
@@ -39,14 +41,17 @@ export function stub_platform(main_windows: unknown[] = []): PlatformStub {
     // The pages API loads the page actor's parent from a `resource://` root of its own. Here it is a module that does nothing.
     const page_actor = { start() {}, stop() {}, set_keys() {}, set_insert() {}, takes_keys: () => false, scroll: () => false, blur: () => false };
     const globals = globalThis as Record<string, unknown>;
-    const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"], Ci: globals["Ci"] };
+    const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"], Ci: globals["Ci"], Cc: globals["Cc"] };
+    const sheet_service = { USER_SHEET: 1, loadAndRegisterSheet: (uri: { spec: string }) => void stub.sheets.push(uri.spec), unregisterSheet: (uri: { spec: string }) => void stub.sheets.splice(stub.sheets.indexOf(uri.spec), 1) };
+    globals["Cc"] = { "@mozilla.org/content/style-sheet-service;1": { getService: () => sheet_service } };
     globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] ?? (url.startsWith("resource://desertbird-actor-") ? page_actor : undefined) };
-    globals["Services"] = { wm: { getEnumerator: () => main_windows }, io: { getProtocolHandler: () => ({ QueryInterface: () => ({ setSubstitution() {} }) }) } };
+    globals["Services"] = { wm: { getEnumerator: () => main_windows }, io: { newURI: (spec: string) => ({ spec }), getProtocolHandler: () => ({ QueryInterface: () => ({ setSubstitution() {} }) }) } };
     globals["Ci"] = { nsIResProtocolHandler: {}, nsMsgNavigationType: { nextMessage: 2, previousMessage: 3, nextUnreadMessage: 7, previousUnreadMessage: 8 } };
     stub.restore = () => {
         globals["ChromeUtils"] = before.ChromeUtils;
         globals["Services"] = before.Services;
         globals["Ci"] = before.Ci;
+        globals["Cc"] = before.Cc;
     };
     return stub;
 }
