@@ -6,10 +6,10 @@ import { DEFAULT_KEYMAP, GROUPS, registry } from "../src/background/commands/ind
 import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 
 /** One row per group file: the side it runs on and the command ids it holds. Add a row with each new group. */
-const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[]; background_ids?: string[] }> = {
+const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[]; background_ids?: string[]; chrome_ids?: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle", "select.toggle", "pane.resize_mode"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move", "msg.copy"] },
-    compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new", "compose.edit_external", "compose.save"] },
+    compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new", "compose.edit_external", "compose.save", "compose.focus", "compose.close", "compose.send"], chrome_ids: ["compose.focus", "compose.close", "compose.send"] },
     view: { runs_in: "background", ids: ["filter.set", "filter.by", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
     snooze: { runs_in: "background", ids: ["msg.snooze"] },
@@ -46,7 +46,7 @@ for (const [name, row] of Object.entries(GROUP_TABLE)) {
         assert.deepEqual(Object.keys(GROUPS[name]!.commands).sort(), [...row.ids].sort());
         for (const id of row.ids) {
             const command = registry.get(id);
-            const side = row.background_ids?.includes(id) ? "background" : row.runs_in;
+            const side = row.background_ids?.includes(id) ? "background" : row.chrome_ids?.includes(id) ? "chrome" : row.runs_in;
             assert.equal(command?.runs_in, side, id);
             assert.equal(typeof command?.run, side === "background" ? "function" : "undefined", id);
             assert.equal(typeof command?.bridge, "boolean", id);

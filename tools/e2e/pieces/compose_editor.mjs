@@ -9,13 +9,13 @@ export const areas = ["compose", "mode_label"];
 // A 1x1 PNG for the draft image measurement.
 const PIXEL_PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-// The mode label is drawn by the compose script, so it shows once the script listens. Ctrl+E before that goes to the editor itself and is lost. The label sits at the bottom right of the compose window, and a stretch of body of the same size shows what the region draws with no label.
-const COMPOSE_LABEL_REGION = "970,672 96x22";
-const COMPOSE_BLANK_REGION = "700,672 96x22";
+// The chrome runtime draws the mode label in the status bar, so it shows once the runtime hooks the window. Ctrl+E before that goes to the editor itself and is lost. A stretch of the bar of the same size shows what the region draws with no label.
+const COMPOSE_LABEL_REGION = "980,696 90x22";
+const COMPOSE_BLANK_REGION = "600,696 90x22";
 
 async function wait_compose_script(instance, { hud_pixels, wait_pixels }) {
   const blank = await hud_pixels(instance, `${instance.app}_compose_blank`, COMPOSE_BLANK_REGION);
-  return wait_pixels(instance, "the compose script to draw its mode label", `${instance.app}_compose_label`, COMPOSE_LABEL_REGION, (hash) => hash !== blank, { timeout_ms: 10000 });
+  return wait_pixels(instance, "the compose window to draw its mode label", `${instance.app}_compose_label`, COMPOSE_LABEL_REGION, (hash) => hash !== blank, { timeout_ms: 10000 });
 }
 
 async function run_compose_editor_html(instance, ctx) {
@@ -94,10 +94,6 @@ async function run_compose_editor(instance, ctx) {
   await sleep(800);
   state = await instance.ask("state");
   check(app, kind, "a letter and Enter typed in normal mode leave the body unchanged", body_of(state) === body_before_x, `body ${JSON.stringify(body_of(state))}`);
-  await instance.press(["q"]);
-  await sleep(800);
-  state = await instance.ask("state");
-  check(app, kind, "q in normal mode closes nothing", state.windows.some((window) => window.type === "messageCompose"));
   const body_before_tab = body_of(state);
   await instance.press(["-k", "Tab"]);
   await instance.press(["-M", "shift", "-k", "Tab", "-m", "shift"]);
@@ -200,9 +196,153 @@ async function note_draft_image(instance, ctx) {
   await instance.ask("close_compose");
 }
 
+// The compose window hook: the keys of the chrome runtime in the body, To, Cc, Bcc and Subject. The mode label sits in the status bar, so its pixels (the region below) change between INSERT and NORMAL.
+const STATUS_LABEL_REGION = COMPOSE_LABEL_REGION;
+const FIND_REGION = "210,630 860x66";
+// The middle of the window, where the save prompt of `q` draws.
+const PROMPT_REGION = "340,300 600x140";
+
+async function run_compose_window(instance, ctx) {
+  const { report, check, note, key_and_state, close_compose, hud_pixels, wait_pixels } = ctx;
+  const app = instance.app;
+  const kind = instance.kind;
+  // The compose window hook is measured and tested on Betterbird alone.
+  if (app !== "betterbird") {
+    note(app, kind, "compose window keys not run", "measured on Betterbird only");
+    return;
+  }
+  const body_of = (state) => compose_tab(state)?.body ?? "";
+  const field_of = (name) => (state) => compose_tab(state)?.[name];
+  const compose_open = (state) => state.windows.some((window) => window.type === "messageCompose");
+  const type_text = async (text) => {
+    for (const character of text) await instance.press([character]);
+  };
+  const settle_ms = 2500;
+  const shot = async (name, line) => report.shots.push({ app, kind, path: await instance.shot(`${app}_${kind}_${name}`), name: `${kind}_${name}`, line });
+  const jump = async (letter) => {
+    await instance.press(["g"]);
+    await instance.press([letter]);
+    await sleep(700);
+  };
+  const waits_for = (what, until) => ({ what, until, timeout_ms: 8000 });
+  await instance.ask("make_contacts");
+
+  let state = await reply_to_inbox_s2(instance, ctx, { focus_list: true });
+  await sleep(settle_ms);
+  await shot("opened", "compose window right after the reply opened");
+  const insert_pixels = await hud_pixels(instance, `${app}_status_insert`, STATUS_LABEL_REGION);
+  await instance.press(["-k", "Escape"]);
+  const normal_pixels = await wait_pixels(instance, "the status bar label to read NORMAL", `${app}_status_normal`, STATUS_LABEL_REGION, (hash) => hash !== insert_pixels, { timeout_ms: 5000 });
+  check(app, kind, "Escape in the body draws a NORMAL label in the status bar", normal_pixels !== insert_pixels);
+  await shot("normal_label", "status bar label reads NORMAL after Escape");
+  await instance.press(["i"]);
+  const back_pixels = await wait_pixels(instance, "the status bar label to read INSERT", `${app}_status_back`, STATUS_LABEL_REGION, (hash) => hash === insert_pixels, { timeout_ms: 5000 });
+  check(app, kind, "i brings the INSERT label back", back_pixels === insert_pixels);
+  await instance.press(["-k", "Escape"]);
+
+  // Jumps. Each one leaves normal mode for insert, so the field takes typing at once. Escape then makes normal mode in that field.
+  await jump("s");
+  state = await key_and_state(instance, ["Z"], waits_for("Z in the Subject", (state) => (field_of("subject")(state) ?? "").includes("Z")));
+  check(app, kind, "gs jumps to the Subject in insert mode, so the first letter types", (field_of("subject")(state) ?? "").includes("Z"), `subject ${JSON.stringify(field_of("subject")(state))}`);
+  const jump_label = await hud_pixels(instance, `${app}_status_after_jump`, STATUS_LABEL_REGION);
+  check(app, kind, "the label reads INSERT after a jump", jump_label === insert_pixels);
+  await instance.press(["-k", "Escape"]);
+  const subject_before = field_of("subject")(await instance.ask("state"));
+  await type_text("xj");
+  await sleep(500);
+  check(app, kind, "letters in normal mode leave the Subject unchanged", field_of("subject")(await instance.ask("state")) === subject_before, `subject ${JSON.stringify(field_of("subject")(await instance.ask("state")))}`);
+  await instance.press(["i"]);
+  state = await key_and_state(instance, ["W"], waits_for("W in the Subject", (state) => (field_of("subject")(state) ?? "").includes("W")));
+  check(app, kind, "i in the Subject returns to typing", (field_of("subject")(state) ?? "").includes("W") && !(field_of("subject")(state) ?? "").includes("xj"), `subject ${JSON.stringify(field_of("subject")(state))}`);
+  await instance.press(["-k", "Escape"]);
+
+  await jump("t");
+  await type_text("zed@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in To", (state) => (field_of("to")(state) ?? []).join(" ").includes("zed@fixture.invalid")));
+  await type_text("xj");
+  await instance.press(["i"]);
+  await type_text("yan@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a second pill in To", (state) => (field_of("to")(state) ?? []).join(" ").includes("yan@fixture.invalid")));
+  const to_list = (field_of("to")(state) ?? []).join(" ");
+  check(app, kind, "gt types an address in To at once, and letters in normal mode type nothing there", to_list.includes("zed@fixture.invalid") && to_list.includes("yan@fixture.invalid") && !to_list.includes("xj"), `to ${JSON.stringify(to_list)}`);
+  await shot("to_pill", "To holds the typed addresses as pills");
+
+  await jump("c");
+  await type_text("cee@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in Cc", (state) => (field_of("cc")(state) ?? []).length > 0));
+  check(app, kind, "gc reveals Cc and types there at once", (field_of("cc")(state) ?? []).join(" ").includes("cee@fixture.invalid"), `cc ${JSON.stringify(field_of("cc")(state))}`);
+  await jump("b");
+  await type_text("bee@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in Bcc", (state) => (field_of("bcc")(state) ?? []).length > 0));
+  check(app, kind, "gb reveals Bcc and types there at once", (field_of("bcc")(state) ?? []).join(" ").includes("bee@fixture.invalid"), `bcc ${JSON.stringify(field_of("bcc")(state))}`);
+  await shot("cc_bcc", "Cc and Bcc rows revealed with a pill each");
+
+  await jump("m");
+  state = await key_and_state(instance, ["Y"], waits_for("Y in the body", (state) => body_of(state).includes("Y")));
+  check(app, kind, "gm focuses the body in insert mode, so the first letter types", body_of(state).includes("Y"), `body ${JSON.stringify(body_of(state))}`);
+  await instance.press(["-k", "Escape"]);
+  const body_before = body_of(await instance.ask("state"));
+  await type_text("xj");
+  await sleep(500);
+  check(app, kind, "letters in normal mode leave the body unchanged", body_of(await instance.ask("state")) === body_before);
+
+  // The find bar is no header field: in normal mode its field takes typing, and Escape closes it and keeps the mode.
+  const find_before = await hud_pixels(instance, `${app}_find_before`, FIND_REGION);
+  await instance.press(["-M", "ctrl", "f", "-m", "ctrl"]);
+  await sleep(1000);
+  const find_open = await hud_pixels(instance, `${app}_find_open`, FIND_REGION);
+  await type_text("abc");
+  await sleep(500);
+  await shot("find_bar", "the find bar open with abc typed in normal mode");
+  const find_typed = await hud_pixels(instance, `${app}_find_typed`, FIND_REGION);
+  check(app, kind, "Ctrl+F in normal mode opens the find bar and its field takes typing", find_open !== find_before && find_typed !== find_open);
+  await instance.press(["-k", "Escape"]);
+  const find_closed = await wait_pixels(instance, "the find bar to close on Escape", `${app}_find_closed`, FIND_REGION, (hash) => hash === find_before, { timeout_ms: 5000 });
+  check(app, kind, "Escape in the find bar closes it", find_closed === find_before);
+
+  // The address popup: Escape closes it first and keeps insert mode, the next Escape enters normal mode.
+  await jump("t");
+  await type_text("ali");
+  await sleep(2000);
+  await shot("popup_open", "the address popup open under To");
+  await instance.press(["-k", "Escape"]);
+  await sleep(700);
+  await shot("popup_closed", "the address popup closed by the first Escape");
+  await type_text("x@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("the pill after the popup Escape", (state) => (field_of("to")(state) ?? []).join(" ").includes("alix@fixture.invalid")));
+  check(app, kind, "Escape with the popup open closes it and keeps insert mode (the next letters still type)", (field_of("to")(state) ?? []).join(" ").includes("alix@fixture.invalid"), `to ${JSON.stringify(field_of("to")(state))}`);
+
+  // q with a changed draft shows the save prompt, and Cancel keeps the window and the text.
+  await jump("m");
+  state = await key_and_state(instance, ["K"], waits_for("K in the body", (state) => body_of(state).includes("K")));
+  await instance.press(["-k", "Escape"]);
+  const prompt_before = await hud_pixels(instance, `${app}_prompt_before`, PROMPT_REGION);
+  await instance.press(["q"]);
+  // The prompt is a window of its own that the window list does not show, so its pixels in the middle of the screen stand for it.
+  const prompt_shown = await wait_pixels(instance, "the save prompt to draw", `${app}_prompt_shown`, PROMPT_REGION, (hash) => hash !== prompt_before, { timeout_ms: 8000 });
+  await shot("save_prompt", "the save prompt after q on a changed draft");
+  state = await instance.ask("state");
+  check(app, kind, "q on a changed draft shows the save prompt and keeps the window", prompt_shown !== prompt_before && compose_open(state));
+  await instance.press(["-k", "Escape"]);
+  const prompt_gone = await wait_pixels(instance, "the save prompt to go", `${app}_prompt_gone`, PROMPT_REGION, (hash) => hash === prompt_before, { timeout_ms: 8000 });
+  state = await instance.ask("state");
+  check(app, kind, "Cancel in the save prompt closes it and keeps the window and the text", prompt_gone === prompt_before && compose_open(state) && body_of(state).includes("K"), `body ${JSON.stringify(body_of(state))}`);
+  await close_compose(instance);
+
+  // q on a draft with no change closes the window with no prompt.
+  state = await reply_to_inbox_s2(instance, ctx);
+  await sleep(settle_ms);
+  await instance.press(["-k", "Escape"]);
+  state = await key_and_state(instance, ["q"], { what: "the compose window to close", until: (state) => !compose_open(state), timeout_ms: 10000 });
+  check(app, kind, "q on a draft with no change closes the window", !compose_open(state));
+  state = await instance.ask("state");
+  check(app, kind, "the app survived the compose window keys", instance.exited() === null && !compose_open(state));
+}
+
 const with_editor = { seeds: { desertbird_settings: { external_editor: true } }, prepare: (work_dir, kind) => install_editor_host(work_dir, kind) };
 
 export const pieces = [
   { kind: "compose_editor", section: "main", ...with_editor, run: (instance, ctx) => run_compose_editor(instance, ctx) },
+  { kind: "compose_editor", section: "window", run: (instance, ctx) => run_compose_window(instance, ctx) },
   ...Object.keys(COMPOSE_EDITOR_HTML_KINDS).map((kind) => ({ kind, section: "main", ...with_editor, run: (instance, ctx) => run_compose_editor_html(instance, ctx) })),
 ];

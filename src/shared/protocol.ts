@@ -190,6 +190,8 @@ export const EXPERIMENT_VERBS = {
     app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"], events: [] },
     // Loaded on first use, like `folderpane`.
     zoom: { functions: ["get", "set"], events: [] },
+    // Loaded at startup by the first install, since it takes the keys of the compose windows.
+    composewin: { functions: ["install"], events: ["onInvocation"] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -226,6 +228,22 @@ export interface PagesInstallArgs {
 /** Call and event shapes as the background sees them on `browser.pages`. Its events carry the same payloads as `keys.onInvocation`. */
 export interface PagesApi {
     install(args: PagesInstallArgs): Promise<void>;
+    onInvocation: KeysApi["onInvocation"];
+}
+
+/** Installs the keys of the compose windows: the tree of normal mode, and whether the send key may send. */
+export interface ComposewinInstallArgs {
+    composeTree: KeymapTree;
+    /** The `compose_send` setting. While it is false the send key runs nothing. */
+    allowSend: boolean;
+    /** The look of the mode label in the status bar: the `mode_indicator_style` setting and the colors of the `theme` setting, as for the label of the main window. */
+    labelStyle: ModeLabelStyle;
+    labelColors: ModeLabelColors;
+}
+
+/** Call and event shapes as the background sees them on `browser.composewin`. Its event carries only invocations: a compose window has no hud, so no pending keys and no mode go out. */
+export interface ComposewinApi {
+    install(args: ComposewinInstallArgs): Promise<void>;
     onInvocation: KeysApi["onInvocation"];
 }
 

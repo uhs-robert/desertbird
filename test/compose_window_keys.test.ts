@@ -15,17 +15,19 @@ function bound_ids(kind: Parameters<typeof default_keymap_of>[0], user = {}): st
     return Object.values(keymap_of(kind, user).normal ?? {}).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []).map((invocation) => invocation.id));
 }
 
-test("the default compose keys are e, s, ? and the zoom keys", () => {
+test("the default compose keys are e, s, ?, the field jumps, q, g S and the zoom keys", () => {
     const keys = default_keymap_of("compose").normal ?? {};
-    const ids = (key: string) => (Array.isArray(keys[key]) ? [] : [(keys[key] as { id: string } | null)?.id]);
-    assert.deepEqual([ids("e"), ids("s"), ids("?")], [["compose.edit_external"], ["compose.save"], ["help.open"]]);
-    for (const key of ["zi", "zo", "z+", "z-", "zm", "zr", "z=", "zI", "zO"]) assert.match(ids(key)[0] ?? "", /^zoom\./, key);
-    assert.deepEqual([...new Set(bound_ids("compose"))].sort(), ["compose.edit_external", "compose.save", "help.open", "zoom.by", "zoom.set"]);
+    const binding = (key: string) => keys[key] as { id: string; args?: unknown } | null | undefined;
+    assert.deepEqual([binding("e")?.id, binding("s")?.id, binding("?")?.id, binding("q")?.id, binding("gS")?.id], ["compose.edit_external", "compose.save", "help.open", "compose.close", "compose.send"]);
+    for (const [key, field] of [["gt", "to"], ["gc", "cc"], ["gb", "bcc"], ["gs", "subject"], ["gm", "body"]] as const) assert.deepEqual([binding(key)?.id, binding(key)?.args], ["compose.focus", { field }], key);
+    for (const key of ["zi", "zo", "z+", "z-", "zm", "zr", "z=", "zI", "zO"]) assert.match(binding(key)?.id ?? "", /^zoom\./, key);
+    assert.deepEqual([...new Set(bound_ids("compose"))].sort(), ["compose.close", "compose.edit_external", "compose.focus", "compose.save", "compose.send", "help.open", "zoom.by", "zoom.set"]);
 });
 
-test("no default key of a compose window closes it, sends, deletes or opens the command line", () => {
+test("no default key of a compose window removes it, deletes or opens the command line, and its close and send are Thunderbird's own commands", () => {
     for (const id of bound_ids("compose")) assert.ok(COMPOSE_COMMANDS.has(id), id);
     for (const id of ["tab.close", "msg.delete", "msg.archive", "cmdline.open", "app.open_page", "msg.new", "options.open"]) assert.equal(bound_ids("compose").includes(id), false, id);
+    for (const id of ["compose.close", "compose.send", "compose.focus"]) assert.equal(registry.get(id)?.runs_in, "chrome", id);
 });
 
 test("a user key for a command outside the compose set is dropped from the compose tree, one that is inside stays", () => {
@@ -53,15 +55,14 @@ function compose_requests(window_type: string) {
         windows: { get: async () => ({ type: window_type }) },
         notifications: { create: async () => "n1" },
     };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), compose_allowed: COMPOSE_COMMANDS, run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     return { handle, ran, calls };
 }
 
-test("a compose window runs only the compose commands, with no messages, and never a close", async () => {
+test("a compose window sends no body.invoke that runs: every command is refused, with no lookup of messages", async () => {
     const { handle, ran, calls } = compose_requests("messageCompose");
-    for (const command of ["compose.save", "compose.edit_external", "help.open", "tab.close", "msg.delete", "msg.reply", "cmdline.open", "pane.focus"]) await handle({ type: "body.invoke", command, args: command === "cmdline.open" ? { text: "" } : {}, count: 1 }, compose_sender);
-    assert.deepEqual(ran.map((invocation) => invocation.command), ["compose.save", "compose.edit_external", "help.open"]);
-    assert.deepEqual(ran.map((invocation) => [invocation.windowId, invocation.messageIds]), [[COMPOSE_WINDOW, []], [COMPOSE_WINDOW, []], [COMPOSE_WINDOW, []]]);
+    for (const command of ["compose.save", "compose.edit_external", "help.open", "tab.close", "msg.delete", "msg.reply", "pane.focus"]) await handle({ type: "body.invoke", command, args: {}, count: 1 }, compose_sender);
+    assert.deepEqual(ran, []);
     assert.deepEqual(calls, []);
 });
 
@@ -102,7 +103,7 @@ test("compose.save from the main window refuses and saves nothing, as :edit does
 test("a sender whose window cannot be read runs nothing, in neither set", async () => {
     const ran: KeysInvocation[] = [];
     const api: BodyRequestApi = { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => Promise.reject(new Error("gone")) }, notifications: { create: async () => "n1" } };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), compose_allowed: COMPOSE_COMMANDS, run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     for (const command of ["tab.close", "compose.save"]) await handle({ type: "body.invoke", command, args: {}, count: 1 }, compose_sender);
     assert.deepEqual(ran, []);
 });

@@ -55,6 +55,10 @@ const HINTS_CEILING_BYTES = 20480;
 const COMPOSE_MAX_BYTES = 4012;
 const COMPOSE_CEILING_BYTES = 8192;
 
+// `experiment/composewin.js`, the key runtime of the compose windows. See docs/design.md, "Compose window bundle".
+const COMPOSEWIN_MAX_BYTES = 10752;
+const COMPOSEWIN_CEILING_BYTES = 15360;
+
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
 const PAGES_MAX_BYTES = 27920;
 const PAGES_CEILING_BYTES = 34816;
@@ -102,6 +106,7 @@ const PARENTS = [
     { name: "app", entry: "src/chrome/parent_app.ts", max_bytes: APP_MAX_BYTES },
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
     { name: "zoom", entry: "src/chrome/parent_zoom.ts", max_bytes: ZOOM_MAX_BYTES },
+    { name: "composewin", entry: "src/chrome/parent_composewin.ts", max_bytes: COMPOSEWIN_MAX_BYTES },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,

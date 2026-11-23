@@ -50,8 +50,8 @@ export const area_rules = [
   { globs: ["src/background/handlers/{folder_collapse,folder_marks,folder_open,folder_state,special_folder,displayed_folder,jump_history}.ts", "src/background/commands/folders.ts", "src/chrome/parent_folderpane.ts", "src/experiment/folderpane.schema.json"], areas: ["folders", "panes"] },
   { globs: ["src/background/{commands,handlers}/view.ts", "src/chrome/view_verbs.ts"], areas: ["views"] },
   { globs: ["src/background/{commands,handlers}/thread*.ts"], areas: ["threads"] },
-  // The compose label is checked in the compose editor and quick reply pieces.
-  { globs: ["src/content/compose_mode_label.ts"], areas: ["mode_label", "compose", "quick_reply"] },
+  // The compose window runtime draws the compose label, which the compose editor and quick reply pieces check.
+  { globs: ["src/chrome/{compose_runtime,parent_composewin}.ts", "src/experiment/composewin.schema.json"], areas: ["mode_label", "compose", "quick_reply"] },
   { globs: ["src/chrome/{pane_resize,readable_focus}.ts"], areas: ["panes"] },
   { globs: ["src/background/commands/motion.ts"], areas: ["motions", "visual"] },
   { globs: ["src/background/{commands,handlers}/step.ts"], areas: ["motions", "views", "panes"] },

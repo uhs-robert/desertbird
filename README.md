@@ -171,7 +171,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 
 - Every compose window opens in insert mode, where all keys type. `Escape` in the body enters normal mode and `i` returns to typing. In normal mode no letter reaches the draft.
 - In normal mode, `e` edits in the external editor, `s` saves a draft and keeps the window open, `?` and `,h` open the help page, and `zi`, `zo`, `z=` and the other zoom keys zoom the body.
-- Chords such as `Ctrl+Enter` and `Ctrl+S` stay Thunderbird's. No key closes the window, because a close from the add-on would drop unsaved text without asking.
+- Chords such as `Ctrl+Enter` and `Ctrl+S` stay Thunderbird's. `q` closes the window through Thunderbird's own close command, so unsaved text gets its save prompt.
 - The mode stays when the focus leaves the body and returns, and across a draft save.
 - `Tab` and `Shift+Tab` are held back in normal mode. Chords such as `Ctrl+V` and `Ctrl+Z`, `Shift+Insert`, the Paste and Cut keys and a middle-click paste still work. A mouse paste, a drag, the context menu and an input method can still change the draft in normal mode.
 - A user binding on `i`, on `Escape` or on a chord has no effect there. The other keys are rebindable.

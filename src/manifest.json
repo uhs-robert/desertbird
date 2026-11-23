@@ -60,6 +60,14 @@
                 "script": "experiment/overlay.js"
             }
         },
+        "composewin": {
+            "schema": "experiment/composewin.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["composewin"]],
+                "script": "experiment/composewin.js"
+            }
+        },
         "pages": {
             "schema": "experiment/pages.schema.json",
             "parent": {

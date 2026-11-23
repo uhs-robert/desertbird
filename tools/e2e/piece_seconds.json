@@ -1,5 +1,6 @@
 {
   "betterbird/compose_editor/main": 23,
+  "betterbird/compose_editor/window": 42,
   "betterbird/compose_editor_html/main": 15,
   "betterbird/compose_editor_html_top/main": 14,
   "betterbird/default/cmdline": 55,
@@ -39,6 +40,7 @@
   "betterbird/web/main": 132,
   "betterbird/zoom/main": 73,
   "thunderbird/compose_editor/main": 22,
+  "thunderbird/compose_editor/window": 3,
   "thunderbird/compose_editor_html/main": 13,
   "thunderbird/compose_editor_html_top/main": 13,
   "thunderbird/default/cmdline": 57,
