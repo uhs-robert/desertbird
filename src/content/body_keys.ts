@@ -92,8 +92,8 @@ function tree_of_record(record: unknown, tree_field: TreeField): { version: numb
     return typeof tree?.version === "number" ? { version: tree.version, root: tree.root } : null;
 }
 
-/** Starts the keys of one message document. `open_pick` runs on a picked link or button. A yank sends the text to the background, which owns the clipboard. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. */
-export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch(log_error), tree_field: TreeField = "message_tree", parent_pick: (action: HintAction | undefined) => Promise<number> = async () => -1): Promise<void> {
+/** Starts the keys of one message document. `open_pick` runs on a picked link or button. A yank sends the text to the background, which owns the clipboard. The default asks the background for a trusted Enter. A page of the add-on passes a script click: it has no mail to lie about a link, and the trusted Enter is refused outside the message pane. The tree comes from storage and follows `storage.onChanged`. Until a tree is in, no key is touched and the live marker stays off. Resolves to a switch to another tree field. */
+export async function start_body_script(window: BodyWindow, storage: BodyStorage, runtime: BodyRuntime, open_pick: (element: HintElement) => void = () => void runtime.sendMessage({ type: "body.open_link" }).catch(log_error), tree_field: TreeField = "message_tree", parent_pick: (action: HintAction | undefined) => Promise<number> = async () => -1): Promise<(tree: TreeField) => void> {
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     const root_element = window.document.documentElement;
     // Read once per document: each message loads the script anew, so a theme change shows on the next message.
@@ -163,7 +163,9 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         if (result.kind_ === "match") run_leaf(result.leaf, result.count);
     }
 
+    let last_record: unknown;
     function install(record: unknown): void {
+        last_record = record;
         const tree = tree_of_record(record, tree_field);
         try {
             matcher = tree && matcher_for_tree(tree);
@@ -198,4 +200,6 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     hint_colors = (stored[HINT_STYLE_STORAGE_KEY] as string | undefined) ?? hint_colors;
     context.step_px = scroll_step_of(stored[SETTINGS_STORAGE_KEY]);
     install(stored[KEYMAP_STORAGE_KEY]);
+    // Switches the document to another tree of the same record, for a message window whose background answered late.
+    return (tree) => ((tree_field = tree), install(last_record));
 }
