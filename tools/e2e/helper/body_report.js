@@ -42,6 +42,8 @@ setTimeout(report, 1500);
 
 // Probe for the hint pick: a scripted click() on the link whose text contains the given text, as the body script would run it. The answer says whether the document moved on, so the e2e run can compare it with a real Enter.
 browser.runtime.onMessage.addListener((message) => {
+  // A fresh report on request, for a check that must read this document after a key that moves nothing it listens to (a key in the header, a zoom).
+  if (message?.kind === "report_now") return Promise.resolve(report());
   if (message?.kind !== "click_link") return undefined;
   const link = [...document.querySelectorAll("a[href]")].find((candidate) => candidate.textContent.includes(message.text));
   if (!link) return Promise.resolve({ clicked: false });

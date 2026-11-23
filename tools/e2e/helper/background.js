@@ -261,6 +261,11 @@ async function poll_forever() {
       } else if (command.name === "focus_window") {
         await browser.windows.update(command.args.windowId, { focused: true });
         await post({ seq: command.seq, focused: true });
+      } else if (command.name === "report_window") {
+        // The message document of the window sends a fresh report, so a wait can read that window and no other.
+        const [tab] = await browser.tabs.query({ windowId: command.args.windowId });
+        await browser.tabs.sendMessage(tab.id, { kind: "report_now" });
+        await post({ seq: command.seq, asked: true });
       } else if (command.name === "close_message_windows") {
         for (const window of await browser.windows.getAll({ windowTypes: ["messageDisplay"] })) await browser.windows.remove(window.id);
         await post({ seq: command.seq, closed: true });
