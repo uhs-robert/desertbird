@@ -97,8 +97,8 @@ test("a stored keymap compiled from other default bindings is rebuilt", async ()
 });
 
 test("a storage change during a pending read wins: the tree read before the change is neither kept nor installed last", async () => {
-    const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: keymap_of("message", {}), window: keymap_of("window", {}), page: keymap_of("page", {}), own: keymap_of("own", {}), typing: compile_typing_keymap({}).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
-    const record = (marker: string) => ({ record_version: 15, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, window_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, own_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, typing_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
+    const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: keymap_of("message", {}), window: keymap_of("window", {}), page: keymap_of("page", {}), own: keymap_of("own", {}), compose: keymap_of("compose", {}), typing: compile_typing_keymap({}).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
+    const record = (marker: string) => ({ record_version: 16, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, window_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, own_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, compose_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, typing_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
     const { installs, external_write, first_read } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
     await start_background();
     await first_read;
@@ -153,7 +153,7 @@ test("a record of version 14, with no window tree, is rebuilt with one, and the 
     await start_background();
     await settle();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; window_tree?: { root: unknown } };
-    assert.equal(record.record_version, 15);
+    assert.equal(record.record_version, 16);
     assert.match(JSON.stringify(record.window_tree?.root), /msg\.flag/);
     assert.doesNotMatch(JSON.stringify(record.window_tree?.root), /tab\.next|pane\.focus|cmdline\.open/);
     assert.equal(window_installs.length, 1);
@@ -177,7 +177,7 @@ test("a stored record of version 2, with no message tree, is rebuilt with one", 
     await start_background();
     await settle();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
-    assert.equal(record.record_version, 15);
+    assert.equal(record.record_version, 16);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
     assert.equal(installs.length, 1);
 });

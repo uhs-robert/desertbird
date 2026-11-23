@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 417 (Mail tab 147, Message 98, Message window 69, Own pages 50, Other tabs 49, Text fields 4)
+bound: 430 (Mail tab 147, Message 98, Message window 69, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -555,6 +555,38 @@ A message in a window of its own (message mode), in the body and in the header. 
 | Key | Command |
 | --- | --- |
 | `dd` | `msg.delete` |
+
+### Compose window
+
+The body of a message being written, in normal mode (Escape enters it, `i` returns to typing). Ctrl+E edits in either mode. A key left out is not a key there, and no key closes the window. A binding on `i`, on Escape or on a chord has no effect.
+
+#### Single keys
+
+| Key | Command |
+| --- | --- |
+| `e` | `edit` |
+| `s` | `save` |
+| `?` | `help.open` |
+
+#### DesertBird
+
+| Key | Command |
+| --- | --- |
+| `,h` | `help.open` |
+
+#### Zoom and scroll
+
+| Key | Command |
+| --- | --- |
+| `zi` | `zoom.by 0.1` |
+| `z+` | `zoom.by 0.1` |
+| `zo` | `zoom.by -0.1` |
+| `z-` | `zoom.by -0.1` |
+| `zm` | `zoom.by 0.5` |
+| `zr` | `zoom.by -0.5` |
+| `z=` | `zoom 1` |
+| `zI` | `zoom 3` |
+| `zO` | `zoom 0.3` |
 
 ### Own pages
 

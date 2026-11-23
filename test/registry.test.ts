@@ -9,7 +9,7 @@ import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"; ids: string[]; background_ids?: string[] }> = {
     motion: { runs_in: "chrome", ids: ["motion.down", "motion.up", "motion.top", "motion.bottom", "repeat.last", "visual.toggle", "pane.resize_mode"] },
     messages: { runs_in: "background", ids: ["msg.archive", "msg.delete", "msg.read", "folder.read_all", "msg.flag", "msg.junk", "msg.tag", "msg.move", "msg.copy"] },
-    compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new", "compose.edit_external"] },
+    compose: { runs_in: "background", ids: ["msg.reply", "msg.forward", "msg.new", "compose.edit_external", "compose.save"] },
     view: { runs_in: "background", ids: ["filter.set", "search.threads", "sort.set", "pane.toggle"] },
     clipboard: { runs_in: "background", ids: ["msg.yank", "msg.open"] },
     snooze: { runs_in: "background", ids: ["msg.snooze"] },

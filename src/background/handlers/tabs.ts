@@ -38,10 +38,12 @@ export interface MainWindowApi {
     };
 }
 
-/** The window a page opened by the key goes to. A message window has no tab bar, and `tabs.create` refuses its id, so the page opens in the first main window, which comes to the front. Any other window is its own. */
+const WINDOWS_WITHOUT_TABS = new Set(["messageDisplay", "messageCompose"]);
+
+/** The window a page opened by the key goes to. A message window and a compose window have no tab bar, and `tabs.create` refuses their ids, so the page opens in the first main window, which comes to the front. Any other window is its own. */
 // Not `windows.getLastFocused`: Thunderbird ignores its `windowTypes` and answers the message window itself.
 export async function main_window_of(api: MainWindowApi, window_id: number): Promise<number> {
-    if (window_id < 0 || (await api.windows.get(window_id)).type !== "messageDisplay") return window_id;
+    if (window_id < 0 || !WINDOWS_WITHOUT_TABS.has((await api.windows.get(window_id)).type ?? "")) return window_id;
     const main_id = (await refused_as(api.windows.getAll({ windowTypes: ["normal"] }), []))[0]?.id;
     if (main_id === undefined) throw new RuntimeRefusal("No main window is open to show the page in.");
     await api.windows.update(main_id, { focused: true });

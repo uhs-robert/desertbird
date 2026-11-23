@@ -10,16 +10,18 @@ type ZoomBrowser = object;
 
 interface ZoomWindow extends MainWindow {
     getBrowser?(): ZoomBrowser | null;
+    /** The compose window has no `getBrowser`; its body editor is the browser Thunderbird zooms there. */
+    GetCurrentEditorElement?(): ZoomBrowser | null;
     ZoomManager: { getZoomForBrowser(browser: ZoomBrowser): number; setZoomForBrowser(browser: ZoomBrowser, level: number): void };
 }
 
-const WINDOW_TYPES = ["mail:3pane", "mail:messageWindow"];
+const WINDOW_TYPES = ["mail:3pane", "mail:messageWindow", "msgcompose"];
 
 export function get_zoom_api(context: ExtensionContext) {
     function zoomable(window_id: number): { window: ZoomWindow; browser: ZoomBrowser } | null {
         const window = WINDOW_TYPES.flatMap(open_windows).find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === window_id) as ZoomWindow | undefined;
-        if (!window) throw new Error("no main or message window has that id");
-        const browser = window.getBrowser?.();
+        if (!window) throw new Error("no main, message or compose window has that id");
+        const browser = window.getBrowser?.() ?? window.GetCurrentEditorElement?.();
         return browser ? { window, browser } : null;
     }
     return {

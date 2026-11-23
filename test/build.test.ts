@@ -153,10 +153,10 @@ test("the own page script stays within its size guard", () => {
     assert.ok(size <= PAGE_KEYS_MAX_BYTES, `page_keys.js is ${size} bytes, over ${PAGE_KEYS_MAX_BYTES}`);
 });
 
-test("the compose script bundle takes only its own files and the shared protocol (which names the matcher file for a type, shaken out of the bundle), and stays within its guard", () => {
+test("the compose script bundle takes only its own files, the shared protocol and the swallow helpers (which names the matcher file for a type, shaken out of the bundle), and stays within its guard", () => {
     const bundle_inputs = Object.keys((JSON.parse(readFileSync(join(out_dir, "meta/compose_keys.json"), "utf8")) as { inputs: object }).inputs);
     assert.ok(bundle_inputs.length > 0);
-    for (const input of bundle_inputs) assert.match(input, /^(src\/(content\/compose_[a-z_]+|shared\/protocol)|vendor\/desertfox\/prefix_tree)\.ts$/);
+    for (const input of bundle_inputs) assert.match(input, /^(src\/(content\/compose_[a-z_]+|shared\/(protocol|swallow))|vendor\/desertfox\/prefix_tree)\.ts$/);
     // The shared protocol names the matcher file for a type. A later value import of it would add bytes here.
     const outputs = (JSON.parse(readFileSync(join(out_dir, "meta/compose_keys.json"), "utf8")) as { outputs: Record<string, { inputs: Record<string, { bytesInOutput: number }> }> }).outputs;
     const matcher_bytes = Object.values(outputs).flatMap((output) => Object.entries(output.inputs)).filter(([input]) => input === "vendor/desertfox/prefix_tree.ts").map(([, entry]) => entry.bytesInOutput);

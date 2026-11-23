@@ -54,7 +54,7 @@ test("a window with no browser to zoom answers null and false and sets nothing",
 
 test("an unknown window id fails with the verb name", async () => {
     const { get, restore } = api_for(new Map([[3, zoom_window({}).window]]));
-    await assert.rejects(get({ windowId: 9 }), /zoom\.get: no main or message window/);
+    await assert.rejects(get({ windowId: 9 }), /zoom\.get: no main, message or compose window/);
     restore();
 });
 

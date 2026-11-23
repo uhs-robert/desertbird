@@ -24,6 +24,7 @@ const sections: KeymapSection[] = [
   { title: "Mail tab", about: "The thread list and the folder pane.", keymap: DEFAULT_KEYMAP },
   { title: "Message", about: "A message in a tab or the message pane.", keymap: default_keymap_of("message") },
   { title: "Message window", about: "A message in a window of its own (message mode), in the body and in the header. It has no tab, pane or command line keys.", keymap: default_keymap_of("window") },
+  { title: "Compose window", about: "The body of a message being written, in normal mode (Escape enters it, `i` returns to typing). Ctrl+E edits in either mode. A key left out is not a key there, and no key closes the window. A binding on `i`, on Escape or on a chord has no effect.", keymap: default_keymap_of("compose") },
   { title: "Own pages", about: "The options page and the help page.", keymap: default_keymap_of("own") },
   { title: "Other tabs", about: "Calendar, tasks, chat, the address book, settings and `about:` pages.", keymap: default_keymap_of("page") },
   { title: "Text fields", about: "A text field in a page tab or in the mail tab (the quick filter, the search box). Plain keys are text there. Alt+j and Alt+k also work in insert mode.", keymap: default_typing_keymap() },
