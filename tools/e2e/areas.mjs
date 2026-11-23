@@ -38,6 +38,8 @@ export const area_rules = [
   // The help page shows in the hud piece and the own_pages piece.
   { globs: ["src/help/**", "src/background/{commands,handlers}/help.ts"], areas: ["hud", "own_pages"] },
   { globs: ["src/options/**"], areas: ["own_pages"] },
+  // The toolbar popup and its icon run only by hand: no piece clicks a toolbar button, and the unit tests read the request handler.
+  { globs: ["src/popup/**", "src/icons/**", "src/background/popup_requests.ts"], areas: [] },
   { globs: ["src/content/body_hints.ts"], areas: ["hints", "message_body"] },
   // The own pages (options, help) run these same body scripts for j, q and /.
   { globs: ["src/content/{body_find,body_keys}.ts"], areas: ["message_body", "own_pages"] },

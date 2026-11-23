@@ -26,6 +26,7 @@ import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
 import { start_jump_history } from "./handlers/jump_history.ts";
 import { create_body_requests } from "./body_requests.ts";
+import { create_popup_requests, POPUP_PAGE } from "./popup_requests.ts";
 import type { BodyRequestApi } from "./body_requests.ts";
 import { notify_refusal, notify_result } from "./notify.ts";
 import { create_new_mail_notifier } from "./new_mail_notify.ts";
@@ -338,8 +339,10 @@ const bridge = create_bridge_port({
 const compose_requests = create_compose_requests((window_id) => router.run({ command: "compose.edit_external", args: {}, count: 1, windowId: window_id, messageIds: [] }));
 const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), compose_allowed: COMPOSE_COMMANDS, which_key: hud, run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
 
+const popup_requests = create_popup_requests({ popup_url: () => messenger.runtime.getURL(POPUP_PAGE), target_window: last_focused_main_window, run: (invocation) => router.run(invocation) });
+
 // The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
-messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? compose_requests(message, sender) ?? body_requests(message, sender));
+messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? popup_requests(message, sender) ?? compose_requests(message, sender) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
 messenger.overlay?.onClosed.addListener(({ windowId, surface, reason }) => {
     if (surface !== "cmdline") return hud.forget(windowId);

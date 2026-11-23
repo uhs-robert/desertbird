@@ -1,4 +1,4 @@
-// Builds dist/: background.js, the vendored library files, experiment/{keys,overlay,app}.{schema.json,js}, overlay/ (the command line and hud pages), help/, manifest.json and an unsigned desertbird.xpi.
+// Builds dist/: background.js, the vendored library files, experiment/{keys,overlay,app}.{schema.json,js}, overlay/ (the command line and hud pages), help/, popup/ and icons/ (the toolbar button), manifest.json and an unsigned desertbird.xpi.
 //   node tools/build.mjs [--out <dir>]
 // The esbuild metafiles go to <out>/meta/ and stay out of the xpi. test/build.test.ts reads them.
 
@@ -181,6 +181,13 @@ for (const file of ["cmdline.html", "cmdline.css"]) copyFileSync(join(root, "src
 await build({ ...shared_options, entryPoints: ["src/overlay/hud.ts"], outfile: join(out_dir, "overlay", "hud.js") });
 for (const file of ["hud.html", "hud.css"]) copyFileSync(join(root, "src", "overlay", file), join(out_dir, "overlay", file));
 
+// The toolbar popup is an extension page that sends one message, so it bundles only the type import.
+mkdirSync(join(out_dir, "popup"), { recursive: true });
+await build({ ...shared_options, entryPoints: ["src/popup/popup.ts"], outfile: join(out_dir, "popup", "popup.js") });
+for (const file of ["popup.html", "popup.css"]) copyFileSync(join(root, "src", "popup", file), join(out_dir, "popup", file));
+mkdirSync(join(out_dir, "icons"), { recursive: true });
+copyFileSync(join(root, "src", "icons", "desertbird.svg"), join(out_dir, "icons", "desertbird.svg"));
+
 // The help page is generated at run time from the command registry, so it bundles the registry as the options page does.
 mkdirSync(join(out_dir, "help"), { recursive: true });
 await build({ ...shared_options, entryPoints: ["src/help/help.ts"], outfile: join(out_dir, "help", "help.js") });
@@ -224,5 +231,5 @@ if (compose_keys_bytes > COMPOSE_MAX_BYTES) {
     process.exit(1);
 }
 
-execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help", "vendor"], { cwd: out_dir });
+execFileSync("zip", ["-q", "-X", "-D", "-r", "desertbird.xpi", "manifest.json", "background.js", "experiment", "content", "options", "overlay", "help", "popup", "icons", "vendor"], { cwd: out_dir });
 console.log(`build: ${out_dir} (${[...parent_sizes.map(([name, bytes]) => `${name}.js ${bytes} bytes`), ...actor_sizes.map(([actor, bytes]) => `${actor.name}.sys.mjs ${bytes} bytes`), `message_display.js ${message_display_bytes} bytes`, `page_keys.js ${page_keys_bytes} bytes`, `compose_keys.js ${compose_keys_bytes} bytes`].join(", ")})`);

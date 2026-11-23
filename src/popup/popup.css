@@ -1,0 +1,16 @@
+:root {
+    color-scheme: light dark;
+    --surface: #ffffff;
+    --text: #1f2328;
+    --hover: #e6eaf0;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --surface: #1b1e22;
+        --text: #e8eaed;
+        --hover: #2b3036;
+    }
+}
+body { margin: 0; padding: 4px; min-width: 160px; font: 14px sans-serif; background: var(--surface); color: var(--text); }
+button { display: block; width: 100%; padding: 6px 12px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button:hover, button:focus-visible { background: var(--hover); }
