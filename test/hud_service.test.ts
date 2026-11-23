@@ -533,3 +533,35 @@ test("a refusal toast in a message window, where no hud page can mount, leaves t
     }
     assert.deepEqual(mounts, []);
 });
+
+test("a main window tracked while a toast of the still untracked window mounts stays tracked when that mount fails", async () => {
+    const mounts: number[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const timers = fake_timers();
+    const hud = create_hud_service({
+        overlay: { mount: async ({ windowId }) => (mounts.push(windowId), await gate, Promise.reject(new Error("not ready yet"))), unmount: async () => {}, setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
+        read_settings: async () => settings_with({ mode_indicator: "off" }),
+        read_root: async () => sample_root(),
+        read_marks: async () => ({}),
+        send_changed: () => {},
+        timers,
+    });
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+        const toasted = hud.toast(3, "failed", true);
+        await settle();
+        const tracked = hud.track(3);
+        release();
+        assert.equal(await toasted, false);
+        await tracked;
+        mounts.length = 0;
+        await hud.on_keys_event({ command: "pending", keys: ["g"], windowId: 3 });
+        timers.advance(1000);
+        await settle();
+    } finally {
+        console.error = quiet;
+    }
+    assert.deepEqual(mounts, [3], "the which-key panel of the tracked window still tries to show");
+});

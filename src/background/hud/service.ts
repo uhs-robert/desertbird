@@ -50,6 +50,8 @@ export interface HudService {
 }
 
 interface WindowHud {
+    /** Set by `track`: a main window, whose entry stays when a toast fails to mount. */
+    tracked: boolean;
     toasts: Toasts;
     /** The typed keys the panel lists the continuations of, or null when no panel shows. */
     which_key_keys: string[] | null;
@@ -73,7 +75,7 @@ export function create_hud_service(deps: HudDeps): HudService {
     function hud_of(window_id: number): WindowHud {
         let hud = windows.get(window_id);
         if (hud === undefined) {
-            hud = { toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
+            hud = { tracked: false, toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
             windows.set(window_id, hud);
         }
         return hud;
@@ -208,15 +210,14 @@ export function create_hud_service(deps: HudDeps): HudService {
             const settings = await deps.read_settings();
             const ms = is_error ? settings.toast_error_ms : settings.toast_ms;
             if (ms <= 0) return false;
-            const was_tracked = windows.has(window_id);
             const hud = hud_of(window_id);
             const id = hud.toasts.show(text, is_error, ms);
             // The toast counts as shown only when the page is up to draw it. A failed mount hands the message back to the caller.
             await changed(window_id);
             if (hud.mounted) return true;
             hud.toasts.dismiss(id);
-            // A message window cannot mount the page. Left in the table, it would let its header's prefixes through to mount attempts.
-            if (!was_tracked) windows.delete(window_id);
+            // A message window cannot mount the page. Left in the table, it would let its header's prefixes through to mount attempts. A main window tracked during the mount keeps its entry.
+            if (!hud.tracked && windows.get(window_id) === hud) windows.delete(window_id);
             return false;
         },
         set_lifted(window_id, lifted) {
@@ -229,7 +230,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             for (const [window_id, hud] of windows) if (window_id !== except_window_id) void end_which_key(window_id, hud);
         },
         async track(window_id) {
-            hud_of(window_id);
+            hud_of(window_id).tracked = true;
             await Promise.all([changed(window_id), sync_label(window_id)]);
         },
         forget(window_id) {
