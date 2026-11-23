@@ -7,12 +7,12 @@ import { assert_start_paths, start_paths_of } from "./run_dir.mjs";
 import { seed_storage } from "./seed.mjs";
 import { HUD_REGION, KEY_LIST_REGION, first_selected, QUIET_AFTER_ESCAPE_MS, TOAST_EXPIRY_MS, back_to, drawn_since, folder_shown, holds_twice, sleep } from "./predicates.mjs";
 
-// Opens the Inbox with keys only. `folder_row_tabs` Tabs (seven) reach the Local Folders row, Right expands it, Down selects the Inbox and F6 moves focus to the thread list.
+// Opens the Inbox with keys only. `folder_row_tabs` Tabs (eight) reach the Local Folders row, Right expands it, Down selects the Inbox and F6 moves focus to the thread list.
 // With no identity the New Message button is disabled and skipped by Tab, so the folder row is one Tab sooner.
 // F6 cycles the panes: folder pane, thread list, message body (when a message shows), spaces toolbar, global search. Measured on both apps through the focus chain.
 // Counted Tabs from the folder pane are not used: on Betterbird three Tabs end on a column header.
 // After a restart Local Folders is already expanded, and Right would step into the Inbox row, so `expanded` skips it.
-async function open_inbox(instance, folder_row_tabs = 7, { expanded = false } = {}) {
+async function open_inbox(instance, folder_row_tabs = 8, { expanded = false } = {}) {
   for (let count = 0; count < folder_row_tabs; count++) await instance.press(["-k", "Tab"]);
   if (!expanded) await instance.press(["-k", "Right"]);
   await instance.press(["-k", "Down"]);
