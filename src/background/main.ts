@@ -383,18 +383,17 @@ messenger.windows.onFocusChanged.addListener((window_id) => {
 });
 
 // The hud draws in main windows and message windows. Only a main window has a status bar for the mode label.
-const HUD_WINDOW_TYPES = ["normal", MESSAGE_WINDOW_TYPE];
+const HUD_WINDOW_KINDS: Record<string, "main" | "message"> = { normal: "main", [MESSAGE_WINDOW_TYPE]: "message" };
 const track_window = (window: { id?: number; type?: string }) => {
-    if (window.id === undefined) return;
-    if (window.type === undefined || window.type === "normal") hud.track(window.id).catch(console.error);
-    else if (window.type === MESSAGE_WINDOW_TYPE) hud.track(window.id, "message").catch(console.error);
+    const kind = HUD_WINDOW_KINDS[window.type ?? "normal"];
+    if (window.id !== undefined && kind !== undefined) hud.track(window.id, kind).catch(console.error);
 };
 messenger.windows.onCreated.addListener(track_window);
 messenger.windows.onRemoved.addListener((window_id) => {
     confirm.surface_gone(window_id);
     hud.forget(window_id);
 });
-messenger.windows.getAll({ windowTypes: HUD_WINDOW_TYPES }).then((open) => open.forEach(track_window), console.error);
+messenger.windows.getAll({ windowTypes: Object.keys(HUD_WINDOW_KINDS) }).then((open) => open.forEach(track_window), console.error);
 
 messenger.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !(KEYMAP_STORAGE_KEY in changes || USER_KEYMAP_KEY in changes || SETTINGS_KEY in changes)) return;

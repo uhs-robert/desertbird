@@ -526,7 +526,7 @@ test("a tracked message window shows the panel and toasts and makes no label cal
     assert.equal((await state(7)).which_key, null);
 });
 
-test("a pending or mode event of a window the hud does not track (a message window header) mounts nothing and sets no label", async () => {
+test("a pending or mode event of a window the hud does not track mounts nothing and sets no label", async () => {
     const { hud, log, labels, timers } = setup({ mode_indicator: "always" });
     await hud.on_keys_event({ command: "pending", keys: ["g"], windowId: 9, source: "window" });
     await hud.on_keys_event({ command: "pending", keys: [], windowId: 9, source: "window", root: true });
@@ -538,7 +538,7 @@ test("a pending or mode event of a window the hud does not track (a message wind
     assert.equal((await hud.handle({ type: "hud.state", windowId: 9 }))?.which_key, null);
 });
 
-test("a refusal toast in a message window, where no hud page can mount, leaves the window untracked, so its later prefixes try no mount", async () => {
+test("a refusal toast in a window where no hud page can mount leaves the window untracked, so its later prefixes try no mount", async () => {
     const mounts: number[] = [];
     const timers = fake_timers();
     const hud = create_hud_service({
