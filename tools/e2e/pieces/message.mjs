@@ -299,13 +299,8 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
-  // `/` is unbound in message mode, since find is not checked in a message window: it is swallowed with no notification and no line, and the keys of the window stay as they were. The command line itself is the piece `message/window_cmdline`.
-  await instance.press(["/"]);
-  await sleep(1500);
-  await shot("message_window_slash", "message window after / (no notification, no command line)");
-  const before_refusal = body_state(await instance.ask("state")).scroll_y;
-  const after_refusal = body_state(await key_and_state(instance, ["j"], scroll_is("j to scroll the message window one line", (current) => near(current.scroll_y - before_refusal, LINE_STEP_PX)))).scroll_y;
-  check(app, kind, "message window: / opens no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
+  // Find in a message window: `/` opens the line, the find reaches the window's tab through `tabs.query({windowId, active: true})`, and n and N step with wrap, which also proves the line gave the focus back to the body. The line itself is the piece `message/window_cmdline`.
+  await find_checks("message window");
   state = await flag_keys(plain_id, true);
   check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);

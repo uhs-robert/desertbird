@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 434 (Mail tab 147, Message 98, Message window 73, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
+bound: 437 (Mail tab 147, Message 98, Message window 76, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -440,6 +440,9 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `h` | `message.scroll_left` |
 | `l` | `message.scroll_right` |
 | `G` | `message.bottom` |
+| `/` | `cmdline.open 'find '` |
+| `n` | `message.find_next` |
+| `N` | `message.find_prev` |
 | `f` | `hint.pick` |
 | `a` | `msg.archive` |
 | `r` | `msg.reply` |

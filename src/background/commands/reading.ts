@@ -16,9 +16,9 @@ export const reading: CommandGroup = {
         "message.scroll_right": { runs_in: "message", bridge: true, label: "Scroll right", intent: "Scroll the message to the right.", count: "repeat" },
         "message.top": { runs_in: "message", bridge: true, label: "Go to top", intent: "Scroll to the top of the message." },
         "message.bottom": { runs_in: "message", bridge: true, label: "Go to bottom", intent: "Scroll to the bottom of the message." },
-        // `n` and `N` follow the find line, so they need `tab` as `find` does.
-        "message.find_next": { runs_in: "message", bridge: true, needs: ["body", "tab"], label: "Next match", intent: "Go to the next match of the last find, wrapping.", count: "ignore" },
-        "message.find_prev": { runs_in: "message", bridge: true, needs: ["body", "tab"], label: "Previous match", intent: "Go to the previous match of the last find, wrapping.", count: "ignore" },
+        // `n` and `N` follow the find line, so they need `line` as `find` does.
+        "message.find_next": { runs_in: "message", bridge: true, needs: ["body", "line"], label: "Next match", intent: "Go to the next match of the last find, wrapping.", count: "ignore" },
+        "message.find_prev": { runs_in: "message", bridge: true, needs: ["body", "line"], label: "Previous match", intent: "Go to the previous match of the last find, wrapping.", count: "ignore" },
         "hint.pick": {
             runs_in: "message",
             bridge: true,
@@ -31,8 +31,8 @@ export const reading: CommandGroup = {
             bridge: true,
             runs_in: "background",
             name: "find",
-            // Find stays in the tabs of the main window: its line and its `n` and `N` have not been checked in a message window.
-            needs: ["body", "tab"],
+            // `line` and not `tab`: a message window finds in the body of its one message too.
+            needs: ["body", "line"],
             label: "Find in the message",
             intent: "Highlight text in the message and go to the first match.",
             params: [{ name: "pattern", type: "string", description: "Find this text, case sensitive if it has a capital.", main: true, rest: true, pattern: "\\S" }],

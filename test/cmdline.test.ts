@@ -330,7 +330,7 @@ test("run closes the overlay, then runs the command on the messages selected whe
 test("the line of a message window runs only the commands that window offers, and says so for the rest", async () => {
     const { service, ran } = service_setup();
     service.begin(3, { message_ids: [5], text: "", kind: "window" });
-    for (const text of ["sort --date", "open /Archive", "tab 2", "find hello", "filter --tag --tag=x"]) {
+    for (const text of ["sort --date", "open /Archive", "tab 2", "filter --tag --tag=x"]) {
         const result = await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text });
         assert.equal(result.ok, false, text);
         assert.match((result as { message: string }).message, /is not available in a message window/, text);
@@ -354,8 +354,8 @@ test("the list of a message window holds only the commands it offers, and a refu
     service.begin(3, { message_ids: [5], text: "", kind: "window" });
     const names = async (text: string) => (await ask<CmdlineCompletion>(service, { type: "cmdline.complete", windowId: 3, text, caret: text.length })).rows.map((row) => row.name);
     const all = await names("");
-    for (const name of ["tag", "move", "copy", "msg.flag", "msg.archive"]) assert.ok(all.includes(name), name);
-    for (const name of ["sort", "open", "tab", "find", "filter", "search"]) assert.equal(all.includes(name), false, name);
+    for (const name of ["tag", "move", "copy", "find", "msg.flag", "msg.archive"]) assert.ok(all.includes(name), name);
+    for (const name of ["sort", "open", "tab", "filter", "search"]) assert.equal(all.includes(name), false, name);
     assert.deepEqual(await names("sort "), []);
     assert.deepEqual(await names("sort --"), []);
     assert.ok((await names("move ")).includes("/Archive"));
