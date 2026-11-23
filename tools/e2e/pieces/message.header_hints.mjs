@@ -18,7 +18,8 @@ const in_pane = (state, body) => body.tab_id === state.mail_tab?.id && (body.tex
 const in_tab = (state, body) => body.tab_id === main_window_tabs(state).find((tab) => tab.type === "messageDisplay")?.id;
 const in_window = (state, body) => body.window_id === state.windows.find((window) => window.type === "messageDisplay")?.id;
 
-const body_focus_is = (focused) => ({ what: `the focus to ${focused ? "enter" : "leave"} the body`, until: (state) => body_state(state).has_focus === focused, show: (state) => `has_focus ${body_state(state).has_focus}`, timeout_ms: 5000 });
+// `since` asks for a report sent after that time, so a report from before a key cannot pass.
+const body_focus_is = (focused, since = 0) => ({ what: `the focus to ${focused ? "be in" : "leave"} the body`, until: (state) => body_state(state).has_focus === focused && (body_state(state).reported_at ?? 0) >= since, show: (state) => `has_focus ${body_state(state).has_focus}, reported_at ${body_state(state).reported_at}`, timeout_ms: 5000 });
 
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 15000 });
 
@@ -159,10 +160,13 @@ async function run_header_hints(instance, ctx) {
   await pick(labels.star);
   await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", false));
 
-  // The header of a message tab: F6 takes the focus out of the body, and the header keys of the pages bundle send hint.window, which labels the same set.
+  // The header of a message tab: F6 takes the focus out of the body, and the header keys of the pages bundle send hint.window, which labels the same set. The star pick clicks and moves no focus, so the body still has it. Only a report sent after F6 counts, so an older blur cannot pass the wait.
+  state = await wait_for_state(instance, body_focus_is(true));
+  check(app, kind, "header hints: the message tab's body holds the focus before F6", body_state(state).has_focus === true, `has_focus ${body_state(state).has_focus}`);
+  const f6_at = Date.now();
   await instance.press(["-k", "F6"]);
-  state = await wait_for_state(instance, body_focus_is(false));
-  check(app, kind, "header hints: F6 takes the focus out of the message tab's body", body_state(state).has_focus === false, `has_focus ${body_state(state).has_focus}`);
+  state = await wait_for_state(instance, body_focus_is(false, f6_at));
+  check(app, kind, "header hints: F6 takes the focus out of the message tab's body", body_state(state).has_focus === false && body_state(state).reported_at >= f6_at, `has_focus ${body_state(state).has_focus}, reported ${body_state(state).reported_at - f6_at} ms after F6`);
   await shot("header_hints_tab_header_focus", "message tab after F6: the focus sits in the header, no labels");
   await show_labels();
   await shot("header_hints_tab_header", "f in a message tab with the focus in the header: the same labels over the header and the body");
@@ -210,18 +214,20 @@ async function run_header_hints(instance, ctx) {
   await wait_for_state(instance, window_of_type("messageDisplay", false));
   await sleep(800);
   await shot("header_hints_after_window_close", "the main window after the message window closed with its labels up");
-  await show_labels();
+  const main_labels = await show_labels();
   await shot("header_hints_main_after_close", "f in the main window after the message window closed with its labels up: a new set");
-  await instance.press(["-k", "Escape"]);
-  await sleep(500);
+  check(app, kind, "header hints: after a message window closed with its labels up, f in the main window draws labels", main_labels.labelled !== main_labels.before, "the main window did not change");
+  for (const letter of labels.main_star) await instance.press([letter]);
+  state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
+  check(app, kind, "header hints: after a message window closed with its labels up, the main window's star label flags the message", flagged(state), `flagged ${flagged(state)}`);
   note(app, kind, "header hints: labels used", JSON.stringify(labels));
   check(app, kind, "the app survived the header hint checks", instance.exited() === null);
 }
 
-// The labels sit in document order: the header buttons, More, the star, the address pills, the day/night switch, the tag, the attachment bar (the toggle and Save All), the attachments when the list is open, then the body link. Betterbird has one button more (Headers). A yank labels only the targets with text: More, the pills, the tag and the link. Read from the shots of each app.
+// The labels sit in document order: the header buttons, More, the star, the address pills, the day/night switch, the tag, the attachment bar (the toggle and Save All), the attachments when the list is open, then the body link. Betterbird has one button more (Headers). A yank labels only the targets with text: More, the pills, the tag and the link. `main_star` is the star of the reading pane in the mail window's own set, with the thread list focused. Read from the shots of each app.
 const MESSAGE_HINT_LABELS = {
-  betterbird: { reply: "aa", more: "ak", star: "al", from: "sa", dark: "sg", tag_yank: "h", attachment_toggle: "sj", second_attachment: "da", link: "sl" },
-  thunderbird: { reply: "aa", more: "aj", star: "ak", from: "al", dark: "sf", tag_yank: "h", attachment_toggle: "sh", second_attachment: "sl", link: "sk" },
+  betterbird: { reply: "aa", more: "ak", star: "al", from: "sa", dark: "sg", tag_yank: "h", attachment_toggle: "sj", second_attachment: "da", link: "sl", main_star: "gg" },
+  thunderbird: { reply: "aa", more: "aj", star: "ak", from: "al", dark: "sf", tag_yank: "h", attachment_toggle: "sh", second_attachment: "sl", link: "sk", main_star: "ff" },
 };
 
 const WINDOW_REGION = "0,0 1280x720";
