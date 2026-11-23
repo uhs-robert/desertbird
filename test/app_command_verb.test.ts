@@ -105,6 +105,14 @@ test("a step command in a window with no view (an .eml file) answers false, and 
     platform.restore();
 });
 
+test("a name outside the fixed table throws and runs nothing", async () => {
+    const log: string[] = [];
+    const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: holder_for("window", log) } }] });
+    await assert.rejects(verbs().appCommand({ windowId: 1, name: "cmd_deleteMsg" as never }), /bad name/);
+    assert.deepEqual(log, []);
+    platform.restore();
+});
+
 test("the conversation command never asks the view", async () => {
     const log: string[] = [];
     const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: holder_for("window", log) } }] });

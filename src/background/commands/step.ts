@@ -1,5 +1,6 @@
 import { step_message } from "../handlers/app.ts";
 import type { AppHandlerApi } from "../handlers/app.ts";
+import type { MainWindowApi } from "../handlers/tabs.ts";
 import { step_attachment, step_starred, step_unread } from "../handlers/step.ts";
 import type { StepApi } from "../handlers/step.ts";
 import { needing, scoped } from "./define.ts";
@@ -19,7 +20,7 @@ export const step: CommandGroup = {
                 count: "ignore",
                 needs: ["app.appCommand"],
                 params: [direction, { name: "unread", type: "bool", short: "u", description: "Skip to a message that is unread." }],
-                run: scoped<AppHandlerApi>(step_message),
+                run: scoped<AppHandlerApi & MainWindowApi>(step_message),
             },
         }),
         ...needing("list", {

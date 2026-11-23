@@ -89,6 +89,23 @@ async function run_window_step(instance, ctx) {
   await refused(window_id, ["]", "u"], SUBJECTS.sandbox, "] u at the last unread message, with an earlier unread one to wrap to");
   await step_to(window_id, ["[", "u"], SUBJECTS.plain, "[ u");
   await refused(window_id, ["[", "u"], SUBJECTS.plain, "[ u at the first unread message");
+  // A threaded Inbox: the window of a reply inside a collapsed thread. The shown row is hidden, so the view check must still find the neighbors. Each body starts "Body of <id>.", which tells the messages of one thread apart.
+  const shown_body = (state) => (state.body?.window_id === threaded_id ? (state.body.text_start ?? "") : "");
+  const shows_body = (id) => ({ what: `the window to show ${id}`, until: (state) => shown_body(state).startsWith(`Body of ${id}.`), show: (state) => JSON.stringify(shown_body(state).slice(0, 40)), timeout_ms: 8000, soft: true });
+  await instance.ask("close_message_windows");
+  await sleep(1000);
+  const threaded_id = await open_window_of("inbox-t0-m1");
+  const threaded_step = async (keys, id, what) => {
+    const since = Date.now();
+    for (const key of keys) await instance.press([key]);
+    const state = await wait_for_state(instance, shows_body(id));
+    await wait_for_state(instance, live_again(threaded_id, since));
+    check(app, kind, `message window, threaded Inbox: ${what} shows ${id}`, shown_body(state).startsWith(`Body of ${id}.`), JSON.stringify(shown_body(state).slice(0, 40)));
+  };
+  await wait_for_state(instance, shows_body("inbox-t0-m1"));
+  await threaded_step(["J"], "inbox-t0-m2", "J from a reply in a collapsed thread");
+  await threaded_step(["K"], "inbox-t0-m1", "K");
+  await threaded_step(["K"], "inbox-t0-m0", "K again");
   check(app, kind, "the app survived", instance.exited() === null);
   check(app, kind, "message window: the window is still the only one", message_windows(await instance.ask("state")).length === 1);
 }

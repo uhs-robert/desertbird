@@ -137,6 +137,12 @@ test("step.message refuses with a toast when the Experiment answers false, at ei
     }
 });
 
+test("step.message refuses in the mail tab, where it would step the list through the main window's controller", async () => {
+    const fake = app_fake();
+    await fake.run("step.message", { direction: "next" }, 3);
+    assert.deepEqual(fake.calls, ["notify Stepping the message is only available in a message window."]);
+});
+
 test("the window keys J, K, ] u and [ u step the message, and only a message window has them", () => {
     const window_normal = default_keymap_of("window").normal ?? {};
     assert.deepEqual(window_normal["J"], { id: "step.message", args: { direction: "next", unread: false }, label: "Next message" });

@@ -8,9 +8,7 @@ import type { ResizePane } from "./pane_resize.ts";
 import { mail_pane_of } from "./view.ts";
 import type { FolderTreeLike, ThreadVerbPane } from "./view.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
-import type { AppCommandArgs, AppOpenPageArgs, AppPaneFocusArgs, AppPaneResizeArgs } from "../shared/protocol.ts";
-
-declare const Ci: { nsMsgNavigationType: Record<string, number | undefined> };
+import type { AppCommandArgs, AppCommandName, AppOpenPageArgs, AppPaneFocusArgs, AppPaneResizeArgs } from "../shared/protocol.ts";
 
 interface Controller {
     isCommandEnabled(name: string): boolean;
@@ -47,10 +45,10 @@ interface ControllerHolder {
 
 const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
 
-// `about:3pane`, `about:message` of a message tab or window: each controller acts on its own page's message.
-
-// Thunderbird answers the step commands as enabled at the ends too (next and previous stay put, next unread wraps), so the view is asked first, with no wrap. The answer is the message key, and the all-ones key means none. The index is no help: previous unread with none left gives index 0 and no key. At the first or last message the view answers the shown message itself, which Thunderbird then ignores, so that is no row to step to either. The motion of `cmd_nextUnreadMsg` is `Ci.nsMsgNavigationType.nextUnreadMessage`, and `cmd_openConversation` has none.
+// Thunderbird answers the step commands as enabled at the ends too (next and previous stay put, next unread wraps), so the view is asked first, with no wrap. The answer is the message key, and the all-ones key means none. The index is no help: previous unread with none left gives index 0 and no key. At the first or last message the view answers the shown message itself, which Thunderbird then ignores, so that is no row to step to either.
 const NO_KEY = 0xffffffff;
+// The fixed table of the commands `appCommand` runs, as the `APP_COMMANDS` list names them (the type makes the two agree). A step command carries its `nsMsgNavigationType` value for the view check (nextMessage 2, previousMessage 3, nextUnreadMessage 7, previousUnreadMessage 8, read from `viewNavigate` calls on Betterbird and Thunderbird 153.7.0). A name outside the table throws.
+const COMMAND_MOTIONS = { cmd_openConversation: 0, cmd_nextMsg: 2, cmd_previousMsg: 3, cmd_nextUnreadMsg: 7, cmd_previousUnreadMsg: 8 } as const satisfies Record<AppCommandName, number>;
 
 function view_has_row_to_step_to(holder: ControllerHolder, motion: number): boolean {
     const key = { value: NO_KEY };
@@ -58,6 +56,7 @@ function view_has_row_to_step_to(holder: ControllerHolder, motion: number): bool
     return key.value !== NO_KEY && key.value !== holder.gMessage?.messageKey;
 }
 
+// `about:3pane`, `about:message` of a message tab or window: each controller acts on its own page's message.
 function controller_holder_of(context: ExtensionContext, window_id: number): ControllerHolder | null | undefined {
     const is_window = (candidate: MainWindow) => context.extension.windowManager.getWrapper(candidate)?.id === window_id;
     const message_window = open_windows(MESSAGE_WINDOW_TYPE).find(is_window) as (MainWindow & { messageBrowser?: { contentWindow?: ControllerHolder | null } }) | undefined;
@@ -101,11 +100,12 @@ export function app_verbs(context: ExtensionContext) {
             return direction === "reset" ? reset_sizes(about_3pane) : move_border(about_3pane, pane, direction, steps);
         }),
         appCommand: guard("app.appCommand", ({ windowId, name }: AppCommandArgs): boolean => {
+            const motion = COMMAND_MOTIONS[name];
+            if (motion === undefined) throw new Error("bad name");
             const holder = controller_holder_of(context, windowId);
             const controller = holder && holder.commandController;
             if (!controller) throw new Error("the window shows no message");
-            const motion = Ci.nsMsgNavigationType[name.slice(4).replace("Msg", "Message")];
-            const enabled = controller.isCommandEnabled(name) && (motion === undefined || view_has_row_to_step_to(holder, motion));
+            const enabled = controller.isCommandEnabled(name) && (!motion || view_has_row_to_step_to(holder, motion));
             if (enabled) controller.doCommand(name);
             return enabled;
         }),
