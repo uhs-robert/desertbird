@@ -49,7 +49,7 @@ let runtime: ComposeRuntime | null = null;
 
 function target_of(window: ComposeWindow): ComposeTarget {
     const focused = window.document.activeElement;
-    return focused?.id === "messageEditor" ? "body" : focused?.localName === "input" ? "field" : "other";
+    return focused?.id === "messageEditor" ? "body" : focused?.localName === "input" && !focused.closest?.("findbar") ? "field" : "other";
 }
 
 function show_mode(window: ComposeWindow, mode: ComposeMode | null): void {

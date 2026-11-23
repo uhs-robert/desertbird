@@ -350,20 +350,23 @@ test("an IME composition is never touched: Escape and letters during it change n
     }
 });
 
-test("the field jumps move the focus, and g c and g b reveal their row; the mode stays normal", async () => {
+test("the field jumps move the focus, and g c and g b reveal their row; each jump leaves insert mode so typing starts at once", async () => {
     const a = compose_window(1);
     const { emitted, done } = await setup([a]);
     try {
         a.press("Escape");
         const jumps = [["t", "toAddrInput"], ["c", "ccAddrInput"], ["b", "bccAddrInput"], ["s", "msgSubject"], ["m", "messageEditor"]] as const;
         for (const [key, id] of jumps) {
+            a.press("Escape");
+            assert.equal(a.label(), "-- NORMAL --");
             assert.ok(taken(a.press("g")));
             assert.ok(taken(a.press(key)));
             assert.equal(a.window.document.activeElement?.id, id, key);
+            assert.equal(a.label(), "-- INSERT --", key);
+            assert.ok(passed(a.press("x")), key);
         }
         assert.deepEqual(a.revealed, ["addressRowTo", "addressRowCc", "addressRowBcc"]);
         assert.deepEqual(emitted, []);
-        assert.equal(a.label(), "-- NORMAL --");
     } finally {
         done();
     }
@@ -511,5 +514,31 @@ test("shutdown with no install, and twice, is harmless", () => {
         assert.equal(platform.window_listeners.size, 0);
     } finally {
         platform.restore();
+    }
+});
+
+test("Enter, an arrow and a replaced tree end a half-typed sequence, and a modifier on the way to a chord does not", async () => {
+    const a = compose_window(1);
+    const { api, emitted, done } = await setup([a], { allow_send: true });
+    try {
+        a.press("Escape");
+        for (const key of ["Enter", "ArrowLeft"]) {
+            a.press("g");
+            a.press(key);
+            a.press("t");
+            assert.equal(a.window.document.activeElement?.id, "messageEditor", key);
+        }
+        a.press("g");
+        a.press("Shift", { shiftKey: true });
+        a.press("S", { shiftKey: true });
+        a.run_timers();
+        assert.deepEqual(a.commands, ["cmd_sendWithCheck"]);
+        a.press("g");
+        await api.install({ composeTree: compose_tree({ w: { id: "compose.save" } }) as never, allowSend: true });
+        a.press("t");
+        assert.equal(a.window.document.activeElement?.id, "messageEditor");
+        assert.deepEqual(emitted, []);
+    } finally {
+        done();
     }
 });

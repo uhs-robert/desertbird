@@ -65,6 +65,8 @@ export function compose_token(event: ComposeKeyEvent): string | null {
 
 // What would change the draft in normal mode. Tab and Shift+Tab move the focus in a field, and make a pill of a typed address there, so only the body holds them back (a plain-text body inserts a tab).
 const EDITING_KEYS = new Set(["Enter", "Backspace", "Delete"]);
+// A modifier pressed on its way to a chord does not end a half-typed sequence. Any other named key (Enter, an arrow) does.
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"]);
 
 export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): ComposeRuntime {
     const hooked = new Map<Window, { target: KeyTarget; handler: (event: ComposeKeyEvent) => void }>();
@@ -88,7 +90,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
             const id = invocation.id;
             const args = (invocation.args ?? {}) as Record<string, JsonValue>;
             if (runs_in === "background") deps.emit({ command: id, args, count: invocation.count ?? 1, windowId: deps.window_id_of(window), messageIds: [] });
-            else if (id === "compose.focus" && COMPOSE_FIELDS.includes(args["field"] as ComposeField)) deps.focus_field(window, args["field"] as ComposeField);
+            else if (id === "compose.focus" && COMPOSE_FIELDS.includes(args["field"] as ComposeField)) (deps.focus_field(window, args["field"] as ComposeField), set_mode(window, "insert"));
             else if (id === "compose.close") deps.run_command(window, "cmd_close");
             else if (id === "compose.send" && allow_send) deps.run_command(window, "cmd_sendWithCheck");
         }
@@ -112,7 +114,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
         if (token === "i" && !pending) return void (take(), set_mode(window, "insert"));
         // A held key repeats. Only the first press runs, so a held `q` asks to close once.
         const next = token === null || event.repeat ? undefined : (pending ?? root).children?.[token];
-        if (token !== null && !event.repeat) pending = next?.children ? next : null;
+        if (!event.repeat && !MODIFIER_KEYS.has(event.key)) pending = next?.children ? next : null;
         if (next?.steps) run_leaf(window, next.steps);
         // An unbound chord stays Thunderbird's (Ctrl+Enter, Ctrl+S). Any other key that would type is held back.
         const chord = event.ctrlKey || event.altKey || event.metaKey;
@@ -144,6 +146,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
             if (tree.version !== COMPILED_KEYMAP_VERSION) throw new Error(`keymap version ${tree.version} is not ${COMPILED_KEYMAP_VERSION}`);
             root = tree.root as ComposeNode;
             allow_send = send;
+            pending = null;
             if (listening) return;
             listening = true;
             deps.register_window_listener({ on_load_window: hook, on_unload_window: unhook });

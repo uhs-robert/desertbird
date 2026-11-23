@@ -44,3 +44,9 @@ test("the script holds no mode: Escape, letters, i and the other chords pass unt
     // No focus or blur listener: the label and the mode live in the chrome runtime.
     assert.deepEqual(types, ["keydown"]);
 });
+
+test("a Ctrl+E during an IME composition passes and asks nothing", () => {
+    const { sent, press } = setup();
+    assert.ok(untouched(press("e", { ctrlKey: true, isComposing: true })));
+    assert.deepEqual(sent, []);
+});

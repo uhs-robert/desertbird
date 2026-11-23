@@ -55,15 +55,14 @@ function compose_requests(window_type: string) {
         windows: { get: async () => ({ type: window_type }) },
         notifications: { create: async () => "n1" },
     };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), compose_allowed: COMPOSE_COMMANDS, run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     return { handle, ran, calls };
 }
 
-test("a compose window runs only the compose commands, with no messages, and never a close", async () => {
+test("a compose window sends no body.invoke that runs: every command is refused, with no lookup of messages", async () => {
     const { handle, ran, calls } = compose_requests("messageCompose");
-    for (const command of ["compose.save", "compose.edit_external", "help.open", "tab.close", "msg.delete", "msg.reply", "cmdline.open", "pane.focus"]) await handle({ type: "body.invoke", command, args: command === "cmdline.open" ? { text: "" } : {}, count: 1 }, compose_sender);
-    assert.deepEqual(ran.map((invocation) => invocation.command), ["compose.save", "compose.edit_external", "help.open"]);
-    assert.deepEqual(ran.map((invocation) => [invocation.windowId, invocation.messageIds]), [[COMPOSE_WINDOW, []], [COMPOSE_WINDOW, []], [COMPOSE_WINDOW, []]]);
+    for (const command of ["compose.save", "compose.edit_external", "help.open", "tab.close", "msg.delete", "msg.reply", "pane.focus"]) await handle({ type: "body.invoke", command, args: {}, count: 1 }, compose_sender);
+    assert.deepEqual(ran, []);
     assert.deepEqual(calls, []);
 });
 
@@ -104,7 +103,7 @@ test("compose.save from the main window refuses and saves nothing, as :edit does
 test("a sender whose window cannot be read runs nothing, in neither set", async () => {
     const ran: KeysInvocation[] = [];
     const api: BodyRequestApi = { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => Promise.reject(new Error("gone")) }, notifications: { create: async () => "n1" } };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), compose_allowed: COMPOSE_COMMANDS, run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     for (const command of ["tab.close", "compose.save"]) await handle({ type: "body.invoke", command, args: {}, count: 1 }, compose_sender);
     assert.deepEqual(ran, []);
 });

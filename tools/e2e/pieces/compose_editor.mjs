@@ -198,6 +198,9 @@ async function note_draft_image(instance, ctx) {
 
 // The compose window hook: the keys of the chrome runtime in the body, To, Cc, Bcc and Subject. The mode label sits in the status bar, so its pixels (the region below) change between INSERT and NORMAL.
 const STATUS_LABEL_REGION = COMPOSE_LABEL_REGION;
+const FIND_REGION = "210,630 860x66";
+// The middle of the window, where the save prompt of `q` draws.
+const PROMPT_REGION = "340,300 600x140";
 
 async function run_compose_window(instance, ctx) {
   const { report, check, note, key_and_state, close_compose, hud_pixels, wait_pixels } = ctx;
@@ -237,59 +240,68 @@ async function run_compose_window(instance, ctx) {
   check(app, kind, "i brings the INSERT label back", back_pixels === insert_pixels);
   await instance.press(["-k", "Escape"]);
 
-  // Jumps. Each one leaves the mode as it was, so the field is typed into after `i`.
+  // Jumps. Each one leaves normal mode for insert, so the field takes typing at once. Escape then makes normal mode in that field.
   await jump("s");
+  state = await key_and_state(instance, ["Z"], waits_for("Z in the Subject", (state) => (field_of("subject")(state) ?? "").includes("Z")));
+  check(app, kind, "gs jumps to the Subject in insert mode, so the first letter types", (field_of("subject")(state) ?? "").includes("Z"), `subject ${JSON.stringify(field_of("subject")(state))}`);
+  const jump_label = await hud_pixels(instance, `${app}_status_after_jump`, STATUS_LABEL_REGION);
+  check(app, kind, "the label reads INSERT after a jump", jump_label === insert_pixels);
+  await instance.press(["-k", "Escape"]);
   const subject_before = field_of("subject")(await instance.ask("state"));
   await type_text("xj");
   await sleep(500);
-  check(app, kind, "gs then letters in normal mode leave the Subject unchanged", field_of("subject")(await instance.ask("state")) === subject_before, `subject ${JSON.stringify(field_of("subject")(await instance.ask("state")))}`);
+  check(app, kind, "letters in normal mode leave the Subject unchanged", field_of("subject")(await instance.ask("state")) === subject_before, `subject ${JSON.stringify(field_of("subject")(await instance.ask("state")))}`);
   await instance.press(["i"]);
-  state = await key_and_state(instance, ["Z"], waits_for("Z in the Subject", (state) => (field_of("subject")(state) ?? "").includes("Z")));
-  check(app, kind, "i in the Subject returns to typing", (field_of("subject")(state) ?? "").includes("Z") && !(field_of("subject")(state) ?? "").includes("xj"), `subject ${JSON.stringify(field_of("subject")(state))}`);
+  state = await key_and_state(instance, ["W"], waits_for("W in the Subject", (state) => (field_of("subject")(state) ?? "").includes("W")));
+  check(app, kind, "i in the Subject returns to typing", (field_of("subject")(state) ?? "").includes("W") && !(field_of("subject")(state) ?? "").includes("xj"), `subject ${JSON.stringify(field_of("subject")(state))}`);
   await instance.press(["-k", "Escape"]);
 
   await jump("t");
+  await type_text("zed@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in To", (state) => (field_of("to")(state) ?? []).join(" ").includes("zed@fixture.invalid")));
   await type_text("xj");
   await instance.press(["i"]);
-  await type_text("zed@fixture.invalid,");
-  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in To", (state) => (field_of("to")(state) ?? []).length > 0));
+  await type_text("yan@fixture.invalid,");
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("a second pill in To", (state) => (field_of("to")(state) ?? []).join(" ").includes("yan@fixture.invalid")));
   const to_list = (field_of("to")(state) ?? []).join(" ");
-  check(app, kind, "gt jumps to To, normal mode types nothing there and i types an address", to_list.includes("zed@fixture.invalid") && !to_list.includes("xj"), `to ${JSON.stringify(to_list)}`);
-  await shot("to_pill", "To holds the typed address as a pill");
+  check(app, kind, "gt types an address in To at once, and letters in normal mode type nothing there", to_list.includes("zed@fixture.invalid") && to_list.includes("yan@fixture.invalid") && !to_list.includes("xj"), `to ${JSON.stringify(to_list)}`);
+  await shot("to_pill", "To holds the typed addresses as pills");
 
   await jump("c");
-  await instance.press(["i"]);
   await type_text("cee@fixture.invalid,");
   state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in Cc", (state) => (field_of("cc")(state) ?? []).length > 0));
-  check(app, kind, "gc reveals Cc and focuses it", (field_of("cc")(state) ?? []).join(" ").includes("cee@fixture.invalid"), `cc ${JSON.stringify(field_of("cc")(state))}`);
+  check(app, kind, "gc reveals Cc and types there at once", (field_of("cc")(state) ?? []).join(" ").includes("cee@fixture.invalid"), `cc ${JSON.stringify(field_of("cc")(state))}`);
   await jump("b");
-  await instance.press(["i"]);
   await type_text("bee@fixture.invalid,");
   state = await key_and_state(instance, ["-k", "Escape"], waits_for("a pill in Bcc", (state) => (field_of("bcc")(state) ?? []).length > 0));
-  check(app, kind, "gb reveals Bcc and focuses it", (field_of("bcc")(state) ?? []).join(" ").includes("bee@fixture.invalid"), `bcc ${JSON.stringify(field_of("bcc")(state))}`);
+  check(app, kind, "gb reveals Bcc and types there at once", (field_of("bcc")(state) ?? []).join(" ").includes("bee@fixture.invalid"), `bcc ${JSON.stringify(field_of("bcc")(state))}`);
   await shot("cc_bcc", "Cc and Bcc rows revealed with a pill each");
 
   await jump("m");
+  state = await key_and_state(instance, ["Y"], waits_for("Y in the body", (state) => body_of(state).includes("Y")));
+  check(app, kind, "gm focuses the body in insert mode, so the first letter types", body_of(state).includes("Y"), `body ${JSON.stringify(body_of(state))}`);
+  await instance.press(["-k", "Escape"]);
   const body_before = body_of(await instance.ask("state"));
   await type_text("xj");
   await sleep(500);
-  check(app, kind, "gm then letters in normal mode leave the body unchanged", body_of(await instance.ask("state")) === body_before);
-  await instance.press(["i"]);
-  state = await key_and_state(instance, ["Y"], waits_for("Y in the body", (state) => body_of(state).includes("Y")));
-  check(app, kind, "gm focuses the body and i types there", body_of(state).includes("Y") && !body_of(state).includes("xj"), `body ${JSON.stringify(body_of(state))}`);
-  await instance.press(["-k", "Escape"]);
+  check(app, kind, "letters in normal mode leave the body unchanged", body_of(await instance.ask("state")) === body_before);
 
-  // The one mode is shared: Escape in a field holds for the body after a jump.
-  await jump("s");
-  await jump("m");
-  const body_before_x = body_of(await instance.ask("state"));
-  await instance.press(["x"]);
+  // The find bar is no header field: in normal mode its field takes typing, and Escape closes it and keeps the mode.
+  const find_before = await hud_pixels(instance, `${app}_find_before`, FIND_REGION);
+  await instance.press(["-M", "ctrl", "f", "-m", "ctrl"]);
+  await sleep(1000);
+  const find_open = await hud_pixels(instance, `${app}_find_open`, FIND_REGION);
+  await type_text("abc");
   await sleep(500);
-  check(app, kind, "the mode stays normal across the jumps from Subject to the body", body_of(await instance.ask("state")) === body_before_x, `body ${JSON.stringify(body_of(await instance.ask("state")))}`);
+  await shot("find_bar", "the find bar open with abc typed in normal mode");
+  const find_typed = await hud_pixels(instance, `${app}_find_typed`, FIND_REGION);
+  check(app, kind, "Ctrl+F in normal mode opens the find bar and its field takes typing", find_open !== find_before && find_typed !== find_open);
+  await instance.press(["-k", "Escape"]);
+  const find_closed = await wait_pixels(instance, "the find bar to close on Escape", `${app}_find_closed`, FIND_REGION, (hash) => hash === find_before, { timeout_ms: 5000 });
+  check(app, kind, "Escape in the find bar closes it", find_closed === find_before);
 
   // The address popup: Escape closes it first and keeps insert mode, the next Escape enters normal mode.
   await jump("t");
-  await instance.press(["i"]);
   await type_text("ali");
   await sleep(2000);
   await shot("popup_open", "the address popup open under To");
@@ -299,22 +311,22 @@ async function run_compose_window(instance, ctx) {
   await type_text("x@fixture.invalid,");
   state = await key_and_state(instance, ["-k", "Escape"], waits_for("the pill after the popup Escape", (state) => (field_of("to")(state) ?? []).join(" ").includes("alix@fixture.invalid")));
   check(app, kind, "Escape with the popup open closes it and keeps insert mode (the next letters still type)", (field_of("to")(state) ?? []).join(" ").includes("alix@fixture.invalid"), `to ${JSON.stringify(field_of("to")(state))}`);
-  await type_text("jj");
 
   // q with a changed draft shows the save prompt, and Cancel keeps the window and the text.
   await jump("m");
-  await instance.press(["i"]);
   state = await key_and_state(instance, ["K"], waits_for("K in the body", (state) => body_of(state).includes("K")));
   await instance.press(["-k", "Escape"]);
+  const prompt_before = await hud_pixels(instance, `${app}_prompt_before`, PROMPT_REGION);
   await instance.press(["q"]);
-  await sleep(3000);
+  // The prompt is a window of its own that the window list does not show, so its pixels in the middle of the screen stand for it.
+  const prompt_shown = await wait_pixels(instance, "the save prompt to draw", `${app}_prompt_shown`, PROMPT_REGION, (hash) => hash !== prompt_before, { timeout_ms: 8000 });
   await shot("save_prompt", "the save prompt after q on a changed draft");
   state = await instance.ask("state");
-  check(app, kind, "q on a changed draft keeps the window while the save prompt shows", compose_open(state));
+  check(app, kind, "q on a changed draft shows the save prompt and keeps the window", prompt_shown !== prompt_before && compose_open(state));
   await instance.press(["-k", "Escape"]);
-  await sleep(2000);
+  const prompt_gone = await wait_pixels(instance, "the save prompt to go", `${app}_prompt_gone`, PROMPT_REGION, (hash) => hash === prompt_before, { timeout_ms: 8000 });
   state = await instance.ask("state");
-  check(app, kind, "Cancel in the save prompt keeps the window and the text", compose_open(state) && body_of(state).includes("K"), `body ${JSON.stringify(body_of(state))}`);
+  check(app, kind, "Cancel in the save prompt closes it and keeps the window and the text", prompt_gone === prompt_before && compose_open(state) && body_of(state).includes("K"), `body ${JSON.stringify(body_of(state))}`);
   await close_compose(instance);
 
   // q on a draft with no change closes the window with no prompt.
