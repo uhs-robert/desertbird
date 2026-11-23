@@ -2,6 +2,7 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import type { AppApi } from "../../shared/protocol.ts";
 import type { HandlerScope } from "./message.ts";
+import { refused_as } from "../../shared/swallow.ts";
 
 type TabsScope = HandlerScope<TabsApi>;
 
@@ -27,6 +28,24 @@ export interface TabsApi {
     app: AppApi;
     /** The session store, which a build without it leaves out. `tab.alternate` refuses then. */
     storage: { session?: SessionStore };
+}
+
+export interface MainWindowApi {
+    windows: {
+        get(window_id: number): Promise<{ type?: string }>;
+        getAll(query: { windowTypes: ["normal"] }): Promise<{ id?: number }[]>;
+        update(window_id: number, properties: { focused: true }): Promise<unknown>;
+    };
+}
+
+/** The window a page opened by the key goes to. A message window has no tab bar, and `tabs.create` refuses its id, so the page opens in the first main window, which comes to the front. Any other window is its own. */
+// Not `windows.getLastFocused`: Thunderbird ignores its `windowTypes` and answers the message window itself.
+export async function main_window_of(api: MainWindowApi, window_id: number): Promise<number> {
+    if (window_id < 0 || (await api.windows.get(window_id)).type !== "messageDisplay") return window_id;
+    const main_id = (await refused_as(api.windows.getAll({ windowTypes: ["normal"] }), []))[0]?.id;
+    if (main_id === undefined) throw new RuntimeRefusal("No main window is open to show the page in.");
+    await api.windows.update(main_id, { focused: true });
+    return main_id;
 }
 
 export interface SessionStore {

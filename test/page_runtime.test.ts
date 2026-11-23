@@ -415,7 +415,7 @@ test("the page tree and the message tree keep separate half-typed sequences", ()
     assert.deepEqual(scrolls.map(([id]) => id), ["page.top"]);
 });
 
-test("a message window header takes the message mode tree: j scrolls, m s flags, q closes, f labels through the background, and the tab, pane and line keys do nothing", () => {
+test("a message window header takes the message mode tree: j scrolls, m s flags, q closes, f labels through the background, z i zooms, and the tab, pane, find and line keys do nothing", () => {
     const { windows, runtime, scrolls, invocations, pending } = setup();
     runtime.install(tree(), ["hint.window"]);
     const window = windows[0]!;
@@ -423,11 +423,11 @@ test("a message window header takes the message mode tree: j scrolls, m s flags,
     window.message_window = true;
     press(window, "j");
     for (const key of ["m", "s", "q"]) press(window, key);
-    for (const key of ["J", "K", ":", "/", "H", "c"]) assert.equal(press(window, key).cancelled, true, `${key} is swallowed`);
-    for (const key of ["t", "0", "g", "f", "z", "i"]) press(window, key);
+    for (const key of ["J", "K", ":", "/", "H", "n", "N"]) assert.equal(press(window, key).cancelled, true, `${key} is swallowed`);
+    for (const key of ["t", "0", "g", "f", "z", "a", "z", "i"]) press(window, key);
     press(window, "f");
     assert.deepEqual(scrolls.map(([id]) => id), ["message.scroll_down"]);
-    assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.flag", [42]], ["tab.close", [42]], ["hint.window", [42]]]);
+    assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.flag", [42]], ["tab.close", [42]], ["zoom.by", [42]], ["hint.window", [42]]]);
     assert.ok(pending().filter((event) => event.keys.length > 0).every((event) => event.source === "window"));
 });
 

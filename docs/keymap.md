@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 402 (Mail tab 147, Message 98, Message window 54, Own pages 50, Other tabs 49, Text fields 4)
+bound: 417 (Mail tab 147, Message 98, Message window 69, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -440,12 +440,11 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `h` | `message.scroll_left` |
 | `l` | `message.scroll_right` |
 | `G` | `message.bottom` |
-| `n` | `message.find_next` |
-| `N` | `message.find_prev` |
 | `f` | `hint.pick` |
 | `a` | `msg.archive` |
 | `r` | `msg.reply` |
 | `R` | `msg.reply --all` |
+| `c` | `msg.new` |
 | `<C-l>` | `msg.open` |
 | `q` | `tab.close` |
 | `<A-q>` | `tab.close` |
@@ -456,6 +455,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | Key | Command |
 | --- | --- |
 | `gg` | `message.top` |
+| `g?` | `help.open` |
 | `gF` | `msg.forward` |
 | `gu` | `msg.unsubscribe` |
 | `ga` | `msg.save_attachments` |
@@ -474,6 +474,14 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `gr7` | `msg.reply_with 7` |
 | `gr8` | `msg.reply_with 8` |
 | `gr9` | `msg.reply_with 9` |
+
+#### Pages
+
+| Key | Command |
+| --- | --- |
+| `gpa` | `app.open_page addons` |
+| `gpt` | `app.open_page themes` |
+| `gpc` | `app.open_page config` |
 
 #### Message
 
@@ -501,6 +509,28 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `mft` | `msg.remind three_days` |
 | `mfw` | `msg.remind one_week` |
 | `mfc` | `msg.remind_cancel` |
+
+#### DesertBird
+
+| Key | Command |
+| --- | --- |
+| `,h` | `help.open` |
+| `,s` | `options` |
+| `,?` | `help.open` |
+
+#### Zoom and scroll
+
+| Key | Command |
+| --- | --- |
+| `zi` | `zoom.by 0.1` |
+| `z+` | `zoom.by 0.1` |
+| `zo` | `zoom.by -0.1` |
+| `z-` | `zoom.by -0.1` |
+| `zm` | `zoom.by 0.5` |
+| `zr` | `zoom.by -0.5` |
+| `z=` | `zoom 1` |
+| `zI` | `zoom 3` |
+| `zO` | `zoom 0.3` |
 
 #### Copy
 
