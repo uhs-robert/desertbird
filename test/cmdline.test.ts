@@ -341,6 +341,14 @@ test("the line of a message window runs only the commands that window offers, an
     assert.deepEqual(ran.map((invocation) => invocation.command), ["msg.tag"]);
 });
 
+test("the line of a message window accepts find and runs it on the window", async () => {
+    const { service, ran } = service_setup();
+    service.begin(3, { message_ids: [5], text: "find ", kind: "window" });
+    assert.deepEqual(await ask<CmdlineRunResult>(service, { type: "cmdline.run", windowId: 3, text: "find hello" }), { ok: true });
+    await settle();
+    assert.deepEqual(ran.map((invocation) => [invocation.command, invocation.args]), [["search.message", { pattern: "hello" }]]);
+});
+
 test("the same typed commands run in a main window, which has no kind", async () => {
     const { service } = service_setup();
     for (const text of ["sort --date --ascending", "find hello"]) {
