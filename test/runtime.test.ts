@@ -1310,6 +1310,29 @@ test("visual mode: a click on another row drops the mode, so j does not extend a
     assert.deepEqual(emitted.at(-1)?.messageIds, [121]);
 });
 
+test("visual mode: removing the unselected current row ends the mode, though every selected row is unchanged", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.chosen = [1];
+    window.cursor = 5;
+    press(window, "v");
+    // Another message takes row 5 and the cursor stays on it.
+    window.key_overrides[5] = 99;
+    press(window, "j");
+    assert.deepEqual(window.chosen, [6], "the mode ended, so j selected the next row alone and the old anchor and row 1 are gone");
+});
+
+test("the list port focuses the list body when it moves the cursor alone", () => {
+    const calls: string[] = [];
+    const tree_fake = { selectedIndex: 0, selectedIndices: [] as number[], currentIndex: 0, table: { body: { focus: () => void calls.push("focus") } } };
+    const port = create_list_port({ gDBView: { rowCount: 9, getSelectedMsgHdrs: () => [], getKeyAt: (index) => index }, threadTree: tree_fake }, () => 1);
+    port.move_cursor(4);
+    assert.deepEqual([tree_fake.currentIndex, calls], [4, ["focus"]]);
+    port.select(5);
+    assert.deepEqual(calls, ["focus"], "a select does not take the focus");
+});
+
 test("visual mode: rows that shift above the range drop the mode", () => {
     const { windows, runtime } = setup();
     runtime.install(tree());

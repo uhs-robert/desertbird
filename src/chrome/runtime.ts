@@ -118,9 +118,9 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
 
     // A pick: Space or the end of visual mode started one, and motions move only the current row, so a pick of one row survives `j`. One selected row looks the same whether it was picked or only read, so this flag is the only thing that tells them apart. A pick ends on Escape, a tab change, a blur and a command that removes rows.
     let picking = false;
-    // The current row, the selected rows, and the view and message keys at them after the last key. A key that finds anything else means the list changed under the runtime (a click, new mail, a row inserted or removed above one of them, a sort or folder change), so visual mode and the pick end and old rows never reach into the new list. The row numbers count as well as the keys: a message inserted above a selected row moves the row and its key together.
+    // The current row, the selected rows, and the view and message keys at them after the last key. A key that finds anything else means the list changed under the runtime (a click, new mail, a row inserted or removed above one of them, a sort or folder change), so visual mode and the pick end and old rows never reach into the new list. The current row's key counts too, since a row removed under an unselected cursor leaves every selected row as it was. The row numbers count as well as the keys: a message inserted above a selected row moves the row and its key together.
     let list_seen: unknown[] = [];
-    const list_view = (port: ListPort, rows = port.selected_rows()) => [port.selected_index(), ...rows, ...port.marks(rows)];
+    const list_view = (port: ListPort, rows = port.selected_rows()) => [port.selected_index(), ...rows, ...port.marks([...rows, port.selected_index()])];
     const differs = (now: unknown[], then: unknown[]) => now.length !== then.length || now.some((mark, at) => mark !== then[at]);
 
     // For `.`. An unrepeatable leaf clears it.
@@ -131,7 +131,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
         if (id === "pane.resize_mode") return void ((resize_window = window), (resize_count = 0), (visual_anchor = -1));
         // Space in visual mode leaves it as `v` does, since Space is a toggle of normal mode. It is still unrepeatable, so it clears `.`.
-        if (id === "visual.toggle" || (id === "select.toggle" && visual_anchor >= 0 && !(last = null))) return void (visual_anchor < 0 ? ((visual_anchor = port.selected_index()), (visual_base = port.selected_rows())) : ((visual_anchor = -1), (picking = true)));
+        if (id === "select.toggle" && visual_anchor >= 0) last = null;
+        if (id === "visual.toggle" || (id === "select.toggle" && visual_anchor >= 0)) return void (visual_anchor < 0 ? ((visual_anchor = port.selected_index()), (visual_base = port.selected_rows())) : ((visual_anchor = -1), (picking = true)));
         if (id !== KEY_LIST) last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
         // Space toggles the current row, and the cursor stays. The Space that starts a pick on the one selected row keeps it, so the read message is the first one picked (the string compare asks whether the current row is the only selected row). It acts on the thread list only, so it does nothing while the folder pane has the focus.
         if (id === "select.toggle") return void (deps.folder_port_of(window) || port.selected_index() < 0 || ((picking || `${port.selected_rows()}` !== `${port.selected_index()}`) && port.toggle(port.selected_index()), (picking = true)));

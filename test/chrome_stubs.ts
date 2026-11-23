@@ -42,7 +42,7 @@ export function stub_platform(main_windows: unknown[] = []): PlatformStub {
     const page_actor = { start() {}, stop() {}, set_keys() {}, set_insert() {}, takes_keys: () => false, scroll: () => false, blur: () => false };
     const globals = globalThis as Record<string, unknown>;
     const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"], Ci: globals["Ci"], Cc: globals["Cc"] };
-    const sheet_service = { USER_SHEET: 1, loadAndRegisterSheet: (uri: { spec: string }) => void stub.sheets.push(uri.spec), unregisterSheet: (uri: { spec: string }) => void stub.sheets.splice(stub.sheets.indexOf(uri.spec), 1) };
+    const sheet_service = { USER_SHEET: 1, loadAndRegisterSheet: (uri: { spec: string }) => void stub.sheets.push(uri.spec), unregisterSheet: (uri: { spec: string }) => void (stub.sheets.includes(uri.spec) && stub.sheets.splice(stub.sheets.indexOf(uri.spec), 1)) };
     globals["Cc"] = { "@mozilla.org/content/style-sheet-service;1": { getService: () => sheet_service } };
     globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] ?? (url.startsWith("resource://desertbird-actor-") ? page_actor : undefined) };
     globals["Services"] = { wm: { getEnumerator: () => main_windows }, io: { newURI: (spec: string) => ({ spec }), getProtocolHandler: () => ({ QueryInterface: () => ({ setSubstitution() {} }) }) } };
