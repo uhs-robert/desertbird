@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { append_message_terms, define_message_filter, MESSAGE_FILTER_NAME, show_message_filter } from "../src/chrome/filter_runtime.ts";
+import { append_message_terms, define_message_filter, MESSAGE_FILTER_NAME, SEARCH_WAIT_LIMIT_MS, show_message_filter } from "../src/chrome/filter_runtime.ts";
 import type { MessageFilterState, QuickFilterManagerLike } from "../src/chrome/filter_runtime.ts";
 import { get_filter_api, shutdown } from "../src/chrome/parent_filter.ts";
 import { stub_platform } from "./chrome_stubs.ts";
@@ -40,7 +40,7 @@ function fake_bar() {
             setFilterValue: (name: string, value: MessageFilterState) => void steps.push(`value ${name} ${JSON.stringify(value)} visible=${bar.filterer.visible}`),
         },
         reflectFiltererState: () => void steps.push("reflect"),
-        updateSearch: async () => void steps.push("search"),
+        updateSearch: async (): Promise<void> => void steps.push("search"),
     };
     return { bar, steps };
 }
@@ -73,10 +73,41 @@ test("the filter is defined once, and its terms come from the state Thunderbird 
     assert.equal(terms.length, 1);
 });
 
-test("showing the filter makes the bar visible before it sets the value, then draws the bar and runs the search", async () => {
+/** An about:3pane whose search runs for `polls` timer turns after updateSearch, and whose timer fires at once and counts the waited ms. */
+function fake_pane(steps: string[], polls: number) {
+    const pane = {
+        waited_ms: 0,
+        gViewWrapper: { searching: false },
+        setTimeout(run: () => void, ms: number) {
+            pane.waited_ms += ms;
+            if (--polls <= 0) pane.gViewWrapper.searching = false;
+            setImmediate(run);
+        },
+    };
+    const started = () => {
+        steps.push("search");
+        pane.gViewWrapper.searching = polls > 0;
+    };
+    return { pane, started };
+}
+
+test("showing the filter makes the bar visible before it sets the value, draws the bar, runs the search and waits for it to end", async () => {
     const { bar, steps } = fake_bar();
-    await show_message_filter(bar, { listId: "<a.b>" });
+    const { pane, started } = fake_pane(steps, 3);
+    bar.updateSearch = async () => started();
+    await show_message_filter(pane, bar, { listId: "<a.b>" });
     assert.deepEqual(steps, [`value ${MESSAGE_FILTER_NAME} {"listId":"<a.b>"} visible=true`, "reflect", "search"]);
+    assert.equal(pane.gViewWrapper.searching, false);
+    assert.equal(pane.waited_ms, 30);
+});
+
+test("a search that does not end stops the wait at the limit", async () => {
+    const { bar, steps } = fake_bar();
+    const { pane, started } = fake_pane(steps, Infinity);
+    bar.updateSearch = async () => started();
+    await show_message_filter(pane, bar, { dateUs: 1 });
+    assert.equal(pane.gViewWrapper.searching, true);
+    assert.equal(pane.waited_ms, SEARCH_WAIT_LIMIT_MS);
 });
 
 test("filter.set finds the bar of the tab by id, drops the empty optional args, and shutdown removes the filter", async () => {
@@ -87,7 +118,8 @@ test("filter.set finds the bar of the tab by id, drops the empty optional args, 
     globals["ChromeUtils"] = { importESModule: (url: string) => (url === "resource:///modules/QuickFilterManager.sys.mjs" ? { QuickFilterManager: manager } : chrome_utils.importESModule(url)) };
     globals["Ci"] = CONSTANTS;
     const { bar, steps } = fake_bar();
-    const tabs: Record<number, unknown> = { 5: { nativeTab: { chromeBrowser: { contentWindow: { quickFilterBar: bar } } } }, 6: { nativeTab: { chromeBrowser: null } } };
+    const { pane } = fake_pane(steps, 0);
+    const tabs: Record<number, unknown> = { 5: { nativeTab: { chromeBrowser: { contentWindow: { ...pane, quickFilterBar: bar } } } }, 6: { nativeTab: { chromeBrowser: null } } };
     const api = get_filter_api({ extension: { windowManager: { getWrapper: () => null }, messageManager: { convert: () => null }, tabManager: { get: (id: number) => tabs[id] } } } as never);
     try {
         await api.filter.set({ tabId: 5, listId: "<a.b>", dateUs: null as never });
