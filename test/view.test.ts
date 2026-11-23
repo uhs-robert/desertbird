@@ -4,7 +4,7 @@ import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import { while_loading } from "../src/background/handlers/loading.ts";
-import { filters_ready, forget_filter, keep_filters } from "../src/background/handlers/view.ts";
+import { forget_filter, keep_filters } from "../src/background/handlers/view.ts";
 import { create_search_register } from "../src/background/search/register.ts";
 import { SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
 import type { FilterSetArgs } from "../src/shared/protocol.ts";
@@ -561,23 +561,66 @@ test("a re-apply the Experiment refuses leaves the quick filter alone in memory,
     assert.deepEqual(steps, ["setQuickFilter {}", 'setQuickFilter {"unread":true}']);
 });
 
-test("F m l refuses when the filter Experiment did not load", async () => {
-    const { run, notices } = terms_fake({ filter: "missing" });
+test("F m l refuses when the filter Experiment did not load, and changes nothing", async () => {
+    const { run, notices, steps } = terms_fake({ filter: "missing" });
     await run("filter.by", { field: "list" });
     assert.deepEqual(notices, ["The list and date filters need the DesertBird Experiment, which is not loaded."]);
+    // The refusal comes before setQuickFilter, so the tab keeps its filter.
+    assert.deepEqual(steps, []);
 });
 
-test("F u while F m l still reads the message: the list filter lands on top of the unread filter", async () => {
-    const fake = terms_fake();
+/** A gate a fake call waits on, and the call that opens it. */
+function gate(): { passed: Promise<void>; open: () => void } {
     let open: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => (open = resolve));
-    const read = fake.api.messages.getFull;
-    fake.api.messages.getFull = async (id: number) => (await gate, read(id));
-    const pending = fake.run("filter.by", { field: "list" });
+    const passed = new Promise<void>((resolve) => (open = resolve));
+    return { passed, open };
+}
+
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test("overlapping applies: F r pressed while F m l waits on filter.set runs after it, so the tab and the memory both end cleared", async () => {
+    const fake = terms_fake();
+    const terms = gate();
+    const set = fake.api.filter!.set;
+    fake.api.filter!.set = async (args) => (await terms.passed, set(args));
+    const list = fake.run("filter.by", { field: "list" });
+    while (!fake.steps.includes("setQuickFilter {}")) await settle();
+    const reset = fake.run("filter.set", { state: "all" });
+    await settle();
+    terms.open();
+    await Promise.all([list, reset]);
+    assert.deepEqual(fake.steps, ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`, "setQuickFilter {}"]);
+    // The memory holds no list filter, so F u sends none.
     await fake.run("filter.set", { state: "unread" });
-    open();
-    await pending;
-    assert.deepEqual(fake.steps, ['setQuickFilter {"unread":true}', 'setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+    assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"unread":true}']);
+});
+
+test("F u while F m l still reads the message, with the read done before F u's setQuickFilter returns: the list filter applies after it, and the tab and the memory agree", async () => {
+    const fake = terms_fake();
+    const read_gate = gate();
+    const unread_gate = gate();
+    const read = fake.api.messages.getFull;
+    fake.api.messages.getFull = async (id: number) => (await read_gate.passed, read(id));
+    const quick = fake.api.mailTabs.setQuickFilter;
+    fake.api.mailTabs.setQuickFilter = async (id: number, filter: unknown) => (JSON.stringify(filter) === '{"unread":true}' && (await unread_gate.passed), quick(id, filter));
+    const list = fake.run("filter.by", { field: "list" });
+    const unread = fake.run("filter.set", { state: "unread" });
+    await settle();
+    read_gate.open();
+    await settle();
+    unread_gate.open();
+    await Promise.all([list, unread]);
+    // F m l read the memory before F u wrote it, so its filter has no unread. It runs second and wins, in the tab and in the memory alike.
+    assert.deepEqual(fake.steps, ['setQuickFilter {"unread":true}', "setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
+    await fake.run("filter.set", { state: "toggle_starred" });
+    assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"flagged":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test(":search keeps the list filter under its text", async () => {
+    const { run, steps } = terms_fake();
+    await run("filter.by", { field: "list" });
+    await run("search.threads", { query: "invoice" });
+    assert.deepEqual(steps.slice(2), ['setQuickFilter {"text":{"text":"invoice","subject":true,"author":true}}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
 test("the list filter survives a restart of the background page through session storage, and F u re-applies it", async () => {
@@ -590,8 +633,8 @@ test("the list filter survives a restart of the background page through session 
     // A new page starts with an empty map and reads the stored one.
     keep_filters(undefined);
     forget_filter(tab_id);
-    keep_filters({ get: async () => stored, set: async () => undefined });
-    await filters_ready();
+    // F u comes before the stored filters have loaded and must wait for them.
+    keep_filters({ get: async () => (await settle(), stored), set: async () => undefined });
     await fake.run("filter.set", { state: "unread" });
     keep_filters(undefined);
     assert.deepEqual(fake.steps.slice(2), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);

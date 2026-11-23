@@ -1,4 +1,4 @@
-import { ignore_refusal } from "../../shared/swallow.ts";
+import { ignore_refusal, keep_chain } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { while_loading } from "./loading.ts";
@@ -122,19 +122,33 @@ function remember_filter(tab_id: number, filter: AppliedFilter): void {
 }
 
 // `setQuickFilter` clears every filter it does not know, so the message terms go back on after each call: after `F u`, `F s`, each step of `/` and its Escape. `F r` sets no terms and leaves them off.
-export async function apply_filter(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
+async function apply_now(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
     const { by_message, ...quick } = filter;
+    const terms_api = api.filter;
+    // Refused before any change, so the tab keeps its filter and its hidden-bar flag.
+    if (by_message !== undefined && terms_api === undefined) throw new RuntimeRefusal("The list and date filters need the DesertBird Experiment, which is not loaded.");
     await api.mailTabs.setQuickFilter(tab_id, quick);
-    if (by_message === undefined) return remember_filter(tab_id, filter);
+    if (by_message === undefined || terms_api === undefined) return remember_filter(tab_id, filter);
     try {
-        if (api.filter === undefined) throw new RuntimeRefusal("The list and date filters need the DesertBird Experiment, which is not loaded.");
-        await api.filter.set(filter_set_args(tab_id, by_message));
+        await terms_api.set(filter_set_args(tab_id, by_message));
     } catch (error) {
         // The tab now shows the quick filter alone, and the memory must say so.
         remember_filter(tab_id, quick);
         throw error;
     }
     remember_filter(tab_id, filter);
+}
+
+// One apply is two calls, `setQuickFilter` and then `filter.set`. Two applies that interleave would leave the tab with the quick filter of one and the terms of the other, and the memory with neither, so the applies of a tab run one after the other.
+const applies_in_flight = new Map<number, Promise<void>>();
+
+export function apply_filter(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
+    const apply = (applies_in_flight.get(tab_id) ?? Promise.resolve()).then(() => apply_now(api, tab_id, filter));
+    const queued = keep_chain(apply);
+    applies_in_flight.set(tab_id, queued);
+    // The chain of a tab ends with its last apply, so the map holds only the applies in flight.
+    void queued.then(() => applies_in_flight.get(tab_id) === queued && applies_in_flight.delete(tab_id));
+    return apply;
 }
 
 const FIXED_FILTERS: Record<string, QuickFilter> = {
@@ -159,15 +173,20 @@ function toggled_starred({ show: _hidden, flagged, ...rest }: AppliedFilter): Ap
 export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const state = args["state"] as string;
     const tab = await list_mail_tab(scope);
+    await filters_ready();
     const filter: AppliedFilter = state === "tag" ? { tags: { mode: "any" as const, tags: { [await tag_key(scope, args["tag"] as string)]: true as const } } } : state === "toggle_starred" ? toggled_starred(remembered_filter(tab.id)) : FIXED_FILTERS[state]!;
     const { by_message } = remembered_filter(tab.id);
     const keeps_message_terms = state !== "all" && by_message !== undefined;
     await apply_filter(scope.api, tab.id, keeps_message_terms ? { ...filter, by_message } : filter);
 }
 
+// The text replaces the quick filter, as before, and the list and date terms stay, as under `/`.
 export async function search_threads(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    await apply_filter(scope.api, tab.id, { text: { text: args["query"] as string, subject: true, author: true } });
+    await filters_ready();
+    const { by_message } = remembered_filter(tab.id);
+    const text: AppliedFilter = { text: { text: args["query"] as string, subject: true, author: true } };
+    await apply_filter(scope.api, tab.id, by_message === undefined ? text : { ...text, by_message });
 }
 
 const bare_address = (mailbox: string): string => (mailbox.match(/<([^>]+)>/)?.[1] ?? mailbox).trim();
