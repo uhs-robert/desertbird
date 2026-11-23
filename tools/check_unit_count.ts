@@ -5,16 +5,19 @@
 // Known false failure: a line-start test( inside an if block counts but may not run. Build such tests another way.
 // The node flags mirror `unit:file` in package.json. Change both together.
 // No --test-force-exit: it exits a file's child while that child's last results still wait in its stdout queue, so the run loses them when the parent reads slowly.
+// Without it, a test that leaks a timer or a server keeps its child alive, so the whole run has a time limit and is killed past it.
 // Extra arguments go to node --test after the glob and switch the guard off, because a name filter or a file list drops tests on purpose.
 // Reported counts come from the junit reporter (one testcase element per test, with its file), written to a temp file beside the spec output on stdout.
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { globSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const TEST_GLOB = "test/**/*.test.ts";
+/** A full run takes about 30 s. */
+export const RUN_LIMIT_MS = 5 * 60_000;
 
 export type ShortFile = { readonly file: string; readonly expected: number; readonly reported: number };
 
@@ -46,19 +49,53 @@ export function describe_short_files(short: readonly ShortFile[]): string {
     return `Unit run lost test results in ${short.length} file(s):\n${lines.join("\n")}`;
 }
 
-function run(extra_args: readonly string[]): number {
+export type LimitedRun = { readonly status: number; readonly timed_out: boolean };
+
+/** Run a command with inherited stdio and kill it with all its children when it passes `limit_ms`. The command leads its own process group so one kill reaches the test file children too. */
+export function run_with_limit(command: string, args: readonly string[], cwd: string, limit_ms: number): Promise<LimitedRun> {
+    const child = spawn(command, args, { cwd, stdio: "inherit", detached: true });
+    const kill_group = (signal: NodeJS.Signals) => {
+        try {
+            process.kill(-child.pid!, signal);
+        } catch {
+            // The group is already gone.
+        }
+    };
+    // A detached group misses the terminal's Ctrl+C, so pass interrupts on.
+    const forward = (signal: NodeJS.Signals) => kill_group(signal);
+    process.on("SIGINT", forward).on("SIGTERM", forward);
+    let timed_out = false;
+    const timer = setTimeout(() => {
+        timed_out = true;
+        kill_group("SIGKILL");
+    }, limit_ms);
+    return new Promise((done) => {
+        child.on("close", (code) => {
+            clearTimeout(timer);
+            process.off("SIGINT", forward).off("SIGTERM", forward);
+            done({ status: timed_out ? 1 : (code ?? 1), timed_out });
+        });
+    });
+}
+
+export function describe_timeout(limit_ms: number): string {
+    return `Unit run passed its ${limit_ms / 1000} s limit and was killed. A test likely leaked a timer or a server that kept its file running.`;
+}
+
+async function run(extra_args: readonly string[]): Promise<number> {
     const root = resolve(import.meta.dirname, "..");
     const files = globSync(TEST_GLOB, { cwd: root }).map((file) => resolve(root, file)).sort();
     const scratch = mkdtempSync(join(tmpdir(), "unit-count-"));
     const junit_path = join(scratch, "junit.xml");
     try {
-        const result = spawnSync(process.execPath, [
+        const result = await run_with_limit(process.execPath, [
             "--test", "--test-timeout=30000", "--no-warnings",
             "--test-reporter=spec", "--test-reporter-destination=stdout",
             "--test-reporter=junit", `--test-reporter-destination=${junit_path}`,
             TEST_GLOB, ...extra_args,
-        ], { cwd: root, stdio: "inherit" });
-        if (result.status !== 0) return result.status ?? 1;
+        ], root, RUN_LIMIT_MS);
+        if (result.timed_out) console.error(describe_timeout(RUN_LIMIT_MS));
+        if (result.status !== 0) return result.status;
         if (extra_args.length > 0) return 0;
         const expected = new Map(files.map((file) => [file, static_test_count(readFileSync(file, "utf8"))]));
         const short = short_files(expected, reported_counts(readFileSync(junit_path, "utf8")));
@@ -70,4 +107,4 @@ function run(extra_args: readonly string[]): number {
     }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(run(process.argv.slice(2)));
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(await run(process.argv.slice(2)));
