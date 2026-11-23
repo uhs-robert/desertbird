@@ -266,7 +266,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/app.js` | 11109 | 12800 |
 | `experiment/folderpane.js` | 5900 | 10240 |
 | `experiment/zoom.js` | 3544 | 6144 |
-| `experiment/composewin.js` | 10240 | 15360 |
+| `experiment/composewin.js` | 10752 | 15360 |
 | `content/message_display.js` | 19698 | 24576 |
 | `experiment/hints.js` | 18170 | 20480 |
 | `experiment/pages.js` | 27920 | 34816 |
@@ -397,7 +397,7 @@ The keys are a tab kind of their own, `compose`, with a tree of its own (`compos
 
 ### Compose window bundle
 
-`experiment/composewin.js` is the Experiment API `composewin`, the key runtime of the compose windows. It decides what happens to every key of a compose window, so it is chrome runtime code under the admission rule, and it has a bundle of its own because `keys.js` and `pages.js` have no room. It walks the compose tree itself and bundles neither the vendored matcher nor the key token reader. Its first measured size was 9875 bytes, over the 8192 bytes first set as its ceiling. The guard is 10240 (that size rounded up to a 512-byte step) and the ceiling is 15360, about 1.5 times the guard. The raise passes the admission rule through the clause that the code decides what happens to a key. It is the first guard and ceiling of the compose window hook (normal mode in every field, field jumps, close and send). It rests on a fresh `tools/measure/` run on Betterbird alone.
+`experiment/composewin.js` is the Experiment API `composewin`, the key runtime of the compose windows. It decides what happens to every key of a compose window, so it is chrome runtime code under the admission rule, and it has a bundle of its own because `keys.js` and `pages.js` have no room. It walks the compose tree itself and bundles neither the vendored matcher nor the key token reader. Its first measured size was 9875 bytes, over the 8192 bytes first set as its ceiling. The guard is 10240 (that size rounded up to a 512-byte step) and the ceiling is 15360, about 1.5 times the guard. Drawing the mode label in the theme colors and the label style of the main window (clause: decides what happens to a key, because the label shows the mode the keys run in) raised the guard by one 512-byte step to 10752. The raise passes the admission rule through the clause that the code decides what happens to a key. It is the first guard and ceiling of the compose window hook (normal mode in every field, field jumps, close and send). It rests on a fresh `tools/measure/` run on Betterbird alone.
 
 ### Compose script bundle
 

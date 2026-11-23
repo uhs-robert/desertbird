@@ -65,8 +65,6 @@ export function compose_token(event: ComposeKeyEvent): string | null {
 
 // What would change the draft in normal mode. Tab and Shift+Tab move the focus in a field, and make a pill of a typed address there, so only the body holds them back (a plain-text body inserts a tab).
 const EDITING_KEYS = new Set(["Enter", "Backspace", "Delete"]);
-// A modifier pressed on its way to a chord does not end a half-typed sequence. Any other named key (Enter, an arrow) does.
-const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"]);
 
 export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): ComposeRuntime {
     const hooked = new Map<Window, { target: KeyTarget; handler: (event: ComposeKeyEvent) => void }>();
@@ -114,7 +112,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
         if (token === "i" && !pending) return void (take(), set_mode(window, "insert"));
         // A held key repeats. Only the first press runs, so a held `q` asks to close once.
         const next = token === null || event.repeat ? undefined : (pending ?? root).children?.[token];
-        if (!event.repeat && !MODIFIER_KEYS.has(event.key)) pending = next?.children ? next : null;
+        if (!event.repeat && (token !== null || EDITING_KEYS.has(event.key))) pending = next?.children ? next : null;
         if (next?.steps) run_leaf(window, next.steps);
         // An unbound chord stays Thunderbird's (Ctrl+Enter, Ctrl+S). Any other key that would type is held back.
         const chord = event.ctrlKey || event.altKey || event.metaKey;
@@ -147,6 +145,8 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
             root = tree.root as ComposeNode;
             allow_send = send;
             pending = null;
+            // A change of the label look redraws the open windows.
+            hooked.forEach((_, window) => deps.show_mode(window, modes.get(window)!));
             if (listening) return;
             listening = true;
             deps.register_window_listener({ on_load_window: hook, on_unload_window: unhook });

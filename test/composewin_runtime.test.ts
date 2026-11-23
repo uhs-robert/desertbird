@@ -18,6 +18,8 @@ function compose_tree(user: Parameters<typeof compile_tab_keymap>[1] = {}) {
     return { version: COMPILED_KEYMAP_VERSION, root };
 }
 
+const LABEL = { labelStyle: "classic" as const, labelColors: { dark: { normal: "#111111", visual: "#222222", insert: "#333333", resize: "#444444", on_badge: "#000000" }, light: { normal: "#aaaaaa", visual: "#bbbbbb", insert: "#cccccc", resize: "#dddddd", on_badge: "#ffffff" } } };
+
 type Listener = (event: ComposeKeyEvent) => void;
 
 interface FakeElement {
@@ -48,8 +50,10 @@ function compose_window(id: number) {
     const commands: string[] = [];
     const timers: (() => void)[] = [];
     const revealed: string[] = [];
+    const scheme = { dark: false };
     const window = {
         id,
+        matchMedia: () => ({ matches: scheme.dark }),
         windowRoot: { addEventListener: (_type: string, listener: Listener) => void listeners.add(listener), removeEventListener: (_type: string, listener: Listener) => void listeners.delete(listener) },
         document,
         focusMsgBody: () => void (document.activeElement = fields.body),
@@ -67,8 +71,9 @@ function compose_window(id: number) {
     };
     const run_timers = () => timers.splice(0).forEach((callback) => callback());
     const label = () => bar_children.find((child) => child.id === "desertbird-compose-mode")?.textContent ?? null;
+    const label_css = () => bar_children.find((child) => child.id === "desertbird-compose-mode")?.style.cssText ?? null;
     const focus = (name: keyof typeof fields) => void (document.activeElement = fields[name]);
-    return { window, fields, press, run_timers, label, focus, commands, timers, revealed, listener_count: () => listeners.size, label_count: () => bar_children.length };
+    return { window, scheme, label_css, fields, press, run_timers, label, focus, commands, timers, revealed, listener_count: () => listeners.size, label_count: () => bar_children.length };
 }
 
 type FakeCompose = ReturnType<typeof compose_window>;
@@ -79,7 +84,7 @@ async function setup(open: FakeCompose[] = [compose_window(1)], { tree = compose
     const context = { extension: { windowManager: { getWrapper: (window: { id: number }) => ({ id: window.id }) }, messageManager: { convert: () => null } } };
     const api = get_composewin_api(context as never).composewin;
     (api.onInvocation as unknown as { subscribe(listener: (event: KeysEvent) => void): void }).subscribe((event) => void emitted.push(event));
-    await api.install({ composeTree: tree as never, allowSend: allow_send });
+    await api.install({ composeTree: tree as never, allowSend: allow_send, ...LABEL });
     const listener = () => platform.window_listeners.get("desertbird@uhs-robert/composewin");
     return { api, platform, emitted, listener, done: () => (shutdown(), platform.restore()) };
 }
@@ -107,7 +112,7 @@ test("a second install replaces the tree and adds no window listener and no key 
     const a = compose_window(1);
     const { api, platform, emitted, done } = await setup([a]);
     try {
-        await api.install({ composeTree: compose_tree({ w: { id: "compose.save" } }) as never, allowSend: false });
+        await api.install({ composeTree: compose_tree({ w: { id: "compose.save" } }) as never, allowSend: false, ...LABEL });
         assert.equal(platform.register_calls, 1);
         assert.equal(a.listener_count(), 1);
         a.press("Escape");
@@ -428,7 +433,7 @@ test("with compose_send on, g S runs Thunderbird's send with its checks, from a 
         a.run_timers();
         assert.deepEqual(a.commands, ["cmd_sendWithCheck"]);
         // Turning the setting off reinstalls with the flag off, and the key sends nothing again.
-        await api.install({ composeTree: compose_tree() as never, allowSend: false });
+        await api.install({ composeTree: compose_tree() as never, allowSend: false, ...LABEL });
         a.press("g");
         a.press("S", { shiftKey: true });
         a.run_timers();
@@ -493,7 +498,7 @@ test("a tree of another version fails the install and hooks nothing", async () =
     const platform = stub_platform([a.window]);
     try {
         const api = get_composewin_api({ extension: { windowManager: { getWrapper: () => null }, messageManager: { convert: () => null } } } as never).composewin;
-        await assert.rejects(api.install({ composeTree: { version: 1, root: { kind: "branch", children: {} } } as never, allowSend: false }), /composewin.install: keymap version 1/);
+        await assert.rejects(api.install({ composeTree: { version: 1, root: { kind: "branch", children: {} } } as never, allowSend: false, ...LABEL }), /composewin.install: keymap version 1/);
         assert.equal(a.listener_count(), 0);
     } finally {
         shutdown();
@@ -517,12 +522,12 @@ test("shutdown with no install, and twice, is harmless", () => {
     }
 });
 
-test("Enter, an arrow and a replaced tree end a half-typed sequence, and a modifier on the way to a chord does not", async () => {
+test("Enter, Backspace and a replaced tree end a half-typed sequence, and a modifier on the way to a chord does not", async () => {
     const a = compose_window(1);
     const { api, emitted, done } = await setup([a], { allow_send: true });
     try {
         a.press("Escape");
-        for (const key of ["Enter", "ArrowLeft"]) {
+        for (const key of ["Enter", "Backspace"]) {
             a.press("g");
             a.press(key);
             a.press("t");
@@ -534,10 +539,29 @@ test("Enter, an arrow and a replaced tree end a half-typed sequence, and a modif
         a.run_timers();
         assert.deepEqual(a.commands, ["cmd_sendWithCheck"]);
         a.press("g");
-        await api.install({ composeTree: compose_tree({ w: { id: "compose.save" } }) as never, allowSend: true });
+        await api.install({ composeTree: compose_tree({ w: { id: "compose.save" } }) as never, allowSend: true, ...LABEL });
         a.press("t");
         assert.equal(a.window.document.activeElement?.id, "messageEditor");
         assert.deepEqual(emitted, []);
+    } finally {
+        done();
+    }
+});
+
+test("the label takes the mode color of the scheme the window shows, and a new install redraws it", async () => {
+    const a = compose_window(1);
+    const { api, done } = await setup([a]);
+    try {
+        assert.match(a.label_css()!, /color: #cccccc;/);
+        a.press("Escape");
+        assert.match(a.label_css()!, /color: #aaaaaa;/);
+        a.scheme.dark = true;
+        a.press("i");
+        a.press("Escape");
+        assert.match(a.label_css()!, /color: #111111;/);
+        await api.install({ composeTree: compose_tree() as never, allowSend: false, labelStyle: "badge", labelColors: LABEL.labelColors });
+        assert.match(a.label_css()!, /background-color: #111111; color: #000000;/);
+        assert.equal(a.label(), "NORMAL");
     } finally {
         done();
     }

@@ -236,6 +236,9 @@ export interface ComposewinInstallArgs {
     composeTree: KeymapTree;
     /** The `compose_send` setting. While it is false the send key runs nothing. */
     allowSend: boolean;
+    /** The look of the mode label in the status bar: the `mode_indicator_style` setting and the colors of the `theme` setting, as for the label of the main window. */
+    labelStyle: ModeLabelStyle;
+    labelColors: ModeLabelColors;
 }
 
 /** Call and event shapes as the background sees them on `browser.composewin`. Its event carries only invocations: a compose window has no hud, so no pending keys and no mode go out. */

@@ -17,6 +17,7 @@ import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
+import { mode_label_colors, resolve_theme } from "./theme/palette.ts";
 import { publish_theme } from "./theme/publish.ts";
 import { themed_hints } from "./theme/themed_hints.ts";
 import { write_to_clipboard } from "./handlers/clipboard.ts";
@@ -184,12 +185,13 @@ async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
     const { tree, page_tree, message_tree, window_tree, typing_tree, compose_tree } = await load_record();
-    const allow_send = (await config_store.read()).settings.compose_send;
-    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send]);
+    const { compose_send: allow_send, mode_indicator_style: label_style, theme } = (await config_store.read()).settings;
+    const label_colors = mode_label_colors(resolve_theme(theme));
+    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send, label_style, label_colors]);
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
     await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), windowTree: page_message_tree(window_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
-    await messenger.composewin?.install({ composeTree: compose_tree, allowSend: allow_send });
+    await messenger.composewin?.install({ composeTree: compose_tree, allowSend: allow_send, labelStyle: label_style, labelColors: label_colors });
     installed_tree_json = tree_json;
     // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
     hud.close_which_key();

@@ -6,6 +6,7 @@ import type { ComposeCommand, ComposeField, ComposeMode, ComposeRuntime, Compose
 import { guard, load_platform, open_windows } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import type { KeyTarget } from "./runtime.ts";
+import { label_look } from "./mode_label.ts";
 import type { ComposewinInstallArgs, KeysEvent } from "../shared/protocol.ts";
 
 const COMPOSE_WINDOW_URL = "chrome://messenger/content/messengercompose/messengercompose.xhtml";
@@ -46,6 +47,8 @@ interface ComposeWindow extends MainWindow {
 
 const invocation_listeners = new Set<(invocation: KeysEvent) => void>();
 let runtime: ComposeRuntime | null = null;
+// The label look of the last install, drawn in the colors of the scheme Thunderbird shows.
+let label_args: Pick<ComposewinInstallArgs, "labelStyle" | "labelColors"> | null = null;
 
 function target_of(window: ComposeWindow): ComposeTarget {
     const focused = window.document.activeElement;
@@ -60,10 +63,12 @@ function show_mode(window: ComposeWindow, mode: ComposeMode | null): void {
     if (!label && bar) {
         label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
         label.id = LABEL_ID;
-        label.style.cssText = "font: bold 11px monospace; margin-inline: 1em 6px; align-self: center";
         bar.append(label);
     }
-    if (label) label.textContent = `-- ${mode.toUpperCase()} --`;
+    if (!label || !label_args) return;
+    const look = label_look(mode, label_args.labelStyle, label_args.labelColors[window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"]);
+    label.textContent = look.text;
+    label.style.cssText = look.css + "align-self: center;";
 }
 
 // `run_command` waits for a timer: the save prompt of `cmd_close` and the confirm of `cmd_sendWithCheck` wait in a nested event loop, which would hold the key handler until they are answered. `window.close()` is never used: it drops a changed draft with no prompt (measured).
@@ -104,7 +109,7 @@ function ensure_runtime(context: ExtensionContext): ComposeRuntime {
 export function get_composewin_api(context: ExtensionContext) {
     return {
         composewin: {
-            install: guard("composewin.install", ({ composeTree, allowSend }: ComposewinInstallArgs): void => ensure_runtime(context).install(composeTree, allowSend)),
+            install: guard("composewin.install", ({ composeTree, allowSend, labelStyle, labelColors }: ComposewinInstallArgs): void => ((label_args = { labelStyle, labelColors }), ensure_runtime(context).install(composeTree, allowSend))),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "composewin.onInvocation",
@@ -121,6 +126,6 @@ export function get_composewin_api(context: ExtensionContext) {
 /** Removes the key listener and the mode label from every compose window, removes the window listener and forgets the event subscribers. */
 export function shutdown(): void {
     runtime?.shutdown();
-    runtime = null;
+    runtime = label_args = null;
     invocation_listeners.clear();
 }
