@@ -97,10 +97,10 @@ export interface KeyEventTargets {
 /** Whether focus sits in a text field of the window: insert mode. The body script counts as typing for a key and not here, since it runs commands of its own. */
 export const in_text_field = (document: FocusDocument): boolean => is_typing_element(innermost_focus(document));
 
-/** Whether the focus sits in the overlay's browser while its page is not ready. A key sent there reaches no page, so it must not reach Thunderbird's shortcuts either. */
 /** How many hint picks have ended in the window, from `HINTS_DONE_ATTRIBUTE`. */
 export const hints_done = (document: FocusDocument): number => Number(document.documentElement?.getAttribute?.(HINTS_DONE_ATTRIBUTE)) || 0;
 
+/** Whether the focus sits in the overlay's browser while its page is not ready. A key sent there reaches no page, so it must not reach Thunderbird's shortcuts either. */
 export const overlay_is_loading = (document: FocusDocument): boolean => innermost_focus(document)?.id === OVERLAY_LOADING_ID;
 
 // A key is typing when the event target, the original target or the focused element is a text field. The composed path is not asked: seen from the top window it starts at the browser that holds about:3pane, whatever has focus inside.

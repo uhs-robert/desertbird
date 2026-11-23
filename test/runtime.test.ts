@@ -1569,3 +1569,13 @@ test("a labels-done mark from before the hold started does not end it", () => {
     press(window, "f");
     assert.deepEqual(emitted.map((invocation) => invocation.command), ["hint.window"]);
 });
+
+test("a labels-done mark bumped during a command line hold does not end it", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    press(window, ":");
+    window.hints_done++;
+    assert.equal(press(window, "j").cancelled, true, "the hold still swallows the key");
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+});

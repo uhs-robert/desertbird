@@ -66,7 +66,7 @@ interface PickMainWindow extends ListenerTarget, HintWindow {
     document: HintWindow["document"] & {
         hasFocus(): boolean;
         getElementById(id: string): unknown;
-        documentElement: { setAttribute(name: string, value: string): void; removeAttribute(name: string): void };
+        documentElement: { getAttribute(name: string): string | null; setAttribute(name: string, value: string): void; removeAttribute(name: string): void };
     };
     matchMedia(query: string): { matches: boolean };
     setTimeout(callback: () => void, ms: number): unknown;
@@ -111,9 +111,6 @@ function listen(target: ListenerTarget, type: string, listener: (event: never) =
 // The clipboard service of the parent. The label is typed later, inside this Experiment, and the background cannot wait for that key. So the pick writes the text here when the label completes.
 const copy_to_clipboard = (text: string): void => Cc["@mozilla.org/widget/clipboardhelper;1"]!.getService(Ci["nsIClipboardHelper"]).copyString(text);
 
-// Counts across windows: a runtime only compares the value with the one it read when its hold began.
-let picks_ended = 0;
-
 function pick_host(main: PickMainWindow, documents: ListenerTarget[], message?: ListenerTarget): PickHost {
     return {
         copy: copy_to_clipboard,
@@ -122,7 +119,7 @@ function pick_host(main: PickMainWindow, documents: ListenerTarget[], message?: 
             const root = main.document.documentElement;
             root.setAttribute(HINTS_LIVE_ATTRIBUTE, "");
             const stop = listen(main.windowRoot ?? main, "keydown", listener as (event: PickKeyEvent) => void);
-            return () => (stop(), root.removeAttribute(HINTS_LIVE_ATTRIBUTE), root.setAttribute(HINTS_DONE_ATTRIBUTE, String(++picks_ended)));
+            return () => (stop(), root.removeAttribute(HINTS_LIVE_ATTRIBUTE), root.setAttribute(HINTS_DONE_ATTRIBUTE, String(Number(root.getAttribute(HINTS_DONE_ATTRIBUTE)) + 1)));
         },
         on_disturb(listener) {
             // The blur lands on the focused element when focus moves inside the window too, so only a window that lost the focus counts.
