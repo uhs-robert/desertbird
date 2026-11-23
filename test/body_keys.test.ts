@@ -828,3 +828,25 @@ test("a message window document reads the window tree and names it in the pendin
     assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["msg.flag"]);
     assert.deepEqual(trees, ["window", "window"]);
 });
+
+test("the message script entry starts on the message keys while the background cannot answer body.tree, and switches to the window keys once it answers", async () => {
+    const window_root = JSON.parse(JSON.stringify(compile_tab_keymap("window").compiled.modes.normal)) as unknown;
+    const window = new StubWindow();
+    const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { ...record(), window_tree: { version: COMPILED_KEYMAP_VERSION, root: window_root } } });
+    const sent: unknown[] = [];
+    let tree_answers = 0;
+    // The first question finds no background, as in a message window that opens while the add-on starts.
+    const runtime: BodyRuntime = {
+        sendMessage: async (message) => (message.type === "body.tree" ? (tree_answers++ === 0 ? Promise.reject(new Error("Receiving end does not exist")) : "window_tree") : void sent.push(message)),
+        onMessage: { addListener() {} },
+    };
+    Object.assign(globalThis, { window, browser: { storage: { local: storage, onChanged: storage.onChanged }, runtime } });
+    await import("../src/content/message_display.ts");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    window.press("J");
+    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["tab.next"], "the message keys run until the background answers");
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    window.press("J");
+    window.press("c");
+    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["tab.next", "msg.new"], "the window keys run once it answers");
+});
