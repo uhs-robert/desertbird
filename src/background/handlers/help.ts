@@ -7,19 +7,23 @@ export const HELP_PAGE = "help/help.html";
 export interface HelpApi extends MainWindowApi {
     runtime: { getURL(path: string): string };
     tabs: {
-        query(query: { url: string }): Promise<{ id?: number }[]>;
+        query(query: { url: string }): Promise<{ id?: number; windowId?: number }[]>;
         create(properties: { url: string; windowId?: number }): Promise<unknown>;
         update(tab_id: number, properties: { active: true }): Promise<unknown>;
     };
 }
 
-/** Opens the help page in a tab of the key's window, or of the main window for a key in a message window, or shows the tab that already holds it. */
+/** Shows the tab that already holds the help page and brings its window to the front. Else opens the page in a tab of the key's window, or of the main window for a key in a message window. */
 export async function open_help(scope: HandlerScope<HelpApi>): Promise<void> {
-    const window_id = await main_window_of(scope.api, scope.window_id);
     const url = scope.api.runtime.getURL(HELP_PAGE);
-    const open_id = (await scope.api.tabs.query({ url }))[0]?.id;
-    if (open_id !== undefined) await scope.api.tabs.update(open_id, { active: true });
-    else await scope.api.tabs.create({ url, ...(window_id >= 0 && { windowId: window_id }) });
+    const open = (await scope.api.tabs.query({ url }))[0];
+    if (open?.id !== undefined) {
+        // Activating a tab does not focus its window, which can be another main window than the key's.
+        if (open.windowId !== undefined) await scope.api.windows.update(open.windowId, { focused: true });
+        return void (await scope.api.tabs.update(open.id, { active: true }));
+    }
+    const window_id = await main_window_of(scope.api, scope.window_id);
+    await scope.api.tabs.create({ url, ...(window_id >= 0 && { windowId: window_id }) });
 }
 
 export interface OptionsApi extends MainWindowApi {
