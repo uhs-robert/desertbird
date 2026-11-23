@@ -91,6 +91,33 @@ function views_text() {
   return entries.join("");
 }
 
+// The Lists folder serves the list and date filters (F m l, F m d), in profile kind "lists" only, so the folder pane of every other piece stays as it was. Seven single messages on three days, from two mailing lists and none. Every date sits near noon UTC, so the day is the same in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
+const LISTS_MAIL = [
+  ["dev", 3, 11], ["dev", 3, 12], ["ops", 3, 13], ["dev", 4, 12], ["ops", 5, 12], [null, 5, 13], ["dev", 6, 12],
+];
+function lists_text() {
+  return LISTS_MAIL.map(([list, day, hour], index) => {
+    const time = new Date(Date.UTC(2026, 1, day, hour)).toUTCString();
+    const unread = index === 3 || index === 6;
+    return [
+      `From l${index}@fixture.invalid ${time}`,
+      `X-Mozilla-Status: ${((unread ? 0 : 1) | (index === 1 ? 4 : 0)).toString(16).padStart(4, "0")}`,
+      "X-Mozilla-Status2: 00000000",
+      `Message-ID: <lists-${index}@fixture.invalid>`,
+      `Date: ${time.replace("GMT", "+0000")}`,
+      `From: Lists Sender ${index} <l${index}@fixture.invalid>`,
+      "To: Local <local@fixture.invalid>",
+      `Subject: Lists ${index}`,
+      ...(list ? [`List-Id: The ${list} list <${list}.fixture.invalid>`] : []),
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      `Body of lists-${index}.`,
+      "",
+    ].join("\n") + "\n";
+  }).join("");
+}
+
 // A second account, the default one: a POP3 account that never connects, with two identities and two Inbox messages. One message is addressed to the alias identity.
 // Local Folders keeps no identity of its own in this kind, as in a real profile.
 const MAIL_ACCOUNT_PREFS = {
@@ -137,6 +164,7 @@ const mail_account_inbox = () =>
     .join("");
 
 // kind "owner" is the default plus the prefs a window a person looks at needs: no first-run policy tab. owner-test uses it.
+// kind "lists" adds the Lists folder (List-Id headers and three days).
 // kind "message_header" adds the Header folder (a message with Cc, a tag and an attachment) and the dark scheme.
 // kinds "quick_reply_plain" and "quick_reply_html" have an identity with a signature. kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
@@ -146,6 +174,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const scale = process.env.E2E_SCALE === "1";
   const folder_dir = write_fixtures(profile_dir, { big: scale, header: kind === "message_header" });
   writeFileSync(join(folder_dir, "Views"), views_text());
+  if (kind === "lists") writeFileSync(join(folder_dir, "Lists"), lists_text());
   write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   if (!scale) for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));

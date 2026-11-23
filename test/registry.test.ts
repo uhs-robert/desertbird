@@ -157,6 +157,8 @@ test("the view keys run the planned commands with the planned args", () => {
         Fa: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
         Fmf: { id: "filter.by", args: { field: "from" }, label: "Sender" },
         Fmt: { id: "filter.by", args: { field: "tag" }, label: "Tag" },
+        Fml: { id: "filter.by", args: { field: "list" }, label: "Mailing list" },
+        Fmd: { id: "filter.by", args: { field: "date" }, label: "Same day" },
         sd: { id: "sort.set", args: { by: "date", order: "descending" }, label: "Date" },
         so: { id: "sort.set", args: { by: "current", order: "toggle" }, label: "Toggle direction" },
         wm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },

@@ -107,6 +107,7 @@ const PARENTS = [
     { name: "folderpane", entry: "src/chrome/parent_folderpane.ts", max_bytes: FOLDERPANE_MAX_BYTES },
     { name: "zoom", entry: "src/chrome/parent_zoom.ts", max_bytes: ZOOM_MAX_BYTES },
     { name: "composewin", entry: "src/chrome/parent_composewin.ts", max_bytes: COMPOSEWIN_MAX_BYTES },
+    { name: "filter", entry: "src/chrome/parent_filter.ts" },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,

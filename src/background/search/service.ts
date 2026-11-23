@@ -8,7 +8,7 @@ import type { AppApi, CmdlineSearchNote, SearchDirection, ViewRow } from "../../
 import { select_row } from "../handlers/thread_view.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
 import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
-import type { QuickFilter } from "../handlers/view.ts";
+import type { AppliedFilter, FilterApis } from "../handlers/view.ts";
 import type { Timers } from "../hud/toasts.ts";
 import { create_folder_search } from "./folder_search.ts";
 import type { FolderSearchApi } from "./folder_search.ts";
@@ -20,7 +20,7 @@ export const SEARCH_DEBOUNCE_MS = 150;
 // The most rows one `app.viewRows` call returns.
 const BLOCK = 500;
 
-export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"] } & Partial<Pick<FolderSearchApi, "folders">>;
+export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApis["filter"] } & Partial<Pick<FolderSearchApi, "folders">>;
 
 export interface SearchDeps {
     api: SearchApi;
@@ -52,14 +52,14 @@ interface LiveSearch {
     folder_id: string;
     direction: SearchDirection;
     /** What the tab showed when the search began. */
-    prior: QuickFilter;
+    prior: AppliedFilter;
     /** Counts keystrokes. A wait or an apply that finds a newer number stops. */
     sequence: number;
     /** Every filter change of the search runs after the one before it, so a slow older filter never lands after a newer one or after the restore. */
     changes: Promise<unknown>;
 }
 
-const with_text = (base: QuickFilter, text: string): QuickFilter => {
+const with_text = (base: AppliedFilter, text: string): AppliedFilter => {
     // The bar must show while text filters the list, so the hidden flag of the earlier filter is dropped.
     const kept = { ...base };
     delete kept.show;
@@ -144,7 +144,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
                     leave_search(window_id, search);
                     return { note: "The folder changed, so the search ended.", is_error: true };
                 }
-                await apply_filter(deps.api.mailTabs, search.tab_id, text === "" ? search.prior : with_text(search.prior, text));
+                await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text));
                 if (text === "") return { note: "", is_error: false };
                 const count = await count_rows(window_id);
                 if (mine !== search.sequence) return { stale: true };
@@ -168,7 +168,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
                     leave_search(window_id, search);
                     throw new RuntimeRefusal("The folder changed, so the search ended.");
                 }
-                await apply_filter(deps.api.mailTabs, search.tab_id, with_text(search.prior, query));
+                await apply_filter(deps.api, search.tab_id, with_text(search.prior, query));
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
                 if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
@@ -187,7 +187,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             if (search === undefined) return;
             leave_search(window_id, search);
             await in_order(search, async () => {
-                if (await owns_tab(search)) await apply_filter(deps.api.mailTabs, search.tab_id, search.prior);
+                if (await owns_tab(search)) await apply_filter(deps.api, search.tab_id, search.prior);
                 else forget_filter(search.tab_id);
             }).catch((error: unknown) => console.error("desertbird:", error));
         },
@@ -198,7 +198,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             if (register.kind === "folders") return folder_search.step(window_id, register, relation);
             const tab = await list_mail_tab(scope_of(window_id));
             // After Escape the list is no longer narrowed to the search, so `n` narrows it again.
-            if (remembered_filter(tab.id).text?.text !== register.text) await apply_filter(deps.api.mailTabs, tab.id, with_text(remembered_filter(tab.id), register.text));
+            if (remembered_filter(tab.id).text?.text !== register.text) await apply_filter(deps.api, tab.id, with_text(remembered_filter(tab.id), register.text));
             const count = await count_rows(window_id);
             if (count === 0) throw new RuntimeRefusal(describe_match(register.text, 0, 0, undefined));
             const direction = relation === "same" ? register.direction : opposite(register.direction);

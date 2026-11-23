@@ -65,7 +65,7 @@ test("the moved keys run their commands, and the old keys are free", () => {
     assert.deepEqual(command_at(mail_root, ["g", "p", "t"]), { id: "app.open_page", args: { page: "themes" } });
     assert.deepEqual(command_at(mail_root, ["g", "p", "c"]), { id: "app.open_page", args: { page: "config" } });
     assert.deepEqual(command_at(mail_root, ["F", "a"]), { id: "filter.set", args: { state: "attachment" } });
-    assert.deepEqual(rows_of(mail_root, ["F", "m"]), { f: "Sender", s: "Subject", r: "Recipient", t: "Tag" });
+    assert.deepEqual(rows_of(mail_root, ["F", "m"]), { f: "Sender", s: "Subject", r: "Recipient", t: "Tag", l: "Mailing list", d: "Same day" });
     assert.deepEqual(command_at(mail_root, ["F", "r"]), { id: "filter.set", args: { state: "all" } });
     assert.equal(command_at(mail_root, ["a"])?.id, "msg.archive");
     assert.equal(node_at(mail_root, ["x"]), undefined);

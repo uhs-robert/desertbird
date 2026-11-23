@@ -4,7 +4,12 @@ import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import { while_loading } from "../src/background/handlers/loading.ts";
-import { keep_filters } from "../src/background/handlers/view.ts";
+import { filters_ready, forget_filter, keep_filters } from "../src/background/handlers/view.ts";
+import { create_search_register } from "../src/background/search/register.ts";
+import { SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
+import type { FilterSetArgs } from "../src/shared/protocol.ts";
+import { fake_storage } from "./fake_api.ts";
+import { fake_timers } from "./hud_fakes.ts";
 import type { MailTab } from "../src/background/handlers/view.ts";
 import { APPLIED_FILTERS_STORAGE_KEY } from "../src/shared/protocol.ts";
 import type { RouterApi } from "../src/background/router.ts";
@@ -317,7 +322,8 @@ const SAMPLE = { author: "Ann Lee <ann@example.org>", subject: "Re: Fwd: Budget 
 
 test("filter.by validates the field", () => {
     for (const field of ["from", "subject", "recipient", "tag"]) assert.equal(ok("filter.by", { field }), true, field);
-    assert.equal(ok("filter.by", { field: "date" }), false);
+    for (const field of ["list", "date"]) assert.equal(ok("filter.by", { field }), true, field);
+    assert.equal(ok("filter.by", { field: "thread" }), false);
     assert.equal(ok("filter.by", {}), false);
 });
 
@@ -416,4 +422,177 @@ test("filter.by waits for the stored filters to load before it reads the remembe
     await pending;
     assert.deepEqual(fake.calls, ['{"unread":true,"text":{"text":"ann@example.org","author":true}}']);
     keep_filters(undefined);
+});
+
+// --- the list and date filters of the `filter` Experiment, and their re-apply after each `setQuickFilter`
+
+const DEV_DAY = new Date("2026-03-08T12:00:00Z");
+const LIST_MAIL: Record<number, { date: Date; headers: Record<string, string[]> }> = {
+    1: { date: DEV_DAY, headers: { "List-Id": ["Dev list <dev.example.org>"] } },
+    2: { date: new Date("2026-03-09T08:00:00Z"), headers: { "list-id": ["<ops.example.org>"] } },
+    3: { date: new Date("2026-03-10T08:00:00Z"), headers: { subject: ["no list"] } },
+};
+const DEV_LIST = { tabId: 0, listId: "<dev.example.org>" };
+
+/** One mail tab whose `setQuickFilter` and `filter.set` calls land in one list, in order, so a test reads what the tab shows after each step. The live search of `/` runs on the same fake. */
+function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "missing" | "failing" } = {}) {
+    const tab_id = next_tab_id++;
+    const steps: string[] = [];
+    const notices: string[] = [];
+    const filter_set = async (args: FilterSetArgs) => {
+        if (options.filter === "failing") throw new Error("filter.set: the tab shows no message list");
+        steps.push(`filter.set ${JSON.stringify({ ...args, tabId: args.tabId - tab_id })}`);
+    };
+    const api = {
+        mailTabs: {
+            query: async () => [{ id: tab_id, displayedFolder: INBOX }],
+            get: async () => ({ displayedFolder: INBOX }),
+            update: async () => undefined,
+            setQuickFilter: async (_id: number, filter: unknown) => void steps.push(`setQuickFilter ${JSON.stringify(filter)}`),
+            setSelectedMessages: async () => undefined,
+        },
+        messages: {
+            get: async (id: number) => ({ id, date: LIST_MAIL[id]!.date }),
+            getFull: async (id: number) => ({ headers: LIST_MAIL[id]!.headers }),
+            tags: { list: async () => [] },
+        },
+        app: { viewRows: async ({ first }: { first: number }) => ({ current: options.cursor_row ?? 0, rows: first === options.cursor_row ? [{ index: first, id: 2, depth: 0, collapsed: false, unread: false, flags: 0 }] : [{ index: first, id: 9, depth: 0, collapsed: false, unread: false, flags: 0 }] }) },
+        filter: options.filter === "missing" ? undefined : { set: filter_set },
+        folderpane: undefined,
+        notifications: { create: async (_id: string, notification: { message: string }) => (notices.push(notification.message), "n1") },
+        keys: undefined,
+    };
+    const router = create_router(registry, api as unknown as RouterApi);
+    const run = (command: string, args: Record<string, string>) => router.run({ command, args, count: 1, windowId: 3, messageIds: options.ids ?? [1] });
+    const timers = fake_timers();
+    const search = create_search_service({ api: api as never, register: create_search_register(fake_storage().api.local), timers, say: async () => undefined });
+    const type = async (text: string) => {
+        const pending = search.type(3, text);
+        await new Promise((resolve) => setImmediate(resolve));
+        timers.advance(SEARCH_DEBOUNCE_MS);
+        return pending;
+    };
+    return { run, steps, notices, search, type, api };
+}
+
+test("F m l filters on the List-Id in angle brackets and F m d on the message date in microseconds, after a setQuickFilter that keeps the other filters", async () => {
+    const list = terms_fake();
+    await list.run("filter.by", { field: "list" });
+    assert.deepEqual(list.steps, ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
+    const date = terms_fake();
+    await date.run("filter.set", { state: "unread" });
+    await date.run("filter.by", { field: "date" });
+    assert.deepEqual(date.steps.slice(1), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify({ tabId: 0, dateUs: DEV_DAY.getTime() * 1000 })}`]);
+});
+
+test("F m l and F m d stack, and a later F m l swaps only the list", async () => {
+    const { run, steps } = terms_fake();
+    await run("filter.by", { field: "list" });
+    await run("filter.by", { field: "date" });
+    assert.equal(steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<dev.example.org>", dateUs: DEV_DAY.getTime() * 1000 })}`);
+});
+
+test("F m l refuses a message with no List-Id and changes nothing", async () => {
+    const { run, steps, notices } = terms_fake({ ids: [3] });
+    await run("filter.by", { field: "list" });
+    assert.deepEqual(notices, ["The selected message is not from a mailing list."]);
+    assert.deepEqual(steps, []);
+});
+
+test("with several messages selected, F m l takes the cursor message, or the first selected when the cursor is outside the selection", async () => {
+    const at_cursor = terms_fake({ ids: [1, 2], cursor_row: 4 });
+    await at_cursor.run("filter.by", { field: "list" });
+    assert.equal(at_cursor.steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<ops.example.org>" })}`);
+    const outside = terms_fake({ ids: [1, 3], cursor_row: 4 });
+    await outside.run("filter.by", { field: "list" });
+    assert.equal(outside.steps.at(-1), `filter.set ${JSON.stringify(DEV_LIST)}`);
+});
+
+test("re-apply after F u: the unread filter replaces the earlier quick filter and the list filter goes back on", async () => {
+    const { run, steps } = terms_fake();
+    await run("filter.by", { field: "list" });
+    await run("filter.set", { state: "unread" });
+    assert.deepEqual(steps.slice(2), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("re-apply after F s: the star toggles on and off and the list filter goes back on each time", async () => {
+    const { run, steps } = terms_fake();
+    await run("filter.by", { field: "list" });
+    await run("filter.set", { state: "toggle_starred" });
+    await run("filter.set", { state: "toggle_starred" });
+    assert.deepEqual(steps.slice(2), ['setQuickFilter {"flagged":true}', `filter.set ${JSON.stringify(DEV_LIST)}`, "setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("F r clears the list and date filters, and a later F u brings neither back", async () => {
+    const { run, steps } = terms_fake();
+    await run("filter.by", { field: "list" });
+    await run("filter.by", { field: "date" });
+    await run("filter.set", { state: "all" });
+    await run("filter.set", { state: "unread" });
+    assert.deepEqual(steps.slice(4), ["setQuickFilter {}", 'setQuickFilter {"unread":true}']);
+});
+
+test("F m f after F m l keeps the list filter beside the sender text", async () => {
+    const fake = terms_fake();
+    fake.api.messages.get = async (id: number) => ({ id, date: DEV_DAY, author: "Ann <ann@example.org>" }) as never;
+    await fake.run("filter.by", { field: "list" });
+    await fake.run("filter.by", { field: "from" });
+    assert.deepEqual(fake.steps.slice(2), ['setQuickFilter {"text":{"text":"ann@example.org","author":true}}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("re-apply after /: each keystroke, the commit and Escape put the list filter back after their setQuickFilter", async () => {
+    const { run, steps, search, type } = terms_fake();
+    await run("filter.by", { field: "list" });
+    await search.start(3, "forward");
+    await type("inv");
+    await search.cancel(3);
+    const text = '{"text":{"text":"inv","subject":true,"author":true}}';
+    assert.deepEqual(steps.slice(2), [`setQuickFilter ${text}`, `filter.set ${JSON.stringify(DEV_LIST)}`, "setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
+    await search.start(3, "forward");
+    await search.commit(3, "inv").catch(() => undefined);
+    assert.deepEqual(steps.slice(6, 8), [`setQuickFilter ${text}`, `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("a re-apply the Experiment refuses leaves the quick filter alone in memory, so the next F u sends no list filter", async () => {
+    const { run, steps, notices } = terms_fake({ filter: "failing" });
+    await run("filter.by", { field: "list" });
+    assert.equal(notices.length, 1);
+    await run("filter.set", { state: "unread" });
+    assert.deepEqual(steps, ["setQuickFilter {}", 'setQuickFilter {"unread":true}']);
+});
+
+test("F m l refuses when the filter Experiment did not load", async () => {
+    const { run, notices } = terms_fake({ filter: "missing" });
+    await run("filter.by", { field: "list" });
+    assert.deepEqual(notices, ["The list and date filters need the DesertBird Experiment, which is not loaded."]);
+});
+
+test("F u while F m l still reads the message: the list filter lands on top of the unread filter", async () => {
+    const fake = terms_fake();
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const read = fake.api.messages.getFull;
+    fake.api.messages.getFull = async (id: number) => (await gate, read(id));
+    const pending = fake.run("filter.by", { field: "list" });
+    await fake.run("filter.set", { state: "unread" });
+    open();
+    await pending;
+    assert.deepEqual(fake.steps, ['setQuickFilter {"unread":true}', 'setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("the list filter survives a restart of the background page through session storage, and F u re-applies it", async () => {
+    const fake = terms_fake();
+    const tab_id = next_tab_id - 1;
+    const stored: Record<string, unknown> = {};
+    keep_filters({ get: async () => ({}), set: async (items) => void Object.assign(stored, items) });
+    await fake.run("filter.by", { field: "list" });
+    assert.deepEqual((stored[APPLIED_FILTERS_STORAGE_KEY] as Record<string, unknown>)[tab_id], { by_message: { list_id: "<dev.example.org>" } });
+    // A new page starts with an empty map and reads the stored one.
+    keep_filters(undefined);
+    forget_filter(tab_id);
+    keep_filters({ get: async () => stored, set: async () => undefined });
+    await filters_ready();
+    await fake.run("filter.set", { state: "unread" });
+    keep_filters(undefined);
+    assert.deepEqual(fake.steps.slice(2), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
