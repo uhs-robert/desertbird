@@ -474,6 +474,20 @@ test("a half-typed g in a message window header ends when the body takes a key, 
     assert.equal(scrolls.length, 0);
 });
 
+test("a half-typed d in a message window ends when a text field takes a key, so d, Escape in a field, then d deletes nothing", () => {
+    const { windows, runtime, invocations } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.message_window = true;
+    window.situation = "message";
+    press(window, "d");
+    window.situation = "field";
+    press(window, "Escape");
+    window.situation = "message";
+    press(window, "d");
+    assert.deepEqual(invocations().map((event) => event.command), []);
+});
+
 const modes = (events: KeysEvent[]) => events.filter((event) => event.command === "mode").map((event) => (event as { mode: string }).mode);
 
 test("Escape in a text field is left to Thunderbird first and blurs in the bubble phase, once", () => {

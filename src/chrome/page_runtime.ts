@@ -125,10 +125,10 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         const in_field = situation === "field";
         // A page of another process hides its text fields, so only a chord is safe there. In a text field a plain key is text.
         if ((in_field || situation === "remote") && is_plain_printable(token)) return (end_key_list(window), reset_matchers());
-        // The two matchers each keep a half-typed sequence, so the one not in use starts over.
+        // Each matcher keeps a half-typed sequence, so every one not in use starts over: a `d` typed before a text field took Escape must not wait for the second `d`.
         const in_window = deps.is_message_window(window);
-        const [active, idle] = in_field ? [typing_matcher, matcher] : situation === "message" ? [in_window ? window_matcher : message_matcher, matcher] : [matcher, message_matcher];
-        idle.reset();
+        const active = in_field ? typing_matcher : situation === "message" ? (in_window ? window_matcher : message_matcher) : matcher;
+        for (const each of [matcher, message_matcher, window_matcher, typing_matcher]) each === active || each.reset();
         if (sequence_window !== window) active.reset();
         sequence_window = window;
         const result = active.feed(NORMAL_MODE, token);
