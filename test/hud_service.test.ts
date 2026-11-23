@@ -508,3 +508,28 @@ test("a pending or mode event of a window the hud does not track (a message wind
     assert.deepEqual(labels, []);
     assert.equal((await hud.handle({ type: "hud.state", windowId: 9 }))?.which_key, null);
 });
+
+test("a refusal toast in a message window, where no hud page can mount, leaves the window untracked, so its later prefixes try no mount", async () => {
+    const mounts: number[] = [];
+    const timers = fake_timers();
+    const hud = create_hud_service({
+        overlay: { mount: async ({ windowId }) => (mounts.push(windowId), Promise.reject(new Error(`no main window has id ${windowId}`))), unmount: async () => {}, setModeLabel: async () => {}, onClosed: { addListener: () => {}, removeListener: () => {} } },
+        read_settings: async () => settings_with({ mode_indicator: "off" }),
+        read_root: async () => message_root(),
+        read_marks: async () => ({}),
+        send_changed: () => {},
+        timers,
+    });
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+        assert.equal(await hud.toast(9, "Thunderbird cannot open a conversation", true), false);
+        mounts.length = 0;
+        await hud.on_keys_event({ command: "pending", keys: ["g"], windowId: 9, source: "window" });
+        timers.advance(1000);
+        await settle();
+    } finally {
+        console.error = quiet;
+    }
+    assert.deepEqual(mounts, []);
+});
