@@ -2,8 +2,9 @@ import { ignore_refusal } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
 import { while_loading } from "./loading.ts";
+import { require_messages } from "./each_message.ts";
 import type { MailFolder } from "./displayed_folder.ts";
-import type { HandlerScope } from "./message.ts";
+import type { HandlerScope, MessageHeader } from "./message.ts";
 import { APPLIED_FILTERS_STORAGE_KEY } from "../../shared/protocol.ts";
 
 /** The `mailTabs.setQuickFilter` state. `{}` clears every filter. */
@@ -14,7 +15,7 @@ export interface QuickFilter {
     flagged?: true;
     attachment?: true;
     tags?: { mode: "any"; tags: Record<string, true> };
-    text?: { text: string; subject: true; author: true };
+    text?: { text: string; subject?: true; author?: true; recipients?: true };
 }
 
 export interface MailTab {
@@ -35,7 +36,7 @@ export interface MailTabUpdate {
 }
 
 export interface ViewApi {
-    messages?: { tags: { list(): Promise<{ key: string; tag: string }[]> } };
+    messages?: { get(id: number): Promise<MessageHeader>; tags: { list(): Promise<{ key: string; tag: string }[]> } };
     mailTabs: {
         query(query: { windowId: number; active: true }): Promise<MailTab[]>;
         update(tab_id: number, update: MailTabUpdate): Promise<unknown>;
@@ -133,6 +134,37 @@ export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<v
 export async function search_threads(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
     await apply_filter(scope.api.mailTabs, tab.id, { text: { text: args["query"] as string, subject: true, author: true } });
+}
+
+const bare_address = (mailbox: string): string => mailbox.match(/<([^>]+)>/)?.[1] ?? mailbox.trim();
+
+// A reply prefix would hide the first message of the conversation, which has none.
+const without_reply_prefix = (subject: string): string => subject.replace(/^(\s*(re|fwd?|aw)\s*:)+/i, "").trim();
+
+// A text filter holds one string and Thunderbird ANDs its words, so only one message can supply it. Tags are the one field that can match any of several messages.
+async function filter_of_message(scope: ViewScope, field: string, base: QuickFilter): Promise<QuickFilter> {
+    const messages = scope.api.messages;
+    if (messages === undefined) throw new RuntimeRefusal("This window cannot read messages.");
+    const ids = require_messages(scope.message_ids);
+    if (field !== "tag" && ids.length > 1) throw new RuntimeRefusal("Select one message.");
+    const selected = await Promise.all(ids.map((id) => messages.get(id)));
+    if (field === "tag") {
+        const keys = selected.flatMap((message) => message.tags ?? []);
+        if (keys.length === 0) throw new RuntimeRefusal("The selected message has no tag.");
+        return { ...base, tags: { mode: "any", tags: Object.fromEntries(keys.map((key) => [key, true as const])) } };
+    }
+    const [message] = selected as [MessageHeader];
+    const text = { from: message.author ?? "", subject: without_reply_prefix(message.subject ?? ""), recipient: message.recipients?.[0] ?? "" }[field]!;
+    const value = field === "subject" ? text : bare_address(text);
+    if (value === "") throw new RuntimeRefusal(`The selected message has no ${field}.`);
+    return { ...base, text: { text: value, ...(field === "from" ? { author: true as const } : field === "subject" ? { subject: true as const } : { recipients: true as const }) } };
+}
+
+// The filter is added to the remembered one, as the live search does. The hidden-bar marker goes because the user should see a filter that narrows the list.
+export async function filter_by_message(scope: ViewScope, args: CheckedArgs): Promise<void> {
+    const tab = await list_mail_tab(scope);
+    const { show: _hidden, ...current } = remembered_filter(tab.id);
+    await apply_filter(scope.api.mailTabs, tab.id, await filter_of_message(scope, args["field"] as string, current));
 }
 
 // A view grouped by its sort column cannot group by size or by read state. Thunderbird swaps in date without an error, so the handler refuses first.

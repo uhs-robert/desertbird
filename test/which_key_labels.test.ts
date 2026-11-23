@@ -47,7 +47,7 @@ test("the root lists each group by its name", () => {
 
 test("the rows carry the short labels", () => {
     assert.deepEqual(rows_of(mail_root, ["g", "p"]), { a: "Add-ons", t: "Themes", c: "Config" });
-    assert.deepEqual(rows_of(mail_root, ["F"]), { u: "Unread", r: "Reset", s: "Starred", a: "Attachments", f: "By text", t: "By tag" });
+    assert.deepEqual(rows_of(mail_root, ["F"]), { u: "Unread", r: "Reset", s: "Starred", a: "Attachments", f: "By text", t: "By tag", m: "By message" });
     assert.deepEqual(rows_of(mail_root, ["m", "f"]), { d: "In 1 day", t: "In 3 days", w: "In 1 week", c: "Cancel" });
     assert.deepEqual(rows_of(mail_root, ["y"]), { y: "Message", s: "Subject", f: "Sender", a: "Address", i: "Message ID" });
     assert.deepEqual(rows_of(mail_root, ["g", "r"])["1"], "Slot 1");
@@ -65,6 +65,7 @@ test("the moved keys run their commands, and the old keys are free", () => {
     assert.deepEqual(command_at(mail_root, ["g", "p", "t"]), { id: "app.open_page", args: { page: "themes" } });
     assert.deepEqual(command_at(mail_root, ["g", "p", "c"]), { id: "app.open_page", args: { page: "config" } });
     assert.deepEqual(command_at(mail_root, ["F", "a"]), { id: "filter.set", args: { state: "attachment" } });
+    assert.deepEqual(rows_of(mail_root, ["F", "m"]), { f: "Sender", s: "Subject", r: "Recipient", t: "Tag" });
     assert.deepEqual(command_at(mail_root, ["F", "r"]), { id: "filter.set", args: { state: "all" } });
     assert.equal(command_at(mail_root, ["a"])?.id, "msg.archive");
     assert.equal(node_at(mail_root, ["x"]), undefined);

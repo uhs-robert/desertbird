@@ -64,6 +64,7 @@ export const GROUP_NAMES: Record<string, string> = {
     mz: "Snooze",
     mf: "Remind",
     F: "Filter",
+    Fm: "By message",
     ",": "DesertBird",
     s: "Sort",
     t: "Tabs",

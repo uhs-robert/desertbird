@@ -1,4 +1,4 @@
-import { search_threads, set_filter, set_sort, toggle_pane } from "../handlers/view.ts";
+import { filter_by_message, search_threads, set_filter, set_sort, toggle_pane } from "../handlers/view.ts";
 import type { ViewApi } from "../handlers/view.ts";
 import { needing, scoped } from "./define.ts";
 import type { CommandGroup } from "./define.ts";
@@ -8,7 +8,7 @@ const UNTAGGED_STATES = ["unread", "all", "starred", "toggle_starred", "attachme
 // A sort key names its order because the column alone leaves it open: dates read newest first and every other column reads smallest first.
 const sort_key = (by: string, order: string, label: string) => ({ id: "sort.set", args: { by, order }, label });
 
-// All four change only what the list shows, never mail, so `bridge` is true.
+// All five change only what the list shows, never mail. `bridge` is true except for `filter.by`.
 export const view: CommandGroup = {
     commands: needing("list", {
         "filter.set": {
@@ -40,6 +40,24 @@ export const view: CommandGroup = {
                 },
             ],
             run: scoped<ViewApi>(set_filter),
+        },
+        // Off the bridge: a filter on the text of a message, then a step, would tell a caller what mail it holds.
+        "filter.by": {
+            bridge: false,
+            runs_in: "background",
+            name: "filter-by",
+            label: "Filter by the message",
+            intent: "Filter the list by a field of the selected message.",
+            params: [
+                {
+                    name: "field",
+                    type: "enum",
+                    values: ["from", "subject", "recipient", "tag"],
+                    short: { from: "f", subject: "s", recipient: "r", tag: "t" },
+                    description: { from: "Show the mail from the sender of the selected message.", subject: "Show the mail with the subject of the selected one.", recipient: "Show the mail to the first recipient of the selected one.", tag: "Show the mail with a tag of the selected messages." },
+                },
+            ],
+            run: scoped<ViewApi>(filter_by_message),
         },
         "search.threads": {
             bridge: true,
@@ -101,6 +119,10 @@ export const view: CommandGroup = {
         Fr: { id: "filter.set", args: { state: "all" }, label: "Reset" },
         Fs: { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" },
         Fa: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
+        Fmf: { id: "filter.by", args: { field: "from" }, label: "Sender" },
+        Fms: { id: "filter.by", args: { field: "subject" }, label: "Subject" },
+        Fmr: { id: "filter.by", args: { field: "recipient" }, label: "Recipient" },
+        Fmt: { id: "filter.by", args: { field: "tag" }, label: "Tag" },
         sd: sort_key("date", "descending", "Date"),
         sj: sort_key("subject", "ascending", "Subject"),
         sf: sort_key("author", "ascending", "Author"),

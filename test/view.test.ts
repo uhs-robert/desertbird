@@ -291,3 +291,66 @@ test("F s flips only the star and keeps the other filters", async () => {
     await run("filter.set", { state: "toggle_starred" });
     assert.deepEqual(calls.filter((call) => call.startsWith("mailTabs.setQuickFilter")), ['mailTabs.setQuickFilter 78 {"unread":true}', 'mailTabs.setQuickFilter 78 {"unread":true,"flagged":true}', 'mailTabs.setQuickFilter 78 {"unread":true}']);
 });
+
+/** A fake whose messages.get answers from `messages`, with the selection `ids`. */
+// The remembered filter is keyed by tab id and lives for the process, so each fake gets a tab of its own.
+let next_tab_id = 100;
+function by_message_fake(messages: Record<number, Record<string, unknown>>, ids: number[], earlier?: unknown) {
+    const calls: string[] = [];
+    const tab_id = next_tab_id++;
+    const mailTabs = {
+        query: async () => [{ id: tab_id, displayedFolder: INBOX }],
+        update: async () => undefined,
+        setQuickFilter: async (_id: number, filter: unknown) => void calls.push(JSON.stringify(filter)),
+    };
+    const notices: string[] = [];
+    const api = { mailTabs, messages: { get: async (id: number) => ({ id, ...messages[id] }), tags: { list: async () => [] } }, notifications: { create: async (_id: string, notification: { message: string }) => (notices.push(notification.message), "n1") }, keys: undefined } as unknown as RouterApi;
+    const router = create_router(registry, api);
+    const run = (field: string) => router.run({ command: "filter.by", args: { field }, count: 1, windowId: 3, messageIds: ids });
+    return { run, calls, notices, earlier: async () => earlier === undefined || (await router.run({ command: "filter.set", args: { state: earlier as string }, count: 1, windowId: 3, messageIds: [] })) };
+}
+
+const SAMPLE = { author: "Ann Lee <ann@example.org>", subject: "Re: Fwd: Budget plan", recipients: ["Bob <bob@example.org>", "cy@example.org"], tags: ["$label1"] };
+
+test("filter.by validates the field", () => {
+    for (const field of ["from", "subject", "recipient", "tag"]) assert.equal(ok("filter.by", { field }), true, field);
+    assert.equal(ok("filter.by", { field: "date" }), false);
+    assert.equal(ok("filter.by", {}), false);
+});
+
+test("filter.by filters on the bare sender address, the subject without prefixes, the first recipient and the tags", async () => {
+    const expected = {
+        from: '{"text":{"text":"ann@example.org","author":true}}',
+        subject: '{"text":{"text":"Budget plan","subject":true}}',
+        recipient: '{"text":{"text":"bob@example.org","recipients":true}}',
+        tag: '{"tags":{"mode":"any","tags":{"$label1":true}}}',
+    };
+    for (const [field, filter] of Object.entries(expected)) {
+        const { run, calls } = by_message_fake({ 1: SAMPLE }, [1]);
+        await run(field);
+        assert.deepEqual(calls, [filter], field);
+    }
+});
+
+test("filter.by adds to the remembered filter, swaps only the text, and drops the hidden-bar marker", async () => {
+    const { run, calls, earlier } = by_message_fake({ 1: SAMPLE }, [1], "unread");
+    await earlier();
+    await run("from");
+    await run("subject");
+    assert.deepEqual(calls.slice(1), ['{"unread":true,"text":{"text":"ann@example.org","author":true}}', '{"unread":true,"text":{"text":"Budget plan","subject":true}}']);
+});
+
+test("filter.by refuses a text field for several messages, ORs their tags, and refuses what the message lacks", async () => {
+    const several = by_message_fake({ 1: SAMPLE, 2: { ...SAMPLE, tags: ["$label2"] } }, [1, 2]);
+    await several.run("from");
+    assert.deepEqual(several.notices, ["Select one message."]);
+    await several.run("tag");
+    assert.deepEqual(several.calls, ['{"tags":{"mode":"any","tags":{"$label1":true,"$label2":true}}}']);
+    const bare = by_message_fake({ 1: { author: "a@b.c", subject: "Re:", recipients: [], tags: [] } }, [1]);
+    for (const field of ["subject", "recipient", "tag"]) await bare.run(field);
+    assert.deepEqual(bare.notices, ["The selected message has no subject.", "The selected message has no recipient.", "The selected message has no tag."]);
+    assert.deepEqual(bare.calls, []);
+    const none = by_message_fake({}, []);
+    await none.run("from");
+    assert.deepEqual(none.notices, ["No message is selected."]);
+});

@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 441 (Mail tab 147, Message 98, Message window 80, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
+bound: 445 (Mail tab 151, Message 98, Message window 80, Compose window 13, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -139,6 +139,15 @@ The thread list and the folder pane.
 | `Fa` | `filter --attachment` |
 | `Ff` | `cmdline.open 'filter '` |
 | `Ft` | `cmdline.open filter --tag --tag=` |
+
+#### By message
+
+| Key | Command |
+| --- | --- |
+| `Fmf` | `filter-by from` |
+| `Fms` | `filter-by subject` |
+| `Fmr` | `filter-by recipient` |
+| `Fmt` | `filter-by tag` |
 
 #### DesertBird
 
