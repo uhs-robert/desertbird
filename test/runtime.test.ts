@@ -1175,6 +1175,56 @@ test("Space: a message inserted above the picked rows ends the pick", () => {
     assert.deepEqual(window.chosen, [3], "the pick ended, so j selects");
 });
 
+test("Space in visual mode leaves the mode and keeps the selection as a pick, like Escape", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, "v");
+    press(window, "j");
+    assert.equal(press(window, " ").cancelled, true);
+    assert.equal(modes.at(-1), "normal");
+    assert.deepEqual([window.chosen, window.cursor], [[2, 3], 3], "Space took no row out and the range stayed");
+    press(window, "j");
+    press(window, "j");
+    assert.deepEqual([window.chosen, window.cursor], [[2, 3], 5], "j moved only the cursor, so nothing undid the range");
+    press(window, " ");
+    assert.deepEqual(window.chosen, [2, 3, 5], "the next Space toggles in normal mode");
+});
+
+test("leaving visual mode on one row keeps it as a pick, so j moves only the cursor", () => {
+    for (const leave of ["v", "Escape", " "]) {
+        const { windows, runtime } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        window.selected = 2;
+        press(window, "v");
+        press(window, leave);
+        press(window, "j");
+        assert.deepEqual([window.chosen, window.cursor], [[2], 3], leave);
+    }
+});
+
+test("a second visual mode never unselects a row selected before it opened", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 5;
+    press(window, "v");
+    press(window, "k");
+    press(window, "k");
+    press(window, "Escape");
+    press(window, "k");
+    press(window, "k");
+    press(window, "v");
+    for (const key of ["j", "j", "j", "j", "j", "j"]) press(window, key);
+    assert.deepEqual(window.chosen, [1, 2, 3, 4, 5, 6, 7]);
+    for (const key of ["k", "k", "k", "k", "k", "k"]) press(window, key);
+    assert.deepEqual(window.chosen, [1, 3, 4, 5], "the range shrank back to its anchor and the rows kept before stayed");
+    press(window, "v");
+    assert.deepEqual(window.chosen, [1, 3, 4, 5]);
+});
+
 test("visual mode is not a command that `.` replays", () => {
     const { windows, runtime } = setup();
     runtime.install(tree());

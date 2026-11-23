@@ -91,7 +91,8 @@ async function run_visual(instance, ctx) {
   await keys(["space"], selects_rows([rows[0], rows[2]]));
   const picked = ids((await keys(["j", "j", "space"], selects_rows([rows[0], rows[2], rows[4]]))).selected);
   check(app, kind, "Space picks three rows apart", same(picked, [rows[0], rows[2], rows[4]]), `selected ${picked.join(" ")}`);
-  state = await keys(["a"], { what: "a to archive the three picked rows", until: (current) => picked.every((id) => !current.folders["/Inbox"]?.includes(id)) && current.selected.length > 0, timeout_ms: 10000 });
+  // The folder contents and the listed rows come from different calls, so the wait needs both before `rows` is read from the list.
+  state = await keys(["a"], { what: "a to archive the three picked rows", until: (current) => picked.every((id) => !current.folders["/Inbox"]?.includes(id) && !current.listed.includes(id)) && current.selected.length > 0, timeout_ms: 10000 });
   const picked_left = picked.filter((id) => state.folders["/Inbox"]?.includes(id));
   check(app, kind, "a archives every picked row", picked_left.length === 0, `still in the Inbox ${picked_left.join(" ")}`);
   rows = state.listed;
