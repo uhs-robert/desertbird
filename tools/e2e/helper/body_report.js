@@ -20,6 +20,8 @@ function report() {
       text_start: (document.body?.innerText ?? "").slice(0, 200),
       // Whether the focus sits in this document, so a check can tell the body from the header around it.
       has_focus: document.hasFocus(),
+      // When the report was sent, so a wait can ignore a report from before a key.
+      reported_at: Date.now(),
     })
     .catch(() => {});
 }
