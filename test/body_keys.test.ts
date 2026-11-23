@@ -239,10 +239,20 @@ test("Escape with nothing pending is not cancelled, so Thunderbird still closes 
     assert.deepEqual(window.press("Escape"), { cancelled: false, stopped: false });
 });
 
-test("Escape with a sequence pending clears it and is cancelled, so the window stays open", async () => {
-    const { window } = await started();
+test("Escape after a prefix in a message tab document is cancelled and clears the sequence", async () => {
+    const { window, reports } = await started();
     window.press("g");
     assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
+    assert.deepEqual(reports.at(-1), []);
+    window.press("g");
+    assert.deepEqual(window.scrolls, [], "the cleared g does not make g g");
+});
+
+test("Escape with a sequence pending clears it and is cancelled, so the window stays open", async () => {
+    const { window, reports } = await started();
+    window.press("g");
+    assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
+    assert.deepEqual(reports, [["g"], []], "the pending report clears");
     window.press("g");
     assert.deepEqual(window.scrolls, []);
     assert.deepEqual(window.press("Escape"), { cancelled: true, stopped: true });
