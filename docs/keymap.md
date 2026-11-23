@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 348 (Mail tab 147, Message 98, Own pages 50, Other tabs 49, Text fields 4)
+bound: 402 (Mail tab 147, Message 98, Message window 54, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -253,7 +253,7 @@ The thread list and the folder pane.
 
 ### Message
 
-A message in a tab, a window or the message pane.
+A message in a tab or the message pane.
 
 #### Single keys
 
@@ -398,6 +398,109 @@ A message in a tab, a window or the message pane.
 | `z=` | `zoom 1` |
 | `zI` | `zoom 3` |
 | `zO` | `zoom 0.3` |
+
+#### Copy
+
+| Key | Command |
+| --- | --- |
+| `yy` | `msg.yank` |
+| `ys` | `msg.yank --subject` |
+| `yf` | `msg.yank --sender` |
+| `ya` | `msg.yank --address` |
+| `yi` | `msg.yank --message-id` |
+
+#### Hints
+
+| Key | Command |
+| --- | --- |
+| `;f` | `hint.pick --focus` |
+| `;c` | `hint.pick` |
+| `;y` | `hint.pick --yank` |
+
+#### Delete
+
+| Key | Command |
+| --- | --- |
+| `dd` | `msg.delete` |
+
+### Message window
+
+A message in a window of its own (message mode), in the body and in the header. It has no tab, pane or command line keys.
+
+#### Single keys
+
+| Key | Command |
+| --- | --- |
+| `j` | `message.scroll_down` |
+| `k` | `message.scroll_up` |
+| `<C-d>` | `message.half_page_down` |
+| `<C-u>` | `message.half_page_up` |
+| `<C-f>` | `message.page_down` |
+| `<C-b>` | `message.page_up` |
+| `h` | `message.scroll_left` |
+| `l` | `message.scroll_right` |
+| `G` | `message.bottom` |
+| `n` | `message.find_next` |
+| `N` | `message.find_prev` |
+| `f` | `hint.pick` |
+| `a` | `msg.archive` |
+| `r` | `msg.reply` |
+| `R` | `msg.reply --all` |
+| `<C-l>` | `msg.open` |
+| `q` | `tab.close` |
+| `<A-q>` | `tab.close` |
+| `u` | `undo` |
+
+#### Go
+
+| Key | Command |
+| --- | --- |
+| `gg` | `message.top` |
+| `gF` | `msg.forward` |
+| `gu` | `msg.unsubscribe` |
+| `ga` | `msg.save_attachments` |
+| `gC` | `thread.open_conversation` |
+
+#### Quick reply
+
+| Key | Command |
+| --- | --- |
+| `gr1` | `msg.reply_with 1` |
+| `gr2` | `msg.reply_with 2` |
+| `gr3` | `msg.reply_with 3` |
+| `gr4` | `msg.reply_with 4` |
+| `gr5` | `msg.reply_with 5` |
+| `gr6` | `msg.reply_with 6` |
+| `gr7` | `msg.reply_with 7` |
+| `gr8` | `msg.reply_with 8` |
+| `gr9` | `msg.reply_with 9` |
+
+#### Message
+
+| Key | Command |
+| --- | --- |
+| `mr` | `msg.read --read` |
+| `mu` | `msg.read --unread` |
+| `ms` | `msg.flag` |
+| `mj` | `msg.junk` |
+
+#### Snooze
+
+| Key | Command |
+| --- | --- |
+| `mzl` | `msg.snooze later_today` |
+| `mzt` | `msg.snooze tomorrow` |
+| `mzw` | `msg.snooze weekend` |
+| `mzm` | `msg.snooze monday` |
+
+#### Remind
+
+| Key | Command |
+| --- | --- |
+| `mfd` | `msg.remind one_day` |
+| `mft` | `msg.remind three_days` |
+| `mfw` | `msg.remind one_week` |
+| `mfc` | `msg.remind_cancel` |
 
 #### Copy
 

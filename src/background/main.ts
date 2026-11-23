@@ -24,7 +24,7 @@ import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/sto
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
 import { start_jump_history } from "./handlers/jump_history.ts";
-import { create_body_requests } from "./body_requests.ts";
+import { create_body_requests, refused_outside_main_window } from "./body_requests.ts";
 import type { BodyRequestApi } from "./body_requests.ts";
 import { notify_refusal, notify_result } from "./notify.ts";
 import { create_new_mail_notifier } from "./new_mail_notify.ts";
@@ -64,7 +64,7 @@ const UNDO_RETRY_DELAYS_MS = [500, 1000, 1500];
 
 /** Bumped when the stored record changes shape, so an old record is rebuilt and never read. */
 // The record is derived from the user's keymap and the source hash, and an old record is rebuilt on read, so the bump moves no user data.
-const KEYMAP_RECORD_VERSION = 14;
+const KEYMAP_RECORD_VERSION = 15;
 
 interface KeymapRecord {
     record_version: number;
@@ -73,6 +73,8 @@ interface KeymapRecord {
     tree: KeymapTree;
     /** The keys of the message document. The Experiment never sees it: the body script reads it from storage. */
     message_tree: KeymapTree;
+    /** The keys of a message window (message mode): the message keys without the tab, pane and command line keys. Its body script reads it from storage, and the `pages` Experiment installs it for the header. */
+    window_tree: KeymapTree;
     /** The keys of the tabs that are not the mail tab. The `pages` Experiment installs it. */
     page_tree: KeymapTree;
     /** The keys of DesertBird's own pages (options, help): the page keys with find and hints. Their body script reads it from storage. */
@@ -138,7 +140,7 @@ async function hash_of(value: unknown): Promise<string> {
 
 function is_current_record(value: unknown, source_hash: string): value is KeymapRecord {
     const record = value as Partial<KeymapRecord> | null | undefined;
-    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION && record.own_tree?.version === COMPILED_KEYMAP_VERSION && record.typing_tree?.version === COMPILED_KEYMAP_VERSION;
+    return record?.record_version === KEYMAP_RECORD_VERSION && record.source_hash === source_hash && record.tree?.version === COMPILED_KEYMAP_VERSION && record.message_tree?.version === COMPILED_KEYMAP_VERSION && record.window_tree?.version === COMPILED_KEYMAP_VERSION && record.page_tree?.version === COMPILED_KEYMAP_VERSION && record.own_tree?.version === COMPILED_KEYMAP_VERSION && record.typing_tree?.version === COMPILED_KEYMAP_VERSION;
 }
 
 function tree_of(result: CompileResult): KeymapTree {
@@ -151,7 +153,7 @@ function tree_of(result: CompileResult): KeymapTree {
 function compile_record(source_hash: string, config: Config): KeymapRecord {
     const mail = compile_effective_keymap(config.user_keymap, config.setting_overrides);
     // The message tree ends every mail sequence, the user's included, so it reads this mail tree. The source hash already covers the user's mail keys.
-    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_tab_keymap("message", config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_tab_keymap("page", config.user_keymap.normal)), own_tree: tree_of(compile_tab_keymap("own", config.user_keymap.normal, mail.compiled.modes.normal)), typing_tree: tree_of(compile_typing_keymap(config.user_keymap.normal)) };
+    return { record_version: KEYMAP_RECORD_VERSION, source_hash, tree: tree_of(mail), message_tree: tree_of(compile_tab_keymap("message", config.user_keymap.normal, mail.compiled.modes.normal)), window_tree: tree_of(compile_tab_keymap("window", config.user_keymap.normal, mail.compiled.modes.normal)), page_tree: tree_of(compile_tab_keymap("page", config.user_keymap.normal)), own_tree: tree_of(compile_tab_keymap("own", config.user_keymap.normal, mail.compiled.modes.normal)), typing_tree: tree_of(compile_typing_keymap(config.user_keymap.normal)) };
 }
 
 // Registered before the listener below, so the store has dropped its copy by the time an install reads it.
@@ -165,7 +167,7 @@ let installed_tree_json: string | undefined;
 async function load_record(): Promise<KeymapRecord> {
     if (cached_record !== undefined) return cached_record;
     const config = await config_store.read();
-    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: keymap_of("message", config.user_keymap.normal), page: keymap_of("page", config.user_keymap.normal), own: keymap_of("own", config.user_keymap.normal), typing: compile_typing_keymap(config.user_keymap.normal).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
+    const source_hash = await hash_of({ keymap: effective_keymap(config.user_keymap), message: keymap_of("message", config.user_keymap.normal), window: keymap_of("window", config.user_keymap.normal), page: keymap_of("page", config.user_keymap.normal), own: keymap_of("own", config.user_keymap.normal), typing: compile_typing_keymap(config.user_keymap.normal).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: config.setting_overrides });
     const stored = (await messenger.storage.local.get(KEYMAP_STORAGE_KEY))[KEYMAP_STORAGE_KEY];
     if (is_current_record(stored, source_hash)) return (cached_record = stored);
     const record = compile_record(source_hash, config);
@@ -176,11 +178,11 @@ async function load_record(): Promise<KeymapRecord> {
 async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
-    const { tree, page_tree, message_tree, typing_tree } = await load_record();
-    const tree_json = JSON.stringify([tree, page_tree, message_tree, typing_tree]);
+    const { tree, page_tree, message_tree, window_tree, typing_tree } = await load_record();
+    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree]);
     if (tree_json === installed_tree_json) return;
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
-    await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
+    await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), windowTree: page_message_tree(window_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
     installed_tree_json = tree_json;
     // A new matcher forgets the half-typed sequence without a report, so a panel that shows would list keys that no longer follow.
     hud.close_which_key();
@@ -218,7 +220,7 @@ messenger.notifications.onClicked.addListener((id) => {
 
 // The hud shows the which-key panel and the toasts, and keeps the mode label of the status bar. Its state is a few seconds of interface state per window and lives in memory only, like the command line session.
 const NO_WINDOW = -1;
-const TREE_OF_SOURCE = { main: "tree", message: "message_tree", own: "own_tree", page: "page_tree" } as const;
+const TREE_OF_SOURCE = { main: "tree", message: "message_tree", window: "window_tree", own: "own_tree", page: "page_tree" } as const;
 const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
@@ -363,7 +365,10 @@ create_new_mail_notifier(messenger, async () => (await config_store.read()).sett
 const on_key_event = (event: KeysEvent) => {
     if ("mode" in event) hud.on_keys_event(event).then(() => bridge.mode_changed(), console.error);
     else if ("keys" in event) hud.on_keys_event(event).catch(console.error);
-    else router.run(event).catch(console.error);
+    else
+        refused_outside_main_window(registry, messenger, event.command, event.windowId)
+            .then((refused) => (refused ? undefined : router.run(event)))
+            .catch(console.error);
 };
 messenger.keys?.onInvocation.addListener(on_key_event);
 messenger.pages?.onInvocation.addListener(on_key_event);

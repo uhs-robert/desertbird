@@ -88,7 +88,7 @@ test("only the trees are loose objects among the function parameters, and a comm
         });
     }
     // `root` is typed any inside the tree, so it sits under the same loose object.
-    assert.deepEqual(loose.sort(), ["keys.install.args.tree", "keys.install.args.tree.*", "keys.install.args.tree.root", "pages.install.args.messageTree", "pages.install.args.messageTree.*", "pages.install.args.messageTree.root", "pages.install.args.pageTree", "pages.install.args.pageTree.*", "pages.install.args.pageTree.root", "pages.install.args.typingTree", "pages.install.args.typingTree.*", "pages.install.args.typingTree.root"]);
+    assert.deepEqual(loose.sort(), ["keys.install.args.tree", "keys.install.args.tree.*", "keys.install.args.tree.root", "pages.install.args.messageTree", "pages.install.args.messageTree.*", "pages.install.args.messageTree.root", "pages.install.args.pageTree", "pages.install.args.pageTree.*", "pages.install.args.pageTree.root", "pages.install.args.typingTree", "pages.install.args.typingTree.*", "pages.install.args.typingTree.root", "pages.install.args.windowTree", "pages.install.args.windowTree.*", "pages.install.args.windowTree.root"]);
 });
 
 test("the schema has no verb that runs a script, evaluates or opens a URL", () => {

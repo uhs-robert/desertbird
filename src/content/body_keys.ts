@@ -7,7 +7,7 @@ import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, HINT_STYLE_STORAGE_KEY, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
-import type { BodyFindReply, BodyFindRequest, BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyYankRequest, HintAction, JsonValue } from "../shared/protocol.ts";
+import type { BodyFindReply, BodyFindRequest, BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue } from "../shared/protocol.ts";
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
@@ -36,7 +36,7 @@ export interface BodyStorage {
 
 /** The ways to reach the background page: send a request, and answer the ones it sends. */
 export interface BodyRuntime {
-    sendMessage(message: BodyHintsRequest | BodyInvokeRequest | BodyOpenLinkRequest | BodyPendingRequest | BodyYankRequest): Promise<unknown>;
+    sendMessage(message: BodyHintsRequest | BodyInvokeRequest | BodyOpenLinkRequest | BodyPendingRequest | BodyTreeRequest | BodyYankRequest): Promise<unknown>;
     onMessage: { addListener(listener: (message: unknown) => Promise<BodyFindReply> | undefined): void };
 }
 
@@ -74,7 +74,7 @@ const ACTIONS: Record<string, Action> = {
     "hint.pick": ({ pick }, _count, args) => pick(args["action"] as HintAction | undefined),
 };
 
-type TreeField = "message_tree" | "own_tree";
+export type TreeField = BodyTreeField | "own_tree";
 
 const log_error = (error: unknown) => console.error("desertbird message keys:", error);
 
@@ -86,7 +86,7 @@ function scroll_step_of(settings: unknown): number {
     return typeof step === "number" && Number.isFinite(step) && step >= 1 ? step : MESSAGE_SCROLL_STEP_PX;
 }
 
-/** The keymap record in storage, read for the tree of this document: a message document reads `message_tree` and an own page `own_tree`. A record that is absent or of another shape gives null. */
+/** The keymap record in storage, read for the tree of this document: a message document reads `message_tree`, one in a message window `window_tree` and an own page `own_tree`. A record that is absent or of another shape gives null. */
 function tree_of_record(record: unknown, tree_field: TreeField): { version: number; root: unknown } | null {
     const tree = (record as Record<string, { version?: unknown; root?: unknown } | undefined> | null | undefined)?.[tree_field];
     return typeof tree?.version === "number" ? { version: tree.version, root: tree.root } : null;
@@ -119,7 +119,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         const joined = keys.join(" ");
         if (joined === reported) return;
         reported = joined;
-        void best_effort(runtime.sendMessage({ type: "body.pending", keys, ...(tree_field === "own_tree" ? { tree: "own" } : {}) }));
+        void best_effort(runtime.sendMessage({ type: "body.pending", keys, ...(tree_field === "message_tree" ? {} : { tree: tree_field === "own_tree" ? "own" : "window" }) }));
     }
 
     function reset_sequence(): void {

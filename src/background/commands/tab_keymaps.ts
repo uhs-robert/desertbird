@@ -14,11 +14,13 @@ import type { KeymapTree } from "../../shared/protocol.ts";
 /**
  * What each kind of tab offers. A message document is the message pane, a message tab and a message window. An own page is the options or help page, which runs the body script and shows no message. A page tab is any other tab with a chrome page: calendar, tasks, chat, settings, the address book, `about:` pages and search results. A remote page (web content) takes the page tree too, and its runtime lets only `tab.close` run.
  * A message tab whose focus is outside the body is a message document with the find line cut out and the hint picks sent to the background by `page_message_tree`.
+ * A message window (`window`, message mode) is a message document with no tab bar and no panes around it: it takes the message commands and `q`, and the tab, pane and command line keys stay unbound there. The body and the header of the window run its one tree.
  */
 export const TAB_KINDS = {
-    message: ["message", "tab", "body"],
-    own: ["tab", "body"],
-    page: ["tab", "page", "typing"],
+    message: ["message", "tab", "body", "close", "pane"],
+    own: ["tab", "body", "close"],
+    page: ["tab", "page", "typing", "close"],
+    window: ["message", "body", "close"],
 } as const satisfies Record<string, readonly TabNeed[]>;
 
 export type TabKind = keyof typeof TAB_KINDS;
@@ -32,14 +34,14 @@ const LAYERS: { keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | 
 
 const CMDLINE_OPEN = "cmdline.open";
 
-// `cmdline.open` carries typed text, and the key needs what the command in that text needs: `o` opens a folder, so it needs the list. Text with no command in it (`:`) leaves the line open to any tab.
+// `cmdline.open` carries typed text, and the key needs what the command in that text needs: `o` opens a folder, so it needs the list. Text with no command in it (`:`) leaves the line open to any tab. The line itself draws in the main window only, so every such key also needs `tab`.
 function invocation_needs(invocation: Invocation): TabNeed[] {
     const command = registry.get(invocation.id);
     if (command === undefined) return ["list"];
     if (invocation.id === CMDLINE_OPEN) {
         const word = String(invocation.args?.["text"] ?? "").trim().split(/\s+/)[0] ?? "";
         const typed = word === "" ? undefined : registry.find(word);
-        if (typed !== undefined) return tab_needs_of(typed);
+        if (typed !== undefined) return ["tab", ...tab_needs_of(typed)];
     }
     return tab_needs_of(command);
 }
@@ -126,7 +128,7 @@ const is_find_line = (step: TreeStep) => step.invocation.id === "cmdline.open" &
 // A pick from the header goes to the background as `hint.window`, with the action of the key, and labels the header and body of the message in front as one set, as a pick from the body does.
 const header_pick = (step: TreeStep): TreeStep => (step.invocation.id === "hint.pick" ? { ...step, invocation: { ...step.invocation, id: "hint.window" }, runs_in: "background" } : step);
 
-/** The message tree for a message tab with the focus outside the body: the message keys without the key that opens the find line, and with every hint pick sent to the background. */
+/** The message tree for a message tab or a message window with the focus outside the body: the message keys without the key that opens the find line, and with every hint pick sent to the background. */
 export function page_message_tree(message_tree: KeymapTree): KeymapTree {
     const root: TreeNode = JSON.parse(JSON.stringify(message_tree.root));
     const rewrite = (node: TreeNode): void => {

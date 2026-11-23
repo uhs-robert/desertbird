@@ -814,3 +814,17 @@ test("an own page names its tree in the pending report and a message document do
         assert.deepEqual(trees, [expected]);
     }
 });
+
+test("a message window document reads the window tree and names it in the pending report: J and : do nothing there, and m s runs", async () => {
+    const window_root = JSON.parse(JSON.stringify(compile_tab_keymap("window").compiled.modes.normal)) as unknown;
+    const window = new StubWindow();
+    const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { ...record(), window_tree: { version: COMPILED_KEYMAP_VERSION, root: window_root } } });
+    const { runtime, sent, trees } = stub_runtime();
+    await start_body_script(window, storage, runtime, undefined, "window_tree");
+    assert.equal(window.press("J").cancelled, true, "swallowed, so Thunderbird's own J does not run");
+    assert.equal(window.press(":").cancelled, true);
+    window.press("m");
+    window.press("s");
+    assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["msg.flag"]);
+    assert.deepEqual(trees, ["window", "window"]);
+});

@@ -4,10 +4,12 @@ import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
 import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 
 const root_of = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("page", user).compiled.modes.normal as TreeBranch;
 const own_root = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("own", user).compiled.modes.normal as TreeBranch;
 const message_root = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("message", user).compiled.modes.normal as TreeBranch;
+const window_root = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("window", user).compiled.modes.normal as TreeBranch;
 
 function ids_under(node: TreeNode | undefined): string[] {
     if (node === undefined) return [];
@@ -60,7 +62,7 @@ test("the page tree reads the same command table: the keys that gain a place are
 });
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
-    for (const id of ids_under(root_of())) assert.ok(["tab", "page"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
+    for (const id of ids_under(root_of())) assert.ok(["tab", "page", "close"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
     for (const token of ["m", "d", "s", "F", "y", "]", "[", "o", "a", "r", "R", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
@@ -207,4 +209,37 @@ test("i is bound in the page tree alone, so the own and message trees and the ma
     assert.equal(leaf_at(root_of(), "i")?.id, "mode.insert");
     for (const root of [own_root(), message_root()]) assert.equal(leaf_at(root, "i"), undefined);
     assert.equal(ids_under(root_of()).includes("mode.escape"), false, "the typing layer stays out of the normal trees");
+});
+
+test("the message window tree holds the reading keys, the hint picks, the mail actions and q, and no tab, pane, folder, list, help or command line key", () => {
+    const root = window_root();
+    assert.deepEqual(
+        [["j"], ["<C-d>"], ["g", "g"], ["G"], ["f"], [";", "y"], ["m", "s"], ["m", "r"], ["a"], ["d", "d"], ["r"], ["R"], ["g", "F"], ["y", "y"], ["u"], ["q"], ["<A-q>"]].map((tokens) => leaf_at(root, ...tokens)?.id),
+        ["message.scroll_down", "message.half_page_down", "message.top", "message.bottom", "hint.pick", "hint.pick", "msg.flag", "msg.read", "msg.archive", "msg.delete", "msg.reply", "msg.reply", "msg.forward", "msg.yank", "msg.undo", "tab.close", "tab.close"],
+    );
+    const ids = new Set(ids_under(root));
+    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.|cmdline\.|search\.|help\.|options\.|zoom\.|app\.)/.test(id), id);
+    for (const id of ["msg.new", "msg.move", "msg.tag"]) assert.ok(!ids.has(id), id);
+    for (const token of ["J", "K", "<A-j>", "<A-k>", ":", "/", "H", "L", "c", "T", "o"]) assert.equal(root.children[token], undefined, token);
+    // A mail sequence the tree lacks ends in a leaf that runs nothing, so its tail never runs on its own.
+    for (const tokens of [["t", "0"], ["g", "f"], ["g", "?"], ["m", "t"], ["m", "m"], ["z", "i"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));
+    assert.deepEqual(((root.children["g"] as TreeBranch).children["f"] as { steps: unknown[] }).steps, []);
+});
+
+test("a user key reaches the message window only when its command can run there", () => {
+    const root = window_root({ X: { id: "msg.flag" }, Y: { id: "tab.next" }, Z: { id: "pane.focus", args: { pane: "folders" } }, W: { id: "cmdline.open", args: { text: "tag " } } });
+    assert.equal(leaf_at(root, "X")?.id, "msg.flag");
+    for (const token of ["Y", "Z", "W"]) assert.equal(root.children[token], undefined, token);
+});
+
+test("the message window header tree sends hint picks to the background, as the message tab header does", () => {
+    const tree = page_message_tree({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(window_root())) });
+    const root = tree.root as TreeBranch;
+    assert.equal(leaf_at(root, "f")?.id, "hint.window");
+    assert.equal(leaf_at(root, "m", "s")?.id, "msg.flag");
+});
+
+test("the message tab trees keep their tab, pane and command line keys", () => {
+    const root = message_root();
+    assert.deepEqual([["J"], ["H"], [":"], ["m", "t"], ["g", "f"], ["q"]].map((tokens) => leaf_at(root, ...tokens)?.id), ["tab.next", "pane.left", "cmdline.open", "cmdline.open", "pane.focus", "tab.close"]);
 });

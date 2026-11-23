@@ -44,7 +44,7 @@ const ZOOM_MAX_BYTES = 3544;
 const ZOOM_CEILING_BYTES = 6144;
 
 // `content/message_display.js`, the body script that runs in every message document.
-const CONTENT_MAX_BYTES = 18674;
+const CONTENT_MAX_BYTES = 19186;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.
@@ -56,7 +56,7 @@ const COMPOSE_MAX_BYTES = 3500;
 const COMPOSE_CEILING_BYTES = 8192;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
-const PAGES_MAX_BYTES = 26896;
+const PAGES_MAX_BYTES = 27408;
 const PAGES_CEILING_BYTES = 34816;
 
 // `content/page_keys.js`, the message key script that runs on the own pages (options, help).

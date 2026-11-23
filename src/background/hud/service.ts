@@ -8,7 +8,7 @@ import { create_toasts } from "./toasts.ts";
 import type { Timers, Toasts } from "./toasts.ts";
 import { may_open_by_itself, which_key_panel, with_stored_marks } from "./which_key.ts";
 
-export type WhichKeySource = "main" | "message" | "own" | "page";
+export type WhichKeySource = "main" | "message" | "window" | "own" | "page";
 
 export interface HudDeps {
     /** Absent when the Experiment failed to load. Nothing shows then, and `toast` reports that it showed nothing. */
@@ -27,10 +27,10 @@ export interface HudDeps {
 export interface HudService {
     /** Answers the page's `hud.state`, or returns undefined for a message that is not one. */
     handle(message: unknown): Promise<HudState> | undefined;
-    /** Feeds the `pending` and `mode` events of the key runtime. Other events are ignored. */
+    /** Feeds the `pending` and `mode` events of the key runtime. Other events, and the events of a window the hud does not track (a message window), are ignored. */
     on_keys_event(event: KeysEvent): Promise<void>;
     /** Feeds the typed prefix of a message document in the window. The panel lists the message keys, or the page keys when `source` is `own` (an options or help page). A window the hud does not track as a main window is ignored, so the panel shows in the mail tab and message tabs and not in a standalone message window. The newest report of either source wins. */
-    on_body_pending(window_id: number, keys: string[], source: "message" | "own"): Promise<void>;
+    on_body_pending(window_id: number, keys: string[], source: "message" | "window" | "own"): Promise<void>;
     /** Shows a toast in the window. Resolves to false when no toast can show (no window id, no Experiment, a zero time, or the page could not mount), so the caller falls back to a system notification. */
     toast(window_id: number, text: string, is_error: boolean): Promise<boolean>;
     /** The command line opened or closed in the window. Its box covers the bottom of the window, so the toasts move above it. */
@@ -187,6 +187,8 @@ export function create_hud_service(deps: HudDeps): HudService {
             return request === undefined ? undefined : state_of(request.windowId);
         },
         async on_keys_event(event) {
+            // The header of a message window reports too, and that window has no hud page, as for `on_body_pending`.
+            if (!windows.has(event.windowId)) return;
             if (event.command === "mode" && "mode" in event) {
                 if (event.windowId < 0) return;
                 const hud = hud_of(event.windowId);

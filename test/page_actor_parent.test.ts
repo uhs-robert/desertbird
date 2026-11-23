@@ -296,7 +296,7 @@ test("the pages API loads the actor from a new resource root on each load, after
     try {
         const pages = await import("../src/chrome/parent_pages.ts");
         const context = { extension: { rootURI: "jar:file:///x.xpi!/", id: "desertbird@uhs-robert", windowManager: { getWrapper: () => null }, messageManager: { convert: () => null } } };
-        const install = (api: ReturnType<typeof pages.get_pages_api>) => api.pages.install({ pageTree: page_tree(), messageTree: page_tree(), typingTree: typing_tree(), holdCommands: [] } as never);
+        const install = (api: ReturnType<typeof pages.get_pages_api>) => api.pages.install({ pageTree: page_tree(), messageTree: page_tree(), windowTree: page_tree(), typingTree: typing_tree(), holdCommands: [] } as never);
         await install(pages.get_pages_api(context as never));
         await install(pages.get_pages_api(context as never));
         pages.shutdown();

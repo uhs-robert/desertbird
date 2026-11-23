@@ -1,4 +1,4 @@
-// Key handling in the tabs of the main window that are not the mail tab. It holds no Thunderbird global: the parent hands in a `PageDeps`, so node tests drive every path with fakes.
+// Key handling in the tabs of the main window that are not the mail tab, and in the header of a message window. It holds no Thunderbird global: the parent hands in a `PageDeps`, so node tests drive every path with fakes.
 
 import type { JsonValue, KeysEvent } from "../shared/protocol.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
@@ -14,6 +14,8 @@ export interface PageDeps<Window> {
     /** Where the key listener goes. It must sit above the window, so this bundle sees a key before the key runtime does. */
     key_target_of(window: Window): KeyTarget;
     situation_of(window: Window, event: KeydownEvent): Situation;
+    /** Whether the window is a message window, whose message keys are message mode's (the window tree). */
+    is_message_window(window: Window): boolean;
     /** The MailExtension ids of the message the front tab shows, read when the key is pressed. */
     message_ids_of(window: Window): number[];
     /** Runs a reading action of the front tab's document. Returns false for an id it has no action for: a message step that needs the body script (hints, find) ends here. */
@@ -51,7 +53,7 @@ export interface ChildPort {
 export interface PageRuntime {
     /** Runs a key from the page actor's child as the front tab's own. Null tells that the front tab's child said hello (a new page, or a key typed in the page's field), which ends insert mode, the half-typed sequence and its key list, as a tab change does. */
     on_child_key(window: unknown, key: ChildKey | null): void;
-    install(trees: { page: { version: number; root: unknown }; message: { version: number; root: unknown }; typing: { version: number; root: unknown } }, hold_commands?: readonly string[]): void;
+    install(trees: { page: { version: number; root: unknown }; message: { version: number; root: unknown }; window: { version: number; root: unknown }; typing: { version: number; root: unknown } }, hold_commands?: readonly string[]): void;
     shutdown(): void;
 }
 
@@ -66,6 +68,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     // The message tab takes its own tree, so its keys and their meaning follow the message document's.
     let message_matcher: ReturnType<typeof matcher_for_tree> | null = null;
+    // A message window takes the message mode tree. It never shows a page tab, and a message tab never runs this tree, so a window switch, which resets the sequence, is the only way between the two.
+    let window_matcher: ReturnType<typeof matcher_for_tree> | null = null;
     let listening = false;
     let sequence_window: Window | null = null;
     // The windows in manual insert mode (`i`): plain keys go to the page, as in a text field. Memory only, and each window has its own.
@@ -87,6 +91,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
     // Whether the last report left the panel open. The next key then reports its end, unless it extends the typed prefix.
     let key_list_shown = false;
 
+    const reset_matchers = () => [matcher, message_matcher, window_matcher, typing_matcher].forEach((each) => each?.reset());
+
     function end_key_list(window: Window): void {
         if (key_list_shown) deps.emit({ command: "pending", keys: [], windowId: deps.window_id_of(window) });
         key_list_shown = false;
@@ -94,7 +100,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
 
     // `from_child` is set for a key of the page actor's child: the child read the focus, where the chrome sees only the remote browser.
     function on_keydown(window: Window, event: KeydownEvent, from_child?: Situation): void {
-        if (!matcher || !message_matcher || !typing_matcher) return;
+        if (!matcher || !message_matcher || !window_matcher || !typing_matcher) return;
         // A chord takes the named-key path: it runs and is cancelled only when the keymap binds it, so Thunderbird keeps every chord the keymap leaves free.
         const token = event_to_token(event);
         if (token === null) return;
@@ -115,17 +121,18 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
                 return;
             }
         }
-        if (situation === "pass" || situation === "typing") return (end_key_list(window), matcher.reset(), message_matcher.reset());
+        if (situation === "pass" || situation === "typing") return (end_key_list(window), reset_matchers());
         const in_field = situation === "field";
         // A page of another process hides its text fields, so only a chord is safe there. In a text field a plain key is text.
-        if ((in_field || situation === "remote") && is_plain_printable(token)) return (end_key_list(window), matcher.reset(), message_matcher.reset(), typing_matcher.reset());
+        if ((in_field || situation === "remote") && is_plain_printable(token)) return (end_key_list(window), reset_matchers());
         // The two matchers each keep a half-typed sequence, so the one not in use starts over.
-        const [active, idle] = in_field ? [typing_matcher, matcher] : situation === "message" ? [message_matcher, matcher] : [matcher, message_matcher];
+        const in_window = deps.is_message_window(window);
+        const [active, idle] = in_field ? [typing_matcher, matcher] : situation === "message" ? [in_window ? window_matcher : message_matcher, matcher] : [matcher, message_matcher];
         idle.reset();
         if (sequence_window !== window) active.reset();
         sequence_window = window;
         const result = active.feed(NORMAL_MODE, token);
-        const source = situation === "message" ? "message" : "page";
+        const source = situation !== "message" ? "page" : in_window ? "window" : "message";
         if (result.kind_ === "pending") {
             key_list_shown = true;
             deps.emit({ command: "pending", keys: result.typed_, windowId: deps.window_id_of(window), source });
@@ -169,9 +176,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         };
         const reset_typing = () => {
             set_insert(window, false);
-            typing_matcher?.reset();
-            matcher?.reset();
-            message_matcher?.reset();
+            reset_matchers();
             hold_until = 0;
             key_list_shown = false;
         };
@@ -204,6 +209,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         install(trees, hold = []) {
             matcher = matcher_for_tree(trees.page);
             message_matcher = matcher_for_tree(trees.message);
+            window_matcher = matcher_for_tree(trees.window);
             typing_matcher = matcher_for_tree(trees.typing);
             hold_commands = new Set(hold);
             if (listening) return;
@@ -220,6 +226,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
             listening = false;
             matcher = null;
             message_matcher = null;
+            window_matcher = null;
             hold_until = 0;
             sequence_window = null;
         },

@@ -31,10 +31,21 @@ function setup(overrides: Partial<Settings> = {}) {
         send_changed: (window_id) => void log.push(`changed ${window_id}`),
         timers,
     });
-    const pending = (keys: string[], window_id = 1, extra: { source?: "page" | "message"; root?: true } = {}): Promise<void> => hud.on_keys_event({ command: "pending", keys, windowId: window_id, ...extra });
+    // The key runtimes report only for the main windows the hud tracks. Tracking shows the mode label, which the label tests read after it.
+    const tracked = new Set<number>();
+    const track_once = async (window_id: number) => {
+        if (tracked.has(window_id)) return;
+        tracked.add(window_id);
+        const [log_at, labels_at, colors_at] = [log.length, labels.length, label_colors.length];
+        await hud.track(window_id);
+        log.splice(log_at);
+        labels.splice(labels_at);
+        label_colors.splice(colors_at);
+    };
+    const pending = async (keys: string[], window_id = 1, extra: { source?: "page" | "message"; root?: true } = {}): Promise<void> => (await track_once(window_id), hud.on_keys_event({ command: "pending", keys, windowId: window_id, ...extra }));
     const body_pending = (keys: string[], window_id = 1, source: "message" | "own" = "message"): Promise<void> => hud.on_body_pending(window_id, keys, source);
     const state = async (window_id = 1): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
-    const set_mode = (mode: KeysMode["mode"], window_id = 1): Promise<void> => hud.on_keys_event({ command: "mode", mode, windowId: window_id });
+    const set_mode = async (mode: KeysMode["mode"], window_id = 1): Promise<void> => (await track_once(window_id), hud.on_keys_event({ command: "mode", mode, windowId: window_id }));
     return { hud, body_pending, log, labels, label_colors, timers, pending, state, set_mode, set_settings: (next: Partial<Settings>) => void (settings = { ...settings, ...next }) };
 }
 
@@ -484,4 +495,16 @@ test("a root report shows the named tree at once, whatever the delay", async () 
     await pending([], 1, { source: "message", root: true });
     assert.deepEqual(log, ["mount hud@1"]);
     assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["g"]);
+});
+
+test("a pending or mode event of a window the hud does not track (a message window header) mounts nothing and sets no label", async () => {
+    const { hud, log, labels, timers } = setup({ mode_indicator: "always" });
+    await hud.on_keys_event({ command: "pending", keys: ["g"], windowId: 9, source: "window" });
+    await hud.on_keys_event({ command: "pending", keys: [], windowId: 9, source: "window", root: true });
+    await hud.on_keys_event({ command: "mode", mode: "insert", windowId: 9 });
+    timers.advance(1000);
+    await settle();
+    assert.deepEqual(log, []);
+    assert.deepEqual(labels, []);
+    assert.equal((await hud.handle({ type: "hud.state", windowId: 9 }))?.which_key, null);
 });
