@@ -4,6 +4,7 @@
 // The declared count is a floor: files that build tests in loops report more, and that is fine.
 // Known false failure: a line-start test( inside an if block counts but may not run. Build such tests another way.
 // The node flags mirror `unit:file` in package.json. Change both together.
+// No --test-force-exit: it exits a file's child while that child's last results still wait in its stdout queue, so the run loses them when the parent reads slowly.
 // Extra arguments go to node --test after the glob and switch the guard off, because a name filter or a file list drops tests on purpose.
 // Reported counts come from the junit reporter (one testcase element per test, with its file), written to a temp file beside the spec output on stdout.
 
@@ -52,7 +53,7 @@ function run(extra_args: readonly string[]): number {
     const junit_path = join(scratch, "junit.xml");
     try {
         const result = spawnSync(process.execPath, [
-            "--test", "--test-timeout=30000", "--test-force-exit", "--no-warnings",
+            "--test", "--test-timeout=30000", "--no-warnings",
             "--test-reporter=spec", "--test-reporter-destination=stdout",
             "--test-reporter=junit", `--test-reporter-destination=${junit_path}`,
             TEST_GLOB, ...extra_args,
