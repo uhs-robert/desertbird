@@ -32,7 +32,22 @@ class FakeWindow implements KeyTarget {
     /** The count of ended hint picks the runtime reads through `hints_done_of`. */
     hints_done = 0;
     document = { getElementById: () => ({ tabInfo: [], currentTabInfo: null }), hasFocus: () => this.has_focus };
-    selected = 0;
+    /** The current row (Thunderbird's `currentIndex`). */
+    cursor = 0;
+    /** The selected rows, in ascending order. */
+    chosen: number[] = [0];
+    /** How many times the fake fired Thunderbird's `select` event: a change of the selection, never a move of the cursor alone. */
+    select_events = 0;
+    /** Called inside each `select` event, as Thunderbird's own listeners run inside the call that changes the selection. */
+    on_select: () => void = () => {};
+    /** The current row. Setting it from a test stands for a click: that row alone is selected. */
+    get selected(): number {
+        return this.cursor;
+    }
+    set selected(index: number) {
+        this.cursor = index;
+        this.chosen = [index];
+    }
     rows = 10;
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
@@ -60,8 +75,18 @@ class FakeWindow implements KeyTarget {
         this.has_focus = !window_lost_focus;
         for (const listener of [...this.blur_listeners]) listener();
     }
-    /** The rows `select_range` selected, or null when one row is selected. */
-    range: [number, number] | null = null;
+    /** The first and last selected rows, or null when one row or none is selected. Setting it selects that run of rows, and null selects the current row alone. */
+    get range(): [number, number] | null {
+        return this.chosen.length > 1 ? [this.chosen[0]!, this.chosen.at(-1)!] : null;
+    }
+    set range(span: [number, number] | null) {
+        this.chosen = span ? Array.from({ length: span[1] - span[0] + 1 }, (_, offset) => span[0] + offset) : [this.cursor];
+    }
+    private choose(rows: number[]) {
+        this.chosen = [...rows].sort((a, b) => a - b);
+        this.select_events++;
+        this.on_select();
+    }
     /** What the list is showing: a new object stands for another folder, a rebuilt view. */
     view = {};
     /** The message key at a row where a test has inserted or removed a message. Other rows have their index as key. */
@@ -69,12 +94,20 @@ class FakeWindow implements KeyTarget {
     port(): ListPort {
         const key_at = (index: number) => this.key_overrides[index] ?? index;
         return {
-            marks: (anchor, end) => [this.view, key_at(anchor), key_at(end)],
+            marks: (rows) => [this.view, ...rows.map(key_at)],
             row_count: () => this.rows,
-            selected_index: () => this.selected,
-            select: (index) => void ((this.selected = index), (this.range = null)),
-            select_range: (anchor, end) => void ((this.selected = end), (this.range = [Math.min(anchor, end), Math.max(anchor, end)])),
-            selected_message_ids: () => (this.range ? Array.from({ length: this.range[1] - this.range[0] + 1 }, (_, offset) => 100 + this.range![0] + offset) : [100 + this.selected]),
+            selected_index: () => this.cursor,
+            select: (index) => void ((this.cursor = index), this.choose([index])),
+            selected_rows: () => [...this.chosen],
+            select_rows: (rows, current) => {
+                assert.equal(new Set(rows).size, rows.length, "a row listed twice would be toggled off again");
+                this.choose(rows);
+                this.cursor = current;
+            },
+            // Thunderbird moves the current row to the toggled row and fires `select` inside the call.
+            toggle: (index) => void ((this.cursor = index), this.choose(this.chosen.includes(index) ? this.chosen.filter((row) => row !== index) : [...this.chosen, index])),
+            move_cursor: (index) => void (this.cursor = index),
+            selected_message_ids: () => this.chosen.map((row) => 100 + row),
         };
     }
 }
@@ -106,6 +139,7 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
 const step = (id: string, runs_in: "chrome" | "background") => ({ invocation: { id }, runs_in, count_rule: "repeat" as const });
 const leaf = (id: string, runs_in: "chrome" | "background") => ({ kind: "leaf" as const, steps: [step(id, runs_in)] });
 const unrepeatable = (id: string) => ({ kind: "leaf" as const, steps: [{ ...step(id, "background"), repeatable: false }] });
+const unrepeatable_chrome = (id: string) => ({ kind: "leaf" as const, steps: [{ ...step(id, "chrome"), repeatable: false }] });
 const keeps_selection = (id: string) => ({ kind: "leaf" as const, steps: [{ ...step(id, "background"), keeps_selection: true }] });
 const tree = () => ({
     version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION,
@@ -120,6 +154,7 @@ const tree = () => ({
             ":": leaf("cmdline.open", "background"),
             ".": leaf("repeat.last", "chrome"),
             v: leaf("visual.toggle", "chrome"),
+            "<Space>": unrepeatable_chrome("select.toggle"),
             w: { kind: "branch", children: { r: leaf("pane.resize_mode", "chrome") } },
             "<C-b>": { kind: "branch", children: { y: leaf("msg.read", "background") } },
             r: leaf("msg.read", "background"),
@@ -232,7 +267,7 @@ test("an unbound plain printable key is swallowed, a named or modified key passe
     const window = windows[0]!;
     assert.equal(press(window, "m").cancelled, true);
     assert.equal(press(window, "J").cancelled, true);
-    for (const key of ["Enter", "Escape", "ArrowDown", "Tab", " ", "Backspace"]) assert.equal(press(window, key).cancelled, false, key);
+    for (const key of ["Enter", "Escape", "ArrowDown", "Tab", "Backspace"]) assert.equal(press(window, key).cancelled, false, key);
     assert.equal(press(window, "j", { ctrlKey: true }).cancelled, false);
     assert.equal(press(window, "j", { altKey: true }).cancelled, false);
     assert.equal(press(window, "j", { metaKey: true }).cancelled, false);
@@ -972,14 +1007,17 @@ test("visual mode: motions extend the range and a background command acts on it 
     assert.deepEqual(window.range, [2, 3], "k shrinks the range back toward the anchor");
     press(window, "x");
     assert.deepEqual(emitted.map((invocation) => invocation.messageIds), [[102, 103]]);
+    assert.deepEqual(window.range, [2, 3], "the command ended visual mode and kept the selection, for Thunderbird to replace once the rows go");
+    // Thunderbird selects the next row once the archived rows leave the list.
+    window.selected = 2;
     press(window, "j");
-    assert.equal(window.range, null, "the command ended visual mode, so j moves one row again");
+    assert.equal(window.range, null, "visual mode is off, so j moves one row");
     press(window, "x");
-    assert.deepEqual(emitted.at(-1)?.messageIds, [104]);
+    assert.deepEqual(emitted.at(-1)?.messageIds, [103]);
 });
 
-test("visual mode: a range runs through the anchor when it extends upward, and v again ends it on the current row", () => {
-    const { windows, runtime } = setup();
+test("visual mode: a range runs through the anchor when it extends upward, and v again ends it and keeps the range", () => {
+    const { windows, emitted, runtime } = setup();
     runtime.install(tree());
     const window = windows[0]!;
     window.selected = 5;
@@ -988,22 +1026,26 @@ test("visual mode: a range runs through the anchor when it extends upward, and v
     press(window, "k");
     assert.deepEqual(window.range, [3, 5]);
     press(window, "v");
-    assert.equal(window.range, null);
+    assert.deepEqual(window.range, [3, 5]);
     assert.equal(window.selected, 3);
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [103, 104, 105], "the mode is off and the command still acts on the kept rows");
 });
 
-test("visual mode: Escape ends it only while it is active", () => {
-    const { windows, runtime } = setup();
+test("Escape ends visual mode and keeps the range, then a second Escape drops the range to the current row", () => {
+    const { windows, modes, runtime } = setup();
     runtime.install(tree());
     const window = windows[0]!;
     window.selected = 1;
-    assert.equal(press(window, "Escape").cancelled, false, "Escape passes when visual mode is off");
+    assert.equal(press(window, "Escape").cancelled, false, "Escape passes with one row selected and no mode");
     press(window, "v");
     press(window, "j");
     assert.equal(press(window, "Escape").cancelled, true);
-    assert.equal(window.range, null);
-    assert.equal(window.selected, 2);
-    assert.equal(press(window, "Escape").cancelled, false, "and passes again afterwards");
+    assert.equal(modes.at(-1), "normal");
+    assert.deepEqual(window.range, [1, 2], "leaving the mode kept the range");
+    assert.equal(press(window, "Escape").cancelled, true, "Escape in normal mode takes a selection of two rows");
+    assert.deepEqual([window.chosen, window.cursor], [[2], 2]);
+    assert.equal(press(window, "Escape").cancelled, false, "and passes again with one row left");
 });
 
 test("visual mode: Escape in a text field passes and a tab change ends the mode", () => {
@@ -1017,6 +1059,122 @@ test("visual mode: Escape in a text field passes and a tab change ends the mode"
     assert.equal(window.range, null, "the tab change dropped visual mode");
 });
 
+test("Space: the first Space keeps the read row, j then moves only the cursor, and Space picks each row a command then acts on", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    assert.equal(press(window, " ").cancelled, true, "Space is swallowed, or Thunderbird would select the cursor row alone later");
+    assert.deepEqual([window.chosen, window.select_events], [[2], 0], "the read row stays picked");
+    press(window, "j");
+    press(window, "j");
+    assert.deepEqual([window.chosen, window.cursor], [[2], 4], "the pick of one row survives j");
+    press(window, " ");
+    press(window, "k");
+    press(window, " ");
+    assert.deepEqual([window.chosen, window.cursor], [[2, 3, 4], 3], "the cursor stays on the toggled row");
+    press(window, " ");
+    assert.deepEqual([window.chosen, window.cursor], [[2, 4], 3], "a second Space takes the row out");
+    press(window, " ");
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [102, 103, 104]);
+    window.selected = 3;
+    press(window, "j");
+    assert.deepEqual(window.chosen, [4], "the command removed rows and ended the pick, so j selects again");
+});
+
+test("Space: a pick of one row ends on Escape, a click, a tab change or a blur, and j selects again", () => {
+    const ends: Record<string, (window: FakeWindow) => void> = {
+        Escape: (window) => assert.equal(press(window, "Escape").cancelled, true, "Escape takes a pick of one row"),
+        click: (window) => void (window.selected = 5),
+        "tab change": (window) => window.select_tab(),
+        blur: (window) => window.blur(),
+        "reading pane": (window) => void ((window.in_reading_pane = true), press(window, "a"), (window.in_reading_pane = false)),
+    };
+    for (const [name, end] of Object.entries(ends)) {
+        const { windows, runtime } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        window.selected = 2;
+        press(window, " ");
+        press(window, "j");
+        end(window);
+        window.has_focus = true;
+        const cursor = window.cursor;
+        press(window, "j");
+        assert.deepEqual(window.chosen, [cursor + 1], name);
+    }
+});
+
+test("Space: a command that leaves the rows keeps the pick, and Escape then drops it to the current row", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 1;
+    press(window, " ");
+    press(window, "s");
+    press(window, "j");
+    press(window, " ");
+    press(window, "r");
+    assert.deepEqual(emitted.map((invocation) => invocation.messageIds), [[101], [101, 102]]);
+    press(window, "j");
+    assert.equal(press(window, "Escape").cancelled, true);
+    assert.deepEqual([window.chosen, window.cursor], [[3], 3]);
+    assert.equal(press(window, "Escape").cancelled, false, "with the pick gone, Escape is Thunderbird's again");
+});
+
+test("Space adds a row to a range that v kept, and a second v adds a range to the kept rows", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 1;
+    press(window, "v");
+    press(window, "j");
+    press(window, "Escape");
+    press(window, "j");
+    press(window, "j");
+    press(window, " ");
+    assert.deepEqual(window.chosen, [1, 2, 4]);
+    press(window, "j");
+    press(window, "j");
+    press(window, "v");
+    press(window, "j");
+    press(window, "v");
+    assert.deepEqual(window.chosen, [1, 2, 4, 6, 7]);
+    press(window, "x");
+    assert.deepEqual(emitted.at(-1)?.messageIds, [101, 102, 104, 106, 107]);
+});
+
+test("Space does nothing in the folder pane or with no current row, and passes out of the mail tab", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    window.folder = { rows: 5, selected: 1 };
+    press(window, " ");
+    window.folder = null;
+    press(window, "j");
+    assert.deepEqual(window.chosen, [3], "Space in the folder pane started no pick");
+    window.cursor = -1;
+    window.chosen = [];
+    assert.equal(press(window, " ").cancelled, true);
+    assert.deepEqual(window.chosen, []);
+    window.in_mail_tab = false;
+    assert.equal(press(window, " ").cancelled, false);
+});
+
+test("Space: a message inserted above the picked rows ends the pick", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, " ");
+    // Another message now sits at the picked row: the list changed under the pick while row numbers stayed.
+    window.key_overrides = { 2: 99 };
+    press(window, "j");
+    assert.deepEqual(window.chosen, [3], "the pick ended, so j selects");
+});
+
 test("visual mode is not a command that `.` replays", () => {
     const { windows, runtime } = setup();
     runtime.install(tree());
@@ -1028,12 +1186,18 @@ test("visual mode is not a command that `.` replays", () => {
     assert.deepEqual(window.range, [1, 2]);
 });
 
-test("the list port selects a range and makes its end the current row", () => {
-    const tree_fake = { selectedIndex: 0, selectedIndices: [] as number[], currentIndex: 0 };
-    const port = create_list_port({ gDBView: { rowCount: 9, getSelectedMsgHdrs: () => [] }, threadTree: tree_fake }, () => 1);
-    port.select_range(5, 3);
-    assert.deepEqual(tree_fake.selectedIndices, [3, 4, 5]);
+test("the list port selects rows and makes the given row current, toggles a row and moves the cursor alone", () => {
+    const toggled: number[] = [];
+    const tree_fake = { selectedIndex: 0, selectedIndices: [] as number[], currentIndex: 0, toggleSelectionAtIndex: (index: number) => void toggled.push(index) };
+    const port = create_list_port({ gDBView: { rowCount: 9, getSelectedMsgHdrs: () => [], getKeyAt: (index) => 50 + index }, threadTree: tree_fake }, () => 1);
+    port.select_rows([7, 3, 4, 5], 3);
+    assert.deepEqual(port.selected_rows(), [7, 3, 4, 5]);
     assert.equal(tree_fake.currentIndex, 3);
+    port.move_cursor(6);
+    assert.deepEqual([tree_fake.currentIndex, tree_fake.selectedIndices], [6, [7, 3, 4, 5]]);
+    port.toggle(6);
+    assert.deepEqual(toggled, [6]);
+    assert.deepEqual(port.marks([2, 8]).slice(1), [52, 58]);
 });
 
 test("visual mode: a click on another row drops the mode, so j does not extend across the gap", () => {
@@ -1061,11 +1225,11 @@ test("visual mode: rows that shift above the range drop the mode", () => {
     press(window, "v");
     press(window, "j");
     // A message arrives at the top: Thunderbird keeps the selection on the same messages, one row lower.
-    window.selected = 7;
+    window.cursor = 7;
     window.range = [6, 7];
     press(window, "j");
-    assert.equal(window.range, null, "the old anchor row, now the message above the range, stays out");
-    assert.equal(window.selected, 8);
+    assert.deepEqual(window.range, [6, 7], "the mode ended, so j moved only the cursor and the old anchor row did not join");
+    assert.equal(window.cursor, 8);
 });
 
 test("visual mode: a change of folder drops the mode even when the current row is the same", () => {
@@ -1084,21 +1248,24 @@ test("visual mode: a change of folder drops the mode even when the current row i
     assert.equal(window.range, null);
 });
 
-test("visual mode: a command collapses the selection to the current row, and a key in a text field ends the mode", () => {
-    const { windows, runtime } = setup();
+test("visual mode: a command that removes the rows ends the mode without touching the selection, and a key in a text field ends the mode", () => {
+    const { windows, modes, runtime } = setup();
     runtime.install(tree());
     const window = windows[0]!;
     window.selected = 2;
     press(window, "v");
     press(window, "j");
+    const events = window.select_events;
     press(window, "x");
-    assert.equal(window.range, null, "the range is gone once x has taken it");
-    assert.equal(window.selected, 3);
+    assert.equal(modes.at(-1), "normal");
+    assert.equal(window.select_events, events, "the runtime left the selection for Thunderbird to replace");
+    window.selected = 2;
     press(window, "v");
     press(window, "j");
     press(window, "a", { target: { localName: "input" } });
     press(window, "j");
-    assert.equal(window.range, null, "a key that went to a text field ended the mode");
+    assert.equal(modes.at(-1), "normal", "a key that went to a text field ended the mode");
+    assert.deepEqual([window.range, window.cursor], [[2, 3], 4], "with two rows kept, j moved only the cursor");
 });
 
 test("visual mode: a command that leaves the rows keeps the range, and a delete still ends it", () => {
@@ -1118,7 +1285,8 @@ test("visual mode: a command that leaves the rows keeps the range, and a delete 
     press(window, "d");
     press(window, "d");
     assert.deepEqual(emitted.at(-1)?.messageIds, [102, 103, 104]);
-    assert.equal(window.range, null, "delete ended visual mode");
+    press(window, "j");
+    assert.deepEqual([window.range, window.cursor], [[2, 4], 5], "delete ended visual mode, so j moved only the cursor");
 });
 
 test("visual mode: a message inserted inside an upward range drops the mode", () => {
@@ -1134,10 +1302,10 @@ test("visual mode: a message inserted inside an upward range drops the mode", ()
     // A message arrives at row 7. The anchor message moves to row 9 and the current row stays at 6.
     window.key_overrides = { 8: 7 };
     press(window, "k");
-    assert.equal(window.range, null, "the range did not grow over the shifted rows");
-    assert.equal(window.selected, 5);
+    assert.deepEqual(window.range, [6, 8], "the range did not grow over the shifted rows");
+    assert.equal(window.cursor, 5);
     press(window, "x");
-    assert.deepEqual(emitted.at(-1)?.messageIds, [105]);
+    assert.deepEqual(emitted.at(-1)?.messageIds, [106, 107, 108]);
 });
 
 test("visual mode: a message removed inside an upward range drops the mode", () => {
@@ -1151,8 +1319,8 @@ test("visual mode: a message removed inside an upward range drops the mode", () 
     press(window, "k");
     window.key_overrides = { 8: 9 };
     press(window, "k");
-    assert.equal(window.range, null);
-    assert.equal(window.selected, 5);
+    assert.deepEqual(window.range, [6, 8]);
+    assert.equal(window.cursor, 5);
 });
 
 const pending_keys = (pending: KeysPending[]) => pending.map((event) => event.keys.join(""));
@@ -1466,7 +1634,7 @@ test("visual mode ends when resize mode starts, and the label reports resize the
     assert.deepEqual(modes, ["visual", "resize"]);
     press(window, "Escape");
     assert.deepEqual(modes, ["visual", "resize", "normal"]);
-    assert.equal(window.range, null, "the range collapsed");
+    assert.deepEqual(window.range, [0, 1], "the range stays");
 });
 
 test("shutdown ends the mode", () => {

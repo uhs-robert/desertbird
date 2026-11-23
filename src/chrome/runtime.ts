@@ -112,25 +112,31 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     let resize_window: Window | null = null;
     let resize_count = 0;
 
-    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the range from it to the current row. A blur or a tab change ends the mode, so no per-window copy is needed. A background command that removes or moves rows ends it too, so `a` or `d` acts on the range once. One that leaves the rows (`m r`, `m s`) keeps it.
+    // Visual mode: the row where `v` was pressed, or -1 when the mode is off. Motions then select the rows that were selected at `v` plus the range from the anchor to the current row, so a second `v` adds to a kept selection. A blur or a tab change ends the mode, so no per-window copy is needed. Ending the mode keeps the selection: a command that removes the rows leaves Thunderbird to pick the next one.
     let visual_anchor = -1;
-    // Where the mode last put the current row, and the view and message keys at both ends of the range then. A key that finds anything else means the list changed under the mode (a click, new mail, a row inserted or removed inside the range, a sort or folder change), so the mode ends and the old anchor never reaches into the new list.
+    let visual_base: number[] = [];
+    // Where the mode last put the current row, and the view and message keys at the anchor, that row and the rows of the base then. A key that finds anything else means the list changed under the mode (a click, new mail, a row inserted or removed above one of them, a sort or folder change), so the mode ends and old rows never reach into the new list.
     let visual_end = -1;
     let visual_marks: unknown[] = [];
+    const visual_rows = () => [visual_anchor, visual_end, ...visual_base];
 
-    function end_visual(port: ListPort): void {
-        visual_anchor = -1;
-        port.select(port.selected_index());
-    }
+    // A pick: Space started one, and motions move only the current row, so a pick of one row survives `j`. One selected row looks the same whether it was picked or only read, so this flag is the only thing that tells them apart. `pick_seen` is the current row and the marks of the selected rows after the last key. A key that finds anything else means a click or another change of the list, and the pick ends, as do Escape, a tab change, a blur and a command that removes rows.
+    let picking = false;
+    let pick_seen: unknown[] = [];
+    const pick_view = (port: ListPort) => [port.selected_index(), ...port.marks(port.selected_rows())];
+    const differs = (now: unknown[], then: unknown[]) => now.length !== then.length || now.some((mark, at) => mark !== then[at]);
 
     // For `.`. An unrepeatable leaf clears it.
     let last: { leaf: TreeLeaf; count: number | undefined } | null = null;
 
     function run_leaf(leaf: TreeLeaf, port: ListPort, window: Window, count?: number): void | null {
-        if (leaf.steps[0]?.invocation.id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
-        if (leaf.steps[0]?.invocation.id === "pane.resize_mode") return void ((resize_window = window), (resize_count = 0), visual_anchor >= 0 && end_visual(port));
-        if (leaf.steps[0]?.invocation.id === "visual.toggle") return visual_anchor < 0 ? void ((visual_end = visual_anchor = port.selected_index()), (visual_marks = port.marks(visual_anchor, visual_anchor))) : end_visual(port);
-        if (leaf.steps[0]?.invocation.id !== KEY_LIST) last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
+        const id = leaf.steps[0]?.invocation.id;
+        if (id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
+        if (id === "pane.resize_mode") return void ((resize_window = window), (resize_count = 0), (visual_anchor = -1));
+        if (id === "visual.toggle") return void (visual_anchor < 0 ? ((visual_end = visual_anchor = port.selected_index()), (visual_base = port.selected_rows()), (visual_marks = port.marks(visual_rows()))) : (visual_anchor = -1));
+        if (id !== KEY_LIST) last = leaf.steps.some((step) => "repeatable" in step) ? null : { leaf, count };
+        // Space toggles the current row, and the cursor stays. The Space that starts a pick on the one selected row keeps it, so the read message is the first one picked (the string compare asks whether the current row is the only selected row). It acts on the thread list only, so it does nothing while the folder pane has the focus.
+        if (id === "select.toggle") return void (deps.folder_port_of(window) || port.selected_index() < 0 || ((picking || `${port.selected_rows()}` !== `${port.selected_index()}`) && port.toggle(port.selected_index()), (picking = true)));
         for (const step of leaf.steps) {
             const step_count = count ?? step.invocation.count;
             if (step.runs_in === "background" && hold_commands.has(step.invocation.id)) {
@@ -139,15 +145,18 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             }
             if (step.runs_in === "chrome") {
                 const anchor = visual_anchor;
-                run_motion(step.invocation.id, deps.folder_port_of(window) ?? (anchor < 0 ? port : { ...port, select: (index) => void (port.select_range(anchor, (visual_end = index)), (visual_marks = port.marks(anchor, index))) }), step_count);
+                const range = (end: number) => Array.from({ length: Math.abs(end - anchor) + 1 }, (_, offset) => Math.min(anchor, end) + offset);
+                // In a pick or with two or more rows selected a motion moves only the current row, so the selection stays. Otherwise it selects the row, so the message pane shows each message passed.
+                const list_port = anchor >= 0 ? { ...port, select: (index: number) => void (port.select_rows([...new Set([...visual_base, ...range((visual_end = index))])], index), (visual_marks = port.marks(visual_rows()))) } : picking || port.selected_rows().length > 1 ? { ...port, select: port.move_cursor } : port;
+                run_motion(step.invocation.id, deps.folder_port_of(window) ?? list_port, step_count);
             } else if (step.runs_in === "background") {
                 // The selection is read here, inside the key's own handler, because the background answers later: by then a following `j` has moved the selection.
                 const args = (step.invocation.args ?? {}) as Record<string, JsonValue>;
                 deps.emit({ command: step.invocation.id, args, count: step_count ?? 1, windowId: deps.window_id_of(window), messageIds: port.selected_message_ids() });
                 // The panel of the key list is not a typed prefix, so the next key reports the end of it.
                 if (step.invocation.id === KEY_LIST) was = 1;
-                // The range is taken. Collapsing to the current row keeps a following `d d` to one message. A command whose rows stay in the list keeps the range.
-                if (visual_anchor >= 0 && !("keeps_selection" in step)) end_visual(port);
+                // A command whose rows stay in the list keeps the mode and the pick, so a second command acts on the same rows.
+                if (!("keeps_selection" in step)) visual_anchor = -1, picking = false;
             }
         }
     }
@@ -197,6 +206,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (!port || deps.in_reading_pane(window)) {
             matcher.reset();
             visual_anchor = -1;
+            picking = false;
             pend(window, []);
             // A menu opened by a click leaves the focus in the list, so Thunderbird's single-key shortcuts (`j` marks junk) would act under the menu.
             if (is_plain_printable(token) && (port || menu_takes === false)) {
@@ -204,12 +214,15 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             }
             return;
         }
-        if (visual_anchor >= 0 && (port.selected_index() !== visual_end || port.marks(visual_anchor, visual_end).some((mark, at) => mark !== visual_marks[at]))) visual_anchor = -1;
-        // Escape belongs to visual mode only while it is active, so the command line overlay and Thunderbird keep it otherwise.
-        if (visual_anchor >= 0 && token === "<Escape>") {
+        if (visual_anchor >= 0 && (port.selected_index() !== visual_end || differs(port.marks(visual_rows()), visual_marks))) visual_anchor = -1;
+        if (differs(pick_view(port), pick_seen)) picking = false;
+        // Escape ends visual mode and keeps the selection. Out of it, Escape ends a pick and drops a selection of two or more rows to the current row. Otherwise it passes, so the command line overlay and Thunderbird keep it.
+        if (token === "<Escape>" && (visual_anchor >= 0 || ((picking || port.selected_rows().length > 1) && !deps.folder_port_of(window)))) {
             matcher.reset();
             pend(window, []);
-            end_visual(port);
+            if (visual_anchor < 0) port.select(port.selected_index());
+            visual_anchor = -1;
+            picking = false;
             swallow(event);
             return;
         }
@@ -221,6 +234,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         // Thunderbird binds single keys such as `j` and `a`, so the key stops here whether or not it matched.
         swallow(event);
         if (result.kind_ === "match") run_leaf(result.leaf, port, window, result.count);
+        pick_seen = pick_view(port);
     }
 
     function hook(window: Window): void {
@@ -230,6 +244,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             matcher?.reset();
             hold_until = 0;
             visual_anchor = -1;
+            picking = false;
             resize_window = null;
             tell_mode(window);
         };

@@ -571,6 +571,19 @@ Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, w
 - Selecting a message in the thread list marks it read when the message pane shows it, so an unread step that walks the list leaves the rows it visited read.
 - `threadTree.selectedIndices = [...]` followed by `threadTree.currentIndex = end` selects a range with the current row at its end. `_selectRange(anchor, end)` of the tree sets the current row to the anchor.
 
+### Picking rows with Space
+
+Measured with `tools/measure` (headless, a fresh profile, an Inbox of 10 collapsed threads of 4 and 20 single messages) on Thunderbird 153.7.0 ESR and Betterbird 153.7.0esr-bb13. Both gave the same state in all 46 cases, and the timings differed by a few milliseconds.
+
+- `threadTree.currentIndex = n` moves the current row and nothing else, with one row selected or several: the selection, `getSelectedMsgHdrs`, the message pane and the `select` event stay as they were. So a motion moves only the cursor through it.
+- `toggleSelectionAtIndex(n)` adds the row or takes it out, makes it the current row (also when it takes the row out) and fires one `select` event inside the call, so the message pane has changed when it returns. With `suppressEvent` no event fires and the pane goes stale until the next one, so the runtime never suppresses it. On a collapsed thread root it toggles the whole thread: one selected row, every message of the thread in `getSelectedMsgHdrs`.
+- Two or more selected rows make the message pane show Thunderbird's multi-message summary.
+- With no binding, Space on an unselected current row selects that row alone about 270 ms after the key (the kept rows drop), and does nothing on a selected row. Ctrl+Space toggles the row. Escape does nothing in the thread list and fires no event, with any number of rows selected. So the Space command swallows its key, or a kept selection is lost whenever the cursor sits off it.
+- A folder change drops the selection, and a return to the folder restores it: Thunderbird keeps a selection per folder.
+- A new message never changes a kept selection. The view follows the selected messages, so their rows and the current row shift when a message sorts above them.
+- Collapsing a thread keeps a multi-selection only when the lowest selected row is outside that thread. A selected reply inside it drops out with no event and a stale pane. When the lowest selected row is in the thread, the thread root alone replaces the selection.
+- Deleting a selected row from outside the list (`messages.delete`) collapses the selection to one row at the lowest selected index, after the call returns. Deleting an unselected row leaves it.
+
 ## Panes, undo and pages
 
 Measured with the end-to-end run on Thunderbird 153.7.0 ESR and on Betterbird, with the same result on both. Native Down tells which pane has the focus: it moves the selection of the pane that holds it.
