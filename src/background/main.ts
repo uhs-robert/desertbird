@@ -13,6 +13,7 @@ import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_widget_reader } from "./cmdline/status_widgets.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
+import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
 import { create_search_service } from "./search/service.ts";
@@ -381,15 +382,19 @@ messenger.windows.onFocusChanged.addListener((window_id) => {
     if (window_id !== NO_WINDOW) void bridge.mode_changed();
 });
 
+// The hud draws in main windows and message windows. Only a main window has a status bar for the mode label.
+const HUD_WINDOW_TYPES = ["normal", MESSAGE_WINDOW_TYPE];
 const track_window = (window: { id?: number; type?: string }) => {
-    if (window.id !== undefined && (window.type === undefined || window.type === "normal")) hud.track(window.id).catch(console.error);
+    if (window.id === undefined) return;
+    if (window.type === undefined || window.type === "normal") hud.track(window.id).catch(console.error);
+    else if (window.type === MESSAGE_WINDOW_TYPE) hud.track(window.id, "message").catch(console.error);
 };
 messenger.windows.onCreated.addListener(track_window);
 messenger.windows.onRemoved.addListener((window_id) => {
     confirm.surface_gone(window_id);
     hud.forget(window_id);
 });
-messenger.windows.getAll({ windowTypes: ["normal"] }).then((open) => open.forEach(track_window), console.error);
+messenger.windows.getAll({ windowTypes: HUD_WINDOW_TYPES }).then((open) => open.forEach(track_window), console.error);
 
 messenger.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !(KEYMAP_STORAGE_KEY in changes || USER_KEYMAP_KEY in changes || SETTINGS_KEY in changes)) return;

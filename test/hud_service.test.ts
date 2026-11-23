@@ -377,7 +377,7 @@ test("the toasts lift while the command line is open in the window and drop when
     assert.equal((await state()).lifted, false);
 });
 
-test("a command line opened and closed in a window the hud does not track, a message window, leaves no entry, so a later which-key prefix mounts nothing there", async () => {
+test("a command line opened and closed in a window the hud does not track leaves no entry, so a later which-key prefix mounts nothing there", async () => {
     const { hud, body_pending, log, timers } = setup({ which_key_delay_ms: 300 });
     hud.set_lifted(5, true);
     hud.set_lifted(5, false);
@@ -507,6 +507,23 @@ test("a root report shows the named tree at once, whatever the delay", async () 
     await pending([], 1, { source: "message", root: true });
     assert.deepEqual(log, ["mount hud@1"]);
     assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["g"]);
+});
+
+test("a tracked message window shows the panel and toasts and makes no label call, also on a mode event and a settings change", async () => {
+    const { hud, log, labels, timers, state, body_pending } = setup({ mode_indicator: "always", which_key_delay_ms: 300 });
+    await hud.track(7, "message");
+    assert.deepEqual(labels, []);
+    await body_pending(["g"], 7);
+    timers.advance(300);
+    await settle();
+    assert.deepEqual(log, ["mount hud@7"]);
+    assert.deepEqual((await state(7)).which_key?.rows.map((row) => row.label), ["Only in a message"]);
+    assert.equal(await hud.toast(7, "Archived", false), true);
+    await hud.on_keys_event({ command: "mode", mode: "insert", windowId: 7 });
+    await hud.settings_changed();
+    assert.deepEqual(labels, []);
+    hud.forget(7);
+    assert.equal((await state(7)).which_key, null);
 });
 
 test("a pending or mode event of a window the hud does not track (a message window header) mounts nothing and sets no label", async () => {

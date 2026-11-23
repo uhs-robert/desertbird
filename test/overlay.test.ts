@@ -7,7 +7,6 @@ class FakeWindow {
     unload_listeners = new Set<() => void>();
     escape_listeners = new Set<() => void>();
     boxes: string[] = [];
-    is_message_window = false;
     /** What has the focus when a surface mounts, or null for nothing that can be given back. */
     held_focus: string | null = null;
     /** The `on_not_ready` callback of each mount, in order. */
@@ -18,7 +17,7 @@ function setup() {
     const windows = new Map([[1, new FakeWindow()], [2, new FakeWindow()]]);
     const log: string[] = [];
     const host = create_overlay_host<FakeWindow>({
-        window_with_id: (window_id, surface) => (surface === "hud" && windows.get(window_id)?.is_message_window ? null : windows.get(window_id) ?? null),
+        window_with_id: (window_id) => windows.get(window_id) ?? null,
         create(window, surface, window_id, _click_through, on_not_ready) {
             window.not_ready.push(on_not_ready);
             const box = `${surface}@${window_id}`;
@@ -353,14 +352,4 @@ test("the element the line took the focus from is gone when it closes, so the wi
     host.mount({ windowId: 2, surface: "cmdline" });
     host.unmount({ windowId: 2, surface: "cmdline" });
     assert.deepEqual(log, ["create cmdline@2", "remove cmdline@2", "focus list of 2"]);
-});
-
-test("the hud is refused in a message window and the command line is not, and a refused hud leaves no state", () => {
-    const { windows, log, host } = setup();
-    windows.get(2)!.is_message_window = true;
-    assert.throws(() => host.mount({ windowId: 2, surface: "hud" }), /no window has id 2/);
-    host.mount({ windowId: 2, surface: "cmdline" });
-    host.mount({ windowId: 1, surface: "hud" });
-    assert.deepEqual([windows.get(1)!.boxes, windows.get(2)!.boxes], [["hud@1"], ["cmdline@2"]]);
-    assert.deepEqual(log, ["create cmdline@2", "create hud@1"]);
 });
