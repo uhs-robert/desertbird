@@ -10,6 +10,10 @@ const BODY_POINT = [800, 600];
 // The bottom-left corner of the screen, where only the main window shows: the message window starts to the right of it. It holds the rows of the main line and none of its blinking caret.
 // The right half of the bottom bar of a message window: the line fills it while it is open, and the status text, which can change at any time, stays on the left.
 const LINE_BAR = "700,690 370x28";
+// Where the hud draws in a message window: the lower right of the screen.
+const WINDOW_HUD_REGION = "600,300 660x420";
+// Longer than the refusal toast lasts, so the next step starts with no toast up.
+const TOAST_WAIT_MS = 8000;
 const MAIN_CORNER = "0,500 200x180";
 
 const body_state = (state) => state.body ?? { live: false, scroll_y: -1, has_focus: null };
@@ -135,6 +139,29 @@ async function run_window_cmdline(instance, ctx) {
   await close_line_to(header_baseline);
   scrolled = await scrolls_on_j("from the header after Escape");
   check(app, kind, "message window header: Escape from the line returns the keys to the header, so j scrolls the body", scrolled.ok, `scrollY ${scrolled.from} then ${scrolled.to}`);
+
+  // The which-key panel and the toasts draw in the window. `g` waits for the panel delay, and `m f c` with no reminder shows a refusal toast.
+  const panel_in_window = async (what) => {
+    const bare = await hud_pixels(instance, `${app}_hud_bare`, WINDOW_HUD_REGION);
+    await instance.press(["g"]);
+    const panel = await wait_pixels(instance, `the which-key panel ${what}`, `${app}_hud_panel`, WINDOW_HUD_REGION, ctx.drawn_since(bare), { timeout_ms: 4000 });
+    await shot(`window_which_key_${what.replace(/ /g, "_")}`, `the message window with the which-key panel after g, ${what}`);
+    check(app, kind, `message window ${what}: g shows the which-key panel after the delay`, panel !== bare, "the region did not change");
+    // A key that continues no prefix ends it and moves nothing. Escape would close the window, which Thunderbird does on an Escape no line takes, and g g would scroll the body.
+    await instance.press(["x"]);
+    const gone = await wait_pixels(instance, `the panel ${what} to go`, `${app}_hud_gone`, WINDOW_HUD_REGION, ctx.back_to(bare), { timeout_ms: 4000 });
+    check(app, kind, `message window ${what}: a stray key removes the panel`, gone === bare, "the region still differs");
+  };
+  await panel_in_window("in the header");
+  await instance.press(["-k", "F6"]);
+  await sleep(800);
+  await panel_in_window("in the body");
+  const toast_bare = await hud_pixels(instance, `${app}_toast_bare`, WINDOW_HUD_REGION);
+  for (const key of ["m", "f", "c"]) await instance.press([key]);
+  const toast = await wait_pixels(instance, "the refusal toast of m f c to draw in the window", `${app}_toast`, WINDOW_HUD_REGION, ctx.drawn_since(toast_bare), { timeout_ms: 4000 });
+  await shot("window_toast", "the message window with the refusal toast of m f c");
+  check(app, kind, "message window: a refused command (m f c, no reminder to cancel) shows a toast in the window", toast !== toast_bare, "the region did not change");
+  await sleep(TOAST_WAIT_MS);
 
   // Move: the window shows the next message of the list.
   await instance.click(...BODY_POINT);

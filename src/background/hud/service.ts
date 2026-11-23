@@ -1,4 +1,4 @@
-// The hud in the background: the which-key panel and the toasts of each main window, and the mode label of its status bar. The page draws the panel and the toasts. The label is drawn by the Experiment, which this side tells what to show. This side decides what shows and when, and mounts the page while something shows.
+// The hud in the background: the which-key panel and the toasts of each main window and message window, and the mode label of the status bar of a main window. The page draws the panel and the toasts. The label is drawn by the Experiment, which this side tells what to show. This side decides what shows and when, and mounts the page while something shows.
 
 import type { Settings } from "../config/settings.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
@@ -27,9 +27,9 @@ export interface HudDeps {
 export interface HudService {
     /** Answers the page's `hud.state`, or returns undefined for a message that is not one. */
     handle(message: unknown): Promise<HudState> | undefined;
-    /** Feeds the `pending` and `mode` events of the key runtime. Other events, and the events of a window the hud does not track (a message window), are ignored. */
+    /** Feeds the `pending` and `mode` events of the key runtime. Other events, and the events of a window the hud does not track, are ignored. */
     on_keys_event(event: KeysEvent): Promise<void>;
-    /** Feeds the typed prefix of a message document in the window. The panel lists the message keys, or the page keys when `source` is `own` (an options or help page). A window the hud does not track as a main window is ignored, so the panel shows in the mail tab and message tabs and not in a standalone message window. The newest report of either source wins. */
+    /** Feeds the typed prefix of a message document in the window. The panel lists the message keys, or the page keys when `source` is `own` (an options or help page). A window the hud does not track is ignored. The newest report of either source wins. */
     on_body_pending(window_id: number, keys: string[], source: "message" | "window" | "own"): Promise<void>;
     /** Shows a toast in the window. Resolves to false when no toast can show (no window id, no Experiment, a zero time, or the page could not mount), so the caller falls back to a system notification. */
     toast(window_id: number, text: string, is_error: boolean): Promise<boolean>;
@@ -39,8 +39,8 @@ export interface HudService {
     show_root(window_id: number, source?: WhichKeySource): Promise<void>;
     /** Closes the which-key panel of every window, or of every window but one. A tab change or a window losing focus calls this. */
     close_which_key(except_window_id?: number): void;
-    /** A main window exists. The mode label may need to show in it. */
-    track(window_id: number): Promise<void>;
+    /** A main window or a message window exists. A main window may need the mode label. A message window has no status bar, so it makes no label call. */
+    track(window_id: number, kind?: "main" | "message"): Promise<void>;
     /** The window is gone, or its hud left on its own. */
     forget(window_id: number): void;
     /** The settings changed: the mode settings may add, remove or restyle the label, and the border may change. */
@@ -50,8 +50,10 @@ export interface HudService {
 }
 
 interface WindowHud {
-    /** Set by `track`: a main window, whose entry stays when a toast fails to mount. */
+    /** Set by `track`: a window whose entry stays when a toast fails to mount. */
     tracked: boolean;
+    /** False for a message window: it has no status bar to hold the mode label. */
+    has_label: boolean;
     toasts: Toasts;
     /** The typed keys the panel lists the continuations of, or null when no panel shows. */
     which_key_keys: string[] | null;
@@ -75,7 +77,7 @@ export function create_hud_service(deps: HudDeps): HudService {
     function hud_of(window_id: number): WindowHud {
         let hud = windows.get(window_id);
         if (hud === undefined) {
-            hud = { tracked: false, toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
+            hud = { tracked: false, has_label: true, toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
             windows.set(window_id, hud);
         }
         return hud;
@@ -86,7 +88,7 @@ export function create_hud_service(deps: HudDeps): HudService {
     // Tells the Experiment what the label of the window shows now. It runs on the window's queue, so the last mode and setting always win.
     function sync_label(window_id: number): Promise<void> {
         const hud = windows.get(window_id);
-        if (hud === undefined || deps.overlay === undefined) return Promise.resolve();
+        if (hud === undefined || !hud.has_label || deps.overlay === undefined) return Promise.resolve();
         const overlay = deps.overlay;
         hud.queue = hud.queue.then(async () => {
             const settings = await deps.read_settings();
@@ -189,7 +191,6 @@ export function create_hud_service(deps: HudDeps): HudService {
             return request === undefined ? undefined : state_of(request.windowId);
         },
         async on_keys_event(event) {
-            // The header of a message window reports too, and that window has no hud page, as for `on_body_pending`.
             if (!windows.has(event.windowId)) return;
             if (event.command === "mode" && "mode" in event) {
                 if (event.windowId < 0) return;
@@ -203,7 +204,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             if (event.root) return show_root(event.windowId, source);
             await on_pending(event.windowId, event.keys, source);
         },
-        // Only a tracked main window has a hud page to mount. The overlay host refuses the hud in a message window and `set_lifted` makes no entry for it, so its reports are dropped.
+        // Only a tracked window gets a hud page. `set_lifted` makes no entry, so the command line alone never starts one.
         on_body_pending: async (window_id, keys, source) => (windows.has(window_id) ? on_pending(window_id, keys, source) : undefined),
         async toast(window_id, text, is_error) {
             if (deps.overlay === undefined || window_id < 0) return false;
@@ -216,12 +217,12 @@ export function create_hud_service(deps: HudDeps): HudService {
             await changed(window_id);
             if (hud.mounted) return true;
             hud.toasts.dismiss(id);
-            // A window that cannot mount the page (a message window) must not stay in the table, or its prefixes would reach mount attempts. A main window tracked during the mount keeps its entry.
+            // A window that cannot mount the page must not stay in the table, or its prefixes would reach mount attempts. A tracked window keeps its entry.
             if (!hud.tracked && windows.get(window_id) === hud) windows.delete(window_id);
             return false;
         },
         set_lifted(window_id, lifted) {
-            // The command line opens in a message window too, which has no hud: it gets no entry here.
+            // The command line opens in an untracked window too: it gets no entry here.
             const hud = windows.get(window_id);
             if (hud === undefined) return;
             hud.lifted = lifted;
@@ -231,8 +232,10 @@ export function create_hud_service(deps: HudDeps): HudService {
         close_which_key(except_window_id) {
             for (const [window_id, hud] of windows) if (window_id !== except_window_id) void end_which_key(window_id, hud);
         },
-        async track(window_id) {
-            hud_of(window_id).tracked = true;
+        async track(window_id, kind = "main") {
+            const hud = hud_of(window_id);
+            hud.tracked = true;
+            hud.has_label = kind === "main";
             await Promise.all([changed(window_id), sync_label(window_id)]);
         },
         forget(window_id) {

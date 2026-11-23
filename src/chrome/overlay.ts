@@ -4,8 +4,8 @@ import { OVERLAY_SURFACES } from "../shared/protocol.ts";
 import type { OverlayMountArgs, OverlaySurface, OverlayUnmountArgs } from "../shared/protocol.ts";
 
 export interface OverlayDeps<Window> {
-    /** The window the MailExtension window id names and the surface can draw in, or null. */
-    window_with_id(window_id: number, surface: OverlaySurface): Window | null;
+    /** The main window the MailExtension window id names, or null. */
+    window_with_id(window_id: number): Window | null;
     /** Puts the surface in the window and gives it the focus. Returns the way to remove it. `on_not_ready` runs when a surface that takes the keyboard has not said it is ready in time. */
     create(window: Window, surface: OverlaySurface, window_id: number, click_through: boolean, on_not_ready: () => void): () => void;
     /** Focuses the thread list of the front tab. Does nothing when that tab is not the mail tab. */
@@ -73,7 +73,7 @@ export function create_overlay_host<Window extends object>(deps: OverlayDeps<Win
         mount(args) {
             const window_id = checked_window_id(args);
             if (!is_surface(args.surface)) throw new Error(`unknown surface ${String(args.surface)}`);
-            const window = deps.window_with_id(window_id, args.surface);
+            const window = deps.window_with_id(window_id);
             if (window === null) throw new Error(`no window has id ${window_id}`);
             // A second mount replaces the first, so the page starts clean and one window never holds two of a surface.
             const earlier = mounted.get(window)?.get(args.surface);
