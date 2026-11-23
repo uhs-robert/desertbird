@@ -1,6 +1,6 @@
 // The view settings, read as row counts of the Views folder.
 
-import { same, listed_count, pane_is, sorted_by } from "../predicates.mjs";
+import { same, listed_count, pane_is, selects, sorted_by } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
 export const areas = ["views", "cmdline"];
@@ -47,6 +47,35 @@ async function run_view_settings(instance, ctx) {
   await instance.ask("api_view", 20000, { filter: {} });
   state = await wait_for_state(instance, listed_count(6));
   check(app, kind, "clearing with {} restores 6 rows", state.listed.length === 6);
+  // F m f, s and t read (F m r has no row count to show here, since every Views message has the same recipient, and the unit tests cover it) the selected message. Each sender and subject in the folder is its own, so one row stays, and the two tagged rows stay for the tag. The sender names hold spaces, so the sender row also shows that a name with spaces matches.
+  const rows = state.listed;
+  const select_row = async (header_id) => {
+    await instance.press(["g"]);
+    await key_and_state(instance, ["g"], selects(rows[0]));
+    for (let step = 0; step < rows.indexOf(header_id); step += 1) await key_and_state(instance, ["j"], selects(rows[step + 1]));
+  };
+  const filtered_by = async (field_key, count) => {
+    await instance.press(["F"]);
+    await instance.press(["m"]);
+    return (await key_and_state(instance, [field_key], listed_count(count))).listed;
+  };
+  const clear_to_all = async () => {
+    await instance.press(["F"]);
+    await key_and_state(instance, ["r"], listed_count(6));
+  };
+  await select_row(rows[3]);
+  check(app, kind, "F m f shows only the mail of the selected sender", same(await filtered_by("f", 1), [rows[3]]));
+  await clear_to_all();
+  check(app, kind, "F m s shows only the mail with the selected subject", same(await filtered_by("s", 1), [rows[3]]));
+  await clear_to_all();
+  await select_row("views-4@fixture.invalid");
+  check(app, kind, "F m t shows the mail with a tag of the selected message", same(await filtered_by("t", 2), ["views-4@fixture.invalid", "views-5@fixture.invalid"]));
+  await clear_to_all();
+  await select_row("views-1@fixture.invalid");
+  await instance.press(["F"]);
+  await key_and_state(instance, ["s"], listed_count(2));
+  check(app, kind, "F s then F m s keeps the starred filter and adds the subject", same(await filtered_by("s", 1), ["views-1@fixture.invalid"]));
+  await clear_to_all();
   // The Views messages rise in date and subject with their number, and the sender names follow the order in profile.mjs, so each sort key shows as the row order.
   const views_rows = (by, order) => {
     const ascending = by === "author" ? [2, 4, 0, 3, 5, 1] : [0, 1, 2, 3, 4, 5];

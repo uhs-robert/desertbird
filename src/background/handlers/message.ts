@@ -22,6 +22,7 @@ export interface MessageHeader {
     bccList?: string[];
     headerMessageId?: string;
     subject?: string;
+    author?: string;
     folder?: { id?: string; accountId: string; path?: string; specialUse?: string[] };
 }
 
