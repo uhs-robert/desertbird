@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe_short_files, describe_timeout, reported_counts, run_with_limit, short_files, static_test_count } from "../tools/check_unit_count.ts";
 
 test("the static count takes test and it calls, with modifiers, at the start of a line", () => {
@@ -53,32 +55,75 @@ function is_alive(pid: number): boolean {
     }
 }
 
-test("a run that never exits is killed at its limit, with the child it started", async () => {
-    const scratch = mkdtempSync(join(tmpdir(), "unit-limit-"));
-    const grandchild_pid_path = join(scratch, "grandchild.pid");
-    // The child starts a grandchild that holds a timer, writes its pid, then holds a timer itself: a test file child kept alive by a leaked handle.
-    const script = `
+/** A child script that starts a grandchild holding a timer, writes both pids, then holds a timer itself: a test file child kept alive by a leaked handle. */
+function leaking_child_script(pids_path: string): string {
+    return `
         const { spawn } = require("node:child_process");
         const grandchild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
-        require("node:fs").writeFileSync(${JSON.stringify(grandchild_pid_path)}, String(grandchild.pid));
+        require("node:fs").writeFileSync(${JSON.stringify(pids_path)}, process.pid + " " + grandchild.pid);
         setInterval(() => {}, 1000);
     `;
-    try {
-        const started = Date.now();
-        const result = await run_with_limit(process.execPath, ["-e", script], scratch, 1500);
-        assert.deepEqual(result, { status: 1, timed_out: true });
-        assert.ok(Date.now() - started < 10_000);
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        assert.equal(is_alive(Number(readFileSync(grandchild_pid_path, "utf8"))), false);
-    } finally {
+}
+
+function written_pids(pids_path: string): number[] {
+    return existsSync(pids_path) ? readFileSync(pids_path, "utf8").split(" ").filter(Boolean).map(Number) : [];
+}
+
+/** Kill what a failed test left behind, so a broken kill path does not leak processes past the test. */
+function kill_leftovers(pids_path: string): void {
+    for (const pid of written_pids(pids_path)) {
         try {
-            process.kill(Number(readFileSync(grandchild_pid_path, "utf8")), "SIGKILL");
+            process.kill(pid, "SIGKILL");
         } catch {
             // Killed with its group, as it should be.
         }
+    }
+}
+
+test("a run that never exits is killed at its limit, with the child it started", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "unit-limit-"));
+    const pids_path = join(scratch, "pids");
+    try {
+        const started = Date.now();
+        const result = await run_with_limit(process.execPath, ["-e", leaking_child_script(pids_path)], scratch, 1500);
+        assert.deepEqual(result, { status: 1, timed_out: true });
+        assert.ok(Date.now() - started < 10_000);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        assert.deepEqual(written_pids(pids_path).filter(is_alive), []);
+    } finally {
+        kill_leftovers(pids_path);
         rmSync(scratch, { recursive: true, force: true });
     }
 });
+
+for (const signal of ["SIGTERM", "SIGHUP"] as const) {
+    test(`a ${signal} to the script running the limit ends the run with its children`, async () => {
+        const scratch = mkdtempSync(join(tmpdir(), "unit-signal-"));
+        const pids_path = join(scratch, "pids");
+        const tool_url = pathToFileURL(resolve(import.meta.dirname, "../tools/check_unit_count.ts")).href;
+        const driver_source = `
+            const { run_with_limit } = await import(${JSON.stringify(tool_url)});
+            await run_with_limit(process.execPath, ["-e", ${JSON.stringify(leaking_child_script(pids_path))}], ${JSON.stringify(scratch)}, 60_000);
+        `;
+        const driver = spawn(process.execPath, ["--no-warnings", "--input-type=module", "-e", driver_source], { stdio: "ignore" });
+        const driver_exit = new Promise((done) => driver.on("exit", done));
+        try {
+            const deadline = Date.now() + 10_000;
+            while (written_pids(pids_path).length < 2) {
+                assert.ok(Date.now() < deadline, "the run never started its grandchild");
+                await new Promise((done) => setTimeout(done, 20));
+            }
+            driver.kill(signal);
+            await driver_exit;
+            await new Promise((done) => setTimeout(done, 200));
+            assert.deepEqual(written_pids(pids_path).filter(is_alive), []);
+        } finally {
+            driver.kill("SIGKILL");
+            kill_leftovers(pids_path);
+            rmSync(scratch, { recursive: true, force: true });
+        }
+    });
+}
 
 test("a run that ends inside its limit keeps its exit status", async () => {
     assert.deepEqual(await run_with_limit(process.execPath, ["-e", "process.exitCode = 3"], tmpdir(), 10_000), { status: 3, timed_out: false });
