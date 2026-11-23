@@ -525,7 +525,7 @@ export interface HudChanged {
 }
 
 /** The commands the toolbar popup may run, in the order its entries show. */
-export const POPUP_COMMANDS = ["options.open", "help.open", "help.whichkey"] as const;
+export const POPUP_COMMANDS = ["options.open", "help.open"] as const;
 export type PopupCommand = (typeof POPUP_COMMANDS)[number];
 
 /** A click on an entry of the toolbar popup. The background runs the command in the last focused main window, since the popup has no tab to take a window from. */
