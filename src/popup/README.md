@@ -1,6 +1,6 @@
 # Toolbar popup
 
-The `default_popup` of the `browser_action` button on the mail tab toolbar. The button shows `icons/desertbird.svg`. A click opens this small page with two entries: Options and Help.
+The `default_popup` of the `browser_action` button on the mail tab and default space toolbars. The button shows `icons/desertbird.svg`. A click opens this small page with two entries: Options and Help.
 
 ## Files
 

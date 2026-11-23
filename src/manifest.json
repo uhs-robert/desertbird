@@ -18,7 +18,8 @@
         "default_title": "DesertBird",
         "default_icon": "icons/desertbird.svg",
         "default_popup": "popup/popup.html",
-        "default_windows": ["normal"]
+        "default_windows": ["normal"],
+        "allowed_spaces": ["mail", "default"]
     },
     "options_ui": {
         "page": "options/options.html",
