@@ -51,6 +51,7 @@ async function rows_under_m(read_marks: () => Promise<Record<string, { path: str
         send_changed: () => {},
         timers,
     });
+    await hud.track(1);
     await hud.on_keys_event({ command: "pending", keys: ["M"], windowId: 1 });
     timers.advance(100);
     await settle();

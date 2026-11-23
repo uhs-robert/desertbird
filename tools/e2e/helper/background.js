@@ -258,6 +258,9 @@ async function poll_forever() {
         await post({ seq: command.seq, counts });
       } else if (command.name === "open_message_window") {
         await post({ seq: command.seq, opened: await open_message_window() });
+      } else if (command.name === "focus_window") {
+        await browser.windows.update(command.args.windowId, { focused: true });
+        await post({ seq: command.seq, focused: true });
       } else if (command.name === "close_message_windows") {
         for (const window of await browser.windows.getAll({ windowTypes: ["messageDisplay"] })) await browser.windows.remove(window.id);
         await post({ seq: command.seq, closed: true });

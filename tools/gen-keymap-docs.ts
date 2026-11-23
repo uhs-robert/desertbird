@@ -22,7 +22,8 @@ if (write === check) {
 // The mail tab has no entry in TAB_KINDS: its keys are DEFAULT_KEYMAP itself.
 const sections: KeymapSection[] = [
   { title: "Mail tab", about: "The thread list and the folder pane.", keymap: DEFAULT_KEYMAP },
-  { title: "Message", about: "A message in a tab, a window or the message pane.", keymap: default_keymap_of("message") },
+  { title: "Message", about: "A message in a tab or the message pane.", keymap: default_keymap_of("message") },
+  { title: "Message window", about: "A message in a window of its own (message mode), in the body and in the header. It has no tab, pane or command line keys.", keymap: default_keymap_of("window") },
   { title: "Own pages", about: "The options page and the help page.", keymap: default_keymap_of("own") },
   { title: "Other tabs", about: "Calendar, tasks, chat, the address book, settings and `about:` pages.", keymap: default_keymap_of("page") },
   { title: "Text fields", about: "A text field in a page tab or in the mail tab (the quick filter, the search box). Plain keys are text there. Alt+j and Alt+k also work in insert mode.", keymap: default_typing_keymap() },

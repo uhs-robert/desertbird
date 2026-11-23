@@ -65,6 +65,21 @@
                 "additionalProperties": {
                   "type": "any"
                 }
+              },
+              "windowTree": {
+                "type": "object",
+                "description": "The compiled message mode keymap as data, loose for the reason of `pageTree`. It is the tree of a message window with the focus outside the body.",
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "root": {
+                    "type": "any"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "any"
+                }
               }
             }
           }
@@ -103,7 +118,7 @@
               },
               "source": {
                 "type": "string",
-                "enum": ["page", "message"],
+                "enum": ["page", "message", "window"],
                 "description": "Which tree the panel of a pending event lists. Left out, it is the mail tree."
               },
               "root": {

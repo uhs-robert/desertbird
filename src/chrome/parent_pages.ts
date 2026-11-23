@@ -1,11 +1,11 @@
-// The parent script of the `pages` API. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `pages`: `getAPI(context)` returns `get_pages_api(context)` and `onShutdown` calls `shutdown()`.
+// The parent script of the `pages` API. It hooks the main windows and the message windows. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `pages`: `getAPI(context)` returns `get_pages_api(context)` and `onShutdown` calls `shutdown()`.
 
 import { blur_text_field, focus_chain, overlay_is_loading } from "./focus.ts";
 import { run_scroll, scroll_axis_of, scroll_focus, scroll_target } from "./page_actions.ts";
 import type { ScrollDocument, ScrollNode } from "./page_actions.ts";
 import { create_page_runtime } from "./page_runtime.ts";
 import type { PageRuntime } from "./page_runtime.ts";
-import { guard, load_platform, open_main_windows, tabmail_of } from "./platform.ts";
+import { MAIN_WINDOW_TYPE, guard, load_platform, open_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { MESSAGE_TAB_MODE, situation_of } from "./readable_focus.ts";
 import type { KeyTarget, WindowListener } from "./runtime.ts";
@@ -18,12 +18,16 @@ declare const Services: { io: { getProtocolHandler(scheme: "resource"): { QueryI
 declare const Ci: { nsIResProtocolHandler: unknown };
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
+const MESSAGE_WINDOW_URL = "chrome://messenger/content/messageWindow.xhtml";
+const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/pages";
 const NO_WINDOW_ID = -1;
 
 interface PagesWindow extends MainWindow {
     /** The parent of the window in the event path. A capture listener there sees a key before every listener of the window, the key runtime's among them. */
     windowRoot?: KeyTarget;
+    /** The `about:message` browser of a message window. */
+    messageBrowser?: FrontTabInfo["chromeBrowser"];
 }
 
 interface FrontTabInfo {
@@ -51,25 +55,30 @@ function start_actor(context: ExtensionContext): typeof PageActor {
     return module;
 }
 
-const front_tab_of = (window: MainWindow) => (tabmail_of(window)?.currentTabInfo as FrontTabInfo | null | undefined) ?? null;
+// A message window has no tabmail. It shows its message as a message tab does, in `about:message`, so it passes for one. Its browser is read at key time, since `about:message` may load after the window hook.
+const front_tab_of = (window: PagesWindow): FrontTabInfo | null => {
+    const tabmail = tabmail_of(window);
+    return tabmail ? ((tabmail.currentTabInfo as FrontTabInfo | null | undefined) ?? null) : { mode: { name: MESSAGE_TAB_MODE }, chromeBrowser: window.messageBrowser ?? null };
+};
 
 function ensure_runtime(context: ExtensionContext): PageRuntime {
     runtime ??= create_page_runtime<PagesWindow>({
         register_window_listener(listener: WindowListener<PagesWindow>) {
             load_platform().ExtensionSupport.registerWindowListener(WINDOW_LISTENER_ID, {
-                chromeURLs: [MAIN_WINDOW_URL],
+                chromeURLs: [MAIN_WINDOW_URL, MESSAGE_WINDOW_URL],
                 onLoadWindow: listener.on_load_window,
                 onUnloadWindow: listener.on_unload_window,
             });
         },
         unregister_window_listener: () => load_platform().ExtensionSupport.unregisterWindowListener(WINDOW_LISTENER_ID),
-        open_windows: open_main_windows,
+        open_windows: () => [MAIN_WINDOW_TYPE, MESSAGE_WINDOW_TYPE].flatMap(open_windows),
         key_target_of: (window) => window.windowRoot ?? window,
         situation_of(window, event) {
             if (window.document.documentElement?.hasAttribute(HINTS_LIVE_ATTRIBUTE)) return "pass";
             const tab = front_tab_of(window);
             return situation_of(window.document, tab && { mode: tab.mode.name, browser_is_remote: tab.browser?.isRemoteBrowser === true }, event);
         },
+        is_message_window: (window) => !tabmail_of(window),
         overlay_is_loading: (window) => overlay_is_loading(window.document),
         blur_focused: (window) => actor?.blur(window) || blur_text_field(window.document),
         child: () => actor,
@@ -114,7 +123,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
 export function get_pages_api(context: ExtensionContext) {
     return {
         pages: {
-            install: guard("pages.install", ({ pageTree, messageTree, typingTree, holdCommands }: PagesInstallArgs): void => (ensure_runtime(context).install({ page: pageTree, message: messageTree, typing: typingTree }, holdCommands), (actor ??= start_actor(context)).set_keys(pageTree, typingTree))),
+            install: guard("pages.install", ({ pageTree, messageTree, windowTree, typingTree, holdCommands }: PagesInstallArgs): void => (ensure_runtime(context).install({ page: pageTree, message: messageTree, window: windowTree, typing: typingTree }, holdCommands), (actor ??= start_actor(context)).set_keys(pageTree, typingTree))),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "pages.onInvocation",

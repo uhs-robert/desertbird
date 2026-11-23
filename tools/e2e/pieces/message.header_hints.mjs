@@ -206,9 +206,27 @@ async function run_header_hints(instance, ctx) {
   await pick(labels.link);
   state = await wait_for_state(instance, scroll_is("the link to scroll the message window to the end", (body) => body.scroll_y > 2 * body.inner_height));
   check(app, kind, "header hints: in a message window the body link label opens the link in one step", body_state(state).scroll_y > 2 * body_state(state).inner_height, `scrollY ${body_state(state).scroll_y}`);
-  // The window closes with its labels up. f in the main window then starts a new set there.
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], scroll_is("g g to the top of the message window", (body) => body.scroll_y === 0));
+  // The header of the window runs message mode from the pages bundle: f there sends hint.window and labels the same set.
+  const window_f6_at = Date.now();
+  await instance.press(["-k", "F6"]);
+  state = await wait_for_state(instance, body_focus_is(false, window_f6_at));
+  check(app, kind, "header hints: F6 takes the focus out of the message window's body", body_state(state).has_focus === false, `has_focus ${body_state(state).has_focus}`);
+  await sleep(1600);
+  const window_header = await show_labels();
+  await shot("header_hints_window_header", "f in a message window with the focus in the header: the same labels over the header and the body");
+  check(app, kind, "header hints: f in a message window header draws labels", window_header.labelled !== window_header.before, "the window did not change");
+  await instance.press(["-k", "Escape"]);
+  await sleep(1600);
+  await pick(labels.star);
+  state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
+  check(app, kind, "header hints: from the header of a message window the star label flags the message", flagged(state), `flagged ${flagged(state)}`);
+  await sleep(1600);
+  await pick(labels.star);
+  await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", false));
+  await sleep(1600);
+  // The window closes with its header labels up. f in the main window then starts a new set there.
   await show_labels();
   await instance.ask("close_message_windows");
   await wait_for_state(instance, window_of_type("messageDisplay", false));

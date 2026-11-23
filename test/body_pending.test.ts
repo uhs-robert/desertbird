@@ -30,9 +30,10 @@ test("a pending report with no tab, or with keys that are not strings, reaches n
     assert.deepEqual(calls, []);
 });
 
-test("an own page report names its tree, and nothing else does", async () => {
+test("an own page and a message window report name their tree, and nothing else does", async () => {
     const { calls, handle } = setup();
     await handle({ type: "body.pending", keys: ["g"], tree: "own" }, { tab: { windowId: 7 } });
+    await handle({ type: "body.pending", keys: ["g"], tree: "window" }, { tab: { windowId: 7 } });
     await handle({ type: "body.pending", keys: ["g"], tree: "other" }, { tab: { windowId: 7 } });
-    assert.deepEqual(calls, ["7 g own", "7 g message"]);
+    assert.deepEqual(calls, ["7 g own", "7 g window", "7 g message"]);
 });

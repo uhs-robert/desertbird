@@ -51,11 +51,11 @@ export interface BodyInvokeRequest {
     count: number;
 }
 
-/** The keys typed so far in a half-typed sequence in a message document, counts left out. No keys means no sequence is pending. The background takes the window from the sender. `tree` names the keys the panel lists: a message document leaves it out and gets the message keys, an own page sends `own` and gets the page keys. */
+/** The keys typed so far in a half-typed sequence in a message document, counts left out. No keys means no sequence is pending. The background takes the window from the sender. `tree` names the keys the panel lists: a message document leaves it out and gets the message keys, an own page sends `own` and gets the page keys, and a message window sends `window`. */
 export interface BodyPendingRequest {
     type: "body.pending";
     keys: string[];
-    tree?: "own";
+    tree?: "own" | "window";
 }
 
 /** Ctrl+E in a compose body. The background takes the window from the sender and runs `compose.edit_external` there. */
@@ -99,8 +99,8 @@ export interface KeysPending {
     command: "pending";
     keys: string[];
     windowId: number;
-    /** The tree the panel lists: a page tab names its own (`page`, or `message` in a message tab). A report without one is the mail tab's. */
-    source?: "page" | "message";
+    /** The tree the panel lists: a page tab names its own (`page`, `message` in a message tab, `window` in a message window). A report without one is the mail tab's. */
+    source?: "page" | "message" | "window";
     /** With no keys: show the root of the tree at once (`g ?`) and not end the panel. */
     root?: true;
 }
@@ -212,6 +212,8 @@ export interface PagesInstallArgs {
     pageTree: KeymapTree;
     /** The keys of a message tab with the focus outside the body. The body script takes the keys while the body has the focus. */
     messageTree: KeymapTree;
+    /** The keys of a message window with the focus outside the body, cut from the message window tree as `messageTree` is cut from the message tree. */
+    windowTree: KeymapTree;
     /** The keys that run while a text field has the focus (in the mail tab too) or manual insert mode is on. */
     typingTree: KeymapTree;
     /** Ids of the commands that open the overlay. The runtime holds plain keys after one fires, until the focus moves. */
@@ -397,6 +399,13 @@ export interface BodyHintsRequest {
     /** Absent means the command's default, `activate`. */
     action?: HintAction | undefined;
 }
+
+/** The body script asks which tree of the keymap record its document runs, before it takes a key. The answer is a field name of the record: `window_tree` in a message window, else `message_tree`. Only the background can tell a message window from a tab. */
+export interface BodyTreeRequest {
+    type: "body.tree";
+}
+
+export type BodyTreeField = "message_tree" | "window_tree";
 
 /** The body script asks the background to copy the address or text of the link its hint pick chose. */
 export interface BodyYankRequest {

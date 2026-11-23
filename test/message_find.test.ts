@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { registry } from "../src/background/commands/index.ts";
 import { message_background_commands } from "../src/background/commands/tab_keymaps.ts";
-import { create_body_requests } from "../src/background/body_requests.ts";
+import { create_body_requests, refused_outside_main_window } from "../src/background/body_requests.ts";
 import type { BodyRequestApi } from "../src/background/body_requests.ts";
 import { create_router } from "../src/background/router.ts";
 import { check_args } from "../vendor/desertfox/registry/check_args.ts";
@@ -131,6 +131,24 @@ test("body.invoke refuses a message window with a notification and runs nothing"
     await handle(open_line, sender);
     assert.deepEqual(ran, []);
     assert.deepEqual(notifications(calls), ["notify The command line is not available in a message window. Open the message in a tab to use it."]);
+});
+
+test("body.tree answers the window tree to a message window and the message tree to a tab, a sender with no window or a window that is gone", async () => {
+    assert.equal(await body_requests("messageDisplay").handle({ type: "body.tree" }, sender), "window_tree");
+    assert.equal(await body_requests("normal").handle({ type: "body.tree" }, sender), "message_tree");
+    assert.equal(await body_requests("messageDisplay").handle({ type: "body.tree" }, {}), "message_tree");
+    const gone = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => Promise.reject(new Error("no window")) }, notifications: { create: async () => "n1" } }, allowed: new Set(), run: async () => {} });
+    assert.equal(await gone(({ type: "body.tree" }), sender), "message_tree");
+});
+
+test("the overlay refusal looks at the window only for a command that needs the overlay, and refuses it outside a main window", async () => {
+    const calls: string[] = [];
+    const api = (type: string) => ({ windows: { get: async (window_id: number) => (calls.push(`windows.get ${window_id}`), { type }) }, notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") } });
+    assert.equal(await refused_outside_main_window(registry, api("messageDisplay"), "msg.flag", 4), false);
+    assert.deepEqual(calls, [], "no window lookup for a command with no overlay");
+    assert.equal(await refused_outside_main_window(registry, api("normal"), "cmdline.open", 4), false);
+    assert.equal(await refused_outside_main_window(registry, api("messageDisplay"), "cmdline.open", 4), true);
+    assert.deepEqual(calls, ["windows.get 4", "windows.get 4", "notify The command line is not available in a message window. Open the message in a tab to use it."]);
 });
 
 test("body.invoke drops a command no message key binds, a request with no tab and a malformed request", async () => {

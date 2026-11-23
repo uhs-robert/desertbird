@@ -18,6 +18,7 @@ class FakeWindow {
     tab_listeners = new Set<() => void>();
     blur_listeners = new Set<() => void>();
     situation: Situation = "page";
+    message_window = false;
     overlay_loading = false;
     /** Whether the page actor's child of the front tab takes the keys. */
     child_takes = false;
@@ -51,7 +52,7 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
 }
 
 const tree_of = (result: ReturnType<typeof compile_tab_keymap>) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(result.compiled.modes.normal)) as unknown });
-const tree = (user?: Parameters<typeof compile_tab_keymap>[1]) => ({ page: tree_of(compile_tab_keymap("page", user)), message: page_message_tree(tree_of(compile_tab_keymap("message", user)) as never), typing: tree_of(compile_typing_keymap(user)) });
+const tree = (user?: Parameters<typeof compile_tab_keymap>[1]) => ({ page: tree_of(compile_tab_keymap("page", user)), message: page_message_tree(tree_of(compile_tab_keymap("message", user)) as never), window: page_message_tree(tree_of(compile_tab_keymap("window", user)) as never), typing: tree_of(compile_typing_keymap(user)) });
 
 function setup(window_count = 1) {
     const windows = Array.from({ length: window_count }, () => new FakeWindow());
@@ -70,6 +71,7 @@ function setup(window_count = 1) {
         open_windows: () => windows,
         key_target_of: (window) => window.root,
         situation_of: (window) => window.situation,
+        is_message_window: (window) => window.message_window,
         overlay_is_loading: (window) => window.overlay_loading,
         blur_focused: (window) => void window.blurs++,
         child: () => ({
@@ -411,6 +413,65 @@ test("the page tree and the message tree keep separate half-typed sequences", ()
     assert.equal(scrolls.length, 0, "no gg out of three g in two tabs");
     press(window, "g");
     assert.deepEqual(scrolls.map(([id]) => id), ["page.top"]);
+});
+
+test("a message window header takes the message mode tree: j scrolls, m s flags, q closes, f labels through the background, and the tab, pane and line keys do nothing", () => {
+    const { windows, runtime, scrolls, invocations, pending } = setup();
+    runtime.install(tree(), ["hint.window"]);
+    const window = windows[0]!;
+    window.situation = "message";
+    window.message_window = true;
+    press(window, "j");
+    for (const key of ["m", "s", "q"]) press(window, key);
+    for (const key of ["J", "K", ":", "/", "H", "c"]) assert.equal(press(window, key).cancelled, true, `${key} is swallowed`);
+    for (const key of ["t", "0", "g", "f", "z", "i"]) press(window, key);
+    press(window, "f");
+    assert.deepEqual(scrolls.map(([id]) => id), ["message.scroll_down"]);
+    assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.flag", [42]], ["tab.close", [42]], ["hint.window", [42]]]);
+    assert.ok(pending().filter((event) => event.keys.length > 0).every((event) => event.source === "window"));
+});
+
+test("a message tab keeps the message tree in a main window while a message window runs message mode", () => {
+    const { windows, runtime, invocations } = setup(2);
+    runtime.install(tree());
+    const [tab_window, message_window] = windows as [FakeWindow, FakeWindow];
+    tab_window.situation = message_window.situation = "message";
+    message_window.message_window = true;
+    press(message_window, "J");
+    press(tab_window, "J");
+    assert.deepEqual(invocations().map((event) => [event.command, event.windowId]), [["tab.next", 7]]);
+});
+
+test("a g in one message window and a g in another do not make gg, and a hold from one window does not swallow keys after a window change", () => {
+    const { windows, runtime, scrolls, invocations, advance } = setup(2);
+    runtime.install(tree(), ["hint.window"]);
+    const [first, second] = windows as [FakeWindow, FakeWindow];
+    for (const window of windows) (window.situation = "message"), (window.message_window = true);
+    press(first, "g");
+    press(second, "g");
+    assert.equal(scrolls.length, 0);
+    press(second, "g");
+    assert.deepEqual(scrolls.map(([id]) => id), ["message.top"]);
+    press(first, "f");
+    for (const listener of first.blur_listeners) listener();
+    press(second, "j");
+    assert.deepEqual(scrolls.map(([id]) => id), ["message.top", "message.scroll_down"], "the blur of the window that asked ends its hold");
+    advance(2000);
+    assert.deepEqual(invocations().map((event) => event.command), ["hint.window"]);
+});
+
+test("a half-typed g in a message window header ends when the body takes a key, so g, a key in the body, then g is not gg", () => {
+    const { windows, runtime, scrolls } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.message_window = true;
+    window.situation = "message";
+    press(window, "g");
+    window.situation = "typing";
+    press(window, "x");
+    window.situation = "message";
+    press(window, "g");
+    assert.equal(scrolls.length, 0);
 });
 
 const modes = (events: KeysEvent[]) => events.filter((event) => event.command === "mode").map((event) => (event as { mode: string }).mode);

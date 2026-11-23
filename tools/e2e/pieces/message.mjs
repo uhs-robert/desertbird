@@ -32,6 +32,9 @@ const window_document = (state, body) => body.window_id === state.windows.find((
 // g e and g f from the message body go through the background page to the window, and the helper state has no focus to read, so the keys after them wait this margin.
 const FOCUS_MOVE_MARGIN_MS = 1200;
 
+// `since` asks for a report sent after that time, so a report from before a key cannot pass.
+const body_focus_is = (focused, since = 0) => ({ what: `the focus to ${focused ? "be in" : "leave"} the body`, until: (state) => body_state(state).has_focus === focused && (body_state(state).reported_at ?? 0) >= since, show: (state) => `has_focus ${body_state(state).has_focus}, reported_at ${body_state(state).reported_at}`, timeout_ms: 5000 });
+
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 10000 });
 
 async function run_message_scripts(instance, ctx) {
@@ -291,20 +294,89 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
-  // The command line cannot open in a message window. `/` refuses with a notification, and the keys of the window stay as they were.
+  // Message mode has no command line until it can draw there: `/` and `:` are unbound, swallowed with no notification, and the keys of the window stay as they were.
   await instance.press(["/"]);
+  await instance.press([":"]);
   await sleep(1500);
-  await shot("message_window_slash", "message window after / (a notification, no command line)");
+  await shot("message_window_slash", "message window after / and : (no notification, no command line)");
   const before_refusal = body_state(await instance.ask("state")).scroll_y;
   const after_refusal = body_state(await key_and_state(instance, ["j"], scroll_is("j to scroll the message window one line", (current) => near(current.scroll_y - before_refusal, LINE_STEP_PX)))).scroll_y;
-  check(app, kind, "message window: / opens no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
+  check(app, kind, "message window: / and : open no command line, so j still scrolls", near(after_refusal - before_refusal, LINE_STEP_PX), `scrollY ${before_refusal} then ${after_refusal}`);
   state = await flag_keys(plain_id, true);
   check(app, kind, "message window: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
   await flag_keys(plain_id, false);
   state = await key_and_state(instance, ["J"], 1500);
   check(app, kind, "message window: J changes nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+
+  // The header of the window runs the same message mode keys, from the pages bundle. F6 takes the focus out of the body. Only a report sent after F6 counts.
+  const header_focus = async (where) => {
+    const f6_at = Date.now();
+    await instance.press(["-k", "F6"]);
+    const focused = await wait_for_state(instance, body_focus_is(false, f6_at));
+    check(app, kind, `${where}: F6 takes the focus out of the body`, body_state(focused).has_focus === false, `has_focus ${body_state(focused).has_focus}`);
+    return focused;
+  };
+  await header_focus("message window");
+  await shot("message_window_header_focus", "message window after F6: the focus sits in the header");
+  const header_top = body_state(await instance.ask("state")).scroll_y;
+  state = await key_and_state(instance, ["j"], scroll_is("j in the header to scroll the body", (current) => current.scroll_y > header_top));
+  check(app, kind, "message window header: j scrolls the body", body_state(state).scroll_y > header_top, `scrollY ${header_top} then ${body_state(state).scroll_y}`);
+  state = await flag_keys(plain_id, true);
+  check(app, kind, "message window header: m s flags the message of the window", flagged_ids(state).includes(plain_id), `flagged ${JSON.stringify(flagged_ids(state))}`);
+  await flag_keys(plain_id, false);
+  const header_scroll = body_state(await instance.ask("state")).scroll_y;
+  for (const key of ["J", ":", "/", "H"]) await instance.press([key]);
+  await sleep(1500);
+  state = await instance.ask("state");
+  await shot("message_window_header_unbound", "message window header after J, :, / and H: nothing changed, no notification, no command line");
+  check(app, kind, "message window header: J, :, / and H do nothing and the window stays", state.windows.some((window) => window.type === "messageDisplay") && body_state(state).scroll_y === header_scroll, `windows ${JSON.stringify(state.windows.map((window) => window.type))}, scrollY ${header_scroll} then ${body_state(state).scroll_y}`);
+
+  // A second message window. Both hook the same pages bundle, which keeps one half-typed sequence: g in one window and g in the other must not make g g.
+  const first_window_id = state.windows.find((window) => window.type === "messageDisplay")?.id;
+  // The helper selects in the mail tab of the focused window, so the main window takes the focus first.
+  await instance.ask("focus_window", 20000, { windowId: state.windows.find((window) => window.type === "normal")?.id });
+  await sleep(800);
+  await instance.ask("select:reading-html@fixture.invalid", 30000);
+  await wait_for_state(instance, selects("reading-html@fixture.invalid"));
+  const second_requested = Date.now();
+  await instance.ask("open_message_window");
+  state = await wait_for_state(instance, body_reports("the second message window", second_requested, (current, body) => body.window_id !== first_window_id && current.windows.some((window) => window.id === body.window_id && window.type === "messageDisplay")));
+  const second_window_id = state.body.window_id;
+  check(app, kind, "two message windows open", state.windows.filter((window) => window.type === "messageDisplay").length === 2, JSON.stringify(state.windows.map((window) => window.type)));
+  await header_focus("second message window");
+  for (const _ of [1, 2, 3]) await instance.press(["j"]);
+  state = await wait_for_state(instance, scroll_is("j j j to scroll the second window", (body) => body.window_id === second_window_id && body.scroll_y > 0));
+  const second_scroll = body_state(state).scroll_y;
+  await instance.ask("focus_window", 20000, { windowId: first_window_id });
+  await sleep(800);
+  await instance.press(["g"]);
+  await instance.ask("focus_window", 20000, { windowId: second_window_id });
+  await sleep(800);
+  await instance.press(["g"]);
+  await sleep(1000);
+  await shot("message_windows_g_g", "the second message window after g in the first window and g in this one: still scrolled");
+  state = await instance.ask("state");
+  check(app, kind, "two message windows: g in one and g in the other make no g g", body_state(state).window_id !== second_window_id || body_state(state).scroll_y === second_scroll, `window ${body_state(state).window_id}, scrollY ${second_scroll} then ${body_state(state).scroll_y}`);
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["g"], scroll_is("g g in the second window to its top", (body) => body.window_id === second_window_id && body.scroll_y === 0));
+  check(app, kind, "two message windows: g g in the second window goes to its top", body_state(state).scroll_y === 0, `scrollY ${body_state(state).scroll_y}`);
+  state = await key_and_state(instance, ["q"], { what: "q in the header to close the second window", until: (current) => !current.windows.some((window) => window.id === second_window_id), show: (current) => JSON.stringify(current.windows.map((window) => window.type)), timeout_ms: 10000 });
+  check(app, kind, "message window header: q closes the window", !state.windows.some((window) => window.id === second_window_id) && state.windows.some((window) => window.id === first_window_id), JSON.stringify(state.windows.map((window) => [window.id, window.type])));
+  await instance.ask("focus_window", 20000, { windowId: first_window_id });
+  await sleep(800);
   state = await key_and_state(instance, ["q"], window_of_type("messageDisplay", false));
   check(app, kind, "message window: q closes the window", !state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
+
+  // A key right after the window opens, before about:message or the body may be ready: it is taken or lost, and the window keeps working.
+  await instance.ask("select:reading-plain@fixture.invalid", 30000);
+  await wait_for_state(instance, selects("reading-plain@fixture.invalid"));
+  const early_requested = Date.now();
+  await instance.ask("open_message_window");
+  await instance.press(["j"]);
+  state = await wait_for_state(instance, body_reports("the message window opened with a key", early_requested, window_document));
+  const early_top = body_state(state).scroll_y;
+  state = await key_and_state(instance, ["j"], scroll_is("j in the new window", (body) => body.scroll_y > early_top));
+  check(app, kind, "message window: a key right after the window opens breaks nothing, and j then scrolls", body_state(state).scroll_y > early_top && instance.exited() === null, `scrollY ${early_top} then ${body_state(state).scroll_y}`);
   await instance.ask("close_message_windows");
   await wait_for_state(instance, window_of_type("messageDisplay", false));
   check(app, kind, "the app survived", instance.exited() === null);
