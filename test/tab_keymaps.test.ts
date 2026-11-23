@@ -222,7 +222,7 @@ test("the message window tree holds the reading keys, the hint picks, the mail a
         ["zoom.by", "zoom.by", "zoom.set", "msg.new", "help.open", "help.open", "help.open", "options.open", "app.open_page", "app.open_page", "app.open_page"],
     );
     const ids = new Set(ids_under(root));
-    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.|search\.|help\.whichkey$)/.test(id), id);
+    for (const id of ids) assert.ok(!/^(tab\.(?!close$)|pane\.|folder\.|jump\.|mark\.|motion\.|view\.|thread\.(?!open_conversation$)|step\.(?!message$)|search\.|help\.whichkey$)/.test(id), id);
     assert.deepEqual(
         [[":"], ["m", "t"], ["m", "m"], ["m", "c"]].map((tokens) => [leaf_at(root, ...tokens)?.id, leaf_at(root, ...tokens)?.args]),
         [["cmdline.open", undefined], ["cmdline.open", { text: "tag " }], ["cmdline.open", { text: "move " }], ["cmdline.open", { text: "copy " }]],
@@ -232,7 +232,13 @@ test("the message window tree holds the reading keys, the hint picks, the mail a
         [["cmdline.open", { text: "find " }], ["message.find_next", undefined], ["message.find_prev", undefined]],
     );
     // The keys that open the line on a command the window cannot run stay out.
-    for (const token of ["J", "K", "<A-j>", "<A-k>", "H", "L", "T", "o"]) assert.equal(root.children[token], undefined, token);
+    for (const token of ["<A-j>", "<A-k>", "H", "L", "T", "o"]) assert.equal(root.children[token], undefined, token);
+    // `J`, `K`, `] u` and `[ u` step the window's message, where the mail tab's `J` and `K` switch tab and `] u` steps its list.
+    assert.deepEqual(
+        [["J"], ["K"], ["]", "u"], ["[", "u"]].map((tokens) => [leaf_at(root, ...tokens)?.id, leaf_at(root, ...tokens)?.args]),
+        [["step.message", { direction: "next", unread: false }], ["step.message", { direction: "previous", unread: false }], ["step.message", { direction: "next", unread: true }], ["step.message", { direction: "previous", unread: true }]],
+    );
+    assert.equal(leaf_at(root, "]", "U")?.id ?? "none", "none", "the all-folders step stays unbound");
     for (const tokens of [["t", "m"], ["t", "T"], ["F", "f"], ["s", "s"], [";", ";"]]) assert.equal(leaf_at(root, ...tokens)?.id ?? "none", "none", tokens.join(""));
     // A mail sequence the tree lacks ends in a leaf that runs nothing, so its tail never runs on its own.
     for (const tokens of [["t", "0"], ["g", "f"], ["z", "a"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));

@@ -325,12 +325,14 @@ export interface AppPaneResizeArgs {
     steps: number;
 }
 
-/** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. */
-export const APP_COMMANDS = ["cmd_openConversation"] as const;
+/** The Thunderbird commands the Experiment runs, one name each. The answer is false when Thunderbird has the command disabled. For the four step commands it is also false when the view has no message to step to, because Thunderbird stays put (next, previous) or wraps (next unread) there and does not say so. */
+export const APP_COMMANDS = ["cmd_openConversation", "cmd_nextMsg", "cmd_previousMsg", "cmd_nextUnreadMsg", "cmd_previousUnreadMsg"] as const;
+
+export type AppCommandName = (typeof APP_COMMANDS)[number];
 
 export interface AppCommandArgs {
     windowId: number;
-    name: (typeof APP_COMMANDS)[number];
+    name: AppCommandName;
 }
 
 /** The pages the Experiment opens. The parent holds the addresses and no caller names one. */

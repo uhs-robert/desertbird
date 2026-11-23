@@ -638,3 +638,49 @@ Measured on Thunderbird 153.7.0esr and Betterbird 153.7.0esr-bb13 by the `web` k
 - With `allFrames: false`, a key typed in a same-origin frame reaches no child: the top-level page's listener does not see it.
 - Going back to a page restores it from the back-forward cache (`pageshow` with `persisted` true), with its old child. The child's `pageshow` listener runs then.
 - Neither app restores a web page tab after a restart, so the e2e cannot open a page before the actor registers. Not measured: whether a registration reaches the listeners of a page loaded before it, and whether `unregisterWindowActor` stops the listener of a child that exists. The actor does not rely on either: its start makes an actor for each open tab, and its stop turns every child off first.
+
+## Next and previous message in a message window
+
+Measured on Betterbird 153.7.0 and Thunderbird ESR 153.7.0 with a probe Experiment in a headless session (the `tools/measure/` harness plus a temporary job that is not kept). The commands live on `commandController` of the `about:message` document inside the message window (`win.messageBrowser.contentWindow.commandController`), the same holder that `cmd_openConversation` uses. Every result came out the same on both apps.
+
+### The commands and `isCommandEnabled`
+
+All four commands exist (`supportsCommand` true) in every window. `isCommandEnabled` is true when the controller has a view (`gViewWrapper.dbView`) and false when it has none. The window's own `<command>` elements (`cmd_nextMsg` and the rest) follow: no `disabled` attribute with a view, `disabled=""` without one.
+
+| Message window opened from | View | `cmd_nextMsg` | `cmd_previousMsg` | `cmd_nextUnreadMsg` | `cmd_previousUnreadMsg` |
+| --- | --- | --- | --- | --- | --- |
+| The thread list (`MailUtils.openMessageInNewWindow(hdr, gViewWrapper)`, what a double click does) | Clone of the list view | enabled | enabled | enabled | enabled |
+| `messageDisplay.open({ location: "window", messageId })` (the add-on API) | View of the message's own folder | enabled | enabled | enabled | enabled |
+| An .eml file (`messageWindow.xhtml` with a `file:` URL, as `thunderbird file.eml` does) | None | disabled | disabled | disabled | disabled |
+| A search (Search Messages dialog) | Not measured, see below | | | | |
+
+`doCommand` after a false `isCommandEnabled` is not run by `app.appCommand`, so a window from an .eml refuses with `enabled: false` and nothing changes.
+
+Search: the probe could not open the Search Messages dialog headless (`SearchDialog.js` read `gCurrentFolder` before its folder picker had loaded), so that row is open. The code in `mailCommon.js` gives the answer for a window opened with a search view: `isCommandEnabled` returns false only for a missing `dbView` or a dummy message, and the search view is a view, so the expected answer is enabled. A message opened from a Gloda results tab was not tried. Measure both before relying on them.
+
+### What the window does at the first and last message
+
+The view was the Inbox as a threaded list (30 rows, collapsed threads). The unread cases ran with `mailnews.nav_crosses_folders` 2 (never cross) unless noted.
+
+| Command | At the first message | At the last message | Window |
+| --- | --- | --- | --- |
+| `cmd_nextMsg` | moves to the next message | stays on the same message, no wrap | stays open, no prompt |
+| `cmd_previousMsg` | stays on the same message, no wrap | moves to the previous message | stays open, no prompt |
+| `cmd_nextUnreadMsg` | moves to the next unread message | wraps: jumps to an unread message earlier in the list (the view navigates with wrap on) | stays open, no prompt |
+| `cmd_previousUnreadMsg` | stays on the same message, no wrap, although unread messages exist below it | moves to the previous unread message | stays open, no prompt |
+
+- `isCommandEnabled` stays true at both ends. The command returns without a change, so the enabled answer cannot tell that a step has nowhere to go. The step command asks the view first, see below.
+- With no unread message left in the list, `cmd_nextUnreadMsg` at the last message stays on it. This held for `nav_crosses_folders` 2, 0 and 1: no folder change and no prompt in the message window. In the main window the same setting changes folders and prompts (`CrossFolderNavigation` in `msgViewNavigation.js`), so a message window does not match it here.
+- A message window shows one message and keeps its view. Reading a step moves the window's message id, so the hint labels and find state of the old message end.
+- The unread steps do not wrap in the same way: next unread wraps at the end, previous unread does not wrap at the start.
+
+### The view check the step command uses
+
+`viewNavigate(motion, key, index, thread, false)` on `gViewWrapper.dbView` (the call `_navigate` makes with wrap on) gives the row a step would go to, with no wrap and no change to the window. Measured in the e2e run on both apps (the Reading folder, a window opened with `messageDisplay.open`):
+
+- The answer is in `key`, and the all-ones key (`nsMsgKey_None`) means no row. The index cannot tell: previous unread with none left gave key none and index 0.
+- At the first message `previousMessage` and at the last `nextMessage` give the shown message's own key. `_navigate` returns on that, so it is no row to step to.
+- Next unread past the last unread message gave key none with wrap off, where the command itself wraps to an earlier unread message.
+
+`app.appCommand` runs the check before `doCommand` for the four step names and answers false when it finds no row, so the background refuses with a toast and never wraps.
+

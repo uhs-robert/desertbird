@@ -33,6 +33,7 @@ export const COMPOSE_COMMANDS: ReadonlySet<string> = new Set(["compose.edit_exte
 // Where a key comes from, in the order that decides a clash: the first layer with a key the tab can serve wins. The reading keys (`message_keys`) belong to the body script, so only a tab with a body takes them. The page keys come last, so a tab with a thread list keeps `j` for the list and the body script keeps `j` for scrolling.
 const LAYERS: { keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | undefined; needs: readonly TabNeed[]; only?: TabKind }[] = [
     { keys_of: (group) => group.compose_keys, needs: [], only: "compose" },
+    { keys_of: (group) => group.window_keys, needs: [], only: "window" },
     { keys_of: (group) => group.message_keys, needs: ["body"] },
     { keys_of: (group) => group.normal_keys, needs: [] },
     { keys_of: (group) => group.page_keys, needs: [] },

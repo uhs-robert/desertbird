@@ -42,7 +42,7 @@ export function stub_platform(main_windows: unknown[] = []): PlatformStub {
     const before = { ChromeUtils: globals["ChromeUtils"], Services: globals["Services"], Ci: globals["Ci"] };
     globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] ?? (url.startsWith("resource://desertbird-actor-") ? page_actor : undefined) };
     globals["Services"] = { wm: { getEnumerator: () => main_windows }, io: { getProtocolHandler: () => ({ QueryInterface: () => ({ setSubstitution() {} }) }) } };
-    globals["Ci"] = { nsIResProtocolHandler: {} };
+    globals["Ci"] = { nsIResProtocolHandler: {}, nsMsgNavigationType: { nextMessage: 2, previousMessage: 3, nextUnreadMessage: 7, previousUnreadMessage: 8 } };
     stub.restore = () => {
         globals["ChromeUtils"] = before.ChromeUtils;
         globals["Services"] = before.Services;

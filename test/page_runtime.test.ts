@@ -431,7 +431,7 @@ test("a message window header takes the message mode tree: j scrolls, m s flags,
     press(window, "f");
     // `n` and `N` reach the scroll dep, and the real `run_scroll` has no action for them (page_actions test), so the header finds nothing.
     assert.deepEqual(scrolls.map(([id]) => id), ["message.scroll_down", "message.find_next", "message.find_prev"]);
-    assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.flag", [42]], ["tab.close", [42]], ["cmdline.open", [42]], ["zoom.by", [42]], ["hint.window", [42]]]);
+    assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.flag", [42]], ["tab.close", [42]], ["step.message", [42]], ["step.message", [42]], ["cmdline.open", [42]], ["zoom.by", [42]], ["hint.window", [42]]]);
     assert.ok(pending().filter((event) => event.keys.length > 0).every((event) => event.source === "window"));
 });
 
@@ -456,7 +456,7 @@ test("a message tab keeps the message tree in a main window while a message wind
     message_window.message_window = true;
     press(message_window, "J");
     press(tab_window, "J");
-    assert.deepEqual(invocations().map((event) => [event.command, event.windowId]), [["tab.next", 7]]);
+    assert.deepEqual(invocations().map((event) => [event.command, event.windowId]), [["step.message", 8], ["tab.next", 7]]);
 });
 
 test("a g in one message window and a g in another do not make gg, and a hold from one window does not swallow keys after a window change", () => {

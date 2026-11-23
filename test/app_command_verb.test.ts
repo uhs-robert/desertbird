@@ -46,3 +46,76 @@ test("a disabled controller answers false, and a window with no controller refus
     await assert.rejects(verbs().appCommand({ windowId: 1, name: "cmd_openConversation" }), /shows no message/);
     platform.restore();
 });
+
+/** A view that answers `viewNavigate` from a table of motion to the index it finds. The key follows the index, and `NONE` is the all-ones key. Previous unread with none left gives index 0 and no key, as Thunderbird does. */
+const NONE = 0xffffffff;
+const SHOWN_KEY = 40;
+const view_finding = (found: Record<number, number>, asked: [number, boolean][] = []) => ({
+    dbView: {
+        viewNavigate: (motion: number, key: { value: number }, index: { value: number }, _thread: unknown, wrap: boolean) => {
+            asked.push([motion, wrap]);
+            index.value = found[motion] ?? 0;
+            key.value = motion in found ? 100 + index.value : NONE;
+        },
+    },
+});
+
+test("a step command runs only when the view has a row to step to, asks with no wrap, and answers false at the end", async () => {
+    const motions = { cmd_nextMsg: 2, cmd_previousMsg: 3, cmd_nextUnreadMsg: 7, cmd_previousUnreadMsg: 8 } as const;
+    for (const [name, motion] of Object.entries(motions)) {
+        const log: string[] = [];
+        const asked: [number, boolean][] = [];
+        const window = { messageBrowser: { contentWindow: { ...holder_for("window", log), gMessage: { messageKey: SHOWN_KEY }, gViewWrapper: view_finding({ [motion]: 5 }, asked) } } };
+        const platform = with_windows({ "mail:messageWindow": [window] });
+        assert.equal(await verbs().appCommand({ windowId: 1, name: name as keyof typeof motions }), true, name);
+        assert.deepEqual(log, [`window ${name}`]);
+        assert.deepEqual(asked, [[motion, false]], "the question never wraps");
+        platform.restore();
+    }
+});
+
+test("a step command at the first or last message answers false and does not run, so next unread never wraps", async () => {
+    for (const name of ["cmd_nextMsg", "cmd_previousMsg", "cmd_nextUnreadMsg", "cmd_previousUnreadMsg"] as const) {
+        const log: string[] = [];
+        const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: { ...holder_for("window", log), gViewWrapper: view_finding({}) } } }] });
+        assert.equal(await verbs().appCommand({ windowId: 1, name }), false, name);
+        assert.deepEqual(log, [], name);
+        platform.restore();
+    }
+});
+
+test("a step command answers false when the view hands back the shown message, as it does at the first and last message", async () => {
+    const log: string[] = [];
+    const stays = { dbView: { viewNavigate: (_motion: number, key: { value: number }, index: { value: number }) => ((key.value = SHOWN_KEY), (index.value = 3)) } };
+    const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: { ...holder_for("window", log), gMessage: { messageKey: SHOWN_KEY }, gViewWrapper: stays } } }] });
+    for (const name of ["cmd_nextMsg", "cmd_previousMsg", "cmd_previousUnreadMsg"] as const) assert.equal(await verbs().appCommand({ windowId: 1, name }), false, name);
+    assert.deepEqual(log, []);
+    platform.restore();
+});
+
+test("a step command in a window with no view (an .eml file) answers false, and a disabled controller is not asked about the view", async () => {
+    const log: string[] = [];
+    let platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: { ...holder_for("window", log, false), gViewWrapper: null } } }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_nextMsg" }), false);
+    platform.restore();
+    // A controller that claims enabled with no view still refuses: there is no row to step to.
+    platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: { ...holder_for("window", log), gViewWrapper: null } } }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_nextUnreadMsg" }), false);
+    assert.deepEqual(log, []);
+    platform.restore();
+});
+
+test("a name outside the fixed table throws and runs nothing", async () => {
+    const log: string[] = [];
+    const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: holder_for("window", log) } }] });
+    await assert.rejects(verbs().appCommand({ windowId: 1, name: "cmd_deleteMsg" as never }), /bad name/);
+    assert.deepEqual(log, []);
+    platform.restore();
+});
+
+test("the conversation command never asks the view", async () => {
+    const log: string[] = [];
+    const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: holder_for("window", log) } }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_openConversation" }), true);
+    platform.restore();
+});

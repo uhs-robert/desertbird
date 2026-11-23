@@ -23,7 +23,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     new_mail: { runs_in: "background", ids: ["notify.toggle"] },
     followup: { runs_in: "background", ids: ["msg.remind", "msg.remind_cancel"] },
     thread: { runs_in: "background", ids: ["motion.left", "motion.right", "step.thread_root", "view.reposition", "view.half_page", "thread.fold_all"] },
-    step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment"] },
+    step: { runs_in: "background", ids: ["step.unread", "step.starred", "step.attachment", "step.message"] },
     hints: { runs_in: "background", ids: ["hint.window"] },
     help: { runs_in: "background", ids: ["help.open", "options.open", "help.whichkey"] },
     search: { runs_in: "background", ids: ["search.open", "search.next", "search.prev"] },
