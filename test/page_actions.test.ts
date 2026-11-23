@@ -143,3 +143,7 @@ test("an id outside the table does nothing, and a missing target is no failure",
     assert.deepEqual(target.calls, []);
     assert.equal(run_scroll("page.top", null, 1), true);
 });
+
+test("the find ids have no scroll action, so n and N in a message header do nothing", () => {
+    for (const id of ["message.find_next", "message.find_prev"]) assert.equal(run_scroll(id, null, 1), false, id);
+});

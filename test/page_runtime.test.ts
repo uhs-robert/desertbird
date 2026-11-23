@@ -429,7 +429,8 @@ test("a message window header takes the message mode tree: j scrolls, m s flags,
     for (const key of ["J", "K", ":", "/", "H", "n", "N"]) assert.equal(press(window, key).cancelled, true, `${key} is swallowed`);
     for (const key of ["t", "0", "g", "f", "z", "a", "z", "i"]) press(window, key);
     press(window, "f");
-    assert.deepEqual(scrolls.map(([id]) => id), ["message.scroll_down"]);
+    // `n` and `N` reach the scroll dep, and the real `run_scroll` has no action for them (page_actions test), so the header finds nothing.
+    assert.deepEqual(scrolls.map(([id]) => id), ["message.scroll_down", "message.find_next", "message.find_prev"]);
     assert.deepEqual(invocations().map((event) => [event.command, event.messageIds]), [["msg.flag", [42]], ["tab.close", [42]], ["cmdline.open", [42]], ["zoom.by", [42]], ["hint.window", [42]]]);
     assert.ok(pending().filter((event) => event.keys.length > 0).every((event) => event.source === "window"));
 });
