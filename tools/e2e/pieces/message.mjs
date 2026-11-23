@@ -32,11 +32,11 @@ const window_document = (state, body) => body.window_id === state.windows.find((
 // g e and g f from the message body go through the background page to the window, and the helper state has no focus to read, so the keys after them wait this margin.
 const FOCUS_MOVE_MARGIN_MS = 1200;
 
-// `since` asks for a report sent after that time, so a report from before a key cannot pass.
-const body_focus_is = (focused, since = 0) => ({ what: `the focus to ${focused ? "be in" : "leave"} the body`, until: (state) => body_state(state).has_focus === focused && (body_state(state).reported_at ?? 0) >= since, show: (state) => `has_focus ${body_state(state).has_focus}, reported_at ${body_state(state).reported_at}`, timeout_ms: 5000 });
+// `since` asks for a report sent after that time, so a report from before a key cannot pass, and `window_id` for a report of that window's document, so another window's report cannot pass.
+const body_focus_is = (focused, since, window_id) => ({ what: `the focus to ${focused ? "be in" : "leave"} the body of window ${window_id}`, until: (state) => body_state(state).window_id === window_id && body_state(state).has_focus === focused && (body_state(state).reported_at ?? 0) >= since, show: (state) => `window ${body_state(state).window_id}, has_focus ${body_state(state).has_focus}, reported_at ${body_state(state).reported_at}`, timeout_ms: 5000 });
 
-// The whole screen: a menu of a message window draws anywhere over it.
-const SCREEN_REGION = "0,0 1280x720";
+// Inside the Help menu of a message window as both apps draw it, and nowhere a notification draws, so only the open menu changes it.
+const HELP_MENU_REGION = "505,60 250x140";
 // A point of plain text in the body of a message window, below its menus, read from the shots of both apps.
 const MESSAGE_WINDOW_BODY_POINT = [800, 600];
 
@@ -316,9 +316,9 @@ async function run_message_scripts(instance, ctx) {
   const main_window_id = state.windows.find((window) => window.type === "normal")?.id;
 
   // The body runs the window tree, which leaves the pane chords to Thunderbird: Alt+H opens its Help menu. The message tree binds Alt+H to `pane.left`, so a body on that tree would swallow it and nothing would draw.
-  const screen_before = await wait_pixels(instance, "the screen to hold still before Alt+H", `${app}_${kind}_alt_h_before`, SCREEN_REGION, holds_twice(), { timeout_ms: 3000 });
+  const screen_before = await wait_pixels(instance, "the Help menu region to hold still before Alt+H", `${app}_${kind}_alt_h_before`, HELP_MENU_REGION, holds_twice(), { timeout_ms: 3000 });
   await instance.press(["-M", "alt", "h", "-m", "alt"]);
-  const menu_drawn = await wait_pixels(instance, "Alt+H to open the Help menu", `${app}_${kind}_alt_h_after`, SCREEN_REGION, drawn_since(screen_before), { timeout_ms: 3000 });
+  const menu_drawn = await wait_pixels(instance, "Alt+H to open the Help menu", `${app}_${kind}_alt_h_after`, HELP_MENU_REGION, drawn_since(screen_before), { timeout_ms: 3000 });
   await shot("message_window_alt_h", "message window body after Alt+H: Thunderbird's Help menu is open");
   check(app, kind, "message window body runs the window tree: Alt+H, which only the message tree binds, reaches Thunderbird and opens its Help menu", menu_drawn !== screen_before);
   // Escape would leave the menu bar active, and with no menu it would close the window. The first click ends the menu, the second puts the focus back in the body.
@@ -378,14 +378,14 @@ async function run_message_scripts(instance, ctx) {
   await window_app_keys("message window body", [[["g", "?"], "help", is_own_page("help/help.html")], [[",", "s"], "options", is_own_page("options")], [["g", "p", "c"], "config", (address) => address === "about:config"]], focus_message_window);
 
   // The header of the window runs the same message mode keys, from the pages bundle. F6 takes the focus out of the body. Only a report sent after F6 counts.
-  const header_focus = async (where) => {
+  const header_focus = async (where, window_id) => {
     const f6_at = Date.now();
     await instance.press(["-k", "F6"]);
-    const focused = await wait_for_state(instance, body_focus_is(false, f6_at));
-    check(app, kind, `${where}: F6 takes the focus out of the body`, body_state(focused).has_focus === false, `has_focus ${body_state(focused).has_focus}`);
+    const focused = await wait_for_state(instance, body_focus_is(false, f6_at, window_id));
+    check(app, kind, `${where}: F6 takes the focus out of the body`, body_state(focused).window_id === window_id && body_state(focused).has_focus === false, `has_focus ${body_state(focused).has_focus}`);
     return focused;
   };
-  await header_focus("message window");
+  await header_focus("message window", message_window_id);
   await shot("message_window_header_focus", "message window after F6: the focus sits in the header");
   const header_top = body_state(await instance.ask("state")).scroll_y;
   state = await key_and_state(instance, ["j"], scroll_is("j in the header to scroll the body", (current) => current.scroll_y > header_top));
@@ -402,7 +402,7 @@ async function run_message_scripts(instance, ctx) {
   // The main window and a compose window take the focus from the header. The window gives it back to the header, else F6 moves it there again.
   const focus_header = async () => {
     await focus_message_window();
-    if (body_state(await fresh_body(message_window_id, "a report of the message window after it took the focus back")).has_focus !== false) await header_focus("message window again");
+    if (body_state(await fresh_body(message_window_id, "a report of the message window after it took the focus back")).has_focus !== false) await header_focus("message window again", message_window_id);
   };
   await window_app_keys("message window header", [[[",", "h"], "help", is_own_page("help/help.html")], [[",", "?"], "help", is_own_page("help/help.html")], [["g", "p", "a"], "add-ons", (address) => address === "about:addons"], [["g", "p", "t"], "themes", (address) => address === "about:addons"]], focus_header);
 
@@ -418,7 +418,7 @@ async function run_message_scripts(instance, ctx) {
   state = await wait_for_state(instance, body_reports("the second message window", second_requested, (current, body) => body.window_id !== first_window_id && current.windows.some((window) => window.id === body.window_id && window.type === "messageDisplay")));
   const second_window_id = state.body.window_id;
   check(app, kind, "two message windows open", state.windows.filter((window) => window.type === "messageDisplay").length === 2, JSON.stringify(state.windows.map((window) => window.type)));
-  await header_focus("second message window");
+  await header_focus("second message window", second_window_id);
   for (const _ of [1, 2, 3]) await instance.press(["j"]);
   state = await wait_for_state(instance, scroll_is("j j j to scroll the second window", (body) => body.window_id === second_window_id && body.scroll_y > 0));
   const second_scroll = body_state(state).scroll_y;
