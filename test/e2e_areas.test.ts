@@ -49,7 +49,7 @@ test("a shared file selects every piece file, a docs file none, a piece file its
 });
 
 test("an src file selects the pieces that share its area, and an unplaced src file selects every piece", () => {
-  assert.deepEqual(files_of(["src/background/search/service.ts"]), ["default.search.mjs"]);
+  assert.deepEqual(files_of(["src/background/search/service.ts"]), ["default.filter_by_message.mjs", "default.search.mjs"]);
   assert.ok(files_of(["src/chrome/mode_label.ts"]).includes("mode_label.mjs"));
   assert.equal(files_of(["src/no_such_area/file.ts"]).length, file_areas.size);
 });
@@ -62,7 +62,7 @@ test("a shared helper of some pieces selects those pieces", () => {
 test("E2E_CHANGED=1 keeps the pieces of the changed files and runs Betterbird alone", async () => {
   const pieces = await load_pieces();
   const names = (chosen: { name: string }[]) => chosen.map((piece) => piece.name);
-  assert.deepEqual(names(select_pieces(pieces, { E2E_CHANGED: "1", E2E_CHANGED_PATHS: "src/background/search/service.ts" })), ["default/search"]);
+  assert.deepEqual(names(select_pieces(pieces, { E2E_CHANGED: "1", E2E_CHANGED_PATHS: "src/background/search/service.ts" })), ["default/filter_by_message", "default/search"]);
   assert.deepEqual(select_pieces(pieces, { E2E_CHANGED: "1", E2E_CHANGED_PATHS: "docs/design.md" }), []);
   assert.equal(select_pieces(pieces, { E2E_CHANGED: "1", E2E_CHANGED_PATHS: "src/manifest.json" }).length, select_pieces(pieces, {}).length);
   assert.deepEqual(changed_run_apps({ E2E_CHANGED: "1" }), ["betterbird"]);

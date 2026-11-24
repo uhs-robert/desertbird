@@ -728,3 +728,15 @@ Measured on Betterbird, headless e2e, popup opened by a click on the DesertBird 
 - The popup opens the options or help tab while its own browser still holds the focus, so `TabSelect` finds the popup browser focused and not the window body. Unless the page focus hook moves the focus into the new tab, the page takes no key until a click (`q` left the help tab open).
 
 To log from the Experiment in an e2e run: call `window.dump()` and set the pref `browser.dom.window.dump.enabled` to true. The lines land in the piece's `app.log`. Run with `E2E_KEEP=1` (and `E2E_CONSOLE=1` for `console` output), because a run removes its work dir after a success.
+
+## List and date filters
+
+Measured on Betterbird 153.7.0 alone (Thunderbird was not installed), headless, on local mbox folders: the 60 message Inbox and folders of 5,000 and 10,000 messages, with `mailnews.customDBHeaders` left at its default (empty). The `filter` Experiment (`F m l`, `F m d`) rests on these results.
+
+- `QuickFilterManager.defineFilter` from an Experiment works with no `domId` and so no button. The state goes in with `filterer.setFilterValue`, then `quickFilterBar.updateSearch()` runs the search. `isAnyFilterActive()` is true and the status bar counts the rows. `filterer.clear()` and `setQuickFilter(tab, {})` both remove it.
+- Set alone, the filter leaves the Quick Filter toggle unpressed and shows no "N messages" label. `filterer.visible = true` and `reflectFiltererState()`, as `setQuickFilter` does, draw both.
+- Every `mailTabs.setQuickFilter` call drops the filter, because it calls `filterer.clear()` first. That holds for `F u`, `F s` and each step of `/` with its Escape, since the add-on's search also goes through `setQuickFilter`. A `filter.set` call right after restores it. Between the two calls the list holds the rows of the quick filter alone for about 7 to 23 ms. Whether a frame paints in that gap is not known. Typing in the bar's own text box does not drop it.
+- The custom terms AND with the unread, starred and text filters, in any order.
+- A List-Id `OtherHeader` term (`arbitraryHeader` `List-Id`, `Contains`, the id with its angle brackets) took a median of 40, 126 and 218 ms on the three folders. A same-day date term took 36, 54 and 57 ms. `messages.getFull` of one message took 1 to 2 ms (29 ms at most). The fixture messages are small and were in the page cache, so a real folder can be slower. IMAP was not measured.
+- A date term value is in microseconds (`nsIMsgSearchValue.date`), and the terms compare local calendar days, not instants. One `Is` term with the message's own date matched its day in 13 of 13 cases: 00:00:00, 00:00:30, 23:59:30, 23:59:59, the 25 hour day and the 23 hour day of daylight saving time. `IsAfter` the day's start returned no rows, because it excludes the whole day.
+- `gDBView.rowCount`, the tree view and `mailTabs.getListedMessages` agree on the row count under the filter, so `folderpane.viewRowCount`, `app.viewRows` and the `/` count read the filtered list.

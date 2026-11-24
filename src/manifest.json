@@ -91,6 +91,14 @@
                 "paths": [["hints"]],
                 "script": "experiment/hints.js"
             }
+        },
+        "filter": {
+            "schema": "experiment/filter.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["filter"]],
+                "script": "experiment/filter.js"
+            }
         }
     }
 }

@@ -130,7 +130,7 @@ test("a search with the backward direction counts from the last row", async () =
 test("the earlier filter survives under the typed text and Escape puts it back exactly", async () => {
     const { service, type, filters, api, tab_id } = setup();
     const unread: QuickFilter = { unread: true };
-    await apply_filter(api.mailTabs, tab_id, unread);
+    await apply_filter(api, tab_id, unread);
     await service.start(3, "forward");
     await type("invoice");
     assert.deepEqual(filters.at(-1), { unread: true, text: { text: "invoice", subject: true, author: true } });
@@ -264,7 +264,7 @@ test("n after Escape narrows the list to the register again", async () => {
     const { service, state, api, tab_id } = setup();
     await service.start(3, "forward");
     await service.commit(3, "invoice");
-    await apply_filter(api.mailTabs, tab_id, { show: false });
+    await apply_filter(api, tab_id, { show: false });
     assert.equal(state.filter.text, undefined);
     await service.step(3, "same");
     assert.equal((state.filter as QuickFilter).text?.text, "invoice");
@@ -499,7 +499,7 @@ test("the remembered filters come back from session storage after a restart of t
     keep_filters({ get: async () => stored, set: async (items) => void writes.push(items) });
     await filters_ready();
     assert.deepEqual(remembered_filter(777), { unread: true });
-    await apply_filter({ setQuickFilter: async () => {} }, 778, { flagged: true });
+    await apply_filter({ mailTabs: { setQuickFilter: async () => {} } }, 778, { flagged: true });
     // Other tests leave filters of their own tabs in the same map, so only these two tabs are compared.
     const written = (writes.at(-1) as Record<string, Record<string, unknown>>)[APPLIED_FILTERS_STORAGE_KEY]!;
     assert.deepEqual([written["777"], written["778"]], [{ unread: true }, { flagged: true }]);
