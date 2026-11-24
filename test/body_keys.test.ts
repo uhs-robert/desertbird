@@ -945,3 +945,30 @@ test("i starts insert mode in an own page and in a message window document too",
         assert.deepEqual(window.scrolls, [], kind);
     }
 });
+
+test("Ctrl+[ ends insert mode in a message document as Escape does", async () => {
+    const { window, sent } = await started();
+    window.press("i");
+    window.press("[", { ctrlKey: true });
+    assert.deepEqual(modes_sent(sent), ["insert", "normal"]);
+});
+
+test("i cancels a pick whose answer is still out, so the late answer draws no labels", async () => {
+    let answer: (count: number) => void = () => {};
+    const { window } = await started(undefined, false, () => new Promise<number>((resolve) => (answer = resolve)));
+    window.elements.push(new StubElement());
+    const started_at = Date.now();
+    window.press("f");
+    // The hold of 1.5 s has run out while the parent still has not answered.
+    const real_now = Date.now;
+    Date.now = () => started_at + 2000;
+    try {
+        window.press("i");
+    } finally {
+        Date.now = real_now;
+    }
+    answer(-1);
+    await settle();
+    assert.equal(window.appended.length, 0, "no hint labels were drawn");
+    assert.deepEqual(window.press("j"), { cancelled: false, stopped: false }, "insert mode keeps the keys");
+});
