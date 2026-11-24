@@ -144,7 +144,7 @@ The table has 42 rows. 27 run without the Experiment (26 Standard and one Standa
 
 ## Toolbar button
 
-The manifest has a `browser_action` (`default_windows` is `normal` only, so message windows have none). Its `allowed_spaces` is `["mail", "default"]`. The button shows on the mail tab and on tabs in the default space (options, help and web page tabs). If the user already customized the toolbar of the default space, Thunderbird does not add the button there, and the user adds it once through Customize. The button is titled DesertBird, with the bird icon `src/icons/desertbird.svg`, which is also the manifest icon at 48 and 96. The click opens a small popup page (`src/popup/`) with two entries that run existing commands: Options (`options.open`) and Help (`help.open`). A Show keys entry (`help.whichkey`) is left out: the which-key panel it opens from the popup does not close on the next key. The popup has no tab, so it sends one `popup.run` message and the background runs the command through the router in the last focused main window. The background accepts only those two ids and only from the popup page. No setting, bundle guard or chrome verb changes.
+The manifest has a `browser_action` (`default_windows` is `normal` only, so message windows have none). Its `allowed_spaces` is `["mail", "default"]`. The button shows on the mail tab and on tabs in the default space (options, help and web page tabs). If the user already customized the toolbar of the default space, Thunderbird does not add the button there, and the user adds it once through Customize. The button is titled DesertBird, with the bird icon `src/icons/desertbird.svg`, which is also the manifest icon at 48 and 96. The click opens a small popup page (`src/popup/`) with two entries that run existing commands: Options (`options.open`) and Help (`help.open`). A Show keys entry (`help.whichkey`) is left out: the which-key panel it opens from the popup does not close on the next key. The popup has no tab, so it sends one `popup.run` message and the background runs the command through the router in the last focused main window. The background accepts only those two ids and only from the popup page. In the popup, `o` and `h` press the entries, `j`, `k` and the arrows move the focus between them, and Enter and Space press the focused one. The chrome key runtime lets plain keys through while DesertBird's own popup browser holds the focus, and still swallows them under any other open panel, another add-on's popup included. No setting or chrome verb changes.
 
 ## Store rules
 
@@ -177,7 +177,7 @@ The e2e run is a list of pieces (`tools/e2e/registry.mjs`, `piece_runner.mjs`, `
 
 DesertFox takes plain keys on web pages through a content script and has none on `about:` pages. A remote page in Thunderbird is out of reach of the chrome runtime, and the setups that load key files into the main window passed plain keys aimed at a `browser` untouched, so only chords ran there.
 
-Departure, step 1: when a tab comes to the front, its browser is remote and the focus sits on the window body or the tab strip, the overlay Experiment (`src/chrome/page_focus.ts`) focuses that browser after a tick. The page's own script then runs `j` and `q` on the options and help pages with no click. Any other focused element stays. The code lives in the overlay bundle because the key runtime has no size to spare.
+Departure, step 1: when a tab comes to the front, its browser is remote and the focus sits on the window body, the tab strip or an add-on's toolbar popup (DesertBird's popup opens the options and help tabs while it holds the focus), the overlay Experiment (`src/chrome/page_focus.ts`) focuses that browser after a tick. The page's own script then runs `j` and `q` on the options and help pages with no click. Any other focused element stays. The code lives in the overlay bundle because the key runtime has no size to spare.
 
 Step 2, the page actor: a `JSWindowActor` named `DesertBirdPage` gives web pages and other add-ons' pages (`moz-extension:`) in a tab of the main window the page tree, the typing keys and insert mode. Its child (`src/chrome/page_actor_child.ts`, shipped as `experiment/page_actor_child.sys.mjs`) runs in the page's process. Its parent (`src/chrome/page_actor_parent.ts`) registers it from `pages.js` at the first `pages.install` and hands each key to the page runtime, which runs it with the same matcher as a key of any other tab. How it works:
 
@@ -262,7 +262,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 
 | Bundle | Guard | Ceiling |
 | --- | --- | --- |
-| `experiment/keys.js` | 25916 | 40960 |
+| `experiment/keys.js` | 26428 | 40960 |
 | `experiment/overlay.js` | 27212 | 40960 |
 | `experiment/app.js` | 11109 | 12800 |
 | `experiment/folderpane.js` | 5900 | 10240 |
@@ -304,6 +304,7 @@ The first measured size of `keys.js` as its own bundle was 15003 bytes. That plu
 - Resize mode (`w r`: the flag, its key branch before the reading-pane and typing branches, the count and the report of the mode; clause: decides what happens to a key) made it 24361 (1499 over main's 22862). A shared `swallow` helper for the six places that cancel a key took 200 bytes of the cost back. The guard rose by two 512-byte steps to 24380, under the 40960 ceiling.
 - Ending the hold after `f` when the labels end (the read of the labels-done mark, clause: decides what happens to a key) made it 24837 (457 over 24380). The guard rose by one 512-byte step to 24892.
 - Picking rows with Space (`select.toggle`, the pick flag, cursor-only motions with two or more rows, Escape that drops a selection, visual mode that keeps the selection; clause: decides what happens to a key) made it 25639 (802 over main's 24837). Hoisting the leaf id in `run_leaf`, a shorter Space branch and one stale-list check shared by visual mode and the pick took 415 bytes of the cost back. The guard rose by two 512-byte steps to 25916, under the 40960 ceiling.
+- Letting plain keys through to DesertBird's own toolbar popup while its browser holds the focus (clause: decides what happens to a key) made it 25922 (175 over main's 25747). The guard rose by one 512-byte step to 26428, under the 40960 ceiling.
 
 ### Backspace in an open which-key
 
