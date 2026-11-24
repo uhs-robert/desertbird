@@ -811,6 +811,23 @@ test("keys typed while the overlay browser has the focus and its page is not rea
     assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
 });
 
+// Space picks a row in the list, so two Spaces typed ahead of the line would start a pick and take the selected row out.
+test("Space typed after a hold command is dropped and picks no row", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree(), ["cmdline.open"]);
+    const window = windows[0]!;
+    window.selected = 2;
+    press(window, ":");
+    assert.deepEqual([press(window, " ").cancelled, press(window, " ").cancelled], [true, true]);
+    assert.deepEqual([window.chosen, window.cursor], [[2], 2]);
+    // The focus reaches the line: the hold ends, so the Space that follows picks again.
+    press(window, "a", { target: { localName: "input" } });
+    press(window, " ");
+    press(window, " ");
+    assert.deepEqual(window.chosen, []);
+    assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+});
+
 test("once the overlay page is ready, its keys reach the line and the hold ends", () => {
     const { windows, emitted, runtime } = setup();
     runtime.install(tree(), ["cmdline.open"]);

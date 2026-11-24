@@ -14,7 +14,8 @@ export async function run_pane_moves(instance, ctx) {
 
   await instance.ask("show_folder", 20000, { path: "/Inbox" });
   await wait_state(instance, "the Inbox to list its messages", (state) => folder_of(state) === "/Inbox" && state.listed.length > 0, { timeout_ms: 10000 });
-  await key_and_state(instance, ["g", "e"], { what: "g e to leave the focus in the thread list", until: () => true });
+  // One argument: wtype types a space between text arguments, and Space picks a row.
+  await key_and_state(instance, ["ge"], { what: "g e to leave the focus in the thread list", until: () => true });
   await key_and_state(instance, ["G"], { what: "G to select the last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-1) });
   // The Inbox threads open collapsed and show a summary, so the second last row, a single message, is the one that lets the message pane take the focus.
   await key_and_state(instance, ["k"], { what: "k to select the second last row", until: (state) => first_selected(state) !== null && first_selected(state) === state.listed.at(-2) });
