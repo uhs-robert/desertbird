@@ -101,7 +101,9 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
         for (const { runs_in, invocation } of steps) {
             const id = invocation.id;
             const args = (invocation.args ?? {}) as Record<string, JsonValue>;
-            if (runs_in === "background") deps.emit({ command: id, args, count: invocation.count ?? 1, windowId: deps.window_id_of(window), messageIds: [] });
+            // The key list panel is the hud's, so the runtime asks for it with a root report. `told` then differs from every real sequence, so the next key reports an end.
+            if (id === "help.whichkey") (deps.emit({ command: "pending", keys: [], root: true, windowId: deps.window_id_of(window), source: "compose" }), (told = "root"));
+            else if (runs_in === "background") deps.emit({ command: id, args, count: invocation.count ?? 1, windowId: deps.window_id_of(window), messageIds: [] });
             else if (id === "compose.focus" && COMPOSE_FIELDS.includes(args["field"] as ComposeField)) (deps.focus_field(window, args["field"] as ComposeField), set_mode(window, "insert"));
             else if (id === "compose.close") deps.run_command(window, "cmd_close");
             else if (id === "compose.send" && allow_send) deps.run_command(window, "cmd_sendWithCheck");

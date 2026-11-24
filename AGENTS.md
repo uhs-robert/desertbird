@@ -63,7 +63,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
   - `experiment/folderpane.js`: guard 5900, ceiling 10240 (`FOLDERPANE_MAX_BYTES`).
   - `experiment/zoom.js`: guard 3544, ceiling 6144 (`ZOOM_MAX_BYTES`).
   - `content/compose_keys.js`: guard 4012, ceiling 8192 (`COMPOSE_MAX_BYTES`).
-  - `experiment/composewin.js`: guard 11264, ceiling 15360 (`COMPOSEWIN_MAX_BYTES`).
+  - `experiment/composewin.js`: guard 11776, ceiling 15360 (`COMPOSEWIN_MAX_BYTES`).
   - `experiment/filter.js`: guard 5632, ceiling 8192 (`FILTER_MAX_BYTES`).
 - Raise a guard only as the last step: the new code passes the admission rule (the commit names the clause), code that fails the rule has moved out first, the step is 512 bytes, and the commit names the feature. Passing a ceiling needs the maintainer's decision and a fresh run of `tools/measure/`. Departures from DesertFox, which has one ceiling on `content.js` only: DesertBird has several bundles, so each has its own ceiling (provisional, about 1.5 times the guard of the day). The current guards are not multiples of 512, so the step applies to later raises only.
 - Put no test hooks in `src/`. Tests drive the add-on through its public surface.

@@ -22,13 +22,13 @@ export const TAB_KINDS = {
     own: ["tab", "line", "body", "close", "main"],
     page: ["tab", "page", "typing", "line", "close", "main"],
     window: ["message", "line", "body", "close", "main"],
-    compose: ["compose", "main"],
+    compose: ["compose", "main", "tab"],
 } as const satisfies Record<string, readonly TabNeed[]>;
 
 export type TabKind = keyof typeof TAB_KINDS;
 
-/** The only commands a key of a compose window runs, by default or by a user key. Save and edit leave the window open, help opens a page in the main window, and zoom acts on the window. Close and send go through Thunderbird's own commands, so a changed draft asks to save and a send runs Thunderbird's checks. */
-export const COMPOSE_COMMANDS: ReadonlySet<string> = new Set(["compose.edit_external", "compose.save", "compose.focus", "compose.close", "compose.send", "help.open", "zoom.by", "zoom.set"]);
+/** The only commands a key of a compose window runs, by default or by a user key. Save and edit leave the window open, help opens a page in the main window, the key list shows the compose keys in the hud, and zoom acts on the window. Close and send go through Thunderbird's own commands, so a changed draft asks to save and a send runs Thunderbird's checks. */
+export const COMPOSE_COMMANDS: ReadonlySet<string> = new Set(["compose.edit_external", "compose.save", "compose.focus", "compose.close", "compose.send", "help.open", "help.whichkey", "zoom.by", "zoom.set"]);
 
 // Where a key comes from, in the order that decides a clash: the first layer with a key the tab can serve wins. The reading keys (`message_keys`) belong to the body script, so only a tab with a body takes them. The page keys come last, so a tab with a thread list keeps `j` for the list and the body script keeps `j` for scrolling.
 const LAYERS: { keys_of: (group: CommandGroup) => CommandGroup["normal_keys"] | undefined; needs: readonly TabNeed[]; only?: TabKind }[] = [

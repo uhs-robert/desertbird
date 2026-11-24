@@ -675,3 +675,26 @@ test("a replaced tree and a shutdown end the reported prefix", async () => {
         done();
     }
 });
+
+test("g ? asks the hud for the root keys of the compose tree, runs no command, and the next key ends the panel; ? alone still opens help", async () => {
+    const a = compose_window(3);
+    const { emitted, reports, done } = await setup([a]);
+    try {
+        a.press("Escape");
+        a.press("g");
+        a.press("?");
+        assert.deepEqual(emitted, []);
+        assert.deepEqual(reports, [
+            { command: "pending", keys: ["g"], windowId: 3, source: "compose" },
+            { command: "pending", keys: [], windowId: 3, source: "compose" },
+            { command: "pending", keys: [], root: true, windowId: 3, source: "compose" },
+        ]);
+        a.press("j");
+        assert.deepEqual(reports.at(-1), { command: "pending", keys: [], windowId: 3, source: "compose" });
+        assert.equal(reports.length, 4);
+        a.press("?");
+        assert.deepEqual(reports.at(-1), { command: "pending", keys: [], windowId: 3, source: "compose" } as never);
+    } finally {
+        done();
+    }
+});

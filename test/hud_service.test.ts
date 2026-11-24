@@ -744,3 +744,16 @@ test("a late end report of one window leaves the panel of another window up", as
     await settle();
     assert.deepEqual(log, ["mount hud@10"]);
 });
+
+test("a root report of a compose window shows the compose root at once and the next end report removes it", async () => {
+    const { hud, log, sources, pending, state } = compose_setup();
+    await hud.track(9, "compose");
+    await hud.on_keys_event({ command: "pending", keys: [], root: true, windowId: 9, source: "compose" });
+    await settle();
+    assert.deepEqual(log, ["mount hud@9"]);
+    assert.deepEqual((await state(9)).which_key?.rows.map((row) => row.key), ["g"]);
+    assert.equal(sources.at(-1), "compose");
+    await pending([], 9);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9", "unmount hud@9"]);
+});
