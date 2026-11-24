@@ -259,7 +259,7 @@ export interface ComposewinApi {
     onInvocation: KeysApi["onInvocation"];
 }
 
-export const MENU_DIRECTIONS = ["down", "up"] as const;
+export const MENU_DIRECTIONS = ["down", "up", "left", "right"] as const;
 export type MenuDirection = (typeof MENU_DIRECTIONS)[number];
 
 /** One key that moves an open menu: a single typed character such as `j` and the way it moves. */

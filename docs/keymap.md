@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 469 (Mail tab 156, Message 100, Message window 82, Compose window 23, Own pages 52, Other tabs 50, Text fields 4, Open menus 2)
+bound: 471 (Mail tab 156, Message 100, Message window 82, Compose window 23, Own pages 52, Other tabs 50, Text fields 4, Open menus 4)
 
 ### Mail tab
 
@@ -845,5 +845,7 @@ A native menu or popup is open (a context menu, a menu bar menu, a dropdown, the
 | --- | --- |
 | `j` | `menu.down` |
 | `k` | `menu.up` |
+| `h` | `menu.left` |
+| `l` | `menu.right` |
 
 <!-- END generated -->

@@ -74,8 +74,8 @@ test("a custom prompt keeps its leading and trailing spaces, and a list setting 
 
 const no_edits = { removed: [], rows: [] };
 
-test("the default menu rows list j and k apart from the thread list rows", () => {
-    assert.deepEqual(default_menu_rows().map((row) => [row.keys, row.command]), [["j", "menu.down"], ["k", "menu.up"]]);
+test("the default menu rows list j, k, h and l apart from the thread list rows", () => {
+    assert.deepEqual(default_menu_rows().map((row) => [row.keys, row.command]), [["j", "menu.down"], ["k", "menu.up"], ["h", "menu.left"], ["l", "menu.right"]]);
     assert.equal(default_rows().some((row) => row.command.startsWith("menu.")), false);
 });
 
@@ -86,6 +86,16 @@ test("menu edits round-trip through the menu section and leave the list keys alo
     if ("user_keymap" in built) {
         assert.deepEqual(menu_edits_from_user_keymap(built.user_keymap), menu_edits);
         assert.deepEqual(built.user_keymap.normal, {});
+    }
+});
+
+test("menu.left and menu.right rows are rebindable and save into the menu section", () => {
+    const menu_edits = { removed: ["h", "l"], rows: [{ keys: "a", command: "menu.left", args: "" }, { keys: "d", command: "menu.right", args: "" }] };
+    const built = build_user_keymap(no_edits, {}, menu_edits);
+    assert.ok("user_keymap" in built && !built.blocked);
+    if ("user_keymap" in built) {
+        assert.deepEqual(built.user_keymap.menu, { h: null, l: null, a: { id: "menu.left" }, d: { id: "menu.right" } });
+        assert.deepEqual(menu_edits_from_user_keymap(built.user_keymap), menu_edits);
     }
 });
 

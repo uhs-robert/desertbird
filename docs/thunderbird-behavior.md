@@ -771,6 +771,13 @@ The methods:
 - App menu: a real Down from `wtype` did not move the focus from the first button, on the first and on a later open, while the TIP and the chrome event moved it to the second. The cause is not known. Issue #161 is about the e2e check that presses that Down.
 - `j` reached a capture listener on the window root in every row: the main window for the thread list, the app menu, settings and the page tab, the message window and the compose window for theirs. The `j` target was the focused element (`tbody`, the button in the panel, the menulist, the remote `browser`, the message or compose `body`), never the popup.
 
+### ArrowLeft and ArrowRight
+
+The same chrome event, with `ArrowLeft` or `ArrowRight` (keyCode 37 and 39) dispatched at the innermost open popup, measured on Betterbird 153.8.0 and Thunderbird 153.7.0 ESR in the e2e popup piece (2026-11-24), read as pixels against a closed baseline.
+
+- Thread context menu, Mark highlighted: `l` opens the Mark submenu, `h` closes it and leaves the context menu open. A real Right and a real Left reach the same pixels.
+- Menu bar menu (File opened by Alt+F, Close highlighted, which has no submenu): `l` moves to the Edit menu, and `h` from there moves back to File with its first item highlighted. A real Right also opens Edit, but with its first enabled item (Delete Selected Messages) highlighted. After `l` no item is highlighted, so the next `j` selects the first one. This is the one difference from a real arrow.
+
 ### `popupshown` at the window root
 
 A capture listener for `popupshown` and `popuphidden` on `windowRoot` saw every popup above, with the popup as `originalTarget`: `mailContext` in `about:3pane`, `mailContext` in the mail tab's `about:message` (two documents down) and in the message window's `about:message`, the menulist popup in `about:preferences`, `browserContext` for the remote page, `msgComposeContext` and the app menu `panel`. A set filled from these events and checked for `state` "open" found the open popup every time.

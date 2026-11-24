@@ -60,7 +60,7 @@ const COMPOSEWIN_MAX_BYTES = 11776;
 const COMPOSEWIN_CEILING_BYTES = 15360;
 
 // `experiment/menukeys.js`, the keys that move an open native menu, hooked into every window at startup. See docs/design.md, "Menu keys bundle".
-const MENUKEYS_MAX_BYTES = 5120;
+const MENUKEYS_MAX_BYTES = 5632;
 const MENUKEYS_CEILING_BYTES = 8192;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.

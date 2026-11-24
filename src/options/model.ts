@@ -2,7 +2,7 @@
 
 import type { KeyBinding } from "../../vendor/desertfox/invocation.ts";
 import { DEFAULT_KEYMAP, is_menu_command } from "../background/commands/index.ts";
-import { default_menu_keymap, menu_key_table } from "../background/commands/tab_keymaps.ts";
+import { default_menu_keymap, menu_direction_of, menu_key_table } from "../background/commands/tab_keymaps.ts";
 import { parse_sequence } from "../../vendor/desertfox/keys/notation.ts";
 import { compile_effective_keymap } from "../background/config/keymap.ts";
 import type { UserKeymap } from "../background/config/keymap.ts";
@@ -123,8 +123,8 @@ export function build_user_keymap(edits: BindingEdits, settings: Partial<Setting
     }
     // The table keeps a key only when it is one typed character that runs a menu command, so a row it lacks blocks the save.
     const table = menu_key_table(menu);
-    const bad_menu_row = menu_edits.rows.find((row) => !is_menu_command(row.command.trim()) || table[row.keys.trim()] !== (row.command.trim() === "menu.down" ? "down" : "up"));
-    if (bad_menu_row) return { error: `"${bad_menu_row.keys}" must be one typed character and the command menu.down or menu.up` };
+    const bad_menu_row = menu_edits.rows.find((row) => !is_menu_command(row.command.trim()) || table[row.keys.trim()] !== menu_direction_of(row.command.trim()));
+    if (bad_menu_row) return { error: `"${bad_menu_row.keys}" must be one typed character and a menu command` };
     const user_keymap: UserKeymap = { normal, ...(Object.keys(menu).length > 0 && { menu }) };
     const { compiled, warnings } = compile_effective_keymap(user_keymap, settings);
     const skipped_row = edits.rows.find((row) => !binding_is_active(compiled.modes.normal, row));

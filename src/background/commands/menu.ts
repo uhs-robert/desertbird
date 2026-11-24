@@ -5,10 +5,14 @@ export const menu: CommandGroup = {
     commands: {
         "menu.down": { runs_in: "chrome", bridge: false, needs: ["menu"], label: "Menu down", intent: "Move the selection of the open menu down by one item." },
         "menu.up": { runs_in: "chrome", bridge: false, needs: ["menu"], label: "Menu up", intent: "Move the selection of the open menu up by one item." },
+        "menu.left": { runs_in: "chrome", bridge: false, needs: ["menu"], label: "Menu left", intent: "Close the open submenu or go to the previous menu." },
+        "menu.right": { runs_in: "chrome", bridge: false, needs: ["menu"], label: "Menu right", intent: "Open the submenu or go to the next menu." },
     },
     normal_keys: {},
     menu_keys: {
         j: { id: "menu.down" },
         k: { id: "menu.up" },
+        h: { id: "menu.left" },
+        l: { id: "menu.right" },
     },
 };

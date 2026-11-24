@@ -206,25 +206,26 @@ test("a user key joins the typing tree only as one key for a command the layer n
     assert.equal(leaf_at(root, "<Escape>")?.id, "mode.escape");
 });
 
-test("the menu key table holds j and k by default, and j and k still move the list in the mail tab", () => {
-    assert.deepEqual(menu_key_table(), { j: "down", k: "up" });
-    assert.deepEqual(Object.keys(default_menu_keymap().normal ?? {}), ["j", "k"]);
+test("the menu key table holds j, k, h and l by default, and they still move in the mail tab", () => {
+    assert.deepEqual(menu_key_table(), { j: "down", k: "up", h: "left", l: "right" });
+    assert.deepEqual(Object.keys(default_menu_keymap().normal ?? {}), ["j", "k", "h", "l"]);
     assert.equal(leaf_at(compile_default_keymap().compiled.modes.normal as TreeBranch, "j")?.id, "motion.down");
+    for (const key of ["h", "l"]) assert.ok(!leaf_at(compile_default_keymap().compiled.modes.normal as TreeBranch, key)?.id.startsWith("menu."), key);
 });
 
 test("a user menu key joins the table only as one typed character for a menu command", () => {
-    const table = menu_key_table({ n: { id: "menu.down" }, "<C-n>": { id: "menu.down" }, "g n": { id: "menu.up" }, x: { id: "msg.archive" }, p: { id: "menu.up" }, "\u{1F600}": { id: "menu.down" } });
-    assert.deepEqual(table, { j: "down", k: "up", n: "down", p: "up" });
+    const table = menu_key_table({ n: { id: "menu.down" }, "<C-n>": { id: "menu.down" }, "g n": { id: "menu.up" }, x: { id: "msg.archive" }, p: { id: "menu.up" }, "\u{1F600}": { id: "menu.down" }, q: { id: "menu.left" }, r: { id: "menu.right" } });
+    assert.deepEqual(table, { j: "down", k: "up", h: "left", l: "right", n: "down", p: "up", q: "left", r: "right" });
 });
 
 test("a null in the menu section unbinds the menu key alone, and the list key keeps its motion", () => {
-    assert.deepEqual(menu_key_table({ j: null }), { k: "up" });
-    assert.deepEqual(menu_key_table({ j: { id: "menu.up" } }), { j: "up", k: "up" });
+    assert.deepEqual(menu_key_table({ j: null, l: null }), { k: "up", h: "left" });
+    assert.deepEqual(menu_key_table({ j: { id: "menu.up" } }), { j: "up", k: "up", h: "left", l: "right" });
     assert.equal(leaf_at(compile_effective_keymap({ normal: {}, menu: { j: null } }).compiled.modes.normal as TreeBranch, "j")?.id, "motion.down");
 });
 
 test("the effective menu keymap lists the user's keys for help", () => {
-    assert.deepEqual(Object.keys(effective_menu_keymap({ n: { id: "menu.down" } }).normal ?? {}), ["j", "k", "n"]);
+    assert.deepEqual(Object.keys(effective_menu_keymap({ n: { id: "menu.down" } }).normal ?? {}), ["j", "k", "h", "l", "n"]);
 });
 
 test("a user key for a menu command never replaces a mail-tab key, and no tab tree takes it", () => {

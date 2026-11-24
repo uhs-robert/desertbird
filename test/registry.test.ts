@@ -31,7 +31,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right", "pane.resize"] },
     zoom: { runs_in: "background", ids: ["zoom.by", "zoom.set"] },
     context: { runs_in: "background", ids: ["context.menu"] },
-    menu: { runs_in: "chrome", ids: ["menu.down", "menu.up"] },
+    menu: { runs_in: "chrome", ids: ["menu.down", "menu.up", "menu.left", "menu.right"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
