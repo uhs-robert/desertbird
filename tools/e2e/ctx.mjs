@@ -106,6 +106,10 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
 
   const wait_for_state = (instance, wanted) => wait_state(instance, wanted.what, wanted.until, wanted);
 
+  // Keys go to the focused window, and under load a fresh tab can leave the main window without focus for longer than a fixed sleep. A window that never gains focus fails by name, since a timed-out wait records a FAIL. It clicks nothing, so a no-click check keeps its contract.
+  // It closes that gap but not every drop: one stressed run still lost the calendar keys after this wait passed, so a single focused read is not proof that keys arrive.
+  const wait_window_focus = (instance) => wait_for_state(instance, { what: "the normal window to report focus before the first key", until: (state) => state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 15000, show: (state) => `windows ${JSON.stringify(state.windows.map((window) => [window.type, window.focused]))}` });
+
   async function show_folder(instance, path) {
     await instance.ask("show_folder", 20000, { path });
     return wait_for_state(instance, folder_shown(path));
@@ -243,7 +247,7 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
     extra_instances: [],
     report, wait_stats,
     check, note, shot, timed,
-    sleep, wait_for, wait_state, wait_for_state, key_and_state, barrier, expect_absent, wait_pixels, drawn_since, back_to, holds_twice,
+    sleep, wait_for, wait_state, wait_for_state, wait_window_focus, key_and_state, barrier, expect_absent, wait_pixels, drawn_since, back_to, holds_twice,
     wait_message_loaded, wait_for_clipboard, close_compose, settled_state,
     open_inbox, restart, show_folder, hud_pixels, first_selected,
     open_command_line, press_in_command_line, close_command_line, toast_cycle, key_list_region: KEY_LIST_REGION,

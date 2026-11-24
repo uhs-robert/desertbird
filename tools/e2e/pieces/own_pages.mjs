@@ -8,7 +8,7 @@ export const areas = ["own_pages", "theme", "message_body", "hud", "cmdline", "p
 
 // DesertBird's own pages run the message keys themselves: q closes the page tab, and q typed in an option input stays text.
 async function run_own_pages(instance, ctx) {
-  const { report, check, open_inbox, wait_for_state, key_and_state, hud_pixels, wait_pixels, close_command_line } = ctx;
+  const { report, check, open_inbox, wait_for_state, wait_window_focus, key_and_state, hud_pixels, wait_pixels, close_command_line } = ctx;
   const app = instance.app;
   const kind = "own_pages";
   await open_inbox(instance);
@@ -19,6 +19,7 @@ async function run_own_pages(instance, ctx) {
     const reply = await instance.ask("open_own_page", 20000, { page });
     const opened = await wait_for_state(instance, last_tab_loaded(before + 1));
     await sleep(PAINT_MARGIN_MS);
+    await wait_window_focus(instance);
     check(app, kind, `the ${page} page opens in a tab`, main_window_tabs(opened).length === before + 1, `reply ${JSON.stringify(reply)}`);
   };
   // A page nobody clicked yet: its first keys must work, so j scrolls it and q closes it.
@@ -80,6 +81,7 @@ async function run_own_pages(instance, ctx) {
     await open();
     const opened = await wait_for_state(instance, last_tab_loaded(before + 1));
     await sleep(CHROME_TAB_MARGIN_MS);
+    await wait_window_focus(instance);
     check(app, kind, `the ${name} tab opens`, main_window_tabs(opened).length === before + 1, `tabs ${main_window_tabs(opened).length}`);
     await instance.click(...click_at);
     await sleep(500);
