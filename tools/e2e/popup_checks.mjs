@@ -27,8 +27,9 @@ const DESERTBIRD_HELP_ENTRY = [1100, 89];
 // The share of bytes two shots of the popup region differ in. A closed popup leaves at most a hover mark of the page below (measured 1.4%), an open one covers most of it (65%).
 const share_differing = (one, other) => one.reduce((count, byte, index) => count + (byte !== other[index] ? 1 : 0), 0) / one.length;
 const CLOSED_AT_MOST = 0.05;
-// The popup draws dark text (Options, Help and their keys: 1100 to 1900 bytes below 110 in the shots), and the region over the help tab holds none (0, measured). The popup does not stay the same while open, since a hover or the focus ring moves, so a comparison with an open shot cannot tell open from closed.
-const dark_bytes = (pixels) => pixels.reduce((count, byte) => count + (byte < 110 ? 1 : 0), 0);
+// A shot of the open popup moves with the hover and the focus ring, so it cannot be the reference for "closed". The popup's own text is the sign: 1100 to 1900 dark bytes while open, 0 over the help tab once closed.
+const DARK_BELOW = 110;
+const dark_bytes = (pixels) => pixels.reduce((count, byte) => count + (byte < DARK_BELOW ? 1 : 0), 0);
 const CLOSED_DARK_BYTES_AT_MOST = 100;
 // The app menu panel region, measured on Betterbird only, over several runs: open against closed differs in 100% of the bytes, and two shots of the closed region in different runs in 0%. A menu that did not open reads 0%.
 const OPEN_AT_LEAST = 0.5;
