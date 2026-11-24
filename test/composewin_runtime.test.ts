@@ -692,8 +692,9 @@ test("g ? asks the hud for the root keys of the compose tree, runs no command, a
         a.press("j");
         assert.deepEqual(reports.at(-1), { command: "pending", keys: [], windowId: 3, source: "compose" });
         assert.equal(reports.length, 4);
+        assert.equal(emitted.length, 0);
         a.press("?");
-        assert.deepEqual(reports.at(-1), { command: "pending", keys: [], windowId: 3, source: "compose" } as never);
+        assert.deepEqual(emitted.map((event: KeysEvent) => event.command), ["help.open"]);
     } finally {
         done();
     }
