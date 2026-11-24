@@ -222,6 +222,9 @@ test("a null in the menu section unbinds the menu key alone, and the list key ke
     assert.deepEqual(menu_key_table({ j: null, l: null }), { k: "up", h: "left" });
     assert.deepEqual(menu_key_table({ j: { id: "menu.up" } }), { j: "up", k: "up", h: "left", l: "right" });
     assert.equal(leaf_at(compile_effective_keymap({ normal: {}, menu: { j: null } }).compiled.modes.normal as TreeBranch, "j")?.id, "motion.down");
+    const defaults = compile_default_keymap().compiled.modes.normal as TreeBranch;
+    const unbound = compile_effective_keymap({ normal: {}, menu: { h: null, l: null } }).compiled.modes.normal as TreeBranch;
+    for (const key of ["h", "l"]) assert.equal(leaf_at(unbound, key)?.id, leaf_at(defaults, key)?.id, key);
 });
 
 test("the effective menu keymap lists the user's keys for help", () => {

@@ -36,7 +36,7 @@ export interface CommandGroup {
     page_keys?: NonNullable<KeymapConfig["normal"]>;
     /** Keys that run while a text field has the focus, in the mail tab and in page tabs. Only chords belong here, since a plain key in a field is text. They are the `typing_tree` of the keymap record, apart from the other layers, so a key like `<Escape>` never reaches the normal-mode trees. */
     typing_keys?: NonNullable<KeymapConfig["normal"]>;
-    /** Keys that move an open menu or popup, in every window. They are the key table of the `menukeys` Experiment, apart from the other layers, because j and k are list motions in the mail tab. */
+    /** Keys that move an open menu or popup, in every window. They are the key table of the `menukeys` Experiment, apart from the other layers, because j, k, h and l are list motions in the mail tab. */
     menu_keys?: NonNullable<KeymapConfig["normal"]>;
 }
 

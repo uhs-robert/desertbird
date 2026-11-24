@@ -148,7 +148,7 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   state = await key_and_state(instance, ["h"], 800);
   const bar_after_h = await bar_pixels("popup_bar_after_h");
   await shot("popup_bar_after_h", "after h on the Edit menu: back to the File menu");
-  check(app, kind, "menu bar menu open: h moves back to the previous menu", !bar_after_h.equals(bar_after_l));
+  const bar_h_shot = bar_after_h;
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
@@ -160,6 +160,13 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   const rows_apart = differing_rows(bar_after_right, bar_after_l);
   // Measured: a real Right opens Edit with its first enabled item highlighted and l opens it with none, so the two differ in the rows of that one item and nowhere else.
   check(app, kind, "menu bar menu open: a real Right opens the same menu as l, apart from the highlighted first item", rows_apart.length > 0 && rows_apart.at(-1) - rows_apart[0] < MENU_ITEM_ROWS_AT_MOST, `rows apart ${rows_apart.at(0)} to ${rows_apart.at(-1)}`);
+  // A real Left from the same Edit state. An h that closed the menu, or stayed on Edit, differs from it in far more than one item.
+  await instance.press(["-k", "Left"]);
+  await sleep(800);
+  const bar_after_left = await bar_pixels("popup_bar_after_left");
+  await shot("popup_bar_after_left", "after a real Left on the Edit menu: the File menu");
+  const left_rows_apart = differing_rows(bar_after_left, bar_h_shot);
+  check(app, kind, "menu bar menu open: h opens the same menu as a real Left, apart from one item", !bar_h_shot.equals(bar_after_l) && (left_rows_apart.length === 0 || left_rows_apart.at(-1) - left_rows_apart[0] < MENU_ITEM_ROWS_AT_MOST), `rows apart ${left_rows_apart.at(0)} to ${left_rows_apart.at(-1)}`);
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
