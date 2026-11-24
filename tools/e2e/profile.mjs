@@ -118,6 +118,30 @@ function lists_text() {
   }).join("");
 }
 
+// The Threads folder of the same kinds: a thread of two on the dev list and a single on the ops list a day later, so a filter by the message can start from a thread row.
+function threads_text() {
+  return [["dev", 3, null], ["dev", 3, 0], ["ops", 4, null]].map(([list, day, parent], index) => {
+    const time = new Date(Date.UTC(2026, 1, day, 12, index)).toUTCString();
+    return [
+      `From t${index}@fixture.invalid ${time}`,
+      "X-Mozilla-Status: 0001",
+      "X-Mozilla-Status2: 00000000",
+      `Message-ID: <threads-${index}@fixture.invalid>`,
+      ...(parent === null ? [] : [`In-Reply-To: <threads-${parent}@fixture.invalid>`, `References: <threads-${parent}@fixture.invalid>`]),
+      `Date: ${time.replace("GMT", "+0000")}`,
+      `From: Threads Sender ${index} <t${index}@fixture.invalid>`,
+      "To: Local <local@fixture.invalid>",
+      `Subject: ${parent === null ? "" : "Re: "}Threads ${parent ?? index}`,
+      `List-Id: The ${list} list <${list}.fixture.invalid>`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      `Body of threads-${index}.`,
+      "",
+    ].join("\n") + "\n";
+  }).join("");
+}
+
 // A second account, the default one: a POP3 account that never connects, with two identities and two Inbox messages. One message is addressed to the alias identity.
 // Local Folders keeps no identity of its own in this kind, as in a real profile.
 const MAIL_ACCOUNT_PREFS = {
@@ -174,7 +198,10 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const scale = process.env.E2E_SCALE === "1";
   const folder_dir = write_fixtures(profile_dir, { big: scale, header: kind === "message_header" });
   writeFileSync(join(folder_dir, "Views"), views_text());
-  if (kind === "lists" || kind === "owner") writeFileSync(join(folder_dir, "Lists"), lists_text());
+  if (kind === "lists" || kind === "owner") {
+    writeFileSync(join(folder_dir, "Lists"), lists_text());
+    writeFileSync(join(folder_dir, "Threads"), threads_text());
+  }
   write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   if (!scale) for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));

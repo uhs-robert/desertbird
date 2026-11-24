@@ -512,6 +512,15 @@ test("with several messages selected, F m l takes the cursor message, or the fir
     assert.equal(outside.steps.at(-1), `filter.set ${JSON.stringify(DEV_LIST)}`);
 });
 
+test("a closed thread selects its root and replies, and F m l and F m d take the root at the cursor row", async () => {
+    // Message 2 is the root at the cursor row, and 3 a reply the closed row also selects.
+    const fake = terms_fake({ ids: [3, 2], cursor_row: 4 });
+    await fake.run("filter.by", { field: "list" });
+    await fake.run("filter.by", { field: "date" });
+    assert.deepEqual(fake.notices, []);
+    assert.equal(fake.steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<ops.example.org>", dateUs: LIST_MAIL[2]!.date.getTime() * 1000 })}`);
+});
+
 test("with nothing selected, F m l, F m d and F m f read the message at the cursor row", async () => {
     const fake = terms_fake({ ids: [], cursor_row: 4 });
     await fake.run("filter.by", { field: "list" });

@@ -79,6 +79,37 @@ async function run_filter_by_message(instance, ctx) {
   check(app, kind, "Space twice and j j leave no row selected", state.selected.length === 0, `selected ${state.selected.map((message) => message.header_id)}`);
   rows = await keys_to_count(["F", "m", "l"], 2);
   check(app, kind, "F m l with nothing selected filters on the list of the message at the cursor", shows(rows, ids(2, 4)), `listed ${rows}, cursor row 2 (${listed[2]})`);
+
+  // A thread row: the Threads folder opens threaded with its thread of two closed. g g selects the closed thread, which selects both its messages.
+  const thread = (index) => `threads-${index}@fixture.invalid`;
+  await instance.ask("show_folder", 20000, { path: "/Threads" });
+  await wait_for_state(instance, folder_shown("/Threads"));
+  const thread_keys = async (keys, count, what) => {
+    for (const key of keys.slice(0, -1)) await instance.press([key]);
+    const after = await key_and_state(instance, keys.slice(-1), { ...listed_count(count), soft: true });
+    check(app, kind, what, after.listed.length === count, `listed ${after.listed}, selected ${after.selected.map((message) => message.header_id)}`);
+  };
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["g"], 700);
+  check(app, kind, "g g in the Threads folder selects the closed thread of two", same(sorted(state.selected.map((message) => message.header_id)), [thread(0), thread(1)]), `selected ${state.selected.map((message) => message.header_id)}`);
+  // The list shows the closed thread as one row, so the list filter leaves that row and drops the ops row.
+  await thread_keys(["F", "m", "l"], 1, "F m l on a closed thread filters on the list of its root");
+  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again");
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 700);
+  await thread_keys(["F", "m", "d"], 1, "F m d on a closed thread filters on the day of its root");
+  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after F m d");
+  // An open thread: l opens it, and g g then selects its root alone.
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], 700);
+  await key_and_state(instance, ["l"], 700);
+  await instance.press(["g"]);
+  state = await key_and_state(instance, ["g"], 700);
+  check(app, kind, "l opens the thread and g g selects its root alone", same(state.selected.map((message) => message.header_id), [thread(0)]) && state.listed.length === 3, `selected ${state.selected.map((message) => message.header_id)}, listed ${state.listed}`);
+  // The search rebuilds the view, which closes the thread again, so the filtered list is its one row.
+  await thread_keys(["F", "m", "l"], 1, "F m l on an open thread root filters on its list");
+  await thread_keys(["F", "m", "d"], 1, "F m d on the thread root adds its day");
+  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the open thread");
 }
 
 export const piece = { ...section_piece({ section: "filter_by_message", run: run_filter_by_message }), profile_kind: "lists" };
