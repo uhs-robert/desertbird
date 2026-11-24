@@ -9,7 +9,7 @@ import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import type { NotificationsApi } from "./notify.ts";
 
 export interface BodyRequestApi extends NotificationsApi {
-    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number }[]>; onMessageDisplayed?: { addListener(listener: (tab: { windowId?: number }) => void): void } };
+    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number }[]>; onMessageDisplayed?: { addListener(listener: (tab: { id?: number }) => void): void } };
     windows: { get(window_id: number): Promise<{ type?: string }> };
 }
 
@@ -58,9 +58,13 @@ type Sender = { tab?: { id?: number; windowId?: number } };
 /** Answers a runtime message of the body script, or returns undefined for a message that is not one. The window and the messages come from the sender, which a mail cannot write. */
 export function create_body_requests(deps: BodyRequestDeps): (message: unknown, sender: Sender) => Promise<unknown> | undefined {
     // A new message loads into the same browser and its fresh body script starts in normal mode, so insert mode that a body reported ends there.
-    const inserting = new Set<number>();
-    deps.api.messageDisplay?.onMessageDisplayed?.addListener((tab) => {
-        if (tab.windowId !== undefined && inserting.delete(tab.windowId)) deps.on_mode?.({ command: "mode", mode: "normal", windowId: tab.windowId });
+    // Keyed by tab, since another tab of the window may show a message while this body stays in insert mode.
+    const inserting = new Map<number, number>();
+    deps.api.messageDisplay?.onMessageDisplayed?.addListener(({ id }) => {
+        const window_id = id === undefined ? undefined : inserting.get(id);
+        if (id === undefined || window_id === undefined) return;
+        inserting.delete(id);
+        deps.on_mode?.({ command: "mode", mode: "normal", windowId: window_id });
     });
 
     async function invoke(request: BodyInvokeRequest, sender: Sender): Promise<unknown> {
@@ -111,8 +115,7 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         if (mode !== undefined) {
             const window_id = sender.tab?.windowId;
             if (window_id !== undefined) {
-                if (mode.mode === "insert") inserting.add(window_id);
-                else inserting.delete(window_id);
+                if (sender.tab?.id !== undefined) (mode.mode === "insert" ? inserting.set(sender.tab.id, window_id) : inserting.delete(sender.tab.id));
                 deps.on_mode?.({ command: "mode", mode: mode.mode, windowId: window_id });
             }
             return Promise.resolve({});

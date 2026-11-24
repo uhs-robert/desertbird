@@ -100,11 +100,12 @@ async function run_message_scripts(instance, ctx) {
     const normal = await label.normal();
     const insert = await label.enter(normal);
     check(app, kind, `${where}: i changes the label to insert`, insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
-    body = await keys(["j"], 1000);
-    check(app, kind, `${where}: j in insert mode does not scroll`, body.scroll_y === 0, `scrollY ${body.scroll_y}`);
+    // G is no Thunderbird key, so it reaches nothing here, and in normal mode it scrolls to the bottom.
+    body = await keys(["G"], 1000);
+    check(app, kind, `${where}: G in insert mode does not scroll`, body.scroll_y === 0, `scrollY ${body.scroll_y}`);
     check(app, kind, `${where}: Escape ends insert mode and the label returns`, (await label.leave(normal)) === normal);
-    body = await keys(["j"], scrolls_near(LINE_STEP_PX));
-    check(app, kind, `${where}: j scrolls again after Escape`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
+    body = await keys(["G"], scroll_is("G to scroll to the bottom", (current) => near(current.scroll_y, current.scroll_height - current.inner_height)));
+    check(app, kind, `${where}: G scrolls again after Escape`, near(body.scroll_y, body.scroll_height - body.inner_height), `scrollY ${body.scroll_y}`);
     await instance.press(["g"]);
     await keys(["g"], scrolls_near(0));
   };
