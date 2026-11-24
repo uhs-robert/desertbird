@@ -109,6 +109,11 @@ export function app_verbs(context: ExtensionContext) {
             if (enabled) controller.doCommand(name);
             return enabled;
         }),
-        appOpenPage: guard("app.appOpenPage", ({ windowId, page }: AppOpenPageArgs): void => PAGES[page](pane_of(windowId).browsingContext.topChromeWindow)),
+        appOpenPage: guard("app.appOpenPage", ({ windowId, page }: AppOpenPageArgs): void => {
+            // Found by id, not through the mail pane: the key may come from a page tab, which has no `about:3pane` in front.
+            const window = open_main_windows().find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === windowId) as AppWindow | undefined;
+            if (!window) throw new Error("no such window");
+            PAGES[page](window);
+        }),
     };
 }
