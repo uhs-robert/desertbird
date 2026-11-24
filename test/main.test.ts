@@ -23,6 +23,9 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const typing_installs: unknown[] = [];
     const new_mail_listeners: unknown[] = [];
     const native = fake_native_messaging();
+    // Each write schedules one echo timer. A test that asserts "only once" drains them first, so a second install the echo causes has landed.
+    const echo_timers: Promise<void>[] = [];
+    let reads_done = 0;
     let report_read: () => void = () => {};
     const first_read = new Promise<void>((resolve) => (report_read = resolve));
     const messenger = {
@@ -32,12 +35,13 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
                     const values = Object.fromEntries((Array.isArray(key) ? key : [key]).filter((name) => stored[name] !== undefined).map((name) => [name, stored[name]]));
                     report_read();
                     await new Promise((resolve) => setTimeout(resolve, read_delays_ms.shift() ?? 0));
+                    reads_done++;
                     return values;
                 },
                 set: async (items: Record<string, unknown>) => {
                     Object.assign(stored, items);
                     const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
-                    setTimeout(() => change_listeners.forEach((listener) => listener(changes, "local")), 0);
+                    echo_timers.push(new Promise<void>((resolve) => setTimeout(() => (change_listeners.forEach((listener) => listener(changes, "local")), resolve()), 0)));
                 },
             },
             session: {
@@ -69,18 +73,32 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    const when_installed = (count: number) => wait_for(`${count} keys.install and pages.install call(s); saw ${installs.length} and ${page_installs.length}`, () => installs.length >= count && page_installs.length >= count);
+    const drain_echoes = async () => {
+        while (echo_timers.length > 0) await Promise.all(echo_timers.splice(0));
+        // Work an echo started on a promise chain finishes before the next macrotask.
+        await new Promise((resolve) => setImmediate(resolve));
+    };
+    return { when_installed, drain_echoes, reads_done: () => reads_done, stored, installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+const WAIT_DEADLINE_MS = 10_000;
+async function wait_for(what: string, condition: () => boolean) {
+    const deadline = Date.now() + WAIT_DEADLINE_MS;
+    while (!condition()) {
+        if (Date.now() > deadline) assert.fail(`timed out after ${WAIT_DEADLINE_MS} ms waiting for ${what}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+}
 let instance = 0;
 // Each case loads its own copy of the entry module, because it starts on import.
 const start_background = () => import(`../src/background/main.ts?instance=${instance++}`);
 
 test("the first start stores the keymap and installs it once, though its own write fires onChanged", async () => {
-    const { stored, installs } = stub_messenger();
+    const { stored, installs, when_installed, drain_echoes } = stub_messenger();
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     assert.equal(installs.length, 1);
     assert.ok(stored["desertbird_compiled_keymap"]);
 });
@@ -88,9 +106,10 @@ test("the first start stores the keymap and installs it once, though its own wri
 test("a stored keymap compiled from other default bindings is rebuilt", async () => {
     // Every check but the source hash passes, so only the hash can trigger the rebuild.
     const stale_tree = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
-    const { stored, installs } = stub_messenger({ desertbird_compiled_keymap: { record_version: 3, source_hash: "an older default keymap", tree: stale_tree, message_tree: stale_tree } });
+    const { stored, installs, when_installed, drain_echoes } = stub_messenger({ desertbird_compiled_keymap: { record_version: 3, source_hash: "an older default keymap", tree: stale_tree, message_tree: stale_tree } });
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     assert.equal(installs.length, 1);
     assert.notDeepEqual(installs[0], stale_tree);
     assert.notEqual((stored["desertbird_compiled_keymap"] as { source_hash: string }).source_hash, "an older default keymap");
@@ -99,28 +118,32 @@ test("a stored keymap compiled from other default bindings is rebuilt", async ()
 test("a storage change during a pending read wins: the tree read before the change is neither kept nor installed last", async () => {
     const source_hash = createHash("sha256").update(JSON.stringify({ keymap: DEFAULT_KEYMAP, message: keymap_of("message", {}), window: keymap_of("window", {}), page: keymap_of("page", {}), own: keymap_of("own", {}), compose: keymap_of("compose", {}), typing: compile_typing_keymap({}).compiled.modes.normal, unrepeatable: [...UNREPEATABLE_IDS], keeps_selection: [...KEEPS_SELECTION_IDS], settings: {} })).digest("hex");
     const record = (marker: string) => ({ record_version: 16, source_hash, tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {}, marker } }, message_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, window_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, page_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, own_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, compose_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } }, typing_tree: { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } } });
-    const { installs, external_write, first_read } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
+    const { installs, external_write, first_read, when_installed, drain_echoes, reads_done } = stub_messenger({ desertbird_compiled_keymap: record("old") }, [40, 0]);
     await start_background();
     await first_read;
     // The start is still reading "old" when "new" lands, and the read of "new" answers first.
     external_write({ desertbird_compiled_keymap: record("new") });
-    await settle();
+    await wait_for(`both reads to finish; saw ${reads_done()}`, () => reads_done() >= 2);
+    await when_installed(1);
+    await drain_echoes();
     assert.deepEqual(installs.at(-1), record("new").tree);
 });
 
 test("the first start stores the message keymap in the same record, and an install of the mail tab tree never carries it", async () => {
-    const { stored, installs } = stub_messenger();
+    const { stored, installs, when_installed, drain_echoes } = stub_messenger();
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     const record = stored["desertbird_compiled_keymap"] as { message_tree: { root: unknown } };
     assert.match(JSON.stringify(record.message_tree.root), /message\.scroll_down/);
     assert.doesNotMatch(JSON.stringify(installs), /message\.scroll_down/);
 });
 
 test("the page tree is stored in the record and installed in the pages Experiment, and the mail install never carries it", async () => {
-    const { stored, installs, page_installs } = stub_messenger();
+    const { stored, installs, page_installs, when_installed, drain_echoes } = stub_messenger();
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     const record = stored["desertbird_compiled_keymap"] as { page_tree: { root: unknown } };
     assert.match(JSON.stringify(record.page_tree.root), /page\.scroll_down/);
     assert.deepEqual(page_installs, [record.page_tree]);
@@ -128,9 +151,10 @@ test("the page tree is stored in the record and installed in the pages Experimen
 });
 
 test("the typing tree is stored in the record and installed in the pages Experiment alone", async () => {
-    const { stored, installs, typing_installs } = stub_messenger();
+    const { stored, installs, typing_installs, when_installed, drain_echoes } = stub_messenger();
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     const record = stored["desertbird_compiled_keymap"] as { typing_tree: { root: unknown } };
     assert.deepEqual(typing_installs, [record.typing_tree]);
     assert.match(JSON.stringify(record.typing_tree.root), /mode\.escape/);
@@ -138,9 +162,10 @@ test("the typing tree is stored in the record and installed in the pages Experim
 });
 
 test("the pages Experiment gets the message tree without the find key", async () => {
-    const { message_installs } = stub_messenger();
+    const { message_installs, when_installed, drain_echoes } = stub_messenger();
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     assert.equal(message_installs.length, 1);
     const root = (message_installs[0] as { root: { children: Record<string, unknown> } }).root;
     assert.match(JSON.stringify(root), /message\.scroll_down/);
@@ -149,9 +174,10 @@ test("the pages Experiment gets the message tree without the find key", async ()
 
 test("a record of version 14, with no window tree, is rebuilt with one, and the pages Experiment gets it with hint picks sent to the background and no tab keys", async () => {
     const empty = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
-    const { stored, window_installs } = stub_messenger({ desertbird_compiled_keymap: { record_version: 14, source_hash: "an older default keymap", tree: empty, message_tree: empty, page_tree: empty, own_tree: empty, typing_tree: empty } });
+    const { stored, window_installs, when_installed, drain_echoes } = stub_messenger({ desertbird_compiled_keymap: { record_version: 14, source_hash: "an older default keymap", tree: empty, message_tree: empty, page_tree: empty, own_tree: empty, typing_tree: empty } });
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; window_tree?: { root: unknown } };
     assert.equal(record.record_version, 16);
     assert.match(JSON.stringify(record.window_tree?.root), /msg\.flag/);
@@ -165,18 +191,20 @@ test("a record of version 14, with no window tree, is rebuilt with one, and the 
 
 test("a stored record of version 4, with no page tree, is rebuilt with one", async () => {
     const empty = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
-    const { stored } = stub_messenger({ desertbird_compiled_keymap: { record_version: 4, source_hash: "an older default keymap", tree: empty, message_tree: empty } });
+    const { stored, when_installed, drain_echoes } = stub_messenger({ desertbird_compiled_keymap: { record_version: 4, source_hash: "an older default keymap", tree: empty, message_tree: empty } });
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     assert.match(JSON.stringify((stored["desertbird_compiled_keymap"] as { page_tree?: { root: unknown } }).page_tree?.root), /page\.scroll_down/);
 });
 
 test("a stored record of version 2, with no message tree, is rebuilt with one", async () => {
     // A record an earlier add-on version wrote. Its tree is valid for the mail tab, so only the version and the missing `message_tree` can trigger the rebuild.
     const old_tree = { version: COMPILED_KEYMAP_VERSION, root: { kind: "branch", children: {} } };
-    const { stored, installs } = stub_messenger({ desertbird_compiled_keymap: { record_version: 2, source_hash: "an older default keymap", tree: old_tree } });
+    const { stored, installs, when_installed, drain_echoes } = stub_messenger({ desertbird_compiled_keymap: { record_version: 2, source_hash: "an older default keymap", tree: old_tree } });
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     const record = stored["desertbird_compiled_keymap"] as { record_version: number; message_tree?: { root: unknown } };
     assert.equal(record.record_version, 16);
     assert.match(JSON.stringify(record.message_tree?.root), /message\.scroll_down/);
@@ -193,23 +221,26 @@ test("the new-mail listeners register once at start", async () => {
 });
 
 test("the bridge never connects while its setting is at the default, and connects once the setting turns on", async () => {
-    const { native, external_write } = stub_messenger();
+    const { native, external_write, when_installed, drain_echoes } = stub_messenger();
     await start_background();
-    await settle();
+    await when_installed(1);
+    await drain_echoes();
     assert.deepEqual(native.names, []);
     external_write({ desertbird_settings: { bridge: true } });
-    await settle();
+    await wait_for("the bridge to connect", () => native.names.length === 1);
     assert.deepEqual(native.names, ["desertbird_bridge"]);
     external_write({ desertbird_settings: { bridge: false } });
-    await settle();
+    await wait_for("the bridge to disconnect", () => native.ports[0]?.disconnected === true);
     assert.equal(native.ports[0]!.disconnected, true);
 });
 
 test("the start registers the compose script, and with external_editor at its default a stored editor job is dropped and never reaches the host", async () => {
     const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
-    const { native_messages, compose_scripts, session } = stub_messenger({}, [], { desertbird_editor_jobs: { 70: job } });
+    const { native_messages, compose_scripts, session, when_installed, drain_echoes } = stub_messenger({}, [], { desertbird_editor_jobs: { 70: job } });
     await start_background();
-    await settle();
+    await wait_for("the stored editor job to be dropped", () => compose_scripts.length === 1 && Object.keys((session["desertbird_editor_jobs"] as object) ?? {}).length === 0);
+    await when_installed(1);
+    await drain_echoes();
     assert.deepEqual(compose_scripts, [{ js: [{ file: "content/compose_keys.js" }] }]);
     assert.deepEqual(session["desertbird_editor_jobs"], {});
     assert.deepEqual(native_messages, []);
@@ -219,20 +250,20 @@ test("with external_editor on, a stored job of a live tab collects again from de
     const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
     const { native_messages } = stub_messenger({ desertbird_settings: { external_editor: true } }, [], { desertbird_editor_jobs: { 70: job } });
     await start_background();
-    await settle();
+    await wait_for("the editor collect message", () => native_messages.length >= 1);
     assert.deepEqual(native_messages[0], { application: "desertbird_host", message: { cmd: "editor_collect", job: "j1" } });
 });
 
 test("a failed send leaves the editor job alone, and a send that went out orphans it", async () => {
     const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
-    const { after_send_listeners, session } = stub_messenger({ desertbird_settings: { external_editor: true } }, [], { desertbird_editor_jobs: { 70: job } });
+    const { after_send_listeners, session, native_messages, drain_echoes } = stub_messenger({ desertbird_settings: { external_editor: true } }, [], { desertbird_editor_jobs: { 70: job } });
     await start_background();
-    await settle();
+    await wait_for("the editor collect message", () => native_messages.length >= 1);
     const stored_job = () => (session["desertbird_editor_jobs"] as Record<string, { orphaned?: true }>)[70];
     after_send_listeners.forEach((listener) => listener({ id: 70 }, { error: "SMTP refused" }));
-    await settle();
+    await drain_echoes();
     assert.equal(stored_job()?.orphaned, undefined);
     after_send_listeners.forEach((listener) => listener({ id: 70 }, {}));
-    await settle();
+    await wait_for("the job to be orphaned", () => stored_job()?.orphaned === true);
     assert.equal(stored_job()?.orphaned, true);
 });
