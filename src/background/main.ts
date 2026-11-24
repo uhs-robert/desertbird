@@ -13,6 +13,7 @@ import { create_cmdline_history } from "./cmdline/history.ts";
 import { create_cmdline_service } from "./cmdline/service.ts";
 import { create_widget_reader } from "./cmdline/status_widgets.ts";
 import { create_hud_service, lifting_toasts } from "./hud/service.ts";
+import { without_leaf } from "./hud/which_key.ts";
 import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import { keep_filters } from "./handlers/view.ts";
 import { create_search_register } from "./search/register.ts";
@@ -229,11 +230,14 @@ messenger.notifications.onClicked.addListener((id) => {
 
 // The hud shows the which-key panel and the toasts, and keeps the mode label of the status bar. Its state is a few seconds of interface state per window and lives in memory only, like the command line session.
 const NO_WINDOW = -1;
-const TREE_OF_SOURCE = { main: "tree", message: "message_tree", window: "window_tree", own: "own_tree", page: "page_tree" } as const;
+const TREE_OF_SOURCE = { main: "tree", message: "message_tree", window: "window_tree", own: "own_tree", page: "page_tree", compose: "compose_tree" } as const;
 const hud = create_hud_service({
     overlay: messenger.overlay,
     read_settings: async () => (await config_store.read()).settings,
-    read_root: async (source) => (await load_record())[TREE_OF_SOURCE[source]].root as TreeBranch,
+    read_root: async (source) => {
+        const root = (await load_record())[TREE_OF_SOURCE[source]].root as TreeBranch;
+        return source === "compose" && !(await config_store.read()).settings.compose_send ? without_leaf(root, "compose.send") : root;
+    },
     read_marks: async () => (await read_folder_state(messenger)).marks,
     send_changed: (windowId) => void best_effort(messenger.runtime.sendMessage({ type: "hud.changed", windowId })),
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
@@ -382,7 +386,8 @@ messenger.keys?.onInvocation.addListener(on_key_event);
 messenger.pages?.onInvocation.addListener(on_key_event);
 // The compose tree holds only the compose commands. The check here keeps any other id out, whatever reaches the event.
 messenger.composewin?.onInvocation.addListener((event) => {
-    if ("args" in event && COMPOSE_COMMANDS.has(event.command)) router.run(event).catch(console.error);
+    if ("keys" in event) hud.on_keys_event(event).catch(console.error);
+    else if ("args" in event && COMPOSE_COMMANDS.has(event.command)) router.run(event).catch(console.error);
 });
 
 // A half-typed sequence the key runtime cannot see end: a tab change, or the window losing the focus.
@@ -394,8 +399,8 @@ messenger.windows.onFocusChanged.addListener((window_id) => {
     if (window_id !== NO_WINDOW) void bridge.mode_changed();
 });
 
-// The hud draws in main windows and message windows. Only a main window has a status bar for the mode label.
-const HUD_WINDOW_KINDS: Record<string, "main" | "message"> = { normal: "main", [MESSAGE_WINDOW_TYPE]: "message" };
+// The hud draws in main windows, message windows and compose windows. Only a main window has a status bar for the mode label.
+const HUD_WINDOW_KINDS: Record<string, "main" | "message" | "compose"> = { normal: "main", [MESSAGE_WINDOW_TYPE]: "message", [COMPOSE_WINDOW_TYPE]: "compose" };
 const track_window = (window: { id?: number; type?: string }) => {
     const kind = HUD_WINDOW_KINDS[window.type ?? "normal"];
     if (window.id !== undefined && kind !== undefined) hud.track(window.id, kind).catch(console.error);

@@ -594,3 +594,166 @@ test("a main window tracked while a toast of the still untracked window mounts s
     }
     assert.deepEqual(mounts, [3], "the which-key panel of the tracked window still tries to show");
 });
+
+// A compose window: the panel lists the compose tree, and the toasts stay system notifications.
+function compose_setup(overrides: Partial<Settings> = {}) {
+    const log: string[] = [];
+    const timers = fake_timers();
+    const sources: string[] = [];
+    const hud = create_hud_service({
+        overlay: {
+            mount: async ({ windowId, surface }) => void log.push(`mount ${surface}@${windowId}`),
+            unmount: async ({ windowId, surface }) => void log.push(`unmount ${surface}@${windowId}`),
+            setModeLabel: async () => void log.push("label"),
+            onClosed: { addListener: () => {}, removeListener: () => {} },
+        },
+        read_settings: async () => settings_with({ mode_indicator: "always", which_key_delay_ms: 200, ...overrides }),
+        read_root: async (source) => (sources.push(source), source === "compose" ? own_root() : sample_root()),
+        read_marks: async () => ({}),
+        send_changed: (window_id) => void log.push(`changed ${window_id}`),
+        timers,
+    });
+    const pending = (keys: string[], window_id: number) => hud.on_keys_event({ command: "pending", keys, windowId: window_id, source: "compose" });
+    const state = async (window_id: number): Promise<HudState> => (await hud.handle({ type: "hud.state", windowId: window_id }))!;
+    return { hud, log, timers, sources, pending, state };
+}
+
+test("a tracked compose window shows the panel of the compose tree after the delay, and makes no label call", async () => {
+    const { hud, log, timers, sources, pending, state } = compose_setup();
+    await hud.track(9, "compose");
+    assert.deepEqual(log, []);
+    await pending(["g"], 9);
+    timers.advance(199);
+    await settle();
+    assert.deepEqual(log, []);
+    timers.advance(1);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9"]);
+    assert.equal(sources.at(-1), "compose");
+    assert.deepEqual((await state(9)).which_key?.rows.map((row) => row.key), ["y"]);
+});
+
+test("a compose window that is not tracked, or is gone, shows nothing", async () => {
+    const { hud, log, timers, pending } = compose_setup();
+    await pending(["g"], 9);
+    timers.advance(1000);
+    await settle();
+    assert.deepEqual(log, [], "an untracked window");
+    await hud.track(9, "compose");
+    await pending(["g"], 9);
+    hud.forget(9);
+    timers.advance(1000);
+    await settle();
+    assert.deepEqual(log, [], "a window that closed during the delay mounts nothing");
+    await pending([], 9);
+    await pending(["g"], 9);
+    timers.advance(1000);
+    await settle();
+    assert.deepEqual(log, [], "a late report of the closed window is dropped");
+});
+
+test("a compose window that closes with its panel up leaves nothing behind: no timer, no later mount", async () => {
+    const { hud, log, timers, pending } = compose_setup();
+    await hud.track(9, "compose");
+    await pending(["g"], 9);
+    timers.advance(200);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9"]);
+    hud.forget(9);
+    await pending([], 9);
+    timers.advance(10000);
+    await settle();
+    assert.equal(timers.pending(), 0);
+    assert.deepEqual(log, ["mount hud@9"]);
+});
+
+test("the panel of a compose window ends on its own end report, a blur of the window and a prefix in another window", async () => {
+    const { hud, log, timers, pending } = compose_setup();
+    await hud.track(9, "compose");
+    await hud.track(10, "compose");
+    await pending(["g"], 9);
+    timers.advance(200);
+    await settle();
+    await pending([], 9);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9", "unmount hud@9"]);
+    log.length = 0;
+    await pending(["g"], 9);
+    timers.advance(200);
+    await settle();
+    hud.close_which_key(10);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9", "unmount hud@9"], "another window took the focus");
+    log.length = 0;
+    await pending(["g"], 9);
+    timers.advance(200);
+    await settle();
+    await pending(["g"], 10);
+    timers.advance(200);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9", "unmount hud@9", "mount hud@10"]);
+});
+
+test("the panel stays when the window itself keeps the focus, as a draft save does: only a blur of the window or a report ends it", async () => {
+    const { hud, log, timers, pending } = compose_setup();
+    await hud.track(9, "compose");
+    await pending(["g"], 9);
+    timers.advance(200);
+    await settle();
+    hud.close_which_key(9);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9"]);
+});
+
+test("which_key_skip and a zero delay hold back the panel of a compose window as in the mail tab", async () => {
+    const skipped = compose_setup({ which_key_skip: ["g"] });
+    await skipped.hud.track(9, "compose");
+    await skipped.pending(["g"], 9);
+    skipped.timers.advance(5000);
+    await settle();
+    assert.deepEqual(skipped.log, []);
+    const off = compose_setup({ which_key_delay_ms: 0 });
+    await off.hud.track(9, "compose");
+    await off.pending(["g"], 9);
+    off.timers.advance(5000);
+    await settle();
+    assert.deepEqual(off.log, []);
+});
+
+test("a toast for a compose window shows nowhere and reports it, so the caller sends a system notification", async () => {
+    const { hud, log, timers, pending } = compose_setup({ toast_ms: 1000, toast_error_ms: 4000 });
+    await hud.track(9, "compose");
+    assert.equal(await hud.toast(9, "saved", false), false);
+    assert.equal(await hud.toast(9, "failed", true), false);
+    assert.deepEqual(log, []);
+    await pending(["g"], 9);
+    timers.advance(200);
+    await settle();
+    assert.equal(await hud.toast(9, "saved", false), false);
+    assert.deepEqual(log, ["mount hud@9"]);
+});
+
+test("a late end report of one window leaves the panel of another window up", async () => {
+    const { hud, log, timers, pending } = compose_setup();
+    await hud.track(9, "compose");
+    await hud.track(10, "compose");
+    await pending(["g"], 10);
+    timers.advance(200);
+    await settle();
+    await pending([], 9);
+    await settle();
+    assert.deepEqual(log, ["mount hud@10"]);
+});
+
+test("a root report of a compose window shows the compose root at once and the next end report removes it", async () => {
+    const { hud, log, sources, pending, state } = compose_setup();
+    await hud.track(9, "compose");
+    await hud.on_keys_event({ command: "pending", keys: [], root: true, windowId: 9, source: "compose" });
+    await settle();
+    assert.deepEqual(log, ["mount hud@9"]);
+    assert.deepEqual((await state(9)).which_key?.rows.map((row) => row.key), ["g"]);
+    assert.equal(sources.at(-1), "compose");
+    await pending([], 9);
+    await settle();
+    assert.deepEqual(log, ["mount hud@9", "unmount hud@9"]);
+});
