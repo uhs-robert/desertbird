@@ -49,6 +49,8 @@ export const area_rules = [
   { globs: ["src/background/search/**", "src/background/{commands,handlers}/search.ts"], areas: ["search"] },
   { globs: ["src/background/handlers/{folder_collapse,folder_marks,folder_open,folder_state,special_folder,displayed_folder,jump_history}.ts", "src/background/commands/folders.ts", "src/chrome/parent_folderpane.ts", "src/experiment/folderpane.schema.json"], areas: ["folders", "panes"] },
   { globs: ["src/background/{commands,handlers}/view.ts", "src/chrome/view_verbs.ts"], areas: ["views"] },
+  // The list and date filters re-apply after each step of the search, so the search piece reads them too.
+  { globs: ["src/background/handlers/filter_terms.ts", "src/chrome/{filter_runtime,parent_filter}.ts", "src/experiment/filter.schema.json"], areas: ["views", "search"] },
   { globs: ["src/background/{commands,handlers}/thread*.ts"], areas: ["threads"] },
   // The compose window runtime draws the compose label, which the compose editor and quick reply pieces check.
   { globs: ["src/chrome/{compose_runtime,parent_composewin}.ts", "src/experiment/composewin.schema.json"], areas: ["mode_label", "compose", "quick_reply"] },

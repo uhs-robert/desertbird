@@ -1,0 +1,40 @@
+[
+  {
+    "namespace": "filter",
+    "description": "The add-on's own part of the quick filter of a mail tab. The script loads when the first verb is called.",
+    "functions": [
+      {
+        "name": "set",
+        "type": "function",
+        "async": true,
+        "description": "Adds a List-Id filter, a same-day filter or both to the filters the mail tab shows, and shows the filter bar. Answers when the search ends: true, or false when it still ran after 5 seconds. A later mailTabs.setQuickFilter removes them.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "tabId": { "type": "integer" },
+              "listId": { "type": "string", "optional": true, "pattern": "^<[^<>]+>$" },
+              "dateUs": { "type": "number", "optional": true, "minimum": 0 }
+            }
+          }
+        ]
+      },
+      {
+        "name": "searching",
+        "type": "function",
+        "async": true,
+        "description": "Answers whether the search of the mail tab's message list still runs.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "tabId": { "type": "integer" }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

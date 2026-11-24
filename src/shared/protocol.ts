@@ -192,6 +192,8 @@ export const EXPERIMENT_VERBS = {
     zoom: { functions: ["get", "set"], events: [] },
     // Loaded at startup by the first install, since it takes the keys of the compose windows.
     composewin: { functions: ["install"], events: ["onInvocation"] },
+    // Loaded on first use, like `folderpane`.
+    filter: { functions: ["set", "searching"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -322,6 +324,24 @@ export interface ZoomSetArgs {
 export interface ZoomApi {
     get(args: ZoomGetArgs): Promise<number | null>;
     set(args: ZoomSetArgs): Promise<boolean>;
+}
+
+/** The list filters `mailTabs.setQuickFilter` cannot carry. `listId` is a List-Id with its angle brackets (`<dev.example.org>`). `dateUs` is a message date in microseconds, and the filter shows the messages of its local calendar day. */
+export interface FilterSetArgs {
+    tabId: number;
+    listId?: string;
+    dateUs?: number;
+}
+
+/** The `browser.filter` API: the add-on's own part of the quick filter of a mail tab. Its script loads when the first call is made. `set` adds the part to the filters the tab shows, shows the filter bar and answers once the search ends: true, or false when it still ran after 5 s and the rows can still change. `mailTabs.setQuickFilter` removes the part again. */
+export interface FilterSearchingArgs {
+    tabId: number;
+}
+
+/** `searching` answers whether the search of the tab's list still runs, so a caller can wait past the 5 s of `set`. */
+export interface FilterApi {
+    set(args: FilterSetArgs): Promise<boolean>;
+    searching(args: FilterSearchingArgs): Promise<boolean>;
 }
 
 export type Pane = "folders" | "threads" | "message";
