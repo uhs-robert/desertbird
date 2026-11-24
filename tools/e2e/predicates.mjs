@@ -22,8 +22,10 @@ export const thread_shows = (open) => ({ what: `the selected thread to ${open ? 
 // A folder shown through the API lists its messages only once Thunderbird has read its mbox, so the folder alone is not the signal.
 export const folder_shown = (path) => ({ what: `${path} to show with its messages`, until: (state) => state.mail_tab?.folder === path && state.listed.length > 0, show: (state) => `folder ${state.mail_tab?.folder}, ${state.listed.length} listed`, timeout_ms: 10000 });
 // A main window the helper opened or closed: it counts when the window list shows it and, for a new one, gives it the focus that keys need.
+// The normal (mail) window reports the focus that keys need.
+export const normal_window_focused = (state) => state.windows.some((window) => window.type === "normal" && window.focused === true);
 export const window_has_focus = (id) => ({ what: `main window ${id} to open and take focus`, until: (state) => state.windows.some((window) => window.id === id && window.focused === true), timeout_ms: 15000 });
-export const window_is_closed = (id) => ({ what: `main window ${id} to close`, until: (state) => !state.windows.some((window) => window.id === id) && state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 10000 });
+export const window_is_closed = (id) => ({ what: `main window ${id} to close`, until: (state) => !state.windows.some((window) => window.id === id) && normal_window_focused(state), timeout_ms: 10000 });
 // A hash of the bottom 80 px of the window, where the panel and the toasts draw, without the scrollbar strip. The mode label sits in it too and stays the same while the mode does. Higher up a message pane can still be loading.
 export const HUD_REGION = "0,640 1260x80";
 // A hash that has not moved between two reads in a row, so the region is done drawing. It reads the region again and again, so build one per poll.
@@ -76,5 +78,5 @@ export const luminance_of = (color) => [1, 3, 5].map((at) => parseInt(color.slic
 export const compose_tab = (state) => state.windows.find((window) => window.type === "messageCompose")?.tabs.find((tab) => tab.subject);
 export const reply_is_loaded = (tab) => Boolean(tab.subject) && tab.is_plain !== null && (tab.body ?? "").includes("Body of inbox-s2.") && (tab.body ?? "").includes("E2E signature line");
 // The mail window has the focus and a mail tab, so F6 reaches the thread list.
-export const mail_window_ready = { what: "the mail window to have a mail tab and the focus", until: (state) => state.mail_tab !== null && state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 10000 };
+export const mail_window_ready = { what: "the mail window to have a mail tab and the focus", until: (state) => state.mail_tab !== null && normal_window_focused(state), timeout_ms: 10000 };
 export const selects_inbox_s2 = selects("inbox-s2@fixture.invalid");
