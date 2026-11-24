@@ -450,6 +450,7 @@ Facts measured on Thunderbird 153.7 ESR and Betterbird 153.7 with the e2e helper
 - A folder shown for the first time that is an empty mbox (`/Trash`) did not throw. A folder shown before did not throw.
 - A `mailTabs.query` right after the failed call threw the same text for `/Views`, which was the first folder shown through the API in the session, and returned the new folder for `/Html`. So the query right after the error is not reliable evidence either way, and a handler that treats the error as success must accept both outcomes.
 - The call to the folder already shown returns with no error.
+- `mailTabs.create({displayedFolder})` returns the converted tab and hits the same throw. Measured on Thunderbird 153.7.0 with `O` on `/Html`, which the session had not shown. The tab opened on `/Html` and a toast read "folder.open failed: An unexpected error occurred". `folder.open` now accepts the error as it does for `update`. `create` takes only the folder and pane properties and rejects `windowId` and `active`.
 
 ### Folder lookup
 
