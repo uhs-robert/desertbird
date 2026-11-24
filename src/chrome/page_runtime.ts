@@ -3,6 +3,7 @@
 import type { JsonValue, KeysEvent } from "../shared/protocol.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
+import { leaves_insert } from "./escape_rule.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "./runtime.ts";
 import type { Situation } from "./readable_focus.ts";
 
@@ -113,6 +114,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         if (from_child ? situation === "pass" : situation === "remote" && deps.child()?.takes_keys(window)) return;
         situation = from_child ?? situation;
         const in_text_field = situation === "field";
+        // The focus moved to a document with its own keys, so this flag ends.
+        if (insert.has(window) && situation === "typing") set_insert(window, false);
         if (insert.has(window) && situation !== "pass" && situation !== "typing") situation = "field";
         // The overlay's browser has the focus before its page can take a key, and the hold timer can run out first. Plain keys are dropped for as long as that lasts.
         if (is_plain_printable(token) && deps.overlay_is_loading(window)) return void (event.preventDefault(), event.stopPropagation());
@@ -179,9 +182,7 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         if (hooked.has(window)) return;
         const handler = (event: KeydownEvent) => on_keydown(window, event);
         const settle = (event: KeydownEvent) => {
-            if (escaped !== event) return;
-            escaped = null;
-            if (!event.defaultPrevented) (set_insert(window, false), escaped_in_field && deps.blur_focused(window));
+            if (leaves_insert(escaped, event)) (set_insert(window, false), escaped_in_field && deps.blur_focused(window));
         };
         const reset_typing = () => {
             set_insert(window, false);

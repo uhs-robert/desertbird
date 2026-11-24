@@ -110,8 +110,10 @@ class StubWindow implements BodyWindow {
         },
     };
     other_listeners: Record<string, (() => void)[]> = {};
-    addEventListener(type: string, listener: (event: BodyKeyEvent) => void) {
-        if (type === "keydown") this.listeners.push(listener);
+    /** The bubble-phase keydown listeners, which run after the page's own handlers. */
+    bubble_listeners: ((event: BodyKeyEvent) => void)[] = [];
+    addEventListener(type: string, listener: (event: BodyKeyEvent) => void, capture?: boolean) {
+        if (type === "keydown") (capture === false ? this.bubble_listeners : this.listeners).push(listener);
         else (this.other_listeners[type] ??= []).push(listener as () => void);
     }
     fire(type: string) {
@@ -146,6 +148,8 @@ class StubWindow implements BodyWindow {
             ...options,
         };
         for (const listener of this.listeners) listener(event);
+        // A test sets `defaultPrevented` in the options for an Escape that the page used.
+        if (!result.stopped) for (const listener of this.bubble_listeners) listener(event);
         return result;
     }
 }
@@ -876,4 +880,68 @@ test("the message script entry starts on the message keys while the background c
     window.press("J");
     window.press("c");
     assert.deepEqual(sent.map((message) => (message as { command?: string }).command), ["tab.next", "step.message", "msg.new"], "the window keys run once it answers");
+});
+
+const modes_sent = (sent: unknown[]) => sent.filter((message) => (message as { type?: string }).type === "body.mode").map((message) => (message as { mode: string }).mode);
+
+test("i starts insert mode in a message document and tells the background, and plain keys then scroll nothing and stay uncancelled", async () => {
+    const { window, sent } = await started();
+    assert.deepEqual(window.press("i"), { cancelled: true, stopped: true });
+    assert.deepEqual(modes_sent(sent), ["insert"]);
+    for (const key of ["j", "k", "G", "f", "d", "/", "n", "5"]) assert.deepEqual(window.press(key), { cancelled: false, stopped: false }, key);
+    assert.deepEqual(window.press("d", { ctrlKey: true }), { cancelled: false, stopped: false }, "a bound chord reaches Thunderbird too");
+    assert.deepEqual([window.scrolls, sent.filter((message) => (message as { type?: string }).type !== "body.mode")], [[], []], "no binding ran");
+});
+
+test("Escape ends insert mode in a message document, does not cancel the key and tells the background", async () => {
+    const { window, sent } = await started();
+    window.press("i");
+    assert.deepEqual(window.press("Escape"), { cancelled: false, stopped: false });
+    assert.deepEqual(modes_sent(sent), ["insert", "normal"]);
+    window.press("j");
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
+});
+
+test("an Escape the page used keeps insert mode, and the next Escape ends it", async () => {
+    const { window, sent } = await started();
+    window.press("i");
+    window.press("Escape", { defaultPrevented: true });
+    assert.deepEqual(modes_sent(sent), ["insert"]);
+    assert.equal(window.press("j").cancelled, false);
+    window.press("Escape");
+    assert.deepEqual(modes_sent(sent), ["insert", "normal"]);
+});
+
+test("a blur of the document ends insert mode, so the mode does not follow the focus to another pane", async () => {
+    const { window, sent } = await started();
+    window.press("i");
+    window.fire("blur");
+    assert.deepEqual(modes_sent(sent), ["insert", "normal"]);
+    window.press("j");
+    assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
+    window.fire("blur");
+    assert.equal(modes_sent(sent).length, 2, "no second report when insert mode is already off");
+});
+
+test("i in a text field is a letter, and a half-typed sequence does not make i insert mode", async () => {
+    const { window, sent } = await started();
+    window.press("i", { target: { localName: "input" } });
+    window.press("g");
+    window.press("Escape");
+    assert.deepEqual(modes_sent(sent), []);
+});
+
+test("i starts insert mode in an own page and in a message window document too", async () => {
+    for (const [kind, field] of [["own", "own_tree"], ["window", "window_tree"]] as const) {
+        const window = new StubWindow();
+        const root = JSON.parse(JSON.stringify(compile_tab_keymap(kind).compiled.modes.normal)) as unknown;
+        const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { [field]: { version: COMPILED_KEYMAP_VERSION, root } } });
+        const { runtime, sent } = stub_runtime();
+        await start_body_script(window, storage, runtime, undefined, field);
+        window.press("i");
+        assert.equal(window.press("j").cancelled, false, kind);
+        window.press("Escape");
+        assert.deepEqual(modes_sent(sent), ["insert", "normal"], kind);
+        assert.deepEqual(window.scrolls, [], kind);
+    }
 });

@@ -6,6 +6,7 @@ The privileged part of the add-on. It runs inside the Thunderbird process as the
 | --- | --- |
 | `parent_keys.ts` | The entry of the `keys` API: `get_keys_api` and `shutdown`. Holds the one runtime and the event subscribers |
 | `platform.ts` | The Thunderbird globals the parent reads, the window lookups (main windows, the windows that can show the overlay) and `window_kind_of` (main, message or other, from the window type, so a compose window is never taken for a message window), and the guard that rethrows `ExtensionError(message)` from each verb |
+| `escape_rule.ts` | The rule that ends insert mode on Escape, shared by the page runtime, the mail runtime and the body script: only an Escape that nothing else used leaves |
 | `focus.ts` | Where a key is going: a text field, the pane that holds the focus, the reading pane (and whether the body script is live in it) or an open menu and whether it takes a key. Follows the focused element through shadow roots and into browser documents. `is_text_field` and `blur_text_field` serve the typing keys of the page bundle: a text field is not the overlay's browser or a live message body |
 | `runtime.ts` | Key handling. Takes its Thunderbird access as `RuntimeDeps`, so tests use fakes |
 | `parent_overlay.ts` | The entry of the `overlay` API (`mount`, `unmount`, `onClosed`). Builds the remote `browser` element and loads the command line page into it, in a main window or a message window |

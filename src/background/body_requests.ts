@@ -2,7 +2,7 @@
 
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
-import type { BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { BodyHintsRequest, BodyInvokeRequest, BodyModeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation, KeysMode } from "../shared/protocol.ts";
 import type { ThemedHints } from "./handlers/hint_window.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
@@ -24,6 +24,8 @@ export interface BodyRequestDeps {
     write_text?: ((text: string) => Promise<void>) | undefined;
     /** The hud, told which keys a message document has typed of a sequence. Absent in a setup with no hud. */
     which_key?: { on_body_pending(window_id: number, keys: string[], source: "message" | "window" | "own"): Promise<void> } | undefined;
+    /** Takes the mode a message document reports (insert mode), as the key runtimes' own mode events are taken. */
+    on_mode?: ((event: KeysMode) => void) | undefined;
     /** Runs one invocation through the router and its validator. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
@@ -43,6 +45,12 @@ function read_pending(message: unknown): BodyPendingRequest | undefined {
     if (typeof request !== "object" || request === null || request["type"] !== "body.pending") return undefined;
     const { keys, tree } = request;
     return Array.isArray(keys) && keys.every((key) => typeof key === "string") ? { type: "body.pending", keys: keys as string[], ...(tree === "own" || tree === "window" ? { tree } : {}) } : undefined;
+}
+
+function read_mode(message: unknown): BodyModeRequest | undefined {
+    const request = message as Partial<Record<string, unknown>> | null;
+    if (typeof request !== "object" || request === null || request["type"] !== "body.mode") return undefined;
+    return request["mode"] === "insert" || request["mode"] === "normal" ? { type: "body.mode", mode: request["mode"] } : undefined;
 }
 
 type Sender = { tab?: { id?: number; windowId?: number } };
@@ -93,6 +101,11 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
     return (message, sender) => {
         const pending = read_pending(message);
         if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys, pending.tree ?? "message").then(() => ({}));
+        const mode = read_mode(message);
+        if (mode !== undefined) {
+            if (sender.tab?.windowId !== undefined) deps.on_mode?.({ command: "mode", mode: mode.mode, windowId: sender.tab.windowId });
+            return Promise.resolve({});
+        }
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
         if ((message as Partial<BodyTreeRequest> | null)?.type === "body.tree") return tree_field_of(sender);
         const hints = message as Partial<BodyHintsRequest> | null;

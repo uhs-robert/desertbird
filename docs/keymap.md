@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 457 (Mail tab 154, Message 98, Message window 80, Compose window 22, Own pages 50, Other tabs 49, Text fields 4)
+bound: 461 (Mail tab 155, Message 99, Message window 81, Compose window 22, Own pages 51, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -58,6 +58,7 @@ The thread list and the folder pane.
 | `n` | `search.next` |
 | `N` | `search.prev` |
 | `f` | `hint` |
+| `i` | `mode.insert` |
 
 #### Go
 
@@ -302,6 +303,7 @@ A message in a tab or the message pane.
 | `<A-h>` | `pane.left` |
 | `L` | `pane.right` |
 | `<A-l>` | `pane.right` |
+| `i` | `mode.insert` |
 
 #### Go
 
@@ -467,6 +469,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `u` | `undo` |
+| `i` | `mode.insert` |
 
 #### Go
 
@@ -665,6 +668,7 @@ The options page and the help page.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
+| `i` | `mode.insert` |
 
 #### Go
 
@@ -742,6 +746,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
 | `f` | `hint` |
+| `i` | `mode.insert` |
 | `j` | `page.scroll_down` |
 | `k` | `page.scroll_up` |
 | `<C-d>` | `page.half_down` |
@@ -751,7 +756,6 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `h` | `page.scroll_left` |
 | `l` | `page.scroll_right` |
 | `G` | `page.bottom` |
-| `i` | `mode.insert` |
 
 #### Go
 

@@ -15,7 +15,7 @@ const shared_files = [
   "src/background/commands/{define,index,tab_keymaps}.ts",
   "src/background/config/**",
   "src/shared/{protocol,swallow,keymap_tree}.ts",
-  "src/chrome/{runtime,parent_keys,platform,focus,view,motions,page_focus,cursor_sheet,mode_label,overlay,overlay_id,parent_overlay}.ts",
+  "src/chrome/{runtime,parent_keys,platform,focus,view,motions,page_focus,cursor_sheet,mode_label,overlay,overlay_id,parent_overlay,escape_rule}.ts",
   "src/experiment/{keys,overlay}.schema.json",
 ];
 
