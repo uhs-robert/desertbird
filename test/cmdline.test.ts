@@ -418,7 +418,7 @@ test("the default keys: : opens an empty line and the typed-value keys open it w
         return binding.args?.["text"];
     };
     assert.equal(text_of(":"), undefined);
-    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["mc", "copy "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["o", "open "], [";;", "hint "]] as const) {
+    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["mc", "copy "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["o", "open "], ["O", "open --tab "], [";;", "hint "]] as const) {
         assert.equal(text_of(keys), text);
         // The text each key types must name a command and parse as far as the word before the value.
         const first_word = text.split(" ")[0]!;
@@ -475,6 +475,13 @@ test("a path two accounts hold gets a row per account that names the account, an
     // An account typed already narrows the list and adds no second flag.
     const narrowed = (await shared("open --account=Home ", 20, no_selection)).rows;
     assert.deepEqual(narrowed.map((row) => row.insert), ["/Inbox "]);
+});
+
+test("open --tab still completes folders", async () => {
+    const shared = create_completer(registry, { ...sources, folders: async () => [choice("/Inbox", "Work", "a1"), choice("/Archives", "Work", "a1")] });
+    const result = await shared("open --tab arch", 15, no_selection);
+    assert.deepEqual(result.rows.map((row) => row.name), ["/Archives"]);
+    assert.equal(result.highlight_first, true);
 });
 
 test("open asks for every account, move and copy for the selection's", async () => {
