@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_KEYMAP, GROUP_NAMES, registry } from "../src/background/commands/index.ts";
-import { default_keymap_of, default_typing_keymap } from "../src/background/commands/tab_keymaps.ts";
+import { default_keymap_of, default_menu_keymap, default_typing_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { render, type KeymapSection } from "./keymap_docs/render.ts";
 import { splice } from "./keymap_docs/splice.ts";
 
@@ -28,6 +28,7 @@ const sections: KeymapSection[] = [
   { title: "Own pages", about: "The options page and the help page.", keymap: default_keymap_of("own") },
   { title: "Other tabs", about: "Calendar, tasks, chat, the address book, settings and `about:` pages.", keymap: default_keymap_of("page") },
   { title: "Text fields", about: "A text field in a page tab or in the mail tab (the quick filter, the search box). Plain keys are text there. Alt+j and Alt+k also work in insert mode.", keymap: default_typing_keymap() },
+  { title: "Open menus", about: "A native menu or popup is open (a context menu, a menu bar menu, a dropdown, the app menu opened by the keyboard) in any window, dialogs included. These keys move the selection and are rebindable in the Menu keys section of the options page, which is apart from the key bindings. A menu key must be one typed character. The access keys of the menu lose the keys that move it.", keymap: default_menu_keymap() },
 ];
 
 const current = readFileSync(doc_path, "utf8");

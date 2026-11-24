@@ -3,10 +3,10 @@
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { Settings } from "./settings.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
-import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_bindings } from "../commands/index.ts";
+import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_bindings, is_menu_command } from "../commands/index.ts";
 
-/** What the user stores: normal-mode bindings only. A `null` binding removes a default key. */
-export type UserKeymap = Pick<KeymapConfig, "normal">;
+/** What the user stores: normal-mode bindings, and the menu keys in a section of their own. A `null` binding removes a default key. The two sections never mix: `menu` unbinds only a menu key, and `normal` never holds a `menu.*` command. */
+export type UserKeymap = Pick<KeymapConfig, "normal"> & { menu?: KeymapConfig["normal"] };
 
 /** Defaults first, so a user entry for the same keys takes the default's place. With no user bindings the result equals `DEFAULT_KEYMAP`. */
 export function effective_keymap(user: UserKeymap): KeymapConfig {
@@ -17,12 +17,18 @@ export function compile_effective_keymap(user: UserKeymap, settings: Partial<Set
     return compile_bindings(effective_keymap(user), settings, DEFAULT_KEYMAP);
 }
 
-/** Keeps the `normal` bindings that are objects or `null`. Stored data is untrusted. */
+/** Keeps the bindings that are objects or `null`. Stored data is untrusted. The `normal` section drops a `menu.*` command, which only the `menu` section may hold, so a stored key never replaces a mail-tab key. */
+function kept_bindings(raw: unknown, menu: boolean): KeymapConfig["normal"] | undefined {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+    const kept = Object.entries(raw).filter(([, binding]) => binding === null || (typeof binding === "object" && !Array.isArray(binding) && typeof (binding as { id?: unknown }).id === "string" && is_menu_command((binding as { id: string }).id) === menu));
+    return Object.fromEntries(kept);
+}
+
 export function sanitize_user_keymap(raw: unknown): UserKeymap {
-    const normal = (raw as { normal?: unknown } | null | undefined)?.normal;
-    if (typeof normal !== "object" || normal === null || Array.isArray(normal)) return {};
-    const kept = Object.entries(normal).filter(([, binding]) => binding === null || (typeof binding === "object" && !Array.isArray(binding) && typeof (binding as { id?: unknown }).id === "string"));
-    return { normal: Object.fromEntries(kept) };
+    const stored = raw as { normal?: unknown; menu?: unknown } | null | undefined;
+    const normal = kept_bindings(stored?.normal, false);
+    const menu = kept_bindings(stored?.menu, true);
+    return { ...(normal && { normal }), ...(menu && { menu }) };
 }
 
 /** Tags each step of a command with `repeatable: false` (so the chrome runtime never replays it) or `keeps_selection: true` (so visual mode stays on after it) in the compiled tree. The compiler has no field for either, and the runtime knows no command ids beyond its motions. */

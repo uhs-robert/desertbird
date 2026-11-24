@@ -1,0 +1,33 @@
+[
+  {
+    "namespace": "menukeys",
+    "description": "Moves the selection of an open Thunderbird menu or popup with letter keys, in every window. A key press under an open menu is turned into an ArrowDown or ArrowUp sent at once to the open popup.",
+    "functions": [
+      {
+        "name": "install",
+        "type": "function",
+        "async": true,
+        "description": "Installs the key table, or replaces the one installed. The first call starts the window listener, which hooks every chrome window including dialogs, and later calls add none.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "description": "The keys that move the selection: the typed character of each (`j`) and the way it moves.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": { "type": "string", "pattern": "^\\S$" },
+                    "direction": { "type": "string", "enum": ["down", "up"] }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

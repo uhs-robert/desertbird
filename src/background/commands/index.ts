@@ -21,6 +21,7 @@ import { folders } from "./folders.ts";
 import { followup } from "./followup.ts";
 import { help } from "./help.ts";
 import { hints } from "./hints.ts";
+import { menu } from "./menu.ts";
 import { messages } from "./messages.ts";
 import { new_mail } from "./new_mail.ts";
 import { page } from "./page.ts";
@@ -38,7 +39,7 @@ import { zoom } from "./zoom.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints, page, zoom };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints, page, zoom, menu };
 
 export const registry = create_registry();
 
@@ -48,6 +49,9 @@ export const hold_command_ids = (): string[] => registry.list().filter((command)
 const define = (id: string, input: CommandDefinition) => registry.define(id, input);
 
 for (const group of Object.values(GROUPS)) for (const [id, input] of Object.entries(group.commands)) define(id, input);
+
+/** Whether the command is a menu key command (`menu.down`, `menu.up`): the one test the stored keymap, the options page and the menu key table share. */
+export const is_menu_command = (id: string): boolean => registry.get(id)?.needs?.includes("menu") === true;
 
 /** Ids of the commands `.` must not replay. */
 export const UNREPEATABLE_IDS: ReadonlySet<string> = new Set(Object.values(GROUPS).flatMap((group) => Object.entries(group.commands).filter(([, input]) => input.repeatable === false).map(([id]) => id)));

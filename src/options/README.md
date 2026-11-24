@@ -5,7 +5,7 @@ The `options_ui` page of the add-on. It opens in a tab, lists the settings, the 
 ## Files
 
 - `options.html`, `options.css`: the page. Its colors are the theme tokens (`--desertfox-*`) that `follow_theme` (`src/shared/follow_theme.ts`) sets from the stored theme, so it follows the `theme` setting and Thunderbird's color scheme. The `theme` setting shows as a choice list built from `SETTING_KINDS`. The script is external because extension pages allow no inline script.
-- `options.ts`: builds the form and the bindings table with DOM calls and saves. It reads the DOM and nothing else.
+- `options.ts`: builds the form, the Menu keys table (apart from the key bindings, saved in the `menu` section of the user keymap) and the bindings table with DOM calls and saves. It reads the DOM and nothing else.
 - `model.ts`: the logic without the DOM: form text to setting values, binding rows to a user keymap, and the compiler check. A binding the compiler skips blocks the save, so a typo never reaches storage. The tests drive this file.
 
 ## Quick replies

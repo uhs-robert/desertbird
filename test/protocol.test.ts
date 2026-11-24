@@ -6,7 +6,7 @@ test("the Experiment exposes the fixed verb table", () => {
     assert.deepEqual(EXPERIMENT_VERBS.keys.functions, ["install"]);
     assert.deepEqual(EXPERIMENT_VERBS.app.functions, ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"]);
     assert.deepEqual(EXPERIMENT_VERBS.overlay.functions, ["mount", "unmount", "setModeLabel"]);
-    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay", "hints", "pages", "folderpane", "app", "zoom", "composewin", "filter"]);
+    assert.deepEqual(Object.keys(EXPERIMENT_VERBS), ["keys", "overlay", "hints", "pages", "folderpane", "app", "zoom", "composewin", "filter", "menukeys"]);
     assert.deepEqual(EXPERIMENT_VERBS.zoom, { functions: ["get", "set"], events: [] });
     assert.deepEqual(EXPERIMENT_VERBS.hints.functions, ["sendEnter", "pick"]);
     assert.deepEqual(EXPERIMENT_VERBS.folderpane.functions, ["fold", "focused", "viewRowCount"]);

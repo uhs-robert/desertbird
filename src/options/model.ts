@@ -1,7 +1,8 @@
 // The logic behind the options page, free of the DOM so tests drive it directly.
 
 import type { KeyBinding } from "../../vendor/desertfox/invocation.ts";
-import { DEFAULT_KEYMAP } from "../background/commands/index.ts";
+import { DEFAULT_KEYMAP, is_menu_command } from "../background/commands/index.ts";
+import { default_menu_keymap, menu_key_table } from "../background/commands/tab_keymaps.ts";
 import { parse_sequence } from "../../vendor/desertfox/keys/notation.ts";
 import { compile_effective_keymap } from "../background/config/keymap.ts";
 import type { UserKeymap } from "../background/config/keymap.ts";
@@ -64,6 +65,17 @@ export function default_rows(): BindingRow[] {
     });
 }
 
+/** The default menu keys, shown in the options page apart from the thread list keys. */
+export function default_menu_rows(): BindingRow[] {
+    return Object.entries(default_menu_keymap().normal ?? {}).flatMap(([keys, binding]) => {
+        const one = single(binding);
+        return one ? [{ keys, command: one.id, args: "" }] : [];
+    });
+}
+
+/** The edits of the `menu` section of the user keymap, which `edits_from_user_keymap` leaves out. */
+export const menu_edits_from_user_keymap = (user: UserKeymap): BindingEdits => edits_from_user_keymap(user.menu ? { normal: user.menu } : {});
+
 export function edits_from_user_keymap(user: UserKeymap): BindingEdits {
     const entries = Object.entries(user.normal ?? {});
     return {
@@ -86,8 +98,9 @@ function binding_is_active(root: unknown, row: BindingRow): boolean {
 export type KeymapBuild = { user_keymap: UserKeymap; messages: string[]; blocked: boolean } | { error: string };
 
 /** Builds the user keymap from the edits and runs it through the compiler. A user binding the compiled tree does not run blocks the save, so a typo never reaches storage. Other compiler messages, such as a default key skipped because of a user key, are shown and do not block. */
-export function build_user_keymap(edits: BindingEdits, settings: Partial<Settings> = {}): KeymapBuild {
+export function build_user_keymap(edits: BindingEdits, settings: Partial<Settings> = {}, menu_edits: BindingEdits = { removed: [], rows: [] }): KeymapBuild {
     const normal: NonNullable<UserKeymap["normal"]> = {};
+    if (edits.rows.some((row) => is_menu_command(row.command.trim()))) return { error: "a menu command belongs in the menu keys section" };
     for (const keys of edits.removed) normal[keys] = null;
     for (const row of edits.rows) {
         if (row.keys.trim() === "" || row.command.trim() === "") return { error: "every binding needs keys and a command" };
@@ -102,7 +115,17 @@ export function build_user_keymap(edits: BindingEdits, settings: Partial<Setting
         }
         normal[row.keys.trim()] = { id: row.command.trim(), ...(args === undefined ? {} : { args: args as Record<string, unknown> }) };
     }
-    const user_keymap: UserKeymap = { normal };
+    const menu: NonNullable<UserKeymap["menu"]> = {};
+    for (const keys of menu_edits.removed) menu[keys] = null;
+    for (const row of menu_edits.rows) {
+        if (row.keys.trim() === "" || row.command.trim() === "") return { error: "every menu key needs a key and a command" };
+        menu[row.keys.trim()] = { id: row.command.trim() };
+    }
+    // The table keeps a key only when it is one typed character that runs a menu command, so a row it lacks blocks the save.
+    const table = menu_key_table(menu);
+    const bad_menu_row = menu_edits.rows.find((row) => !is_menu_command(row.command.trim()) || table[row.keys.trim()] !== (row.command.trim() === "menu.down" ? "down" : "up"));
+    if (bad_menu_row) return { error: `"${bad_menu_row.keys}" must be one typed character and the command menu.down or menu.up` };
+    const user_keymap: UserKeymap = { normal, ...(Object.keys(menu).length > 0 && { menu }) };
     const { compiled, warnings } = compile_effective_keymap(user_keymap, settings);
     const skipped_row = edits.rows.find((row) => !binding_is_active(compiled.modes.normal, row));
     return { user_keymap, messages: warnings, blocked: skipped_row !== undefined };

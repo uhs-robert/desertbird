@@ -54,6 +54,8 @@ export const area_rules = [
   { globs: ["src/background/{commands,handlers}/thread*.ts"], areas: ["threads"] },
   // The compose window runtime draws the compose label, which the compose editor and quick reply pieces check.
   { globs: ["src/chrome/{compose_runtime,parent_composewin}.ts", "src/experiment/composewin.schema.json"], areas: ["mode_label", "compose", "quick_reply"] },
+  // The menu keys move an open menu in the mail window (the popup piece) and in a compose window (the compose pieces).
+  { globs: ["src/chrome/{menu_keys,parent_menukeys}.ts", "src/background/commands/menu.ts", "src/experiment/menukeys.schema.json"], areas: ["popup", "compose"] },
   { globs: ["src/chrome/{pane_resize,readable_focus}.ts"], areas: ["panes"] },
   { globs: ["src/background/commands/motion.ts"], areas: ["motions", "visual"] },
   { globs: ["src/background/{commands,handlers}/step.ts"], areas: ["motions", "views", "panes"] },

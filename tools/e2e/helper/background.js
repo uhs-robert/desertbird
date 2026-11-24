@@ -278,7 +278,7 @@ async function poll_forever() {
         await post({ seq: command.seq, body: await draft_round_trip(command.args.body).catch((error) => `error: ${error.message}`) });
       } else if (command.name === "make_contacts") {
         const [book] = await browser.addressBooks.list();
-        for (const first of ["Alice", "Alina", "Alison"]) await browser.contacts.create(book.id, { FirstName: first, LastName: "Fixture", DisplayName: `${first} Fixture`, PrimaryEmail: `${first.toLowerCase()}@fixture.invalid` });
+        for (const first of ["Alice", "Alina", "Alison", "Alijah"]) await browser.contacts.create(book.id, { FirstName: first, LastName: "Fixture", DisplayName: `${first} Fixture`, PrimaryEmail: `${first.toLowerCase()}@fixture.invalid` });
         await post({ seq: command.seq, made: true });
       } else if (command.name === "close_compose") {
         await close_compose_windows();

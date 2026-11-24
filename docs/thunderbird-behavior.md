@@ -741,3 +741,44 @@ Measured on Betterbird 153.7.0 alone (Thunderbird was not installed), headless, 
 - A List-Id `OtherHeader` term (`arbitraryHeader` `List-Id`, `Contains`, the id with its angle brackets) took a median of 40, 126 and 218 ms on the three folders. A same-day date term took 36, 54 and 57 ms. `messages.getFull` of one message took 1 to 2 ms (29 ms at most). The fixture messages are small and were in the page cache, so a real folder can be slower. IMAP was not measured.
 - A date term value is in microseconds (`nsIMsgSearchValue.date`), and the terms compare local calendar days, not instants. One `Is` term with the message's own date matched its day in 13 of 13 cases: 00:00:00, 00:00:30, 23:59:30, 23:59:59, the 25 hour day and the 23 hour day of daylight saving time. `IsAfter` the day's start returned no rows, because it excludes the whole day.
 - `gDBView.rowCount`, the tree view and `mailTabs.getListedMessages` agree on the row count under the filter, so `folderpane.viewRowCount`, `app.viewRows` and the `/` count read the filtered list.
+
+## Arrow keys into native menus
+
+Measured on Thunderbird 153.7.0esr and Betterbird 153.8.0, 2026-11-23, with a probe Experiment in a headless session (the `tools/measure/` session and fixtures plus a temporary add-on that is not kept). Every result came out the same on both apps. The question: once a capture listener on the window root has taken `j` under an open menu, which way of making an ArrowDown moves the menu? A move counts when the active item of the open `menupopup` (`_moz-menuactive`) or the focused button in the open `panel` changed.
+
+The methods:
+
+- Real Down: `wtype` Down, the control.
+- Timer TIP: `nsITextInputProcessor.beginInputTransactionForTests(window)` plus `keydown` and `keyup` of ArrowDown, from a 0 ms `setTimeout` started in the `j` listener. `window` is the top chrome window whose root holds the listener.
+- Nested TIP: the same, called inside the `j` listener.
+- Chrome event: `new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", keyCode: 40, bubbles: true, cancelable: true })` and its `keyup`, built from the target's window and dispatched synchronously inside the `j` listener. An event that chrome code builds and dispatches has `isTrusted` true, so this is not the untrusted event the design guessed at. Dispatched at the open popup (for a `panel`, at the focused element inside it), and in a second run at the `j` event's `originalTarget`.
+
+| Menu | How it opened | Real Down | Timer TIP | Nested TIP | Chrome event at the popup | Chrome event at the key's target |
+| --- | --- | --- | --- | --- | --- | --- |
+| Thread list `mailContext` (`about:3pane`) | Shift+F10 in the thread list | moves | moves | fails | moves | moves |
+| App menu `appMenu-popup` | click, Escape, Space on the button | does not move | moves | fails | moves | moves |
+| Settings menulist (`defaultWebSearch`, `about:preferences` in a tab) | Alt+Down on the focused menulist | moves | moves | fails | moves | moves |
+| Compose body `msgComposeContext` | Shift+F10 in the body | moves | moves | fails | moves | moves |
+| Message window `mailContext` (`about:message`) | Shift+F10 in the message body | moves | moves | fails | moves | moves |
+| Page tab `browserContext` (remote extension page) | Shift+F10 in the page | moves | moves | fails | moves | moves |
+| Message pane `mailContext` (`about:message` in the mail tab) | `openPopupAtScreen` while the focus stays in the thread list | does not move | does not move | fails | moves | does not move |
+
+- Nested TIP: `beginInputTransactionForTests` returns false inside the keydown of a real key, so nothing is pressed. From the 0 ms timer it returns true every time.
+- A chrome event dispatched at the popup moves every kind, inside the keydown, with no timer. It also reached the window root's capture listener as a trusted ArrowDown, so a listener that replays keys must mark its own event.
+- App menu opened by a mouse click, the focus still in the thread list: the chrome event dispatched at the panel itself moves the menu selection, with the list unmoved (Betterbird 153.8, the e2e popup piece, 2026-11-24). So `j` and `k` move the app menu however it was opened.
+- The event needs `code` for the app menu. Built with `key` and `keyCode` only, it reached the focused button and was not cancelled, and the focus stayed. With `code: "ArrowDown"` the panel cancelled it and the focus moved (Betterbird 153.8, the e2e popup piece, 2026-11-24). A `menupopup` moved either way. `ownerGlobal` of a popup reads `undefined` from an Experiment script, so the event is built from `ownerDocument.defaultView`.
+- The popup manager listens on the popup's own document. A key in another document does not reach it: with the focus in `about:3pane` and a popup open in the pane's `about:message`, a real Down, a TIP and an event at the focused element all leave the popup alone. Only the event at the popup moves it.
+- App menu: a real Down from `wtype` did not move the focus from the first button, on the first and on a later open, while the TIP and the chrome event moved it to the second. The cause is not known. Issue #161 is about the e2e check that presses that Down.
+- `j` reached a capture listener on the window root in every row: the main window for the thread list, the app menu, settings and the page tab, the message window and the compose window for theirs. The `j` target was the focused element (`tbody`, the button in the panel, the menulist, the remote `browser`, the message or compose `body`), never the popup.
+
+### `popupshown` at the window root
+
+A capture listener for `popupshown` and `popuphidden` on `windowRoot` saw every popup above, with the popup as `originalTarget`: `mailContext` in `about:3pane`, `mailContext` in the mail tab's `about:message` (two documents down) and in the message window's `about:message`, the menulist popup in `about:preferences`, `browserContext` for the remote page, `msgComposeContext` and the app menu `panel`. A set filled from these events and checked for `state` "open" found the open popup every time.
+
+### `ExtensionSupport` with no `chromeURLs`
+
+`registerWindowListener` with only `onLoadWindow` called it for the open main window at once and later for the message window, the compose window and the About dialog (`aboutDialog.xhtml`). Other dialogs were not opened.
+
+### A native Enter after `j`
+
+A popup of five items over the thread list, the first active, and the timer TIP in the `j` listener. `wtype` typed `j` and Return in one call (a gap of about 1 ms), three times, and `j`, space, `j`, Return three times (`wtype` puts a space between text arguments, and the popup ignored it). Return activated the item the arrows had reached every time (B, then C): the timer ran before the next native key each time, about 0.4 ms after the `j`. Six runs under no load do not prove the order holds under load, so the queue the design describes stays.

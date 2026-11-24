@@ -30,6 +30,7 @@ const GROUP_TABLE: Record<string, { runs_in: "chrome" | "background" | "message"
     page: { runs_in: "chrome", ids: ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.page_down", "page.page_up", "page.scroll_left", "page.scroll_right", "page.top", "page.bottom", "mode.insert", "mode.escape"] },
     app: { runs_in: "background", ids: ["msg.undo", "thread.open_conversation", "app.open_page", "pane.focus", "pane.left", "pane.right", "pane.resize"] },
     zoom: { runs_in: "background", ids: ["zoom.by", "zoom.set"] },
+    menu: { runs_in: "chrome", ids: ["menu.down", "menu.up"] },
 };
 
 test("every group file has a table row and each row has a group", () => {
@@ -55,6 +56,7 @@ for (const [name, row] of Object.entries(GROUP_TABLE)) {
 
     test(`group ${name}: every default key names a command of the group`, () => {
         for (const [keys, binding] of Object.entries(GROUPS[name]!.normal_keys)) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
+        for (const [keys, binding] of Object.entries(GROUPS[name]!.menu_keys ?? {})) assert.ok(binding && !Array.isArray(binding) && row.ids.includes(binding.id), keys);
         // A message key may bind a command of another group: `/` opens the command line.
         for (const [keys, binding] of Object.entries(GROUPS[name]!.message_keys ?? {})) assert.ok(binding && !Array.isArray(binding) && registry.get(binding.id), keys);
     });

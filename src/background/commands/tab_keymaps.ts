@@ -6,7 +6,7 @@ import type { Invocation, KeyBinding } from "../../../vendor/desertfox/invocatio
 import { parse_sequence } from "../../../vendor/desertfox/keys/notation.ts";
 import { ANY_KEY } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
-import { GROUPS, GROUP_NAMES, compile_bindings, compile_default_keymap, registry } from "./index.ts";
+import { GROUPS, GROUP_NAMES, compile_bindings, compile_default_keymap, is_menu_command, registry } from "./index.ts";
 import { tab_needs_of } from "./define.ts";
 import type { CommandGroup, TabNeed } from "./define.ts";
 import type { KeymapTree } from "../../shared/protocol.ts";
@@ -120,6 +120,30 @@ export function compile_typing_keymap(user: KeymapConfig["normal"] = {}): Compil
     const typing_ids = new Set(Object.values(defaults).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []).map((invocation) => invocation.id)));
     const kept = Object.entries(user ?? {}).filter(([keys, binding]) => binding === null || (parse_sequence(keys).tokens?.length === 1 && (Array.isArray(binding) ? binding : [binding]).every((invocation) => typing_ids.has(invocation.id))));
     return compile_bindings({ normal: { ...defaults, ...Object.fromEntries(kept) }, group_names: GROUP_NAMES }, {}, { normal: defaults });
+}
+
+const menu_keys = (): NonNullable<KeymapConfig["normal"]> => merged((group) => group.menu_keys);
+
+/** The default menu keys, for the help page and the keymap doc. */
+export const default_menu_keymap = (): KeymapConfig => ({ normal: menu_keys(), group_names: GROUP_NAMES });
+
+/**
+ * The menu keys: the defaults with the user's `menu` section on top. A user key joins only when it is one typed character and runs a menu command, and `null` unbinds a default. The section is apart from the user's `normal` keys, so a menu key never replaces a mail-tab key and unbinding one never unbinds the other. A longer sequence or a chord never matches, because the key runs under an open popup, one key at a time.
+ */
+export function effective_menu_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig {
+    const defaults = menu_keys();
+    const kept = Object.entries(user ?? {}).filter(([keys, binding]) => binding === null || (binding && !Array.isArray(binding) && is_menu_command(binding.id) && is_menu_token(keys)));
+    return { normal: { ...defaults, ...Object.fromEntries(kept) }, group_names: GROUP_NAMES };
+}
+
+// The schema of `menukeys.install` takes `^\S$` with no `u` flag: one UTF-16 unit, so an astral character (an emoji) never passes.
+const is_menu_token = (keys: string): boolean => /^\S$/.test(keys) && parse_sequence(keys).tokens?.length === 1;
+
+/** The key table of the `menukeys` Experiment: the typed character of each key and its direction. */
+export function menu_key_table(user: KeymapConfig["normal"] = {}): Record<string, "down" | "up"> {
+    const table: Record<string, "down" | "up"> = {};
+    for (const [keys, binding] of Object.entries(effective_menu_keymap(user).normal ?? {})) if (binding && !Array.isArray(binding)) table[keys] = binding.id === "menu.down" ? "down" : "up";
+    return table;
 }
 
 /** Whether a window kind offers every need of the command. The command line of a kind lists and runs only such commands. */
