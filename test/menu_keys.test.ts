@@ -162,7 +162,7 @@ test("a nested submenu gets the arrow at the innermost open popup, and the paren
     }
 });
 
-test("a panel takes the arrow at the focused element inside it, and passes the key when the focus is outside or in a browser", async () => {
+test("a panel takes the arrow at the focused element inside it, or at itself when the focus is outside, and passes the key when the focus is in a browser", async () => {
     const win = fake_window();
     const { done } = await setup([win]);
     try {
@@ -175,11 +175,13 @@ test("a panel takes the arrow at the focused element inside it, and passes the k
         win.document.activeElement = button.node;
         assert.equal(win.press("j").taken, true);
         assert.deepEqual([button.sent.length, panel.sent.length], [2, 0]);
-        // A click-opened app menu leaves the focus in the list: the key is not taken.
+        // A click-opened app menu leaves the focus in the list: the arrow goes to the panel.
         win.document.activeElement = list.node;
-        assert.equal(win.press("j").taken, false);
+        assert.equal(win.press("j").taken, true);
+        assert.deepEqual([list.sent.length, panel.sent.length], [0, 2]);
         win.document.activeElement = null;
-        assert.equal(win.press("j").taken, false);
+        assert.equal(win.press("k").taken, true);
+        assert.equal(panel.sent.length, 4);
         // An add-on's popup holds a browser that takes the key itself.
         win.document.activeElement = popup_browser.node;
         assert.equal(win.press("j").taken, false);

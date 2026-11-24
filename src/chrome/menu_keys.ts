@@ -77,9 +77,10 @@ export function create_menu_runtime<Window>(deps: MenuDeps<Window>): MenuRuntime
             const direction = table.get(event.key ?? "");
             if (!direction || sending || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
             const open = [...popups].filter((popup) => popup.isConnected && SHOWN_STATES.has(popup.state ?? "") && popup.getAttribute?.("ignorekeys") !== "true").at(-1);
-            // A panel counts only with the focus inside it, which is a keyboard-opened app menu. A click-opened one leaves the focus in the list, and an add-on's popup holds a `browser` that takes the key itself.
+            // A panel takes the key at the focused element inside it (the keyboard-opened app menu), or at itself when the focus stayed outside (the click-opened one). An add-on's popup holds a `browser` that takes the key itself.
             const focused = deps.focused_of(window);
-            const target = open?.localName === "panel" ? (focused?.localName !== "browser" && open.contains?.(focused) ? focused : null) : open;
+            const inside = open?.localName === "panel" && open.contains?.(focused) ? focused : null;
+            const target = inside?.localName === "browser" ? null : (inside ?? open);
             const make = target?.ownerDocument?.defaultView?.KeyboardEvent;
             if (!target || !make) return;
             event.preventDefault();

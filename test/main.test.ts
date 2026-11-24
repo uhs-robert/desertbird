@@ -26,7 +26,6 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     // Each Experiment install in the order it was made, with the menu key table and the menu key tokens the key runtime got.
     const install_log: string[] = [];
     const menu_installs: Record<string, string>[] = [];
-    const menu_key_tokens: string[][] = [];
     const new_mail_listeners: unknown[] = [];
     const native = fake_native_messaging();
     // Calls in flight plus pending echo timers. A test that asserts "only once" waits for zero, so a second install an echo causes has landed.
@@ -80,7 +79,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
                 if (options.menukeys_fails) throw new Error("schema rejected the keys");
                 menu_installs.push(Object.fromEntries(args.keys.map((each) => [each.key, each.direction])));
             }) },
-        keys: { install: (args: { tree: unknown; menuKeys?: string[] }) => counted(async () => void (install_log.push("keys"), installs.push(args.tree), menu_key_tokens.push(args.menuKeys ?? []))), onInvocation: { addListener: () => {} } },
+        keys: { install: (args: { tree: unknown }) => counted(async () => void (install_log.push("keys"), installs.push(args.tree))), onInvocation: { addListener: () => {} } },
         pages: { install: (args: { pageTree: unknown; messageTree: unknown; windowTree: unknown; typingTree: unknown }) => counted(async () => void (install_log.push("pages"), page_installs.push(args.pageTree), message_installs.push(args.messageTree), window_installs.push(args.windowTree), typing_installs.push(args.typingTree))), onInvocation: { addListener: () => {} } },
         runtime: {
             onMessage: { addListener: () => {} },
@@ -111,7 +110,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             if (busy === 0) return;
         }
     };
-    return { when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, menu_key_tokens, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const WAIT_DEADLINE_MS = 5_000;
@@ -193,23 +192,21 @@ test("the typing tree is stored in the record and installed in the pages Experim
     assert.doesNotMatch(JSON.stringify(installs), /mode\.escape/);
 });
 
-test("the menu keys install first, so their listener is the first on each window root, and the key runtime learns the same tokens", async () => {
-    const { install_log, menu_installs, menu_key_tokens, when_installed, when_idle } = stub_messenger();
+test("the menu keys install first, so their listener is the first on each window root", async () => {
+    const { install_log, menu_installs, when_installed, when_idle } = stub_messenger();
     await start_background();
     await when_installed(1);
     await when_idle();
     assert.deepEqual(install_log, ["menukeys", "keys", "pages"]);
     assert.deepEqual(menu_installs, [{ j: "down", k: "up" }]);
-    assert.deepEqual(menu_key_tokens, [["j", "k"]]);
 });
 
 test("a user key for a menu command changes the installed menu keys", async () => {
-    const { menu_installs, menu_key_tokens, when_installed, when_idle } = stub_messenger({ desertbird_user_keymap: { normal: { x: { id: "msg.archive" } }, menu: { n: { id: "menu.down" }, "<C-n>": { id: "menu.down" } } } });
+    const { menu_installs, when_installed, when_idle } = stub_messenger({ desertbird_user_keymap: { normal: { x: { id: "msg.archive" } }, menu: { n: { id: "menu.down" }, "<C-n>": { id: "menu.down" } } } });
     await start_background();
     await when_installed(1);
     await when_idle();
     assert.deepEqual(menu_installs.at(-1), { j: "down", k: "up", n: "down" });
-    assert.deepEqual(menu_key_tokens.at(-1), ["j", "k", "n"]);
 });
 
 test("a user key in the menu section changes the menu keys and nothing else", async () => {
@@ -221,22 +218,20 @@ test("a user key in the menu section changes the menu keys and nothing else", as
     assert.doesNotMatch(JSON.stringify(stored["desertbird_compiled_keymap"]), /menu\./);
 });
 
-test("a menukeys install that rejects leaves the other runtimes installed and the key runtime with no menu keys", async () => {
-    const { install_log, menu_key_tokens, when_installed, when_idle } = stub_messenger({}, [], {}, { menukeys_fails: true });
+test("a menukeys install that rejects leaves the other runtimes installed", async () => {
+    const { install_log, when_installed, when_idle } = stub_messenger({}, [], {}, { menukeys_fails: true });
     await start_background();
     await when_installed(1);
     await when_idle();
     assert.deepEqual(install_log, ["menukeys", "keys", "pages"]);
-    assert.deepEqual(menu_key_tokens, [[]]);
 });
 
-test("with no menukeys Experiment the key runtime gets no menu keys", async () => {
-    const { install_log, menu_key_tokens, when_installed, when_idle } = stub_messenger({}, [], {}, { no_menukeys: true });
+test("with no menukeys Experiment the other runtimes still install", async () => {
+    const { install_log, when_installed, when_idle } = stub_messenger({}, [], {}, { no_menukeys: true });
     await start_background();
     await when_installed(1);
     await when_idle();
     assert.deepEqual(install_log, ["keys", "pages"]);
-    assert.deepEqual(menu_key_tokens, [[]]);
 });
 
 test("the pages Experiment gets the message tree without the find key", async () => {

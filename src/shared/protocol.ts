@@ -85,8 +85,6 @@ export interface KeysInstallArgs {
     settings: MatcherSettings;
     /** Ids of the commands that take the keyboard away from the list (they open the overlay). The runtime holds plain keys after one fires, until the focus moves. */
     holdCommands: string[];
-    /** The tokens of the menu keys (`menu.down`, `menu.up`). A click-opened app menu leaves the focus in the thread list, and these keys run there as the list keys instead of being swallowed. */
-    menuKeys?: string[];
 }
 
 /** Payload of the `keys.onInvocation` event: a background leaf fired in a window. */

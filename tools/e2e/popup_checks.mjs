@@ -93,25 +93,31 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   await instance.press(["-k", "Escape"]);
   await sleep(800);
 
-  // A popup opened by a click leaves the focus where it was or on the button, and plain keys still reach Thunderbird.
+  // A popup opened by a click leaves the focus in the thread list. j and k move the menu all the same, and every other plain key still reaches nothing.
+  const click_closed = await panel_pixels(instance, "popup_app_menu_click_closed");
   await instance.click(...APP_MENU_BUTTON);
   await sleep(1000);
   await shot("popup_app_menu_open", "app menu opened by a click");
-  // The menu keeps the focus in the list, and j and k move the list under it (`menukeys` leaves a panel whose focus is outside it alone).
+  const click_at_first = await panel_pixels(instance, "popup_app_menu_click_at_first");
+  const click_opened = share_differing(click_closed, click_at_first) > OPEN_AT_LEAST;
+  check(app, kind, "app menu opens by a click", click_opened, `differs from closed ${share_differing(click_closed, click_at_first).toFixed(3)}`);
   state = await key_and_state(instance, ["j"], 1200);
-  check(app, kind, "app menu open by mouse: j moves the thread list down one row and marks nothing as junk", first_selected(state) !== start && !any_junk(state), `selected ${first_selected(state)}, expected a row after ${start}, junk ${any_junk(state)}`);
-  const moved = first_selected(state);
+  check(app, kind, "app menu open by mouse: j marks nothing as junk and moves nothing in the list", first_selected(state) === start && !any_junk(state), `selected ${first_selected(state)}, expected ${start}, junk ${any_junk(state)}`);
+  const click_after_j = await panel_pixels(instance, "popup_app_menu_click_after_j");
+  state = await key_and_state(instance, ["j"], 1200);
+  const click_after_jj = await panel_pixels(instance, "popup_app_menu_click_after_jj");
   state = await key_and_state(instance, ["k"], 1200);
-  check(app, kind, "app menu open by mouse: k moves the thread list back up", first_selected(state) === start && !any_junk(state), `selected ${first_selected(state)}, expected ${start}`);
-  state = await key_and_state(instance, ["j"], 1200);
+  const click_after_jjk = await panel_pixels(instance, "popup_app_menu_click_after_jjk");
+  check(app, kind, "app menu open by mouse: j moves the selection down one item and k moves it back up", !click_after_j.equals(click_at_first) && !click_after_jj.equals(click_after_j) && click_after_jjk.equals(click_after_j), `list still at ${first_selected(state)}, expected ${start}`);
+  await shot("popup_app_menu_click_after_jk", "app menu opened by a click, with the selection moved by j, j and k");
   // `a` (archive) and `n` (next unread) are Thunderbird shortcuts and access keys of items inside the app menu's hidden views. The menu takes neither, and they are still swallowed there.
   const folders_before = JSON.stringify(state.folders);
   for (const key of ["a", "n"]) state = await key_and_state(instance, [key], 1200);
-  check(app, kind, "app menu open by mouse: a and n archive nothing and move nothing", first_selected(state) === moved && !any_junk(state) && JSON.stringify(state.folders) === folders_before, `selected ${first_selected(state)}, expected ${moved}, junk ${any_junk(state)}, folders changed ${JSON.stringify(state.folders) !== folders_before}`);
+  check(app, kind, "app menu open by mouse: a and n archive nothing and move nothing", first_selected(state) === start && !any_junk(state) && JSON.stringify(state.folders) === folders_before, `selected ${first_selected(state)}, expected ${start}, junk ${any_junk(state)}, folders changed ${JSON.stringify(state.folders) !== folders_before}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
   state = await key_and_state(instance, ["j"], 1200);
-  check(app, kind, "after the menus close, j moves the list again and marks nothing", first_selected(state) !== moved && !any_junk(state), `selected ${first_selected(state)}`);
+  check(app, kind, "after the menus close, j moves the list again and marks nothing", first_selected(state) !== start && !any_junk(state), `selected ${first_selected(state)}`);
 
   // The last check moved the list, so the baseline is the selection now.
   start = first_selected(state);

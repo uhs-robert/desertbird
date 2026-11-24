@@ -713,7 +713,7 @@ test("the parent resets on a blur only when the window lost focus, not when focu
 });
 
 // Thunderbird moves the focus into an add-on's popup browser once the panel shows. DesertBird's own popup takes its keys there, and any other open panel keeps the swallow, so `j` never marks junk under it.
-async function popup_parent(base_url: string | undefined, menu_keys: string[] = []) {
+async function popup_parent(base_url: string | undefined) {
     const window = new FakeWindow();
     const about_3pane = { threadTree: { currentIndex: 0 }, gDBView: { rowCount: 5, getSelectedMsgHdrs: () => [] } };
     const focused: { active: unknown } = { active: null };
@@ -727,13 +727,13 @@ async function popup_parent(base_url: string | undefined, menu_keys: string[] = 
     const keys = keys_parent.get_keys_api({ extension: { ...(base_url === undefined ? {} : { baseURL: base_url }), windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
     const emitted: KeysInvocation[] = [];
     (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void ("keys" in invocation || emitted.push(invocation)));
-    await keys.install({ tree: tree(), settings: {}, holdCommands: [], menuKeys: menu_keys });
+    await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
     const cancelled = (active: unknown, key = "j") => {
         focused.active = active;
         return press(window, key, { target: active }).cancelled;
     };
     const stop = () => (keys_parent.shutdown(), platform.restore());
-    return { cancelled, emitted, stop, about_3pane };
+    return { cancelled, emitted, stop };
 }
 
 const OWN_BASE = "moz-extension://desertbird-uuid/";
@@ -755,29 +755,6 @@ test("a DesertBird page browser that is no popup, the loading overlay included, 
     assert.equal(cancelled(browser_at(`${OWN_BASE}help/help.html`)), true);
     assert.deepEqual(emitted, []);
     stop();
-});
-
-// A click-opened app menu leaves the focus in the thread list. The menu keys run there as list keys, and every other plain key stays swallowed.
-test("under an open panel the menu keys are no swallowed keys, and every other plain key still is", async () => {
-    const { cancelled, stop, about_3pane } = await popup_parent(OWN_BASE, ["j", "k"]);
-    const list = { localName: "tbody" };
-    cancelled(list, "j");
-    assert.equal((about_3pane.threadTree as { selectedIndex?: number }).selectedIndex, 1);
-    // The others are swallowed and run nothing.
-    const archive = ["a", "n"].map((key) => cancelled(list, key));
-    assert.deepEqual(archive, [true, true]);
-    stop();
-});
-
-test("a shutdown forgets the menu keys, so a later install without them swallows j again", async () => {
-    const first = await popup_parent(OWN_BASE, ["j"]);
-    first.cancelled({ localName: "tbody" });
-    assert.equal((first.about_3pane.threadTree as { selectedIndex?: number }).selectedIndex, 1);
-    first.stop();
-    const second = await popup_parent(OWN_BASE);
-    second.cancelled({ localName: "tbody" });
-    assert.equal((second.about_3pane.threadTree as { selectedIndex?: number }).selectedIndex, undefined);
-    second.stop();
 });
 
 test("with no base URL no popup counts as DesertBird's own", async () => {

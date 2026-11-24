@@ -202,7 +202,7 @@ async function install_keymap(): Promise<void> {
         console.error("desertbird: the menu keys did not install:", error);
         menu_keys = {};
     }
-    await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS, menuKeys: Object.keys(menu_keys) });
+    await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
     await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), windowTree: page_message_tree(window_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
     await messenger.composewin?.install({ composeTree: compose_tree, allowSend: allow_send, labelStyle: label_style, labelColors: label_colors });
     installed_tree_json = tree_json;
