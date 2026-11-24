@@ -115,9 +115,10 @@ test("a pane that closes during the search ends the wait at once", async () => {
     const { bar, steps } = fake_bar();
     const { pane, clock, started } = fake_pane(steps, Infinity);
     bar.updateSearch = async () => started();
-    clock.wait = async () => void (pane.closed = true);
+    // The wait moves the clock, so a loop that missed the close would end at the limit and fail here, not hang.
+    clock.wait = async (ms: number) => void ((clock.at += ms), (pane.closed = true));
     assert.equal(await show_message_filter(pane, bar, { dateUs: 1 }, clock), true);
-    assert.equal(clock.at, 0);
+    assert.equal(clock.at, 10);
 });
 
 test("filter.set finds the bar of the tab by id, drops the empty optional args, and shutdown removes the filter", async () => {
