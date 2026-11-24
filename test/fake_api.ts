@@ -129,7 +129,12 @@ export function fake_api(options: FakeOptions = {}): { api: RouterApi; calls: st
                 if (options.first_display_error !== undefined) throw new Error(options.first_display_error);
                 return undefined;
             },
-            create: async (create: { displayedFolder: MailFolder }) => (calls.push(`mailTabs.create ${create.displayedFolder.id}`), undefined),
+            create: async (create: { displayedFolder: MailFolder }) => {
+                calls.push(`mailTabs.create ${create.displayedFolder.id}`);
+                displayed = create.displayedFolder;
+                if (options.first_display_error !== undefined) throw new Error(options.first_display_error);
+                return undefined;
+            },
             setQuickFilter: async () => {},
             setSelectedMessages: async (tab_id, ids) => void calls.push(`mailTabs.setSelectedMessages ${tab_id} ${ids.join(",")}`),
             onDisplayedFolderChanged: { addListener: (listener) => void folder_listeners.push(listener) },

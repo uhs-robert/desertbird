@@ -42,10 +42,15 @@ export async function active_mail_tab(scope: FolderScope): Promise<FolderMailTab
 /** Shows the folder in the mail tab of the key's window. A caller that already holds the tab passes it. */
 export async function show_folder(scope: FolderScope, folder: MailFolder, tab?: FolderMailTab): Promise<void> {
     tab ??= await active_mail_tab(scope);
+    const { id } = tab;
+    await display_despite_first_display_error(scope, folder, () => scope.api.mailTabs.update(id, { displayedFolder: folder }));
+}
+
+// Thunderbird throws on the first display of a folder it has not read yet, although the folder shows. The text alone proves nothing, so the tab must show the folder or still be loading it.
+async function display_despite_first_display_error(scope: FolderScope, folder: MailFolder, display: () => Promise<unknown>): Promise<void> {
     try {
-        await scope.api.mailTabs.update(tab.id, { displayedFolder: folder });
+        await display();
     } catch (error) {
-        // Thunderbird throws on the first display of a folder it has not read yet, although the folder shows. The text alone proves nothing, so the tab must show the folder or still be loading it.
         if (!is_first_display_error(error) || !(await is_showing_or_loading(scope, folder))) throw error;
     }
 }
@@ -58,7 +63,7 @@ export async function show_folder_and_focus_threads(scope: FolderFocusScope, fol
 
 /** Opens the folder in a new mail tab. `mailTabs.create` takes no window and no `active`: the tab opens in front, in the window the app has current, which is the window of the key. The new tab is the front tab, so its thread list takes the focus. */
 async function show_folder_in_new_tab(scope: FolderFocusScope, folder: MailFolder): Promise<void> {
-    await scope.api.mailTabs.create({ displayedFolder: folder });
+    await display_despite_first_display_error(scope, folder, () => scope.api.mailTabs.create({ displayedFolder: folder }));
     await ignore_refusal(focus_pane(scope, { pane: "threads" }));
 }
 
