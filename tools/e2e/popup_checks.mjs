@@ -1,4 +1,4 @@
-// Plain keys while a popup menu is open: j and k move the selection of a menu (the `menukeys` Experiment), and any other key the popup does not take must not reach Thunderbird's own shortcuts (j marks the selected message as junk). Takes the helpers of `run.mjs` as arguments, as `pages_checks.mjs` does.
+// Plain keys while a popup menu is open: j, k, h and l move the selection of a menu (the `menukeys` Experiment), and any other key the popup does not take must not reach Thunderbird's own shortcuts (j marks the selected message as junk). Takes the helpers of `run.mjs` as arguments, as `pages_checks.mjs` does.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +20,22 @@ const CONTEXT_MENU_REGION = "1080,140 200x305";
 
 // Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10. Thunderbird shows the Inbox as cards and opens the menu at the selected card, Betterbird as a table, so the submenu sits in different places.
 const MARK_SUBMENU_REGIONS = { thunderbird: "610,280 190x290", betterbird: "900,260 190x260" };
+
+// The menu bar (shown by Alt) and the menu under it, with the first menus of the bar. Measured on Betterbird at the e2e window size; Thunderbird has the same bar and its shots are read, not pinned.
+const MENU_BAR_REGION = "0,0 520x460";
+const ALT_F = ["-M", "alt", "-k", "f", "-m", "alt"];
+
+// The tallest span of rows one menu item takes (a row measured at 26 px, on both apps). The bar sits 28 px lower on Thunderbird, so the item is not pinned to a row.
+const MENU_ITEM_ROWS_AT_MOST = 40;
+const MENU_BAR_REGION_WIDTH = 520;
+// The rows of two shots of the menu bar region (P6 files, 3 bytes a pixel) in which any pixel differs.
+const differing_rows = (one, other) => {
+  const header = (ppm) => ppm.length % (MENU_BAR_REGION_WIDTH * 3);
+  const [one_start, other_start] = [header(one), header(other)];
+  const rows = new Set();
+  for (let at = 0; at < one.length - one_start; at++) if (one[one_start + at] !== other[other_start + at]) rows.add(Math.floor(at / (MENU_BAR_REGION_WIDTH * 3)));
+  return [...rows].sort((a, b) => a - b);
+};
 
 // DesertBird's toolbar button and its open popup on Betterbird, read from the shots. Thunderbird places the button elsewhere and is not pinned.
 const DESERTBIRD_BUTTON = { betterbird: [1127, 21] };
@@ -86,14 +102,71 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   const submenu_after_k = await submenu_pixels("popup_submenu_after_k");
   check(app, kind, "context menu open: k opens no Mark submenu", submenu_after_k.equals(submenu_closed));
   await shot("popup_submenu_after_k", "thread context menu after k, with the Mark submenu region closed");
-  // Control: the same region must see the submenu open, or the check above proves nothing. Home goes to the first toolbar button, eight j reach Mark (the other four buttons, Move To, Copy To, Tag, Mark) and Right opens its submenu.
+  // h and l, against the same closed baseline. Home goes to the first toolbar button, eight j reach Mark (the other four buttons, Move To, Copy To, Tag, Mark). A highlighted Mark opens nothing by itself, l opens its submenu, a real Right reaches the same pixels, and h closes it again. A control (the open submenu differs from the closed region) keeps every equality below from passing on a region that never changes.
   await instance.press(["-k", "Home"]);
   for (let step = 0; step < 8; step++) await instance.press(["j"]);
+  await sleep(600);
+  const at_mark = await submenu_pixels("popup_submenu_at_mark");
+  await shot("popup_submenu_at_mark", "thread context menu with Mark highlighted by Home and eight j, its submenu still closed");
+  state = await key_and_state(instance, ["l"], 800);
+  const after_l = await submenu_pixels("popup_submenu_after_l");
+  await shot("popup_submenu_after_l", "thread context menu with the Mark submenu opened by l");
+  check(app, kind, "context menu open: l opens the Mark submenu (the region differs from the closed one)", at_mark.equals(submenu_closed) && !after_l.equals(submenu_closed));
+  check(app, kind, "context menu open: l leaves the list alone", untouched(state), detail(state));
+  state = await key_and_state(instance, ["h"], 800);
+  const after_h = await submenu_pixels("popup_submenu_after_h");
+  await shot("popup_submenu_after_h", "thread context menu after h closed the Mark submenu");
+  check(app, kind, "context menu open: h closes the Mark submenu (the region is the closed baseline again)", after_h.equals(submenu_closed));
+  check(app, kind, "context menu open: h leaves the list alone", untouched(state), detail(state));
   await instance.press(["-k", "Right"]);
   await sleep(600);
-  const control_open = !(await submenu_pixels("popup_submenu_control")).equals(submenu_closed);
-  await shot("popup_submenu_control", "thread context menu with the Mark submenu opened by Home, eight j and Right");
-  check(app, kind, "context menu open: the Mark submenu region shows an open submenu (control)", control_open);
+  const after_right = await submenu_pixels("popup_submenu_after_right");
+  check(app, kind, "context menu open: a real Right reaches what l reached", after_right.equals(after_l));
+  await instance.press(["-k", "Left"]);
+  await sleep(600);
+  check(app, kind, "context menu open: a real Left reaches what h reached", (await submenu_pixels("popup_submenu_after_left")).equals(submenu_closed));
+  await instance.press(["-k", "Escape"]);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+
+  // A menu bar menu: Alt+F opens File on its first item, New, which has a submenu. Two j reach Close, which has none, so l (like a real Right) moves to the next menu, Edit. The shot and its region cover the menu bar and the open menu, so File against Edit reads from the pixels.
+  const bar_pixels = async (name) => (await instance.shot_region(name, MENU_BAR_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
+  const open_file_at_close = async (keys) => {
+    await instance.press(ALT_F);
+    await sleep(800);
+    for (const key of keys) await instance.press(key);
+    await sleep(500);
+  };
+  await open_file_at_close([["j"], ["j"]]);
+  const bar_at_close = await bar_pixels("popup_bar_at_close");
+  await shot("popup_bar_at_close", "File menu opened by Alt+F, Close highlighted by two j");
+  state = await key_and_state(instance, ["l"], 800);
+  const bar_after_l = await bar_pixels("popup_bar_after_l");
+  await shot("popup_bar_after_l", "after l on Close, which has no submenu: the Edit menu is open");
+  check(app, kind, "menu bar menu open, no submenu at the highlight: l moves to the next menu", !bar_after_l.equals(bar_at_close));
+  check(app, kind, "menu bar menu open: l leaves the list alone", untouched(state), detail(state));
+  state = await key_and_state(instance, ["h"], 800);
+  const bar_after_h = await bar_pixels("popup_bar_after_h");
+  await shot("popup_bar_after_h", "after h on the Edit menu: back to the File menu");
+  const bar_h_shot = bar_after_h;
+  await instance.press(["-k", "Escape"]);
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  await open_file_at_close([["-k", "Down"], ["-k", "Down"]]);
+  await instance.press(["-k", "Right"]);
+  await sleep(800);
+  const bar_after_right = await bar_pixels("popup_bar_after_right");
+  await shot("popup_bar_after_right", "after a real Right on Close: the Edit menu with its first item highlighted");
+  const rows_apart = differing_rows(bar_after_right, bar_after_l);
+  // Measured: a real Right opens Edit with its first enabled item highlighted and l opens it with none, so the two differ in the rows of that one item and nowhere else.
+  check(app, kind, "menu bar menu open: a real Right opens the same menu as l, apart from the highlighted first item", rows_apart.length > 0 && rows_apart.at(-1) - rows_apart[0] < MENU_ITEM_ROWS_AT_MOST, `rows apart ${rows_apart.at(0)} to ${rows_apart.at(-1)}`);
+  // A real Left from the same Edit state. An h that closed the menu, or stayed on Edit, differs from it in far more than one item.
+  await instance.press(["-k", "Left"]);
+  await sleep(800);
+  const bar_after_left = await bar_pixels("popup_bar_after_left");
+  await shot("popup_bar_after_left", "after a real Left on the Edit menu: the File menu");
+  const left_rows_apart = differing_rows(bar_after_left, bar_h_shot);
+  check(app, kind, "menu bar menu open: h opens the same menu as a real Left, apart from one item", !bar_h_shot.equals(bar_after_l) && (left_rows_apart.length === 0 || left_rows_apart.at(-1) - left_rows_apart[0] < MENU_ITEM_ROWS_AT_MOST), `rows apart ${left_rows_apart.at(0)} to ${left_rows_apart.at(-1)}`);
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
   await sleep(800);

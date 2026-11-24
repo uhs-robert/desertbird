@@ -194,7 +194,7 @@ async function install_keymap(): Promise<void> {
     const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send, label_style, label_colors, menu_keys]);
     if (tree_json === installed_tree_json) return;
     // First, so the menu keys listener is the first on each window root and takes a key before the runtimes of the keys below.
-    // The menu keys are optional: a missing or failing Experiment must not stop the other runtimes. keys.js then swallows j and k under an open menu.
+    // The menu keys are optional: a missing or failing Experiment must not stop the other runtimes. keys.js then swallows j, k, h and l under an open menu.
     try {
         await messenger.menukeys?.install({ keys: Object.entries(menu_keys).map(([key, direction]) => ({ key, direction })) });
     } catch (error) {

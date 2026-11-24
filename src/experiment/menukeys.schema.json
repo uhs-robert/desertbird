@@ -1,7 +1,7 @@
 [
   {
     "namespace": "menukeys",
-    "description": "Moves the selection of an open Thunderbird menu or popup with letter keys, in every window. A key press under an open menu is turned into an ArrowDown or ArrowUp sent at once to the open popup.",
+    "description": "Moves the selection of an open Thunderbird menu or popup with letter keys, in every window. A key press under an open menu is turned into an ArrowDown, ArrowUp, ArrowLeft or ArrowRight sent at once to the open popup.",
     "functions": [
       {
         "name": "install",
@@ -20,7 +20,7 @@
                   "type": "object",
                   "properties": {
                     "key": { "type": "string", "pattern": "^\\S$" },
-                    "direction": { "type": "string", "enum": ["down", "up"] }
+                    "direction": { "type": "string", "enum": ["down", "up", "left", "right"] }
                   }
                 }
               }

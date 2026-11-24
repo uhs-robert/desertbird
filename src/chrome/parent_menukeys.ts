@@ -1,4 +1,4 @@
-// The parent script of the `menukeys` API: j and k (or the keys the user binds to `menu.down` and `menu.up`) move the selection of an open native menu or popup, in every window. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `menukeys`: `getAPI(context)` returns `get_menukeys_api(context)` and `onShutdown` calls `shutdown()`.
+// The parent script of the `menukeys` API: j, k, h and l (or the keys the user binds to `menu.down`, `menu.up`, `menu.left` and `menu.right`) move the selection of an open native menu or popup, in every window. The build wraps it in an IIFE and a footer defines the ExtensionAPI class `menukeys`: `getAPI(context)` returns `get_menukeys_api(context)` and `onShutdown` calls `shutdown()`.
 // Thunderbird loads it at startup with the first install, which the background makes before the other key installs, so its listener is the first on each window root.
 
 import { create_menu_runtime } from "./menu_keys.ts";

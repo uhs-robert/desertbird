@@ -9,7 +9,7 @@ import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, GROUP_NAMES, compile_bindings, compile_default_keymap, is_menu_command, registry } from "./index.ts";
 import { tab_needs_of } from "./define.ts";
 import type { CommandGroup, TabNeed } from "./define.ts";
-import type { KeymapTree } from "../../shared/protocol.ts";
+import type { KeymapTree, MenuDirection } from "../../shared/protocol.ts";
 
 /**
  * What each kind of tab offers. A message document is the message pane, a message tab and a message window. An own page is the options or help page, which runs the body script and shows no message. A page tab is any other tab with a chrome page: calendar, tasks, chat, settings, the address book, `about:` pages and search results. A remote page (web content) takes the page tree too, and its runtime lets only `tab.close` run.
@@ -139,10 +139,13 @@ export function effective_menu_keymap(user: KeymapConfig["normal"] = {}): Keymap
 // The schema of `menukeys.install` takes `^\S$` with no `u` flag: one UTF-16 unit, so an astral character (an emoji) never passes.
 const is_menu_token = (keys: string): boolean => /^\S$/.test(keys) && parse_sequence(keys).tokens?.length === 1;
 
+/** The direction a menu command moves: its id is `menu.` and the direction. */
+export const menu_direction_of = (command_id: string): MenuDirection => command_id.slice("menu.".length) as MenuDirection;
+
 /** The key table of the `menukeys` Experiment: the typed character of each key and its direction. */
-export function menu_key_table(user: KeymapConfig["normal"] = {}): Record<string, "down" | "up"> {
-    const table: Record<string, "down" | "up"> = {};
-    for (const [keys, binding] of Object.entries(effective_menu_keymap(user).normal ?? {})) if (binding && !Array.isArray(binding)) table[keys] = binding.id === "menu.down" ? "down" : "up";
+export function menu_key_table(user: KeymapConfig["normal"] = {}): Record<string, MenuDirection> {
+    const table: Record<string, MenuDirection> = {};
+    for (const [keys, binding] of Object.entries(effective_menu_keymap(user).normal ?? {})) if (binding && !Array.isArray(binding)) table[keys] = menu_direction_of(binding.id);
     return table;
 }
 

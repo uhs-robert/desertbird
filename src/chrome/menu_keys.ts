@@ -5,7 +5,7 @@ import type { WindowListener } from "./runtime.ts";
 import type { MenuDirection, MenuKey } from "../shared/protocol.ts";
 
 // The app menu's key navigation ignores an event with no `code` (measured), and a menupopup ignores the lack.
-const ARROWS: Record<MenuDirection, [key: string, key_code: number]> = { down: ["ArrowDown", 40], up: ["ArrowUp", 38] };
+const ARROWS: Record<MenuDirection, [key: string, key_code: number]> = { down: ["ArrowDown", 40], up: ["ArrowUp", 38], left: ["ArrowLeft", 37], right: ["ArrowRight", 39] };
 // A popup shows from the moment it opens until it closes, and only `state` tells.
 const SHOWN_STATES = new Set(["showing", "open"]);
 

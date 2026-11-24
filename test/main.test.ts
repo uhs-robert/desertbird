@@ -198,7 +198,7 @@ test("the menu keys install first, so their listener is the first on each window
     await when_installed(1);
     await when_idle();
     assert.deepEqual(install_log, ["menukeys", "keys", "pages"]);
-    assert.deepEqual(menu_installs, [{ j: "down", k: "up" }]);
+    assert.deepEqual(menu_installs, [{ j: "down", k: "up", h: "left", l: "right" }]);
 });
 
 test("a user key for a menu command changes the installed menu keys", async () => {
@@ -206,7 +206,7 @@ test("a user key for a menu command changes the installed menu keys", async () =
     await start_background();
     await when_installed(1);
     await when_idle();
-    assert.deepEqual(menu_installs.at(-1), { j: "down", k: "up", n: "down" });
+    assert.deepEqual(menu_installs.at(-1), { j: "down", k: "up", h: "left", l: "right", n: "down" });
 });
 
 test("a user key in the menu section changes the menu keys and nothing else", async () => {

@@ -167,4 +167,6 @@ test("the menu keys list under menu.down and menu.up, marked as working in an op
     const entries = help_groups(registry, DEFAULT_KEYMAP, {}, {}, effective_menu_keymap({ n: { id: "menu.down" } })).flatMap((group) => group.entries);
     assert.deepEqual(entries.find((entry) => entry.id === "menu.down")?.keys.map((key) => [key.keys, key.where]), [["j", "menu"], ["n", "menu"]]);
     assert.deepEqual(entries.find((entry) => entry.id === "menu.up")?.keys.map((key) => [key.keys, key.where]), [["k", "menu"]]);
+    assert.deepEqual(entries.find((entry) => entry.id === "menu.left")?.keys.map((key) => [key.keys, key.where]), [["h", "menu"]]);
+    assert.deepEqual(entries.find((entry) => entry.id === "menu.right")?.keys.map((key) => [key.keys, key.where]), [["l", "menu"]]);
 });

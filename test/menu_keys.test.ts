@@ -73,7 +73,7 @@ function fake_window() {
 
 type FakeWindow = ReturnType<typeof fake_window>;
 
-async function setup(open: FakeWindow[] = [fake_window()], keys: { key: string; direction: "down" | "up" }[] = [{ key: "j", direction: "down" }, { key: "k", direction: "up" }]) {
+async function setup(open: FakeWindow[] = [fake_window()], keys: { key: string; direction: "down" | "up" | "left" | "right" }[] = [{ key: "j", direction: "down" }, { key: "k", direction: "up" }, { key: "h", direction: "left" }, { key: "l", direction: "right" }]) {
     const platform = stub_platform();
     const api = get_menukeys_api().menukeys;
     await api.install({ keys });
@@ -96,6 +96,32 @@ test("j and k under an open menu send keydown and keyup of the arrow at the popu
         assert.deepEqual(arrows(sent), ["keydown ArrowDown", "keyup ArrowDown", "keydown ArrowUp", "keyup ArrowUp"]);
         assert.deepEqual(sent.slice(0, 1).map((each) => each.keyCode), [40]);
         assert.deepEqual(sent.slice(2, 3).map((each) => each.keyCode), [38]);
+    } finally {
+        done();
+    }
+});
+
+test("h and l under an open menu send ArrowLeft and ArrowRight at the popup and take the key", async () => {
+    const win = fake_window();
+    const { done } = await setup([win]);
+    try {
+        const { node, sent } = fake_node("menupopup");
+        win.show(node);
+        const left = win.press("h");
+        assert.deepEqual([left.taken, left.stopped], [true, true]);
+        win.press("l");
+        assert.deepEqual(arrows(sent), ["keydown ArrowLeft", "keyup ArrowLeft", "keydown ArrowRight", "keyup ArrowRight"]);
+        assert.deepEqual([sent[0]?.keyCode, sent[2]?.keyCode], [37, 39]);
+    } finally {
+        done();
+    }
+});
+
+test("h and l with no popup open are left alone", async () => {
+    const win = fake_window();
+    const { done } = await setup([win]);
+    try {
+        assert.deepEqual([win.press("h").taken, win.press("l").taken], [false, false]);
     } finally {
         done();
     }
