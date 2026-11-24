@@ -46,7 +46,7 @@ test("the root lists each group by its name", () => {
 });
 
 test("the rows carry the short labels", () => {
-    assert.deepEqual(rows_of(mail_root, ["g", "p"]), { a: "Add-ons", t: "Themes", c: "Config" });
+    assert.deepEqual(rows_of(mail_root, ["g", "p"]), { a: "Add-ons", t: "Themes", c: "Config", m: "Mail", b: "Address book", l: "Calendar", k: "Tasks", h: "Chat", s: "Settings", n: "Account settings", d: "Saved files", y: "Activity manager", i: "Troubleshooting" });
     assert.deepEqual(rows_of(mail_root, ["F"]), { u: "Unread", r: "Reset", s: "Starred", a: "Attachments", f: "By text", t: "By tag", m: "By message" });
     assert.deepEqual(rows_of(mail_root, ["m", "f"]), { d: "In 1 day", t: "In 3 days", w: "In 1 week", c: "Cancel" });
     assert.deepEqual(rows_of(mail_root, ["y"]), { y: "Message", s: "Subject", f: "Sender", a: "Address", i: "Message ID" });
@@ -64,6 +64,7 @@ test("the moved keys run their commands, and the old keys are free", () => {
     assert.deepEqual(command_at(mail_root, ["g", "p", "a"]), { id: "app.open_page", args: { page: "addons" } });
     assert.deepEqual(command_at(mail_root, ["g", "p", "t"]), { id: "app.open_page", args: { page: "themes" } });
     assert.deepEqual(command_at(mail_root, ["g", "p", "c"]), { id: "app.open_page", args: { page: "config" } });
+    assert.deepEqual(command_at(mail_root, ["g", "p", "h"]), { id: "app.open_page", args: { page: "chat" } });
     assert.deepEqual(command_at(mail_root, ["F", "a"]), { id: "filter.set", args: { state: "attachment" } });
     assert.deepEqual(rows_of(mail_root, ["F", "m"]), { f: "Sender", s: "Subject", r: "Recipient", t: "Tag", l: "Mailing list", d: "Same day" });
     assert.deepEqual(command_at(mail_root, ["F", "r"]), { id: "filter.set", args: { state: "all" } });
@@ -85,7 +86,7 @@ test("the keys that act on the displayed message resolve in the message tree", (
 test("which-key in a message shows no row and no panel for a mail sequence that runs nothing there", () => {
     for (const keys of [["]"], ["F"], [";", ";"]]) assert.equal(which_key_panel(message_root, keys, settings_with({})), null, keys.join(" "));
     for (const key of ["]", "F", "s"]) assert.equal(rows_of(message_root, [])[key], undefined, key);
-    assert.deepEqual(rows_of(message_root, ["g", "p"]), { a: "Add-ons", c: "Config", t: "Themes" });
+    assert.deepEqual(rows_of(message_root, ["g", "p"]), { a: "Add-ons", t: "Themes", c: "Config", m: "Mail", b: "Address book", l: "Calendar", k: "Tasks", h: "Chat", s: "Settings", n: "Account settings", d: "Saved files", y: "Activity manager", i: "Troubleshooting" });
     assert.deepEqual(rows_of(message_root, [";"]), { f: "Focus link", c: "Click link", y: "Copy link" });
 });
 

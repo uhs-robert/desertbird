@@ -190,7 +190,7 @@
         "name": "appOpenPage",
         "type": "function",
         "async": true,
-        "description": "Opens one of three fixed pages in a tab. The parent holds the addresses.",
+        "description": "Opens one of thirteen fixed pages in a tab of the window, or switches to its open tab. Answers false for chat while chat is turned off. The parent holds the addresses.",
         "parameters": [
           {
             "name": "args",
@@ -204,7 +204,17 @@
                 "enum": [
                   "addons",
                   "themes",
-                  "config"
+                  "config",
+                  "mail",
+                  "addressbook",
+                  "calendar",
+                  "tasks",
+                  "chat",
+                  "settings",
+                  "accountsettings",
+                  "activity",
+                  "downloads",
+                  "support"
                 ]
               }
             }

@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 472 (Mail tab 157, Message 100, Message window 82, Compose window 23, Own pages 52, Other tabs 50, Text fields 4, Open menus 4)
+bound: 522 (Mail tab 167, Message 110, Message window 92, Compose window 23, Own pages 62, Other tabs 60, Text fields 4, Open menus 4)
 
 ### Mail tab
 
@@ -100,6 +100,16 @@ The thread list and the folder pane.
 | `gpa` | `app.open_page addons` |
 | `gpt` | `app.open_page themes` |
 | `gpc` | `app.open_page config` |
+| `gpm` | `app.open_page mail` |
+| `gpb` | `app.open_page addressbook` |
+| `gpl` | `app.open_page calendar` |
+| `gpk` | `app.open_page tasks` |
+| `gph` | `app.open_page chat` |
+| `gps` | `app.open_page settings` |
+| `gpn` | `app.open_page accountsettings` |
+| `gpd` | `app.open_page downloads` |
+| `gpy` | `app.open_page activity` |
+| `gpi` | `app.open_page support` |
 
 #### Message
 
@@ -342,6 +352,16 @@ A message in a tab or the message pane.
 | `gpa` | `app.open_page addons` |
 | `gpt` | `app.open_page themes` |
 | `gpc` | `app.open_page config` |
+| `gpm` | `app.open_page mail` |
+| `gpb` | `app.open_page addressbook` |
+| `gpl` | `app.open_page calendar` |
+| `gpk` | `app.open_page tasks` |
+| `gph` | `app.open_page chat` |
+| `gps` | `app.open_page settings` |
+| `gpn` | `app.open_page accountsettings` |
+| `gpd` | `app.open_page downloads` |
+| `gpy` | `app.open_page activity` |
+| `gpi` | `app.open_page support` |
 
 #### Message
 
@@ -506,6 +526,16 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `gpa` | `app.open_page addons` |
 | `gpt` | `app.open_page themes` |
 | `gpc` | `app.open_page config` |
+| `gpm` | `app.open_page mail` |
+| `gpb` | `app.open_page addressbook` |
+| `gpl` | `app.open_page calendar` |
+| `gpk` | `app.open_page tasks` |
+| `gph` | `app.open_page chat` |
+| `gps` | `app.open_page settings` |
+| `gpn` | `app.open_page accountsettings` |
+| `gpd` | `app.open_page downloads` |
+| `gpy` | `app.open_page activity` |
+| `gpi` | `app.open_page support` |
 
 #### Message
 
@@ -689,6 +719,16 @@ The options page and the help page.
 | `gpa` | `app.open_page addons` |
 | `gpt` | `app.open_page themes` |
 | `gpc` | `app.open_page config` |
+| `gpm` | `app.open_page mail` |
+| `gpb` | `app.open_page addressbook` |
+| `gpl` | `app.open_page calendar` |
+| `gpk` | `app.open_page tasks` |
+| `gph` | `app.open_page chat` |
+| `gps` | `app.open_page settings` |
+| `gpn` | `app.open_page accountsettings` |
+| `gpd` | `app.open_page downloads` |
+| `gpy` | `app.open_page activity` |
+| `gpi` | `app.open_page support` |
 
 #### DesertBird
 
@@ -777,6 +817,16 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `gpa` | `app.open_page addons` |
 | `gpt` | `app.open_page themes` |
 | `gpc` | `app.open_page config` |
+| `gpm` | `app.open_page mail` |
+| `gpb` | `app.open_page addressbook` |
+| `gpl` | `app.open_page calendar` |
+| `gpk` | `app.open_page tasks` |
+| `gph` | `app.open_page chat` |
+| `gps` | `app.open_page settings` |
+| `gpn` | `app.open_page accountsettings` |
+| `gpd` | `app.open_page downloads` |
+| `gpy` | `app.open_page activity` |
+| `gpi` | `app.open_page support` |
 
 #### DesertBird
 

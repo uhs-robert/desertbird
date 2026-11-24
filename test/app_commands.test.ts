@@ -8,11 +8,11 @@ import type { RouterApi } from "../src/background/router.ts";
 
 const ok = (id: string, args: Record<string, unknown>) => check_args(registry.get(id)!, args).ok;
 
-function app_fake(command_enabled = true, pane_focused = true) {
+function app_fake(command_enabled = true, pane_focused = true, page_offered = true) {
     const calls: string[] = [];
     const app = {
         appCommand: async ({ name }: { name: string }) => (calls.push(`appCommand ${name}`), command_enabled),
-        appOpenPage: async ({ windowId, page }: { windowId: number; page: string }) => void calls.push(`appOpenPage ${page}${windowId === 3 ? "" : ` in ${windowId}`}`),
+        appOpenPage: async ({ windowId, page }: { windowId: number; page: string }) => (calls.push(`appOpenPage ${page}${windowId === 3 ? "" : ` in ${windowId}`}`), page_offered),
         paneFocus: async ({ pane }: { pane: string }) => (calls.push(`paneFocus ${pane}`), pane_focused),
     };
     const notifications = { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") };
@@ -24,7 +24,7 @@ function app_fake(command_enabled = true, pane_focused = true) {
 }
 
 test("app.open_page and pane.focus take only the names the table lists", () => {
-    for (const page of ["addons", "themes", "config"]) assert.equal(ok("app.open_page", { page }), true, page);
+    for (const page of ["addons", "themes", "config", "mail", "addressbook", "calendar", "tasks", "chat", "settings", "accountsettings", "activity", "downloads", "support"]) assert.equal(ok("app.open_page", { page }), true, page);
     assert.equal(ok("app.open_page", { page: "https://example.org" }), false);
     assert.equal(ok("app.open_page", {}), false);
     for (const pane of ["folders", "threads", "message"]) assert.equal(ok("pane.focus", { pane }), true, pane);
@@ -35,7 +35,7 @@ test("the app keys bind their commands and add no warning, and u undoes", () => 
     const normal = DEFAULT_KEYMAP.normal ?? {};
     assert.deepEqual(normal["u"], { id: "msg.undo" });
     assert.deepEqual(normal["gC"], { id: "thread.open_conversation", label: "Open conversation" });
-    for (const [keys, page, label] of [["gpa", "addons", "Add-ons"], ["gpt", "themes", "Themes"], ["gpc", "config", "Config"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page }, label }, keys);
+    for (const [keys, page, label] of [["gpa", "addons", "Add-ons"], ["gpt", "themes", "Themes"], ["gpc", "config", "Config"], ["gpm", "mail", "Mail"], ["gpb", "addressbook", "Address book"], ["gpl", "calendar", "Calendar"], ["gpk", "tasks", "Tasks"], ["gph", "chat", "Chat"], ["gps", "settings", "Settings"], ["gpn", "accountsettings", "Account settings"], ["gpd", "downloads", "Saved files"], ["gpy", "activity", "Activity manager"], ["gpi", "support", "Troubleshooting"]] as const) assert.deepEqual(normal[keys], { id: "app.open_page", args: { page }, label }, keys);
     for (const keys of ["gx", "gT", "gc"]) assert.equal(normal[keys], undefined, keys);
     for (const [keys, pane, label] of [["gf", "folders", "Folder pane"], ["ge", "threads", "Thread list"], ["gm", "message", "Message pane"]] as const) assert.deepEqual(normal[keys], { id: "pane.focus", args: { pane }, label }, keys);
     assert.ok(registry.get("folder.collapse"), "the command stays in the registry");
@@ -56,6 +56,12 @@ test("each command calls only the chrome verb its needs lists", async () => {
     await fake.run("app.open_page", { page: "themes" });
     await fake.run("pane.focus", { pane: "message" });
     assert.deepEqual(fake.calls, ["appCommand cmd_openConversation", "appOpenPage themes", "paneFocus message"]);
+});
+
+test("app.open_page refuses with a message when the chrome says the page is not offered, as chat is while turned off", async () => {
+    const fake = app_fake(true, true, false);
+    await fake.run("app.open_page", { page: "chat" });
+    assert.deepEqual(fake.calls, ["appOpenPage chat", "notify Chat is turned off."]);
 });
 
 test("app.open_page from a message window opens the page in the main window and brings it to the front", async () => {

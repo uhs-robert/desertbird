@@ -70,7 +70,7 @@ test("a user key that unbinds or replaces M leaves no capture row behind", () =>
 test("m p stays unbound in the default keymap and g p holds the Thunderbird pages", () => {
     const { compiled } = compile_default_keymap();
     const normal = compiled.modes.normal as { children: Record<string, { children?: Record<string, unknown> }> };
-    assert.deepEqual(Object.keys((normal.children["g"]?.children?.["p"] as { children: object }).children).sort(), ["a", "c", "t"]);
+    assert.deepEqual(Object.keys((normal.children["g"]?.children?.["p"] as { children: object }).children).sort(), ["a", "b", "c", "d", "h", "i", "k", "l", "m", "n", "s", "t", "y"]);
     assert.equal(normal.children["m"]?.children?.["p"], undefined);
 });
 
