@@ -701,6 +701,23 @@ test("a ? commit after the list search passed the cap waits for it to end with n
     assert.equal(fake.said.at(-1), "2 of 2");
 });
 
+test("a folder change while a commit waits for the list search ends the search and commits nothing", async () => {
+    const fake = terms_fake({ search_runs_on: true });
+    await fake.run("filter.by", { field: "list" });
+    await fake.search.start(3, "forward");
+    await fake.type("inv");
+    const reads = long_list_search(fake, Infinity);
+    const commit = fake.search.commit(3, "inv");
+    await settle();
+    fake.timers.advance(100);
+    await settle();
+    fake.view.folder = { ...INBOX, id: "f-other", path: "/Other" };
+    await drain(fake, commit);
+    await assert.rejects(commit, /folder changed/);
+    assert.ok(!reads.includes("rows"), "no rows read in the new folder");
+    assert.deepEqual(fake.said, []);
+});
+
 test("Escape while a commit waits for the list search ends the wait and restores the earlier filter", async () => {
     const fake = terms_fake({ search_runs_on: true });
     await fake.run("filter.by", { field: "list" });

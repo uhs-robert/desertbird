@@ -120,14 +120,24 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     const wait = (ms: number) => new Promise<void>((resolve) => deps.timers.set(resolve, ms));
 
-    // `filter.set` stops waiting after 5 s, and the search of the list and date terms can run on. A commit counts and selects the final rows, so it waits for the end with no limit. Escape ends the wait.
+    // The start of a search job refuses the same way, so a folder change during a wait never commits in the new folder.
+    async function refuse_unless_here(window_id: number, search: LiveSearch): Promise<void> {
+        if (await still_here(window_id, search)) return;
+        forget_filter(search.tab_id);
+        leave_search(window_id, search);
+        throw new RuntimeRefusal("The folder changed, so the search ended.");
+    }
+
+    // `filter.set` stops waiting after 5 s, and the search of the list and date terms can run on. A commit counts and selects the final rows, so it waits for the end with no limit. Escape and a folder change end the wait.
     async function terms_search_ended(window_id: number, search: LiveSearch): Promise<void> {
         const filter = deps.api.filter;
         if (filter === undefined) return;
         while (await filter.searching({ tabId: search.tab_id })) {
             await wait(TERMS_SEARCH_POLL_MS);
             if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
+            await refuse_unless_here(window_id, search);
         }
+        await refuse_unless_here(window_id, search);
     }
 
     async function show_match(window_id: number, text: string, index: number, count: number, wrapped: boolean): Promise<void> {
