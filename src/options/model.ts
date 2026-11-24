@@ -1,7 +1,7 @@
 // The logic behind the options page, free of the DOM so tests drive it directly.
 
 import type { KeyBinding } from "../../vendor/desertfox/invocation.ts";
-import { DEFAULT_KEYMAP } from "../background/commands/index.ts";
+import { DEFAULT_KEYMAP, is_menu_command } from "../background/commands/index.ts";
 import { default_menu_keymap, menu_key_table } from "../background/commands/tab_keymaps.ts";
 import { parse_sequence } from "../../vendor/desertfox/keys/notation.ts";
 import { compile_effective_keymap } from "../background/config/keymap.ts";
@@ -100,7 +100,7 @@ export type KeymapBuild = { user_keymap: UserKeymap; messages: string[]; blocked
 /** Builds the user keymap from the edits and runs it through the compiler. A user binding the compiled tree does not run blocks the save, so a typo never reaches storage. Other compiler messages, such as a default key skipped because of a user key, are shown and do not block. */
 export function build_user_keymap(edits: BindingEdits, settings: Partial<Settings> = {}, menu_edits: BindingEdits = { removed: [], rows: [] }): KeymapBuild {
     const normal: NonNullable<UserKeymap["normal"]> = {};
-    if (edits.rows.some((row) => row.command.trim().startsWith("menu."))) return { error: "a menu command belongs in the menu keys section" };
+    if (edits.rows.some((row) => is_menu_command(row.command.trim()))) return { error: "a menu command belongs in the menu keys section" };
     for (const keys of edits.removed) normal[keys] = null;
     for (const row of edits.rows) {
         if (row.keys.trim() === "" || row.command.trim() === "") return { error: "every binding needs keys and a command" };
@@ -123,8 +123,7 @@ export function build_user_keymap(edits: BindingEdits, settings: Partial<Setting
     }
     // The table keeps a key only when it is one typed character that runs a menu command, so a row it lacks blocks the save.
     const table = menu_key_table(menu);
-    const direction_of = (command: string) => ({ "menu.down": "down", "menu.up": "up" } as Record<string, string>)[command];
-    const bad_menu_row = menu_edits.rows.find((row) => direction_of(row.command.trim()) === undefined || table[row.keys.trim()] !== direction_of(row.command.trim()));
+    const bad_menu_row = menu_edits.rows.find((row) => !is_menu_command(row.command.trim()) || table[row.keys.trim()] !== (row.command.trim() === "menu.down" ? "down" : "up"));
     if (bad_menu_row) return { error: `"${bad_menu_row.keys}" must be one typed character and the command menu.down or menu.up` };
     const user_keymap: UserKeymap = { normal, ...(Object.keys(menu).length > 0 && { menu }) };
     const { compiled, warnings } = compile_effective_keymap(user_keymap, settings);

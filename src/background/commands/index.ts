@@ -50,6 +50,9 @@ const define = (id: string, input: CommandDefinition) => registry.define(id, inp
 
 for (const group of Object.values(GROUPS)) for (const [id, input] of Object.entries(group.commands)) define(id, input);
 
+/** Whether the command is a menu key command (`menu.down`, `menu.up`): the one test the stored keymap, the options page and the menu key table share. */
+export const is_menu_command = (id: string): boolean => registry.get(id)?.needs?.includes("menu") === true;
+
 /** Ids of the commands `.` must not replay. */
 export const UNREPEATABLE_IDS: ReadonlySet<string> = new Set(Object.values(GROUPS).flatMap((group) => Object.entries(group.commands).filter(([, input]) => input.repeatable === false).map(([id]) => id)));
 

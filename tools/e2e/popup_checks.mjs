@@ -31,8 +31,11 @@ const CLOSED_AT_MOST = 0.05;
 const OPEN_AT_LEAST = 0.5;
 const panel_pixels = async (instance, name) => (await instance.shot_region(name, APP_MENU_PANEL_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
 
-// The Mark submenu region without its last 20 px on the menu's side, so a highlighted row of the menu itself cannot read as an open submenu.
-const submenu_only_region = (app) => MARK_SUBMENU_REGIONS[app].replace(/(\d+)x(\d+)$/, (_, width, height) => `${Number(width) - 20}x${height}`);
+// The Mark submenu region without 20 px on the side that touches the context menu, so a highlighted row of the menu itself cannot read as an open submenu. Betterbird opens the menu at the right edge of the window and its submenu to the left of it, so the menu is at the region's right. Thunderbird opens the menu at the selected card and its submenu to the right, so the menu is at the region's left.
+const submenu_only_region = (app) => {
+  const [, x, y, width, height] = MARK_SUBMENU_REGIONS[app].match(/^(\d+),(\d+) (\d+)x(\d+)$/).map(Number);
+  return app === "betterbird" ? `${x},${y} ${width - 20}x${height}` : `${x + 20},${y} ${width - 20}x${height}`;
+};
 
 export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected }) {
   const app = instance.app;
@@ -77,6 +80,15 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   check(app, kind, "context menu open: j and k leave the list alone", untouched(state), detail(state));
   const submenu_after_k = await submenu_pixels("popup_submenu_after_k");
   check(app, kind, "context menu open: k opens no Mark submenu", submenu_after_k.equals(submenu_closed));
+  await shot("popup_submenu_after_k", "thread context menu after k, with the Mark submenu region closed");
+  // Control: the same region must see the submenu open, or the check above proves nothing. Home goes to the first toolbar button, eight j reach Mark (the other four buttons, Move To, Copy To, Tag, Mark) and Right opens its submenu.
+  await instance.press(["-k", "Home"]);
+  for (let step = 0; step < 8; step++) await instance.press(["j"]);
+  await instance.press(["-k", "Right"]);
+  await sleep(600);
+  const control_open = !(await submenu_pixels("popup_submenu_control")).equals(submenu_closed);
+  await shot("popup_submenu_control", "thread context menu with the Mark submenu opened by Home, eight j and Right");
+  check(app, kind, "context menu open: the Mark submenu region shows an open submenu (control)", control_open);
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
   await sleep(800);

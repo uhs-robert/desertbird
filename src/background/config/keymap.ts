@@ -3,7 +3,7 @@
 import type { KeymapConfig } from "../../../vendor/desertfox/keymap.ts";
 import type { Settings } from "./settings.ts";
 import type { CompileResult } from "../../../vendor/desertfox/keys/compiler.ts";
-import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_bindings } from "../commands/index.ts";
+import { DEFAULT_KEYMAP, KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, compile_bindings, is_menu_command } from "../commands/index.ts";
 
 /** What the user stores: normal-mode bindings, and the menu keys in a section of their own. A `null` binding removes a default key. The two sections never mix: `menu` unbinds only a menu key, and `normal` never holds a `menu.*` command. */
 export type UserKeymap = Pick<KeymapConfig, "normal"> & { menu?: KeymapConfig["normal"] };
@@ -17,12 +17,10 @@ export function compile_effective_keymap(user: UserKeymap, settings: Partial<Set
     return compile_bindings(effective_keymap(user), settings, DEFAULT_KEYMAP);
 }
 
-const MENU_COMMAND = /^menu\./;
-
 /** Keeps the bindings that are objects or `null`. Stored data is untrusted. The `normal` section drops a `menu.*` command, which only the `menu` section may hold, so a stored key never replaces a mail-tab key. */
 function kept_bindings(raw: unknown, menu: boolean): KeymapConfig["normal"] | undefined {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
-    const kept = Object.entries(raw).filter(([, binding]) => binding === null || (typeof binding === "object" && !Array.isArray(binding) && typeof (binding as { id?: unknown }).id === "string" && MENU_COMMAND.test((binding as { id: string }).id) === menu));
+    const kept = Object.entries(raw).filter(([, binding]) => binding === null || (typeof binding === "object" && !Array.isArray(binding) && typeof (binding as { id?: unknown }).id === "string" && is_menu_command((binding as { id: string }).id) === menu));
     return Object.fromEntries(kept);
 }
 

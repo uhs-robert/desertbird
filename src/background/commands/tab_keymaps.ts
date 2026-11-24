@@ -6,7 +6,7 @@ import type { Invocation, KeyBinding } from "../../../vendor/desertfox/invocatio
 import { parse_sequence } from "../../../vendor/desertfox/keys/notation.ts";
 import { ANY_KEY } from "../../../vendor/desertfox/prefix_tree.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";
-import { GROUPS, GROUP_NAMES, compile_bindings, compile_default_keymap, registry } from "./index.ts";
+import { GROUPS, GROUP_NAMES, compile_bindings, compile_default_keymap, is_menu_command, registry } from "./index.ts";
 import { tab_needs_of } from "./define.ts";
 import type { CommandGroup, TabNeed } from "./define.ts";
 import type { KeymapTree } from "../../shared/protocol.ts";
@@ -132,8 +132,7 @@ export const default_menu_keymap = (): KeymapConfig => ({ normal: menu_keys(), g
  */
 export function effective_menu_keymap(user: KeymapConfig["normal"] = {}): KeymapConfig {
     const defaults = menu_keys();
-    const menu_ids = new Set(Object.values(defaults).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []).map((invocation) => invocation.id)));
-    const kept = Object.entries(user ?? {}).filter(([keys, binding]) => binding === null || (binding && !Array.isArray(binding) && menu_ids.has(binding.id) && is_menu_token(keys)));
+    const kept = Object.entries(user ?? {}).filter(([keys, binding]) => binding === null || (binding && !Array.isArray(binding) && is_menu_command(binding.id) && is_menu_token(keys)));
     return { normal: { ...defaults, ...Object.fromEntries(kept) }, group_names: GROUP_NAMES };
 }
 
