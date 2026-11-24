@@ -55,9 +55,9 @@ export const view: CommandGroup = {
                     values: ["from", "subject", "recipient", "tag", "list", "date"],
                     short: { from: "f", subject: "s", recipient: "r", tag: "t", list: "l", date: "d" },
                     description: {
-                        from: "Show the mail from the sender of the selected message.",
-                        subject: "Show the mail with the subject of the selected one.",
-                        recipient: "Show the mail to the first recipient of the selected one.",
+                        from: "Show the mail from the sender of the cursor message.",
+                        subject: "Show the mail with the subject of the cursor message.",
+                        recipient: "Show the mail to the first recipient of the cursor message.",
                         tag: "Show the mail with a tag of the selected messages.",
                         list: "Show the mail of the mailing list of the cursor message.",
                         date: "Show the mail of the day of the cursor message.",

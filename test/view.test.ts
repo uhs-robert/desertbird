@@ -349,12 +349,12 @@ test("filter.by adds to the remembered filter, swaps only the text, and drops th
     assert.deepEqual(calls.slice(1), ['{"unread":true,"text":{"text":"ann@example.org","author":true}}', '{"unread":true,"text":{"text":"Budget plan","subject":true}}']);
 });
 
-test("filter.by refuses a text field for several messages, ORs their tags, and refuses what the message lacks", async () => {
-    const several = by_message_fake({ 1: SAMPLE, 2: { ...SAMPLE, tags: ["$label2"] } }, [1, 2]);
+test("filter.by reads a text field from the first of several messages, ORs their tags, and refuses what the message lacks", async () => {
+    const several = by_message_fake({ 1: SAMPLE, 2: { ...SAMPLE, author: "Bob <bob@example.org>", tags: ["$label2"] } }, [1, 2]);
     await several.run("from");
-    assert.deepEqual(several.notices, ["Select one message."]);
+    assert.deepEqual(several.notices, []);
     await several.run("tag");
-    assert.deepEqual(several.calls, ['{"tags":{"mode":"any","tags":{"$label1":true,"$label2":true}}}']);
+    assert.deepEqual(several.calls, ['{"text":{"text":"ann@example.org","author":true}}', '{"text":{"text":"ann@example.org","author":true},"tags":{"mode":"any","tags":{"$label1":true,"$label2":true}}}']);
     const bare = by_message_fake({ 1: { author: "a@b.c", subject: "Re:", recipients: [], tags: [] } }, [1]);
     for (const field of ["subject", "recipient", "tag"]) await bare.run(field);
     assert.deepEqual(bare.notices, ["The selected message has no subject.", "The selected message has no recipient.", "The selected message has no tag."]);
@@ -519,6 +519,16 @@ test("a closed thread selects its root and replies, and F m l and F m d take the
     await fake.run("filter.by", { field: "date" });
     assert.deepEqual(fake.notices, []);
     assert.equal(fake.steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<ops.example.org>", dateUs: LIST_MAIL[2]!.date.getTime() * 1000 })}`);
+});
+
+test("on a closed thread, F m f, F m s and F m r read the root at the cursor row and do not refuse", async () => {
+    // Message 2 is the root at the cursor row, and 3 a reply the closed row also selects, listed first.
+    const fake = terms_fake({ ids: [3, 2], cursor_row: 4 });
+    fake.api.messages.get = async (id: number) => ({ id, date: DEV_DAY, author: `Sender <s${id}@example.org>`, subject: `Re: Subject ${id}`, recipients: [`r${id}@example.org`] }) as never;
+    for (const field of ["from", "subject", "recipient"]) await fake.run("filter.by", { field });
+    assert.deepEqual(fake.notices, []);
+    const texts = fake.steps.filter((step) => step.startsWith("setQuickFilter")).map((step) => JSON.parse(step.slice("setQuickFilter ".length)).text);
+    assert.deepEqual(texts, [{ text: "s2@example.org", author: true }, { text: "Subject 2", subject: true }, { text: "r2@example.org", recipients: true }]);
 });
 
 test("with nothing selected, F m l, F m d and F m f read the message at the cursor row", async () => {

@@ -37,8 +37,9 @@ export async function selected_or_cursor_ids(scope: HandlerScope<FilterTermsApi>
     return cursor_id === null ? [] : [cursor_id];
 }
 
-// The selection comes with the key, and its order is the list's, not the cursor's. The cursor row counts only while it is still part of that selection.
-async function cursor_message_id(scope: HandlerScope<FilterTermsApi>, ids: number[]): Promise<number> {
+/** The one message of `ids` a filter by the message reads: the cursor row while it is part of the selection, else the first selected. A closed thread selects its replies too, and its cursor row is the root. */
+// The selection comes with the key, and its order is the list's, not the cursor's.
+export async function cursor_message_id(scope: HandlerScope<FilterTermsApi>, ids: number[]): Promise<number> {
     if (ids.length === 1) return ids[0]!;
     const cursor_id = await cursor_row_message_id(scope);
     return cursor_id !== null && ids.includes(cursor_id) ? cursor_id : ids[0]!;

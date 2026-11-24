@@ -127,6 +127,11 @@ async function run_filter_by_message(instance, ctx) {
   await thread_keys(["F", "m", "d"], 1, "F m d on a clicked thread filters on the day of its root");
   await thread_keys(["F", "m", "l"], 1, "F m l on a clicked thread adds the list of its root");
   await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the clicked thread");
+  // The sender and subject keys read the root of the selected closed thread too, and refuse nothing.
+  await thread_keys(["F", "m", "f"], 1, "F m f on a closed thread filters on the sender of its root");
+  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after F m f");
+  await thread_keys(["F", "m", "s"], 1, "F m s on a closed thread filters on the subject of its root");
+  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after F m s");
 }
 
 export const piece = { ...section_piece({ section: "filter_by_message", run: run_filter_by_message }), profile_kind: "lists" };
