@@ -83,6 +83,14 @@ const ACTOR_PARENT_CEILING_BYTES = 9216;
 const ACTOR_HINTS_MAX_BYTES = 7680;
 const ACTOR_HINTS_CEILING_BYTES = 10240;
 
+// `experiment/context.js`, the context menu key (`, m`), loaded on the first call. It holds the row, header and compose field dispatch and the registration of the menu actor. See docs/design.md, "Context menu bundle".
+const CONTEXT_MAX_BYTES = 5691;
+const CONTEXT_CEILING_BYTES = 9216;
+
+// `experiment/context_actor_child.sys.mjs`, the context menu actor. It has no parent half and no `matches`, so a window global loads it only when `, m` meets a message body, a compose body or a page tab.
+const CONTEXT_ACTOR_MAX_BYTES = 1898;
+const CONTEXT_ACTOR_CEILING_BYTES = 3072;
+
 // `experiment/filter.js`, the add-on's own quick filter for the list and date terms, loaded on the first `filter.set` call: the first `F m l` or `F m d`, typed or keyed. See docs/design.md, "Filter bundle".
 const FILTER_MAX_BYTES = 5632;
 const FILTER_CEILING_BYTES = 8192;
@@ -117,6 +125,7 @@ const PARENTS = [
     { name: "composewin", entry: "src/chrome/parent_composewin.ts", max_bytes: COMPOSEWIN_MAX_BYTES },
     { name: "filter", entry: "src/chrome/parent_filter.ts", max_bytes: FILTER_MAX_BYTES },
     { name: "menukeys", entry: "src/chrome/parent_menukeys.ts", max_bytes: MENUKEYS_MAX_BYTES },
+    { name: "context", entry: "src/chrome/parent_context.ts", max_bytes: CONTEXT_MAX_BYTES },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,
@@ -133,6 +142,7 @@ const ACTORS = [
     { name: "page_actor_child", entry: "src/chrome/page_actor_child.ts", max_bytes: ACTOR_CHILD_MAX_BYTES },
     { name: "page_actor_parent", entry: "src/chrome/page_actor_parent.ts", max_bytes: ACTOR_PARENT_MAX_BYTES },
     { name: "page_hints_child", entry: "src/chrome/page_hints_child.ts", max_bytes: ACTOR_HINTS_MAX_BYTES },
+    { name: "context_actor_child", entry: "src/chrome/context_actor_child.ts", max_bytes: CONTEXT_ACTOR_MAX_BYTES },
 ];
 
 const shared_options = {

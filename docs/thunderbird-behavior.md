@@ -782,3 +782,50 @@ A capture listener for `popupshown` and `popuphidden` on `windowRoot` saw every 
 ### A native Enter after `j`
 
 A popup of five items over the thread list, the first active, and the timer TIP in the `j` listener. `wtype` typed `j` and Return in one call (a gap of about 1 ms), three times, and `j`, space, `j`, Return three times (`wtype` puts a space between text arguments, and the popup ignored it). Return activated the item the arrows had reached every time (B, then C): the timer ran before the next native key each time, about 0.4 ms after the `j`. Six runs under no load do not prove the order holds under load, so the queue the design describes stays.
+
+## Opening context menus by key
+
+Measured on Betterbird 153.8.0 and Thunderbird 153.7.0 ESR, headless, in a throwaway Experiment and MailExtension (93 trials per app, one fresh profile each). A trial sets up one target, fires one `contextmenu` event of a given kind, waits 900 ms and records every `popupshown` (which popup, where it sits on the screen after 500 ms, what it anchors to) next to a real `Shift+F10` on the same target. The window is 1280x720 at a device pixel ratio of 1. Both apps opened and did not open the same menu in all 93 trials. Only positions differ, because the thread list is a table in Betterbird and cards in Thunderbird.
+
+### Result per target
+
+The dispatch is `new win.MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 0, ... })` on one element. "Coords" means `screenX` and `screenY` set to a point inside the target element (`mozInnerScreenX` plus the client position).
+
+| Target | Dispatch target that works | Runtime | Position | Acts on |
+| --- | --- | --- | --- | --- |
+| Thread row (cursor row) | The row, a cell in it, or the table body. Not the tree element: Thunderbird ignores it | Experiment (chrome), event is trusted | Below the cursor row, at its right edge (`after_end`). Same place as `Shift+F10` | The selected messages, not the cursor row (see below) |
+| Folder row | The row, its inner container or the tree: all give the same menu | Experiment | Below the selected row, same as `Shift+F10` | The selected folder. The target is ignored |
+| Message header field | The recipient pill (`li[is="header-recipient"]`) opens the address menu. A plain header row (`simple-header-row`) opens the copy menu. An attachment item opens the attachment menu | Experiment | Pill: anchored below the pill with no coords. The other two need coords, else they sit at the screen corner (-2, -2) | The field |
+| Message body | Not the `document` (nothing opens). An element does: `body`, a paragraph, a link | Page actor child. A body script (content script) does not open it | Needs coords. With none the menu sits at the screen corner | The body, with the link menu on a link |
+| Compose body | An element (`body` or the caret's element). Not `document` | Page actor child. The compose script does not open it | Same as the message body | The editor |
+| Compose header fields | The address pill, the To input and the Subject input, each as the element | Experiment | Pill, To and Subject sit at the corner with no coords. With coords they open at the point | The field |
+| Page tab (web page, extension page) | An element (`body`, link, input). Not `document` | Page actor child | Same as the message body | The element under the point |
+
+### Does `isTrusted` matter
+
+Yes, for content documents, and not at all for chrome documents.
+
+- A `contextmenu` event built by chrome code (the Experiment) reports `isTrusted: true`, and the chrome targets (thread list, folder pane, header, compose header) open from it.
+- An event built by a content script (the body script and the compose script) reports `isTrusted: false`, is not cancelled and opens nothing, in the message pane, a message window and the compose body. Neither a button 0 nor a button 2 event helped, nor did the link or the document as target.
+- The same event built in a page actor child (privileged code in the page's process) reports `isTrusted: true` and opens the right menu in the message pane, a message window, the compose body and both kinds of page tab. So the body and compose runtimes cannot own this key from the content script. The actor child must dispatch.
+- A trusted event from `windowUtils.sendMouseEvent("contextmenu", ...)` on the page window did nothing: the function does not exist on either app.
+
+### Findings that shape the build
+
+- **Thread list acts on the selection.** A button 0 event anchors the menu to the cursor row (the row `currentIndex` names, or the row of the event target) but the menu works on the selected messages. With the selection on row 2 and the cursor on row 5, the menu opened under row 5 and the context selection stayed `[2]`. A button 2 event with the row's screen coordinates opens the menu at those coordinates and Thunderbird overrides the selection to the cursor row (`selectionIsOverridden` true, selection `[5]`, restored when the menu hides). A key that means "the cursor row" in a pick must use button 2 with coords.
+- **Folder pane acts on the selected row.** A button 0 event opened the menu under the selected row whatever the target was: another row, the tree or the row's inner node. A button 2 event with coords opened at the point. Whether it overrides the folder was read from the source and not measured.
+- **Content menus need coordinates.** With no `screenX` and `screenY` the menu opens at the top-left of the screen (-2, -2 or 0, 0) in every content target and in the compose and header fields that do not anchor to an element. With coords computed from the target element the menu opens at the point, about 30 px right of where `Shift+F10` puts it.
+- **The target must be an element.** Dispatch on `document` opened nothing in the message body, the compose body, the web page and the extension page.
+- **The message pane is not remote.** The message pane browser reports `remote: false` on both apps, so an actor reaches it in the main process. The existing page actor does not match message documents (`mailbox:` and `imap:` URLs) or the compose editor (`about:blank?compose`). The probe reached them with a second registration that has no `matches`.
+- **Two attempts at the body runtimes.** Attempt 1, an untrusted event from the body script, failed. Attempt 2, the same event from an actor child, worked. No further attempt was needed.
+
+### Through the key
+
+The command `, m` (`context.menu`) was run on both apps in the e2e pieces `default/context_menu`, `default/context_compose`, `message/context_menu` and `web/context_menu`, and each screenshot was read. The thread list, the folder pane, the message body, a message window opened after startup (body, sender, recipient pill and subject), a compose window opened after startup (body, Subject and To, in normal mode, since a field jump enters insert mode) and a web page and an extension page in a tab each opened the menu Thunderbird shows for them. An empty list opened nothing. With a menu already open the comma did nothing and the m was the access key of Move To, so the menu stayed one menu.
+
+### Not measured
+
+- A message tab. It shows the same `about:message` document as the pane and the window, so it is expected to behave like them.
+- `about:` pages (settings, add-ons, address book). The page actor does not match them and they bring their own menus.
+- The folder pane override of a button 2 event on another row, and what a chosen item then acts on. Only the opening was measured.
+- Which header element holds the focus after a key. The probe focused the element itself.

@@ -1,0 +1,23 @@
+[
+  {
+    "namespace": "context",
+    "description": "Opens the native context menu of what the focus is on in a main, message or compose window. The script loads when the first verb is called.",
+    "functions": [
+      {
+        "name": "open",
+        "type": "function",
+        "async": true,
+        "description": "Opens the context menu of the cursor row of the thread list, the selected folder, the focused header field or compose field, or, through the context menu actor, the message body, the compose body or the page. Answers false, with nothing done, when the focus has no target.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

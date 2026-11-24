@@ -19,6 +19,7 @@ const ZOOM_MAX_BYTES = Number(/ZOOM_MAX_BYTES = (\d+);/.exec(readFileSync(join(r
 const COMPOSEWIN_MAX_BYTES = Number(/COMPOSEWIN_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const FILTER_MAX_BYTES = Number(/FILTER_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const MENUKEYS_MAX_BYTES = Number(/MENUKEYS_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
+const CONTEXT_MAX_BYTES = Number(/CONTEXT_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 const COMPOSE_MAX_BYTES = Number(/COMPOSE_MAX_BYTES = (\d+);/.exec(readFileSync(join(root, "tools/build.mjs"), "utf8"))?.[1]);
 
 // The matcher side of the vendored tree and the chrome runtime. Nothing else may reach the privileged bundle.
@@ -54,7 +55,7 @@ const BANNED_IN_PARENT: [string, RegExp][] = [
 ];
 
 let out_dir = "";
-const PARENT_NAMES = ["keys", "overlay", "hints", "pages", "folderpane", "app", "zoom", "composewin", "filter", "menukeys"];
+const PARENT_NAMES = ["keys", "overlay", "hints", "pages", "folderpane", "app", "zoom", "composewin", "filter", "menukeys", "context"];
 const sources: Record<string, string> = {};
 const inputs: Record<string, string[]> = {};
 
@@ -106,7 +107,7 @@ test("each parent bundle stays within the size guard", () => {
     assert.ok(PARENT_MAX_BYTES > 0);
     for (const name of PARENT_NAMES) {
         const size = readFileSync(join(out_dir, `experiment/${name}.js`)).length;
-        const max_bytes = { app: APP_MAX_BYTES, keys: KEYS_MAX_BYTES, folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES, zoom: ZOOM_MAX_BYTES, composewin: COMPOSEWIN_MAX_BYTES, filter: FILTER_MAX_BYTES, menukeys: MENUKEYS_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
+        const max_bytes = { app: APP_MAX_BYTES, keys: KEYS_MAX_BYTES, folderpane: FOLDERPANE_MAX_BYTES, hints: HINTS_MAX_BYTES, pages: PAGES_MAX_BYTES, zoom: ZOOM_MAX_BYTES, composewin: COMPOSEWIN_MAX_BYTES, filter: FILTER_MAX_BYTES, menukeys: MENUKEYS_MAX_BYTES, context: CONTEXT_MAX_BYTES }[name] ?? PARENT_MAX_BYTES;
         assert.ok(size <= max_bytes, `${name}.js is ${size} bytes, over ${max_bytes}`);
     }
 });
@@ -181,7 +182,7 @@ test("the manifest injects the body script into message documents and the xpi ho
 
 test("the xpi holds the manifest and every file it names", () => {
     const listing = execFileSync("unzip", ["-Z1", join(out_dir, "desertbird.xpi")], { encoding: "utf8" }).split("\n");
-    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/app.schema.json", "experiment/app.js", "experiment/hints.schema.json", "experiment/hints.js", "experiment/pages.schema.json", "experiment/pages.js", "experiment/zoom.schema.json", "experiment/zoom.js", "experiment/composewin.schema.json", "experiment/composewin.js", "experiment/filter.schema.json", "experiment/filter.js", "experiment/menukeys.schema.json", "experiment/menukeys.js", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css", "popup/popup.html", "popup/popup.js", "popup/popup.css", "icons/desertbird.svg"]) assert.ok(listing.includes(file), file);
+    for (const file of ["manifest.json", "background.js", "experiment/keys.schema.json", "experiment/keys.js", "experiment/overlay.schema.json", "experiment/overlay.js", "experiment/folderpane.schema.json", "experiment/folderpane.js", "experiment/app.schema.json", "experiment/app.js", "experiment/hints.schema.json", "experiment/hints.js", "experiment/pages.schema.json", "experiment/pages.js", "experiment/zoom.schema.json", "experiment/zoom.js", "experiment/composewin.schema.json", "experiment/composewin.js", "experiment/filter.schema.json", "experiment/filter.js", "experiment/menukeys.schema.json", "experiment/menukeys.js", "experiment/context.schema.json", "experiment/context.js", "experiment/context_actor_child.sys.mjs", "overlay/cmdline.html", "overlay/cmdline.js", "overlay/cmdline.css", "overlay/hud.html", "overlay/hud.js", "overlay/hud.css", "help/help.html", "help/help.js", "help/help.css", "popup/popup.html", "popup/popup.js", "popup/popup.css", "icons/desertbird.svg"]) assert.ok(listing.includes(file), file);
     assert.ok(!listing.some((file) => file.startsWith("meta/")));
 });
 
@@ -189,6 +190,8 @@ test("the xpi holds the manifest and every file it names", () => {
 const ACTOR_ALLOWED_INPUTS: Record<string, RegExp[]> = {
     page_actor_child: [/^src\/chrome\/page_actor_child\.ts$/, /^src\/chrome\/page_actions\.ts$/, /^vendor\/desertfox\/keys\/token\.ts$/],
     page_actor_parent: [/^src\/chrome\/page_actor_parent\.ts$/],
+    // The context menu actor holds its one file and nothing of the key runtime.
+    context_actor_child: [/^src\/chrome\/context_actor_child\.ts$/],
     // The hint module a child loads on the first pick: the pick, the page controls and the shared labels and on-screen check.
     page_hints_child: [/^src\/chrome\/(page_hints_child|hint_pick|hint_targets)\.ts$/, /^src\/shared\/hint_(labels|view)\.ts$/],
 };
@@ -210,6 +213,21 @@ test("the page actor halves are ES modules that export their class, hold only al
         assert.ok(source.length <= number_of(guard), `${file} is ${source.length} bytes, over ${number_of(guard)}`);
         assert.ok(listing.includes(file), `the xpi holds ${file}`);
     }
+});
+
+test("the context menu actor is an ES module with no `matches`, no key code and no parent half, within its guard, and the context bundle loads it by URL", () => {
+    const file = "experiment/context_actor_child.sys.mjs";
+    const source = readFileSync(join(out_dir, file), "utf8");
+    assert.match(source, /^export \{[^}]*\bDesertBirdContextChild\b/m);
+    assert.doesNotMatch(source, /^\(\(\) => \{/m);
+    assert.doesNotMatch(source, /matches|JSWindowActorParent|importESModule/);
+    for (const input of bytes_by_input("context_actor_child")) assert.ok(ACTOR_ALLOWED_INPUTS["context_actor_child"]!.some((allowed) => allowed.test(input)), `${input} is not allowed in ${file}`);
+    for (const [banned, pattern] of BANNED_IN_PARENT) assert.ok(!pattern.test(source), `${file} contains ${banned}`);
+    assert.ok(source.length <= number_of("CONTEXT_ACTOR_MAX_BYTES"), `${file} is ${source.length} bytes, over ${number_of("CONTEXT_ACTOR_MAX_BYTES")}`);
+    assert.doesNotMatch(sources["context"]!, /DesertBirdContextChild/);
+    assert.deepEqual(inputs["context"]!.filter((input) => /context_actor_child|page_actor/.test(input)), []);
+    for (const name of ["keys", "pages", "app"]) assert.deepEqual(inputs[name]!.filter((input) => /context_(menu|actor)|parent_context/.test(input)), [], name);
+    assert.doesNotMatch(source, /page_actor/);
 });
 
 test("the hint module of the actor's child is an ES module that exports start, holds only allowlisted code, uses no banned API and stays within its guard", () => {

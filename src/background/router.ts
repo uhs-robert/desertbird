@@ -5,7 +5,7 @@ import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { EXPERIMENT_VERBS } from "../shared/protocol.ts";
-import type { AppApi, ComposewinApi, KeysApi, KeysInvocation, MenukeysApi, OverlayApi, PagesApi, ZoomApi } from "../shared/protocol.ts";
+import type { AppApi, ComposewinApi, ContextApi, KeysApi, KeysInvocation, MenukeysApi, OverlayApi, PagesApi, ZoomApi } from "../shared/protocol.ts";
 import type { CmdlineSessions } from "./cmdline/service.ts";
 import type { SearchSessions } from "./search/service.ts";
 import type { AttachmentsApi } from "./handlers/attachments.ts";
@@ -33,6 +33,7 @@ export type RouterApi = MessageApi & ViewApi & NotificationsApi & SnoozeApi & Fo
     composewin?: ComposewinApi | undefined;
     menukeys?: MenukeysApi | undefined;
     hints?: ThemedHints | undefined;
+    context?: ContextApi | undefined;
     zoom?: ZoomApi | undefined;
     cmdline: CmdlineSessions;
     search: SearchSessions;

@@ -318,3 +318,12 @@ test("a kind offers a command when it offers every need of it, which is what the
     for (const id of ["sort.set", "folder.open", "tab.switch", "filter.set", "motion.down", "step.unread", "pane.focus"]) assert.equal(offered(id), false, id);
     for (const id of ["search.message", "message.find_next", "message.find_prev"]) for (const kind of ["message", "window"] as const) assert.equal(offered_in(kind, registry.get(id) ?? {}), true, `${id} in ${kind}`);
 });
+
+test("`, m` opens the context menu in every tab kind and the mail tab, and the command needs the context Experiment and no command line name", () => {
+    assert.equal(leaf_at(compile_default_keymap().compiled.modes.normal as TreeBranch, ",", "m")?.id, "context.menu");
+    for (const kind of Object.keys(TAB_KINDS) as (keyof typeof TAB_KINDS)[]) assert.equal(leaf_at(compile_tab_keymap(kind).compiled.modes.normal as TreeBranch, ",", "m")?.id, "context.menu", kind);
+    const command = registry.get("context.menu")!;
+    assert.deepEqual(command.needs, ["main", "context.open"]);
+    assert.equal(command.name, undefined);
+    assert.equal(registry.list().some((each) => each.name === "context"), false);
+});

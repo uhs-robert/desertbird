@@ -194,6 +194,8 @@ export const EXPERIMENT_VERBS = {
     folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
     // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
     app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"], events: [] },
+    // Loaded on first use, like `folderpane`. Opens the native context menu of what the focus is on.
+    context: { functions: ["open"], events: [] },
     // Loaded on first use, like `folderpane`.
     zoom: { functions: ["get", "set"], events: [] },
     // Loaded at startup by the first install, since it takes the keys of the compose windows.
@@ -344,6 +346,15 @@ export interface ZoomGetArgs {
 export interface ZoomSetArgs {
     windowId: number;
     level: number;
+}
+
+export interface ContextOpenArgs {
+    windowId: number;
+}
+
+/** The `browser.context` API: the native context menu of what the focus is on in a main, message or compose window. Its script loads when the first call is made. `open` answers false, doing nothing, when the focus has no target. */
+export interface ContextApi {
+    open(args: ContextOpenArgs): Promise<boolean>;
 }
 
 /** The `browser.zoom` API: the zoom of the message pane or the page a main or message window shows. Its script loads when the first call is made. `get` answers null and `set` answers false when the front tab has nothing to zoom. */
