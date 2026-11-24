@@ -9,6 +9,11 @@ const SHIFT_F10 = ["-M", "shift", "-k", "F10", "-m", "shift"];
 // The app menu (hamburger) button at the e2e window size.
 const APP_MENU_BUTTON = [1218, 21];
 
+// The search box, and the Tab presses from it to the app menu button: the DesertBird button comes first, then the app menu button.
+const SEARCH_BOX = [560, 21];
+const TABS_FROM_SEARCH_TO_APP_MENU = 3;
+const APP_MENU_PANEL_REGION = "906,40 330x410";
+
 // Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10. Thunderbird shows the Inbox as cards and opens the menu at the selected card, Betterbird as a table, so the submenu sits in different places.
 const MARK_SUBMENU_REGIONS = { thunderbird: "610,280 190x290", betterbird: "900,260 190x260" };
 
@@ -19,6 +24,8 @@ const DESERTBIRD_HELP_ENTRY = [1100, 89];
 // The share of bytes two shots of the popup region differ in. A closed popup leaves at most a hover mark of the page below (measured 1.4%), an open one covers most of it (65%).
 const share_differing = (one, other) => one.reduce((count, byte, index) => count + (byte !== other[index] ? 1 : 0), 0) / one.length;
 const CLOSED_AT_MOST = 0.05;
+const OPEN_AT_LEAST = 0.5;
+const panel_pixels = async (instance, name) => (await instance.shot_region(name, APP_MENU_PANEL_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
 
 const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGIONS[instance.app], "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
 
@@ -63,14 +70,17 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
 
   // The last check moved the list, so the baseline is the selection now.
   start = first_selected(state);
-  // The app menu opened by the keyboard puts the focus inside the panel. A plain key must reach nothing there, also after an arrow key. Escape after a click leaves the focus on the button, where Space opens the menu.
-  await instance.click(...APP_MENU_BUTTON);
+  // The app menu opened by the keyboard puts the focus inside the panel. A plain key must reach nothing there, also after an arrow key. Escape after a click returns the focus to the thread list on Betterbird, and Space on the button would pick a row there instead of pressing it (the list is the key target unless a text field or an open menu has the focus). So Tab from the search box moves the focus to the button, and Enter presses it.
+  const panel_closed = await panel_pixels(instance, "popup_app_menu_panel_closed");
+  await instance.click(...SEARCH_BOX);
+  await sleep(500);
+  for (let tab = 0; tab < TABS_FROM_SEARCH_TO_APP_MENU; tab++) await instance.press(["-k", "Tab"]);
+  await sleep(500);
+  await instance.press(["-k", "Return"]);
   await sleep(1000);
-  await instance.press(["-k", "Escape"]);
-  await sleep(800);
-  await instance.press(["-k", "space"]);
-  await sleep(1000);
-  await shot("popup_app_menu_open_by_keyboard", "app menu opened by Space on the button");
+  const panel_open = await panel_pixels(instance, "popup_app_menu_panel_open");
+  check(app, kind, "app menu opens by Enter on its button", share_differing(panel_closed, panel_open) > OPEN_AT_LEAST, `differs from closed ${share_differing(panel_closed, panel_open).toFixed(3)}`);
+  await shot("popup_app_menu_open_by_keyboard", "app menu opened by Enter on the button");
   state = await key_and_state(instance, ["j"], 1200);
   check(app, kind, "app menu open by keyboard: j marks nothing as junk and moves nothing", untouched(state), detail(state));
   await instance.press(["-k", "Down"]);
