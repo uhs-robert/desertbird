@@ -4,7 +4,7 @@ import { define_message_filter, MESSAGE_FILTER_NAME, show_message_filter } from 
 import type { FilterPaneLike, MessageFilterState, QuickFilterManagerLike, SearchConstants } from "./filter_runtime.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
-import type { FilterSetArgs } from "../shared/protocol.ts";
+import type { FilterSearchingArgs, FilterSetArgs } from "../shared/protocol.ts";
 
 declare const ChromeUtils: { importESModule(url: string): { QuickFilterManager: QuickFilterManagerLike; setTimeout(run: () => void, ms: number): unknown } };
 declare const Ci: SearchConstants;
@@ -16,10 +16,11 @@ type FilterContext = ExtensionContext & { extension: { tabManager: { get(tab_id:
 let defined_in: QuickFilterManagerLike | null = null;
 
 export function get_filter_api(context: FilterContext) {
+    const pane_of = (tab_id: number) => context.extension.tabManager.get(tab_id).nativeTab.chromeBrowser?.contentWindow;
     return {
         filter: {
             set: guard("filter.set", async ({ tabId, listId, dateUs }: FilterSetArgs): Promise<boolean> => {
-                const pane = context.extension.tabManager.get(tabId).nativeTab.chromeBrowser?.contentWindow;
+                const pane = pane_of(tabId);
                 const bar = pane?.quickFilterBar;
                 if (!pane || !bar) throw new Error(`tab ${tabId} shows no message list`);
                 defined_in ??= ChromeUtils.importESModule("resource:///modules/QuickFilterManager.sys.mjs").QuickFilterManager;
@@ -31,6 +32,7 @@ export function get_filter_api(context: FilterContext) {
                 const { setTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
                 return show_message_filter(pane, bar, state, { now: () => Date.now(), wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) });
             }),
+            searching: guard("filter.searching", ({ tabId }: FilterSearchingArgs): boolean => pane_of(tabId)?.gViewWrapper?.searching === true),
         },
     };
 }

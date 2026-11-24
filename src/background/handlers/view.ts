@@ -47,7 +47,7 @@ export interface ViewApi {
     messages?: FilterTermsApi["messages"] & { tags: { list(): Promise<{ key: string; tag: string }[]> } };
     app?: FilterTermsApi["app"];
     /** Absent when its script did not load. Only the list and date filters need it. */
-    filter?: Pick<FilterApi, "set"> | undefined;
+    filter?: FilterApi | undefined;
     mailTabs: {
         query(query: { windowId: number; active: true }): Promise<MailTab[]>;
         update(tab_id: number, update: MailTabUpdate): Promise<unknown>;
@@ -122,27 +122,21 @@ function remember_filter(tab_id: number, filter: AppliedFilter): void {
 }
 
 // `setQuickFilter` clears every filter it does not know, so the message terms go back on after each call: after `F u`, `F s`, each step of `/` and its Escape. `F r` sets no terms and leaves them off.
-// Answers false when the search of the terms still ran at the limit of `filter.set`, so the rows can still change.
-async function apply_now(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<boolean> {
+async function apply_now(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
     const { by_message, ...quick } = filter;
     const terms_api = api.filter;
     // Refused before any change, so the tab keeps its filter and its hidden-bar flag.
     if (by_message !== undefined && terms_api === undefined) throw new RuntimeRefusal("The list and date filters need the DesertBird Experiment, which is not loaded.");
     await api.mailTabs.setQuickFilter(tab_id, quick);
-    if (by_message === undefined || terms_api === undefined) {
-        remember_filter(tab_id, filter);
-        return true;
-    }
-    let search_ended: boolean;
+    if (by_message === undefined || terms_api === undefined) return remember_filter(tab_id, filter);
     try {
-        search_ended = await terms_api.set(filter_set_args(tab_id, by_message));
+        await terms_api.set(filter_set_args(tab_id, by_message));
     } catch (error) {
         // The tab now shows the quick filter alone, and the memory must say so.
         remember_filter(tab_id, quick);
         throw error;
     }
     remember_filter(tab_id, filter);
-    return search_ended;
 }
 
 /** A filter to apply, or how to build it from the remembered one. */
@@ -152,11 +146,10 @@ export type FilterChange = AppliedFilter | ((remembered: AppliedFilter) => Appli
 // A change that builds on the remembered filter reads it inside the chain, so it builds on what the apply before it left, even one still in flight when its key was pressed.
 const applies_in_flight = new Map<number, Promise<void>>();
 
-/** Answers false when the list can still change because its search ran past the limit. */
-export function apply_filter(api: FilterApis, tab_id: number, change: FilterChange): Promise<boolean> {
+export function apply_filter(api: FilterApis, tab_id: number, change: FilterChange): Promise<void> {
     const apply = (applies_in_flight.get(tab_id) ?? Promise.resolve()).then(async () => {
         await filters_ready();
-        return apply_now(api, tab_id, typeof change === "function" ? change(remembered_filter(tab_id)) : change);
+        await apply_now(api, tab_id, typeof change === "function" ? change(remembered_filter(tab_id)) : change);
     });
     const queued = keep_chain(apply);
     applies_in_flight.set(tab_id, queued);

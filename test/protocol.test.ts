@@ -12,7 +12,7 @@ test("the Experiment exposes the fixed verb table", () => {
     assert.deepEqual(EXPERIMENT_VERBS.folderpane.functions, ["fold", "focused", "viewRowCount"]);
     assert.deepEqual(EXPERIMENT_VERBS.pages, { functions: ["install"], events: ["onInvocation"] });
     assert.deepEqual(EXPERIMENT_VERBS.composewin, { functions: ["install"], events: ["onInvocation"] });
-    assert.deepEqual(EXPERIMENT_VERBS.filter, { functions: ["set"], events: [] });
+    assert.deepEqual(EXPERIMENT_VERBS.filter, { functions: ["set", "searching"], events: [] });
 });
 
 test("an invocation payload is plain data", () => {

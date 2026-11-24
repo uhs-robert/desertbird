@@ -136,6 +136,7 @@ test("filter.set finds the bar of the tab by id, drops the empty optional args, 
         assert.equal(await api.filter.set({ tabId: 5, listId: "<a.b>", dateUs: null as never }), true);
         assert.equal(steps[0], `value ${MESSAGE_FILTER_NAME} {"listId":"<a.b>"} visible=true`);
         assert.ok(MESSAGE_FILTER_NAME in manager.filterDefsByName);
+        assert.equal(await api.filter.searching({ tabId: 5 }), false);
         await assert.rejects(api.filter.set({ tabId: 6, listId: "<a.b>" }), /filter\.set: tab 6 shows no message list/);
         shutdown();
         assert.deepEqual(manager.killed, [MESSAGE_FILTER_NAME]);

@@ -4,11 +4,11 @@
 import { ignore_refusal, keep_chain } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
-import type { AppApi, CmdlineSearchNote, SearchDirection, ViewRow } from "../../shared/protocol.ts";
+import type { AppApi, CmdlineSearchNote, FilterApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
 import { select_row } from "../handlers/thread_view.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
 import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
-import type { AppliedFilter, FilterApis } from "../handlers/view.ts";
+import type { AppliedFilter } from "../handlers/view.ts";
 import type { Timers } from "../hud/toasts.ts";
 import { create_folder_search } from "./folder_search.ts";
 import type { FolderSearchApi } from "./folder_search.ts";
@@ -17,10 +17,13 @@ import type { SearchRegisterStore } from "./register.ts";
 /** How long the filter waits after a keystroke. A burst of typing filters once, and a slow folder is not asked for each letter. */
 export const SEARCH_DEBOUNCE_MS = 150;
 
+// How often a commit asks whether the search of the list and date terms still runs.
+const TERMS_SEARCH_POLL_MS = 100;
+
 // The most rows one `app.viewRows` call returns.
 const BLOCK = 500;
 
-export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApis["filter"] } & Partial<Pick<FolderSearchApi, "folders">>;
+export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApi | undefined } & Partial<Pick<FolderSearchApi, "folders">>;
 
 export interface SearchDeps {
     api: SearchApi;
@@ -114,6 +117,16 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     const wait = (ms: number) => new Promise<void>((resolve) => deps.timers.set(resolve, ms));
 
+    // `filter.set` stops waiting after 5 s, and the search of the list and date terms can run on. A commit counts and selects the final rows, so it waits for the end with no limit. Escape ends the wait.
+    async function terms_search_ended(window_id: number, search: LiveSearch): Promise<void> {
+        const filter = deps.api.filter;
+        if (filter === undefined) return;
+        while (await filter.searching({ tabId: search.tab_id })) {
+            await wait(TERMS_SEARCH_POLL_MS);
+            if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
+        }
+    }
+
     async function show_match(window_id: number, text: string, index: number, count: number, wrapped: boolean): Promise<void> {
         const row = await row_at(window_id, index);
         if (row === undefined) throw new RuntimeRefusal("The list changed under the search.");
@@ -168,12 +181,13 @@ export function create_search_service(deps: SearchDeps): SearchService {
                     leave_search(window_id, search);
                     throw new RuntimeRefusal("The folder changed, so the search ended.");
                 }
-                const search_ended = await apply_filter(deps.api, search.tab_id, with_text(search.prior, query));
+                const wanted = with_text(search.prior, query);
+                // Enter right after the last keystroke finds its filter applied, and the search of that filter may still run. A second apply would restart it.
+                if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted)) await apply_filter(deps.api, search.tab_id, wanted);
+                if (wanted.by_message !== undefined) await terms_search_ended(window_id, search);
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
                 if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
-                // The list and date terms were still searching, so no rows yet does not mean no match. The search stays open for another Enter.
-                if (count === 0 && !search_ended) throw new RuntimeRefusal("The list is still filtering. Press Enter again.");
                 // No match keeps the search open, so the user can edit the text. Escape still restores the earlier filter.
                 if (count === 0) throw new RuntimeRefusal(describe_match(query, 0, 0, undefined));
                 await deps.register.write({ text: query, direction: search.direction, kind: "threads" });

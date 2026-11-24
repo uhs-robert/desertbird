@@ -19,6 +19,21 @@
             }
           }
         ]
+      },
+      {
+        "name": "searching",
+        "type": "function",
+        "async": true,
+        "description": "Answers whether the search of the mail tab's message list still runs.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "tabId": { "type": "integer" }
+            }
+          }
+        ]
       }
     ]
   }

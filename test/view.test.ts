@@ -458,7 +458,7 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
             tags: { list: async () => [] },
         },
         app: { viewRows: async ({ first }: { first: number }) => ({ current: options.cursor_row ?? 0, rows: first === options.cursor_row ? [{ index: first, id: 2, depth: 0, collapsed: false, unread: false, flags: 0 }] : [{ index: first, id: 9, depth: 0, collapsed: false, unread: false, flags: 0 }] }) },
-        filter: options.filter === "missing" ? undefined : { set: filter_set },
+        filter: options.filter === "missing" ? undefined : { set: filter_set, searching: async () => false },
         folderpane: undefined,
         notifications: { create: async (_id: string, notification: { message: string }) => (notices.push(notification.message), "n1") },
         keys: undefined,
@@ -466,14 +466,15 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
     const router = create_router(registry, api as unknown as RouterApi);
     const run = (command: string, args: Record<string, string>) => router.run({ command, args, count: 1, windowId: 3, messageIds: options.ids ?? [1] });
     const timers = fake_timers();
-    const search = create_search_service({ api: api as never, register: create_search_register(fake_storage().api.local), timers, say: async () => undefined });
+    const said: string[] = [];
+    const search = create_search_service({ api: api as never, register: create_search_register(fake_storage().api.local), timers, say: async (_window, text) => void said.push(text) });
     const type = async (text: string) => {
         const pending = search.type(3, text);
         await new Promise((resolve) => setImmediate(resolve));
         timers.advance(SEARCH_DEBOUNCE_MS);
         return pending;
     };
-    return { run, steps, notices, search, type, api };
+    return { run, steps, notices, search, type, api, timers, said };
 }
 
 test("F m l filters on the List-Id in angle brackets and F m d on the message date in microseconds, after a setQuickFilter that keeps the other filters", async () => {
@@ -640,15 +641,59 @@ test(":search waits for the stored filters to load and keeps their list filter",
     assert.deepEqual(fake.steps, ['setQuickFilter {"text":{"text":"invoice","subject":true,"author":true}}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
-test("a / commit that finds no rows while the list search still runs refuses with a retry note, not a no-match, and keeps the search open", async () => {
-    const { run, search, notices, api } = terms_fake({ search_runs_on: true });
-    await run("filter.by", { field: "list" });
-    // The rows of the list search have not come in yet.
-    api.app.viewRows = async () => ({ current: -1, rows: [] }) as never;
-    await search.start(3, "forward");
-    await assert.rejects(search.commit(3, "nothing"), /still filtering/);
-    assert.deepEqual(notices, []);
-    await search.cancel(3);
+/** A list search that runs on past the cap of filter.set for `polls` searching checks. The rows show one match while it runs and two after it ends. */
+function long_list_search(fake: ReturnType<typeof terms_fake>, polls: number) {
+    const reads: string[] = [];
+    fake.api.filter!.searching = async () => {
+        reads.push("searching");
+        return polls-- > 0;
+    };
+    const row = (index: number) => ({ index, id: index + 1, depth: 0, collapsed: false, unread: false, flags: 0 });
+    fake.api.app.viewRows = (async ({ first, last }: { first: number; last: number }) => {
+        reads.push("rows");
+        const rows = polls >= 0 ? [row(0)] : [row(0), row(1)];
+        return { current: -1, rows: rows.filter((each) => each.index >= first && each.index <= last) };
+    }) as never;
+    return reads;
+}
+
+const drain = async (fake: ReturnType<typeof terms_fake>, done: Promise<unknown>) => {
+    let finished = false;
+    void done.finally(() => (finished = true)).catch(() => undefined);
+    for (let turn = 0; turn < 50 && !finished; turn++) {
+        await settle();
+        fake.timers.advance(100);
+    }
+};
+
+test("a ? commit after the list search passed the cap waits for it to end with no new apply, then counts and selects the final rows", async () => {
+    const fake = terms_fake({ search_runs_on: true });
+    await fake.run("filter.by", { field: "list" });
+    await fake.search.start(3, "backward");
+    await fake.type("inv");
+    const applies = fake.steps.length;
+    const reads = long_list_search(fake, 2);
+    const commit = fake.search.commit(3, "inv");
+    await drain(fake, commit);
+    await commit;
+    assert.equal(fake.steps.length, applies, "no apply restarts the running search");
+    assert.deepEqual(reads.slice(0, 4), ["searching", "searching", "searching", "rows"]);
+    assert.equal(fake.said.at(-1), "2 of 2");
+});
+
+test("Escape while a commit waits for the list search ends the wait and restores the earlier filter", async () => {
+    const fake = terms_fake({ search_runs_on: true });
+    await fake.run("filter.by", { field: "list" });
+    await fake.search.start(3, "forward");
+    await fake.type("inv");
+    long_list_search(fake, Infinity);
+    const commit = fake.search.commit(3, "inv");
+    await settle();
+    const cancel = fake.search.cancel(3);
+    await drain(fake, commit);
+    await assert.rejects(commit, /cancelled/);
+    await cancel;
+    assert.deepEqual(fake.steps.slice(-2), ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
 test(":search keeps the list filter under its text", async () => {
