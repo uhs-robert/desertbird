@@ -61,6 +61,12 @@ export interface BodyPendingRequest {
     tree?: "own" | "window";
 }
 
+/** Insert mode started or ended in a message document, for the mode label. The background takes the window from the sender. */
+export interface BodyModeRequest {
+    type: "body.mode";
+    mode: "insert" | "normal";
+}
+
 /** Ctrl+E in a compose body. The background takes the window from the sender and runs `compose.edit_external` there. */
 export interface ComposeEditRequest {
     type: "compose.edit";

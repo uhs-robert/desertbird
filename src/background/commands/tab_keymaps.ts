@@ -18,10 +18,10 @@ import type { KeymapTree } from "../../shared/protocol.ts";
  * A compose window (`compose`) is a message being written: its body and its address and subject fields. It takes only the commands of `COMPOSE_COMMANDS`, and no other, so `COMPOSE_COMMANDS` is what keeps its keys safe, and the offered needs only filter among them.
  */
 export const TAB_KINDS = {
-    message: ["message", "tab", "line", "body", "close", "pane", "main"],
-    own: ["tab", "line", "body", "close", "main"],
+    message: ["message", "tab", "line", "body", "close", "pane", "main", "typing"],
+    own: ["tab", "line", "body", "close", "main", "typing"],
     page: ["tab", "page", "typing", "line", "close", "main"],
-    window: ["message", "line", "body", "close", "main"],
+    window: ["message", "line", "body", "close", "main", "typing"],
     compose: ["compose", "main", "tab"],
 } as const satisfies Record<string, readonly TabNeed[]>;
 

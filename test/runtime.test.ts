@@ -14,6 +14,8 @@ import { StubExtensionError, stub_platform } from "./chrome_stubs.ts";
 
 class FakeWindow implements KeyTarget {
     listeners = new Set<(event: KeydownEvent) => void>();
+    /** The bubble-phase keydown listeners, which run after Thunderbird's own handlers. */
+    bubble_listeners = new Set<(event: KeydownEvent) => void>();
     tab_listeners = new Set<() => void>();
     blur_listeners = new Set<() => void>();
     adds = 0;
@@ -52,19 +54,20 @@ class FakeWindow implements KeyTarget {
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     addEventListener(type: "blur", listener: () => void, capture: boolean): void;
-    addEventListener(type: string, listener: (event?: any) => void) {
+    addEventListener(type: string, listener: (event?: any) => void, capture?: boolean) {
         if (type === "blur") return void this.blur_listeners.add(listener);
         if (type === "TabSelect") return void this.tab_listeners.add(listener as () => void);
+        if (capture === false) return void this.bubble_listeners.add(listener);
         this.adds++;
         this.listeners.add(listener);
     }
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     removeEventListener(type: "blur", listener: () => void, capture: boolean): void;
-    removeEventListener(type: string, listener: (event?: any) => void) {
+    removeEventListener(type: string, listener: (event?: any) => void, capture?: boolean) {
         if (type === "blur") return void this.blur_listeners.delete(listener);
         if (type === "TabSelect") return void this.tab_listeners.delete(listener as () => void);
-        this.listeners.delete(listener);
+        (capture === false ? this.bubble_listeners : this.listeners).delete(listener);
     }
     /** A tab switch with no key: a click on the tab bar. */
     select_tab() {
@@ -114,10 +117,11 @@ class FakeWindow implements KeyTarget {
 
 interface KeyResult {
     cancelled: boolean;
+    stopped: boolean;
 }
 
 function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> = {}): KeyResult {
-    const result = { cancelled: false };
+    const result = { cancelled: false, stopped: false };
     const event: KeydownEvent = {
         key,
         code: "",
@@ -127,12 +131,14 @@ function press(window: FakeWindow, key: string, options: Partial<KeydownEvent> =
         metaKey: false,
         target: { localName: "tbody" },
         preventDefault: () => void (result.cancelled = true),
-        stopPropagation: () => {},
+        stopPropagation: () => void (result.stopped = true),
         ...options,
     };
     // The loading id on the target stands for a focus in the overlay browser whose page is not ready.
     window.overlay_loading = (event.target as { id?: string }).id === OVERLAY_LOADING_ID;
     for (const listener of [...window.listeners]) listener(event);
+    // A test sets `defaultPrevented` in the options for an Escape that Thunderbird's own handler used.
+    if (!result.stopped) for (const listener of [...window.bubble_listeners]) listener(event);
     return result;
 }
 
@@ -154,6 +160,7 @@ const tree = () => ({
             ":": leaf("cmdline.open", "background"),
             ".": leaf("repeat.last", "chrome"),
             v: leaf("visual.toggle", "chrome"),
+            i: leaf("mode.insert", "chrome"),
             "<Space>": unrepeatable_chrome("select.toggle"),
             w: { kind: "branch", children: { r: leaf("pane.resize_mode", "chrome") } },
             "<C-b>": { kind: "branch", children: { y: leaf("msg.read", "background") } },
@@ -1913,4 +1920,169 @@ test("a labels-done mark bumped during a command line hold does not end it", () 
     window.hints_done++;
     assert.equal(press(window, "j").cancelled, true, "the hold still swallows the key");
     assert.deepEqual(emitted.map((invocation) => invocation.command), ["cmdline.open"]);
+});
+
+const enter_insert = (window: FakeWindow) => press(window, "i");
+
+test("i starts insert mode in the thread list: the label hears it, and plain keys and chords reach Thunderbird with no binding run", () => {
+    const { windows, emitted, modes, pending, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    assert.equal(enter_insert(window).cancelled, true);
+    assert.deepEqual(modes, ["insert"]);
+    for (const key of ["j", "x", "f", ":", ".", "v", "w", "r", "g", "d", "3", "<Space>"]) {
+        const result = press(window, key === "<Space>" ? " " : key);
+        assert.deepEqual([result.cancelled, result.stopped], [false, false], key);
+    }
+    assert.equal(press(window, "b", { ctrlKey: true }).cancelled, false);
+    assert.equal(press(window, "y").cancelled, false, "the second key of a chord prefix is plain text too");
+    assert.deepEqual([emitted, pending, window.selected, window.select_events], [[], [], 0, 0]);
+});
+
+test("Escape ends insert mode, tells the label, and lets Thunderbird see the key", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_insert(window);
+    const result = press(window, "Escape");
+    assert.deepEqual([result.cancelled, result.stopped], [false, false]);
+    assert.deepEqual(modes, ["insert", "normal"]);
+    assert.equal(press(window, "j").cancelled, true);
+    assert.equal(window.selected, 1, "normal mode again");
+});
+
+test("an Escape that Thunderbird used keeps insert mode, and the next Escape ends it", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_insert(window);
+    press(window, "Escape", { defaultPrevented: true });
+    assert.deepEqual(modes, ["insert"]);
+    assert.equal(press(window, "j").cancelled, false, "still insert mode");
+    press(window, "Escape");
+    assert.deepEqual(modes, ["insert", "normal"]);
+});
+
+test("Escape in insert mode ends insert mode before it ends a multi-selection, and the next Escape ends the selection", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.cursor = 3;
+    window.range = [2, 4];
+    enter_insert(window);
+    assert.deepEqual(window.chosen, [2, 3, 4], "entering insert mode keeps the selection");
+    press(window, "Escape");
+    assert.deepEqual([modes, window.chosen], [["insert", "normal"], [2, 3, 4]]);
+    assert.equal(press(window, "Escape").cancelled, true, "the second Escape ends the selection as before");
+    assert.deepEqual(window.chosen, [3]);
+});
+
+test("insert mode ends visual mode and a pick when it starts, so no old mode comes back after Escape", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "v");
+    enter_insert(window);
+    assert.deepEqual(modes, ["visual", "insert"], "the label goes straight from visual to insert");
+    press(window, "Escape");
+    assert.deepEqual(modes, ["visual", "insert", "normal"]);
+    const picked = setup();
+    picked.runtime.install(tree());
+    press(picked.windows[0]!, " ");
+    enter_insert(picked.windows[0]!);
+    press(picked.windows[0]!, "Escape");
+    assert.equal(press(picked.windows[0]!, "Escape").cancelled, false, "the pick ended when insert mode started, so this Escape belongs to Thunderbird");
+});
+
+test("insert mode works with the folder pane in focus, and keys there reach Thunderbird", () => {
+    const { windows, emitted, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.folder = { rows: 5, selected: 2 };
+    enter_insert(window);
+    assert.equal(press(window, "j").cancelled, false);
+    assert.deepEqual([window.folder.selected, emitted, modes], [2, [], ["insert"]]);
+    press(window, "Escape");
+    assert.equal(press(window, "j").cancelled, true);
+    assert.equal(window.folder.selected, 3);
+});
+
+test("a tab change, a window blur and a closed window end insert mode, and a reopened window starts clean", () => {
+    const ends: [string, (window: FakeWindow) => void][] = [
+        ["tab change", (window) => window.select_tab()],
+        ["window blur", (window) => window.blur()],
+    ];
+    for (const [name, end] of ends) {
+        const fixture = setup();
+        fixture.runtime.install(tree());
+        const window = fixture.windows[0]!;
+        enter_insert(window);
+        end(window);
+        assert.deepEqual(fixture.modes, ["insert", "normal"], name);
+        assert.equal(press(window, "j").cancelled, true, name);
+        assert.equal(window.selected, 1, name);
+    }
+    const closing = setup();
+    closing.runtime.install(tree());
+    enter_insert(closing.windows[0]!);
+    closing.unload(closing.windows[0]!);
+    assert.deepEqual(closing.modes, ["insert", "normal"]);
+    closing.load(closing.windows[0]!);
+    assert.equal(press(closing.windows[0]!, "j").cancelled, true);
+});
+
+test("a key in the reading pane ends insert mode and runs as it does in normal mode, and a key in another window ends it too", () => {
+    const pane = setup();
+    pane.runtime.install(tree());
+    enter_insert(pane.windows[0]!);
+    pane.windows[0]!.in_reading_pane = true;
+    assert.equal(press(pane.windows[0]!, "j").cancelled, true, "the reading pane swallows plain keys in normal mode");
+    assert.deepEqual(pane.modes, ["insert", "normal"]);
+    pane.windows[0]!.in_reading_pane = false;
+    assert.equal(press(pane.windows[0]!, "j").cancelled, true);
+    assert.equal(pane.windows[0]!.selected, 1, "insert mode did not come back");
+
+    const other = setup();
+    other.runtime.install(tree());
+    const second = new FakeWindow();
+    other.windows.push(second);
+    other.load(second);
+    enter_insert(other.windows[0]!);
+    press(second, "j");
+    assert.deepEqual(other.modes, ["insert", "normal"]);
+    assert.equal(press(other.windows[0]!, "j").cancelled, true, "the first window is in normal mode again");
+});
+
+test("a text field keeps insert mode, and its Escape that cleared the filter leaves insert mode on", () => {
+    const { windows, modes, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_insert(window);
+    window.text_field = true;
+    const field = { target: { localName: "input" } };
+    assert.equal(press(window, "x", field).cancelled, false);
+    press(window, "Escape", { ...field, defaultPrevented: true });
+    assert.deepEqual([modes, emitted], [["insert"], []]);
+    press(window, "Escape", field);
+    assert.deepEqual(modes, ["insert", "normal"]);
+});
+
+test("a shutdown drops insert mode, and a fresh install starts in normal mode", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    enter_insert(windows[0]!);
+    runtime.shutdown();
+    runtime.install(tree());
+    assert.equal(press(windows[0]!, "j").cancelled, true);
+});
+
+test("a count before i does not start a repeat of it, and . after insert mode runs nothing", () => {
+    const { windows, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "x");
+    enter_insert(window);
+    press(window, "Escape");
+    press(window, ".");
+    assert.deepEqual(emitted.map((event) => event.command), ["msg.archive", "msg.archive"], "the dot repeats x, the last repeatable key, not i");
 });

@@ -904,3 +904,47 @@ test("a labels-done mark bumped during a command line hold does not end it", () 
     assert.equal(press(window, "j").cancelled, true, "the hold still swallows the key");
     assert.deepEqual(invocations().map((event) => event.command), ["cmdline.open"]);
 });
+
+test("i in the header of a message tab and of a message window starts insert mode, and Escape ends it", () => {
+    for (const in_window of [false, true]) {
+        const { windows, runtime, events, invocations, scrolls } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        window.situation = "message";
+        window.message_window = in_window;
+        assert.equal(press(window, "i").cancelled, true);
+        assert.deepEqual(modes(events), ["insert"], String(in_window));
+        for (const key of ["j", "d", "a", "g", "q"]) assert.equal(press(window, key).cancelled, false, key);
+        assert.deepEqual([invocations(), scrolls], [[], []], "no binding runs while the flag is set");
+        press(window, "Escape");
+        assert.deepEqual(modes(events), ["insert", "normal"]);
+        assert.equal(press(window, "j").cancelled, true, "j scrolls again");
+    }
+});
+
+test("an Escape that Thunderbird used keeps insert mode in a message tab, and the next one leaves it", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    press(window, "i");
+    window.thunderbird_uses = () => true;
+    press(window, "Escape");
+    assert.deepEqual(modes(events), ["insert"]);
+    window.thunderbird_uses = null;
+    press(window, "Escape");
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+});
+
+test("a key that arrives in the message body while the header was in insert mode ends the mode", () => {
+    const { windows, runtime, events } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.situation = "message";
+    press(window, "i");
+    window.situation = "typing";
+    press(window, "j");
+    assert.deepEqual(modes(events), ["insert", "normal"]);
+    window.situation = "message";
+    assert.equal(press(window, "j").cancelled, true, "the header scrolls again: the mode is gone, not just hidden");
+});

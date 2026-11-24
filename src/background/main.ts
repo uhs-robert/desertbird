@@ -346,7 +346,7 @@ const bridge = create_bridge_port({
 });
 
 const compose_requests = create_compose_requests((window_id) => router.run({ command: "compose.edit_external", args: {}, count: 1, windowId: window_id, messageIds: [] }));
-const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
+const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, on_mode: (event) => on_key_event(event), run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
 
 const popup_requests = create_popup_requests({ popup_url: () => messenger.runtime.getURL(POPUP_PAGE), target_window: last_focused_main_window, run: (invocation) => router.run(invocation) });
 
