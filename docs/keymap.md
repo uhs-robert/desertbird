@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 457 (Mail tab 154, Message 98, Message window 80, Compose window 22, Own pages 50, Other tabs 49, Text fields 4)
+bound: 459 (Mail tab 154, Message 98, Message window 80, Compose window 22, Own pages 50, Other tabs 49, Text fields 4, Open menus 2)
 
 ### Mail tab
 
@@ -824,5 +824,16 @@ A text field in a page tab or in the mail tab (the quick filter, the search box)
 | `<A-k>` | `tab.prev` |
 | `<Escape>` | `mode.escape` |
 | `<C-[>` | `mode.escape` |
+
+### Open menus
+
+A native menu or popup is open (a context menu, a menu bar menu, a dropdown, the app menu opened by the keyboard) in any window, dialogs included. These keys move the selection and are rebindable. A key you set to `menu.down` or `menu.up` must be one typed character. The access keys of the menu lose the keys that move it.
+
+#### Single keys
+
+| Key | Command |
+| --- | --- |
+| `j` | `menu.down` |
+| `k` | `menu.up` |
 
 <!-- END generated -->

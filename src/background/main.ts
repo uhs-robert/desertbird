@@ -3,9 +3,9 @@
 import { COMPILED_KEYMAP_VERSION, KEYMAP_STORAGE_KEY, SEARCH_HISTORY_STORAGE_KEY } from "../shared/protocol.ts";
 import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
-import type { AppApi, ComposewinApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, OverlayApi, PagesApi } from "../shared/protocol.ts";
+import type { AppApi, ComposewinApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, MenukeysApi, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
-import { COMPOSE_COMMANDS, compile_tab_keymap, compile_typing_keymap, keymap_of, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
+import { COMPOSE_COMMANDS, compile_tab_keymap, compile_typing_keymap, keymap_of, menu_key_table, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
 import { record_activation, tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -132,6 +132,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdlin
     overlay?: OverlayApi;
     pages?: PagesApi;
     composewin?: ComposewinApi;
+    menukeys?: MenukeysApi;
     hints?: HintsApi;
 }
 
@@ -186,11 +187,15 @@ async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
     const { tree, page_tree, message_tree, window_tree, typing_tree, compose_tree } = await load_record();
-    const { compose_send: allow_send, mode_indicator_style: label_style, theme } = (await config_store.read()).settings;
+    const config = await config_store.read();
+    const { compose_send: allow_send, mode_indicator_style: label_style, theme } = config.settings;
+    const menu_keys = menu_key_table(config.user_keymap.normal);
     const label_colors = mode_label_colors(resolve_theme(theme));
-    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send, label_style, label_colors]);
+    const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send, label_style, label_colors, menu_keys]);
     if (tree_json === installed_tree_json) return;
-    await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
+    // First, so the menu keys listener is the first on each window root and takes a key before the runtimes of the keys below.
+    await messenger.menukeys?.install({ keys: Object.entries(menu_keys).map(([key, direction]) => ({ key, direction })) });
+    await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS, menuKeys: Object.keys(menu_keys) });
     await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), windowTree: page_message_tree(window_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });
     await messenger.composewin?.install({ composeTree: compose_tree, allowSend: allow_send, labelStyle: label_style, labelColors: label_colors });
     installed_tree_json = tree_json;

@@ -48,7 +48,7 @@ async function run_keys(instance, ctx, start) {
   // The barrier's Escape ends the count 1, so its w m runs once.
   await expect_absent(instance, "s, m x and 1 do nothing", (after) => (same(before.selected, after.selected) && same(before.folders, after.folders) && same(before.flags, after.flags) && same(before.windows, after.windows) ? null : "the selection, folders, flags or windows changed"), { margin_ms: 1200, in_list: true });
 
-  // With the thread list's context menu open (Shift+F10), keys belong to the menu: j moves nothing and k is the menu's access key for Mark.
+  // With the thread list's context menu open (Shift+F10), keys belong to the menu: j and k move its selection and the list stays where it is. (k was the access key of Mark once, and now moves the menu up.)
   const before_menu = first_selected(await instance.ask("state"));
   await instance.press(["-M", "shift", "-k", "F10", "-m", "shift"]);
   // The open menu is chrome and has no helper state, so this wait stays fixed.
@@ -57,7 +57,7 @@ async function run_keys(instance, ctx, start) {
   state = await key_and_state(instance, ["j"], 700);
   const after_menu_j = first_selected(state);
   state = await key_and_state(instance, ["k"], 700);
-  await shot("menu_access_key", "thread context menu open with its Mark submenu opened by k");
+  await shot("menu_keys", "thread context menu open after j and k moved its selection");
   check(app, kind, "with the context menu open, j and k act on the menu, not the list", after_menu_j === before_menu && first_selected(state) === before_menu, `selected ${before_menu}, after j ${after_menu_j}, after k ${first_selected(state)}`);
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);

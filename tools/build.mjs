@@ -59,6 +59,10 @@ const COMPOSE_CEILING_BYTES = 8192;
 const COMPOSEWIN_MAX_BYTES = 11776;
 const COMPOSEWIN_CEILING_BYTES = 15360;
 
+// `experiment/menukeys.js`, the keys that move an open native menu, hooked into every window at startup. See docs/design.md, "Menu keys bundle".
+const MENUKEYS_MAX_BYTES = 5120;
+const MENUKEYS_CEILING_BYTES = 8192;
+
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
 const PAGES_MAX_BYTES = 27920;
 const PAGES_CEILING_BYTES = 34816;
@@ -112,6 +116,7 @@ const PARENTS = [
     { name: "zoom", entry: "src/chrome/parent_zoom.ts", max_bytes: ZOOM_MAX_BYTES },
     { name: "composewin", entry: "src/chrome/parent_composewin.ts", max_bytes: COMPOSEWIN_MAX_BYTES },
     { name: "filter", entry: "src/chrome/parent_filter.ts", max_bytes: FILTER_MAX_BYTES },
+    { name: "menukeys", entry: "src/chrome/parent_menukeys.ts", max_bytes: MENUKEYS_MAX_BYTES },
 ].map((parent) => ({
     ...parent,
     global_name: `desertbird_${parent.name}`,

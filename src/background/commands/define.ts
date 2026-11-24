@@ -8,8 +8,8 @@ import type { HandlerScope, MessageApi } from "../handlers/message.ts";
 // `keeps_selection: true` marks a command that leaves its rows in the list (read state, star, junk, tag, copy). Visual mode then stays on after it, so the range can take a second command. Commands that remove or move rows end the mode, because their rows are gone.
 export type CommandDefinition = CommandInput & { bridge: boolean; repeatable?: false; keeps_selection?: true };
 
-/** What a tab must offer for a command to run in it, written in `needs` next to the Experiment verbs and permissions. `list` is the thread list. `message` is a shown message. `body` is the body script of a message document or an own page, which find and hints need. `tab` means a tab of the main window, with the tab bar and the help page around it. `line` means a window that can show the command line: a main window tab, an own page and a message window. `close` means the key's tab or message window can be closed. `pane` means the panes of the main window around the message. `main` means a command that a message window can run too: it acts on the key's window (zoom) or opens in a main window, the first main window for a key in a message window. Every tab, a message window and a compose window offer it. `compose` means the body of a compose window, which only the compose commands need. A tab that cannot meet every one of them gets no key for the command, so the key reaches Thunderbird. */
-export const TAB_NEEDS = ["list", "message", "tab", "line", "body", "page", "typing", "close", "pane", "main", "compose"] as const;
+/** What a tab must offer for a command to run in it, written in `needs` next to the Experiment verbs and permissions. `list` is the thread list. `message` is a shown message. `body` is the body script of a message document or an own page, which find and hints need. `tab` means a tab of the main window, with the tab bar and the help page around it. `line` means a window that can show the command line: a main window tab, an own page and a message window. `close` means the key's tab or message window can be closed. `pane` means the panes of the main window around the message. `main` means a command that a message window can run too: it acts on the key's window (zoom) or opens in a main window, the first main window for a key in a message window. Every tab, a message window and a compose window offer it. `compose` means the body of a compose window, which only the compose commands need. `menu` means an open native menu or popup, which only the menu key commands need and no tab kind offers, so they are in no tab tree. A tab that cannot meet every one of them gets no key for the command, so the key reaches Thunderbird. */
+export const TAB_NEEDS = ["list", "message", "tab", "line", "body", "page", "typing", "close", "pane", "main", "compose", "menu"] as const;
 export type TabNeed = (typeof TAB_NEEDS)[number];
 
 const is_tab_need = (need: string): need is TabNeed => (TAB_NEEDS as readonly string[]).includes(need);
@@ -36,6 +36,8 @@ export interface CommandGroup {
     page_keys?: NonNullable<KeymapConfig["normal"]>;
     /** Keys that run while a text field has the focus, in the mail tab and in page tabs. Only chords belong here, since a plain key in a field is text. They are the `typing_tree` of the keymap record, apart from the other layers, so a key like `<Escape>` never reaches the normal-mode trees. */
     typing_keys?: NonNullable<KeymapConfig["normal"]>;
+    /** Keys that move an open menu or popup, in every window. They are the key table of the `menukeys` Experiment, apart from the other layers, because j and k are list motions in the mail tab. */
+    menu_keys?: NonNullable<KeymapConfig["normal"]>;
 }
 
 /** The router calls `run` with the usual context plus the scope. The vendored `CommandRun` type has no room for it. */

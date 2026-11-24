@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
-import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, offered_in, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, default_menu_keymap, menu_key_table, offered_in, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 
 const root_of = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("page", user).compiled.modes.normal as TreeBranch;
@@ -203,6 +203,32 @@ test("a user key joins the typing tree only as one key for a command the layer n
     assert.equal(root.children["<C-g>"], undefined);
     assert.equal(root.children["<A-k>"], undefined);
     assert.equal(leaf_at(root, "<Escape>")?.id, "mode.escape");
+});
+
+test("the menu key table holds j and k by default, and j and k still move the list in the mail tab", () => {
+    assert.deepEqual(menu_key_table(), { j: "down", k: "up" });
+    assert.deepEqual(Object.keys(default_menu_keymap().normal ?? {}), ["j", "k"]);
+    assert.equal(leaf_at(compile_default_keymap().compiled.modes.normal as TreeBranch, "j")?.id, "motion.down");
+});
+
+test("a user key joins the menu key table only as one typed character for a menu command", () => {
+    const table = menu_key_table({ n: { id: "menu.down" }, "<C-n>": { id: "menu.down" }, "g n": { id: "menu.up" }, x: { id: "msg.archive" }, p: { id: "menu.up" } });
+    assert.deepEqual(table, { j: "down", k: "up", n: "down", p: "up" });
+});
+
+test("a user binding of j or k to another command leaves the menu keys, and a null unbinds the menu key", () => {
+    assert.deepEqual(menu_key_table({ j: { id: "motion.up" } }), { j: "down", k: "up" });
+    assert.deepEqual(menu_key_table({ j: null }), { k: "up" });
+    assert.deepEqual(menu_key_table({ j: { id: "menu.up" } }), { j: "up", k: "up" });
+});
+
+test("no tab tree and no mail tree takes a menu key, by default or by a user key", () => {
+    const user = { n: { id: "menu.down" } } as const;
+    for (const kind of ["message", "window", "own", "page", "compose"] as const) {
+        assert.equal(ids_under(compile_tab_keymap(kind, user).compiled.modes.normal as TreeBranch).some((id) => id.startsWith("menu.")), false, kind);
+        assert.equal(offered_in(kind, registry.get("menu.down")!), false, kind);
+    }
+    assert.equal(ids_under(compile_default_keymap().compiled.modes.normal as TreeBranch).some((id) => id.startsWith("menu.")), false);
 });
 
 test("i is bound in the page tree alone, so the own and message trees and the mail tab leave it", () => {

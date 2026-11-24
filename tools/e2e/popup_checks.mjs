@@ -1,4 +1,4 @@
-// Plain keys while a popup menu is open: a key the popup does not take must not reach Thunderbird's own shortcuts (j marks the selected message as junk). Takes the helpers of `run.mjs` as arguments, as `pages_checks.mjs` does.
+// Plain keys while a popup menu is open: j and k move the selection of a menu (the `menukeys` Experiment), and any other key the popup does not take must not reach Thunderbird's own shortcuts (j marks the selected message as junk). Takes the helpers of `run.mjs` as arguments, as `pages_checks.mjs` does.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +13,9 @@ const APP_MENU_BUTTON = [1218, 21];
 const SEARCH_BOX = [560, 21];
 const TABS_FROM_SEARCH_TO_APP_MENU = 3;
 const APP_MENU_PANEL_REGION = "906,40 330x410";
+
+// The thread context menu opened by Shift+F10, as pixels, on Betterbird (read from the shots). Thunderbird places it elsewhere and is not pinned, so its moves are read from the selection only.
+const CONTEXT_MENU_REGION = "1080,140 200x305";
 
 // Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10. Thunderbird shows the Inbox as cards and opens the menu at the selected card, Betterbird as a table, so the submenu sits in different places.
 const MARK_SUBMENU_REGIONS = { thunderbird: "610,280 190x290", betterbird: "900,260 190x260" };
@@ -40,16 +43,35 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   const detail = (state) => `selected ${first_selected(state)}, expected ${start}, junk ${any_junk(state)}`;
 
   // A popup opened by the keyboard. The focus is in the thread list, so this runs before the click, which moves it to the menu button.
+  const menu_pixels = async (name) => (await instance.shot_region(name, CONTEXT_MENU_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
   await instance.press(SHIFT_F10);
   await sleep(1000);
+  const pinned = app === "betterbird";
+  const menu_before = pinned && (await menu_pixels("popup_menu_before"));
   let state = await key_and_state(instance, ["j"], 1200);
-  check(app, kind, "context menu open by keyboard: j marks nothing as junk and moves nothing", untouched(state), detail(state));
-  // `k` is the access key of Mark in this menu, so it still reaches the menu and opens the submenu.
-  await instance.shot_region("popup_menu_before_k", MARK_SUBMENU_REGIONS[app], "ppm");
-  await instance.press(["k"]);
-  await sleep(900);
-  check(app, kind, "context menu open: its access key k still reaches the menu and opens the Mark submenu", !(await same_pixels(instance, "popup_menu_after_k", "popup_menu_before_k")));
-  await shot("popup_context_menu_access_key", "thread context menu with Mark opened by k");
+  check(app, kind, "context menu open by keyboard: j marks nothing as junk and moves nothing in the list", untouched(state), detail(state));
+  // j and k move the menu's selection, read as pixels.
+  if (pinned) {
+    const after_j = await menu_pixels("popup_menu_after_j");
+    state = await key_and_state(instance, ["j"], 800);
+    const after_jj = await menu_pixels("popup_menu_after_jj");
+    state = await key_and_state(instance, ["k"], 800);
+    const after_jjk = await menu_pixels("popup_menu_after_jjk");
+    check(app, kind, "context menu open: j moves the selection down one item and k moves it back up", !after_j.equals(menu_before) && !after_jj.equals(after_j) && after_jjk.equals(after_j));
+    // The menu is back on the first item. A real Down reaches what the second j did, and a real Up what the first j did.
+    await instance.press(["-k", "Down"]);
+    await sleep(500);
+    const after_down = await menu_pixels("popup_menu_after_down");
+    await instance.press(["-k", "Up"]);
+    await sleep(500);
+    const after_up = await menu_pixels("popup_menu_after_up");
+    check(app, kind, "context menu open: a real Down and Up reach the items j and k reached", after_down.equals(after_jj) && after_up.equals(after_j));
+    await shot("popup_context_menu_after_keys", "thread context menu with an item selected by j and k");
+  } else {
+    state = await key_and_state(instance, ["k"], 800);
+    note(app, kind, "context menu j and k move the selection", "not read as pixels: the menu position is pinned on Betterbird only");
+  }
+  check(app, kind, "context menu open: j and k leave the list alone, and k opens no Mark submenu", untouched(state), detail(state));
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
@@ -58,16 +80,21 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   await instance.click(...APP_MENU_BUTTON);
   await sleep(1000);
   await shot("popup_app_menu_open", "app menu opened by a click");
+  // The menu keeps the focus in the list, and j and k move the list under it (`menukeys` leaves a panel whose focus is outside it alone).
   state = await key_and_state(instance, ["j"], 1200);
-  check(app, kind, "app menu open by mouse: j marks nothing as junk and moves nothing", untouched(state), detail(state));
-  // `a` (archive) and `n` (next unread) are Thunderbird shortcuts and access keys of items inside the app menu's hidden views. The menu takes neither.
+  check(app, kind, "app menu open by mouse: j moves the thread list down one row and marks nothing as junk", first_selected(state) !== start && !any_junk(state), `selected ${first_selected(state)}, expected a row after ${start}, junk ${any_junk(state)}`);
+  const moved = first_selected(state);
+  state = await key_and_state(instance, ["k"], 1200);
+  check(app, kind, "app menu open by mouse: k moves the thread list back up", first_selected(state) === start && !any_junk(state), `selected ${first_selected(state)}, expected ${start}`);
+  state = await key_and_state(instance, ["j"], 1200);
+  // `a` (archive) and `n` (next unread) are Thunderbird shortcuts and access keys of items inside the app menu's hidden views. The menu takes neither, and they are still swallowed there.
   const folders_before = JSON.stringify(state.folders);
   for (const key of ["a", "n"]) state = await key_and_state(instance, [key], 1200);
-  check(app, kind, "app menu open by mouse: a and n archive nothing and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_before, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_before}`);
+  check(app, kind, "app menu open by mouse: a and n archive nothing and move nothing", first_selected(state) === moved && !any_junk(state) && JSON.stringify(state.folders) === folders_before, `selected ${first_selected(state)}, expected ${moved}, junk ${any_junk(state)}, folders changed ${JSON.stringify(state.folders) !== folders_before}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
   state = await key_and_state(instance, ["j"], 1200);
-  check(app, kind, "after the menus close, j moves the list again and marks nothing", first_selected(state) !== start && !any_junk(state), `selected ${first_selected(state)}`);
+  check(app, kind, "after the menus close, j moves the list again and marks nothing", first_selected(state) !== moved && !any_junk(state), `selected ${first_selected(state)}`);
 
   // The last check moved the list, so the baseline is the selection now.
   start = first_selected(state);
@@ -90,8 +117,17 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
     return;
   }
   await shot("popup_app_menu_open_by_keyboard", "app menu opened by Enter on the button");
+  // j and k move the focus inside the panel: j, j, k ends where the first j did, read as pixels.
+  const at_first = await panel_pixels(instance, "popup_app_menu_at_first");
   state = await key_and_state(instance, ["j"], 1200);
-  check(app, kind, "app menu open by keyboard: j marks nothing as junk and moves nothing", untouched(state), detail(state));
+  check(app, kind, "app menu open by keyboard: j marks nothing as junk and moves nothing in the list", untouched(state), detail(state));
+  const after_j = await panel_pixels(instance, "popup_app_menu_after_j");
+  state = await key_and_state(instance, ["j"], 1200);
+  const after_jj = await panel_pixels(instance, "popup_app_menu_after_jj");
+  state = await key_and_state(instance, ["k"], 1200);
+  const after_jjk = await panel_pixels(instance, "popup_app_menu_after_jjk");
+  check(app, kind, "app menu open by keyboard: j moves the focus down one item and k moves it back up", !after_j.equals(at_first) && !after_jj.equals(after_j) && after_jjk.equals(after_j), `list still untouched ${untouched(state)}`);
+  await shot("popup_app_menu_after_jk", "app menu with the focus moved by j, j and k");
   await instance.press(["-k", "Down"]);
   await sleep(500);
   await shot("popup_app_menu_after_arrow", "app menu after an arrow key pressed in it");

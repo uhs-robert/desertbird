@@ -36,6 +36,15 @@
                   "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
                 }
               },
+              "menuKeys": {
+                "type": "array",
+                "optional": true,
+                "description": "The typed character of each menu key (`j`, `k`). Under a click-opened app menu, which leaves the focus in the thread list, these keys run as list keys instead of being swallowed.",
+                "items": {
+                  "type": "string",
+                  "pattern": "^\\S$"
+                }
+              },
               "settings": {
                 "type": "object",
                 "description": "The settings the key matcher reads. It reads none today.",

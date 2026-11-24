@@ -60,6 +60,14 @@
                 "script": "experiment/overlay.js"
             }
         },
+        "menukeys": {
+            "schema": "experiment/menukeys.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["menukeys"]],
+                "script": "experiment/menukeys.js"
+            }
+        },
         "composewin": {
             "schema": "experiment/composewin.schema.json",
             "parent": {

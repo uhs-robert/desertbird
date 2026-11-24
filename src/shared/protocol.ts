@@ -85,6 +85,8 @@ export interface KeysInstallArgs {
     settings: MatcherSettings;
     /** Ids of the commands that take the keyboard away from the list (they open the overlay). The runtime holds plain keys after one fires, until the focus moves. */
     holdCommands: string[];
+    /** The tokens of the menu keys (`menu.down`, `menu.up`). A click-opened app menu leaves the focus in the thread list, and these keys run there as the list keys instead of being swallowed. */
+    menuKeys?: string[];
 }
 
 /** Payload of the `keys.onInvocation` event: a background leaf fired in a window. */
@@ -194,6 +196,8 @@ export const EXPERIMENT_VERBS = {
     composewin: { functions: ["install"], events: ["onInvocation"] },
     // Loaded on first use, like `folderpane`.
     filter: { functions: ["set", "searching"], events: [] },
+    // Loaded at startup by the first install, since it takes keys in every window, dialogs included.
+    menukeys: { functions: ["install"], events: [] },
 } as const;
 
 /** Call and event shapes as the background sees them on `browser.keys`. */
@@ -247,6 +251,24 @@ export interface ComposewinInstallArgs {
 export interface ComposewinApi {
     install(args: ComposewinInstallArgs): Promise<void>;
     onInvocation: KeysApi["onInvocation"];
+}
+
+export const MENU_DIRECTIONS = ["down", "up"] as const;
+export type MenuDirection = (typeof MENU_DIRECTIONS)[number];
+
+/** One key that moves an open menu: a single typed character such as `j` and the way it moves. */
+export interface MenuKey {
+    key: string;
+    direction: MenuDirection;
+}
+
+export interface MenukeysInstallArgs {
+    keys: MenuKey[];
+}
+
+/** Call shape as the background sees it on `browser.menukeys`. It has no event: the arrow is sent in the window and nothing is reported. */
+export interface MenukeysApi {
+    install(args: MenukeysInstallArgs): Promise<void>;
 }
 
 /** One visible row of the thread list. `depth` 0 is a thread root. `collapsed` is true for a thread whose replies are hidden. `flags` is the `nsMsgMessageFlags` word of the row's own message, so a collapsed thread shows its root's. The background reads the bits it needs. `id` is null when the extension cannot name the message. */

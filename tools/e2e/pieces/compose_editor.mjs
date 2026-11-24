@@ -199,6 +199,9 @@ async function note_draft_image(instance, ctx) {
 // The compose window hook: the keys of the chrome runtime in the body, To, Cc, Bcc and Subject. The mode label sits in the status bar, so its pixels (the region below) change between INSERT and NORMAL.
 const STATUS_LABEL_REGION = COMPOSE_LABEL_REGION;
 const FIND_REGION = "210,630 860x66";
+// The body's context menu opened by Shift+F10 in the reply of the fixture (read from the shots), and the key that opens it.
+const CONTEXT_MENU_REGION = "225,355 235x295";
+const SHIFT_F10 = ["-M", "shift", "-k", "F10", "-m", "shift"];
 // The middle of the window, where the save prompt of `q` draws.
 const PROMPT_REGION = "340,300 600x140";
 
@@ -306,6 +309,32 @@ async function run_compose_window(instance, ctx) {
   await sleep(500);
   check(app, kind, "letters in normal mode leave the body unchanged", body_of(await instance.ask("state")) === body_before);
 
+  // The body's context menu in normal mode and in insert mode: the menu is open, so j and k move its selection and neither types nor runs a mode key. The pixels of the menu region follow j, j, k as they do in the mail window.
+  const context_menu_keys = async (mode) => {
+    await instance.press(SHIFT_F10);
+    await sleep(1000);
+    const menu_before = await hud_pixels(instance, `${app}_context_${mode}_before`, CONTEXT_MENU_REGION);
+    const body_open = body_of(await instance.ask("state"));
+    await instance.press(["j"]);
+    await sleep(500);
+    const after_j = await hud_pixels(instance, `${app}_context_${mode}_after_j`, CONTEXT_MENU_REGION);
+    await instance.press(["j"]);
+    await sleep(500);
+    const after_jj = await hud_pixels(instance, `${app}_context_${mode}_after_jj`, CONTEXT_MENU_REGION);
+    await instance.press(["k"]);
+    await sleep(500);
+    const after_jjk = await hud_pixels(instance, `${app}_context_${mode}_after_jjk`, CONTEXT_MENU_REGION);
+    await shot(`context_menu_${mode}`, `the body's context menu in ${mode} mode after j, j and k`);
+    check(app, kind, `the body's context menu in ${mode} mode: j moves the selection down and k back up`, after_j !== menu_before && after_jj !== after_j && after_jjk === after_j);
+    await instance.press(["-k", "Escape"]);
+    await sleep(700);
+    check(app, kind, `the body's context menu in ${mode} mode: j and k type nothing in the body`, body_of(await instance.ask("state")) === body_open);
+  };
+  await context_menu_keys("normal");
+  await instance.press(["i"]);
+  await context_menu_keys("insert");
+  await instance.press(["-k", "Escape"]);
+
   // The find bar is no header field: in normal mode its field takes typing, and Escape closes it and keeps the mode.
   const find_before = await hud_pixels(instance, `${app}_find_before`, FIND_REGION);
   await instance.press(["-M", "ctrl", "f", "-m", "ctrl"]);
@@ -325,12 +354,14 @@ async function run_compose_window(instance, ctx) {
   await type_text("ali");
   await sleep(2000);
   await shot("popup_open", "the address popup open under To");
+  // A j typed with the popup open is text: the popup keeps its focus in the field, so the menu keys leave it alone.
+  await type_text("j");
   await instance.press(["-k", "Escape"]);
   await sleep(700);
   await shot("popup_closed", "the address popup closed by the first Escape");
   await type_text("x@fixture.invalid,");
-  state = await key_and_state(instance, ["-k", "Escape"], waits_for("the pill after the popup Escape", (state) => (field_of("to")(state) ?? []).join(" ").includes("alix@fixture.invalid")));
-  check(app, kind, "Escape with the popup open closes it and keeps insert mode (the next letters still type)", (field_of("to")(state) ?? []).join(" ").includes("alix@fixture.invalid"), `to ${JSON.stringify(field_of("to")(state))}`);
+  state = await key_and_state(instance, ["-k", "Escape"], waits_for("the pill after the popup Escape", (state) => (field_of("to")(state) ?? []).join(" ").includes("alijx@fixture.invalid")));
+  check(app, kind, "a j typed with the address popup open types, and Escape closes the popup and keeps insert mode (the next letters still type)", (field_of("to")(state) ?? []).join(" ").includes("alijx@fixture.invalid"), `to ${JSON.stringify(field_of("to")(state))}`);
 
   // q with a changed draft shows the save prompt, and Cancel keeps the window and the text.
   await jump("m");

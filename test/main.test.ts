@@ -21,6 +21,10 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const message_installs: unknown[] = [];
     const window_installs: unknown[] = [];
     const typing_installs: unknown[] = [];
+    // Each Experiment install in the order it was made, with the menu key table and the menu key tokens the key runtime got.
+    const install_log: string[] = [];
+    const menu_installs: Record<string, string>[] = [];
+    const menu_key_tokens: string[][] = [];
     const new_mail_listeners: unknown[] = [];
     const native = fake_native_messaging();
     let report_read: () => void = () => {};
@@ -48,8 +52,9 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         },
         composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
         compose: { onAfterSend: { addListener: (listener: (tab: { id?: number }, send_info: { error?: string }) => void) => void after_send_listeners.push(listener) } },
-        keys: { install: async (args: { tree: unknown }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
-        pages: { install: async (args: { pageTree: unknown; messageTree: unknown; windowTree: unknown; typingTree: unknown }) => void (page_installs.push(args.pageTree), message_installs.push(args.messageTree), window_installs.push(args.windowTree), typing_installs.push(args.typingTree)), onInvocation: { addListener: () => {} } },
+        menukeys: { install: async (args: { keys: { key: string; direction: string }[] }) => void (install_log.push("menukeys"), menu_installs.push(Object.fromEntries(args.keys.map((each) => [each.key, each.direction])))) },
+        keys: { install: async (args: { tree: unknown; menuKeys?: string[] }) => void (install_log.push("keys"), installs.push(args.tree), menu_key_tokens.push(args.menuKeys ?? [])), onInvocation: { addListener: () => {} } },
+        pages: { install: async (args: { pageTree: unknown; messageTree: unknown; windowTree: unknown; typingTree: unknown }) => void (install_log.push("pages"), page_installs.push(args.pageTree), message_installs.push(args.messageTree), window_installs.push(args.windowTree), typing_installs.push(args.typingTree)), onInvocation: { addListener: () => {} } },
         runtime: {
             onMessage: { addListener: () => {} },
             connectNative: (application: string) => native.connectNative(application),
@@ -69,7 +74,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         const changes = Object.fromEntries(Object.entries(items).map(([key, value]) => [key, { newValue: value }]));
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
-    return { stored, installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { stored, installs, install_log, menu_installs, menu_key_tokens, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -135,6 +140,23 @@ test("the typing tree is stored in the record and installed in the pages Experim
     assert.deepEqual(typing_installs, [record.typing_tree]);
     assert.match(JSON.stringify(record.typing_tree.root), /mode\.escape/);
     assert.doesNotMatch(JSON.stringify(installs), /mode\.escape/);
+});
+
+test("the menu keys install first, so their listener is the first on each window root, and the key runtime learns the same tokens", async () => {
+    const { install_log, menu_installs, menu_key_tokens } = stub_messenger();
+    await start_background();
+    await settle();
+    assert.deepEqual(install_log, ["menukeys", "keys", "pages"]);
+    assert.deepEqual(menu_installs, [{ j: "down", k: "up" }]);
+    assert.deepEqual(menu_key_tokens, [["j", "k"]]);
+});
+
+test("a user key for a menu command changes the installed menu keys", async () => {
+    const { menu_installs, menu_key_tokens } = stub_messenger({ desertbird_user_keymap: { normal: { n: { id: "menu.down" }, "<C-n>": { id: "menu.down" }, x: { id: "msg.archive" } } } });
+    await start_background();
+    await settle();
+    assert.deepEqual(menu_installs.at(-1), { j: "down", k: "up", n: "down" });
+    assert.deepEqual(menu_key_tokens.at(-1), ["j", "k", "n"]);
 });
 
 test("the pages Experiment gets the message tree without the find key", async () => {

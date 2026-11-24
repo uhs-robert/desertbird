@@ -17,6 +17,8 @@ const NO_WINDOW_ID = -1;
 // The invocation listeners belong to the event the background subscribes to.
 const invocation_listeners = new Set<(invocation: KeysEvent) => void>();
 let runtime: Runtime | null = null;
+// A menu key is no menu key to this runtime: an open popup that takes it was handled by `menukeys` before this runs, so one that reaches here sits under a focus in the list.
+let menu_keys = new Set<string>();
 
 function ensure_runtime(context: ExtensionContext): Runtime {
     const mail_extension_id_of = (header: unknown): number | null => context.extension.messageManager.convert(header, { skipFolder: true })?.id ?? null;
@@ -47,7 +49,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             return tree ? { row_count: () => tree.rowCount, selected_index: () => tree.selectedIndex, select: (index) => void (tree.selectedIndex = index) } : null;
         },
         is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document) || own_popup_has_focus(window),
-        menu_takes_key: (window: MainWindow, key: string) => menu_takes_key(window.document, key),
+        menu_takes_key: (window: MainWindow, key: string) => (menu_keys.has(key) ? null : menu_takes_key(window.document, key)),
         overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
         in_text_field: (window: MainWindow) => in_text_field(window.document),
@@ -77,7 +79,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
 export function get_keys_api(context: ExtensionContext) {
     return {
         keys: {
-            install: guard("keys.install", ({ tree, holdCommands }: KeysInstallArgs): void => ensure_runtime(context).install(tree, holdCommands)),
+            install: guard("keys.install", ({ tree, holdCommands, menuKeys = [] }: KeysInstallArgs): void => ((menu_keys = new Set(menuKeys)), ensure_runtime(context).install(tree, holdCommands))),
             onInvocation: new (load_platform().ExtensionCommon.EventManager)({
                 context,
                 name: "keys.onInvocation",
@@ -95,5 +97,6 @@ export function get_keys_api(context: ExtensionContext) {
 export function shutdown(): void {
     runtime?.shutdown();
     runtime = null;
+    menu_keys = new Set();
     invocation_listeners.clear();
 }

@@ -21,6 +21,7 @@ import { folders } from "./folders.ts";
 import { followup } from "./followup.ts";
 import { help } from "./help.ts";
 import { hints } from "./hints.ts";
+import { menu } from "./menu.ts";
 import { messages } from "./messages.ts";
 import { new_mail } from "./new_mail.ts";
 import { page } from "./page.ts";
@@ -38,7 +39,7 @@ import { zoom } from "./zoom.ts";
 
 export type { ScopedContext } from "./define.ts";
 
-export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints, page, zoom };
+export const GROUPS: Record<string, CommandGroup> = { motion, messages, compose, view, clipboard, tabs, cmdline, snooze, reading, folders, thread, unsubscribe, attachments, new_mail, quick_reply, followup, step, help, app, search, hints, page, zoom, menu };
 
 export const registry = create_registry();
 

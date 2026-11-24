@@ -122,6 +122,26 @@ export function compile_typing_keymap(user: KeymapConfig["normal"] = {}): Compil
     return compile_bindings({ normal: { ...defaults, ...Object.fromEntries(kept) }, group_names: GROUP_NAMES }, {}, { normal: defaults });
 }
 
+const menu_keys = (): NonNullable<KeymapConfig["normal"]> => merged((group) => group.menu_keys);
+
+/** The default menu keys, for the help page and the keymap doc. */
+export const default_menu_keymap = (): KeymapConfig => ({ normal: menu_keys(), group_names: GROUP_NAMES });
+
+/**
+ * The keys that move an open menu: the defaults with the user's keys on top. A user key joins only when it is one typed character and runs a menu command, and `null` unbinds a default. A longer sequence or a chord never matches, because the key runs under an open popup, one key at a time.
+ */
+export function menu_key_table(user: KeymapConfig["normal"] = {}): Record<string, "down" | "up"> {
+    const defaults = menu_keys();
+    const menu_ids = new Set(Object.values(defaults).flatMap((binding) => (Array.isArray(binding) ? binding : binding ? [binding] : []).map((invocation) => invocation.id)));
+    const kept = Object.entries(user ?? {}).filter(([keys, binding]) => binding === null || (binding && !Array.isArray(binding) && menu_ids.has(binding.id) && parse_sequence(keys).tokens?.length === 1));
+    const table: Record<string, "down" | "up"> = {};
+    for (const [keys, binding] of Object.entries({ ...defaults, ...Object.fromEntries(kept) })) {
+        const token = parse_sequence(keys).tokens?.[0];
+        if (binding && !Array.isArray(binding) && token !== undefined && [...token].length === 1) table[token] = binding.id === "menu.down" ? "down" : "up";
+    }
+    return table;
+}
+
 /** Whether a window kind offers every need of the command. The command line of a kind lists and runs only such commands. */
 export const offered_in = (kind: TabKind, command: { needs?: readonly string[] | undefined }): boolean => tab_needs_of(command).every((need) => (TAB_KINDS[kind] as readonly TabNeed[]).includes(need));
 
