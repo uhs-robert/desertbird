@@ -244,8 +244,8 @@ async function run_header_hints(instance, ctx) {
 
 // The labels sit in document order: the header buttons, More, the star, the address pills, the day/night switch, the tag, the attachment bar (the toggle and Save All), the attachments when the list is open, then the body link. Betterbird has one button more (Headers). A yank labels only the targets with text: More, the pills, the tag and the link. `main_star` is the star of the reading pane in the mail window's own set, with the thread list focused. Read from the shots of each app.
 const MESSAGE_HINT_LABELS = {
-  betterbird: { reply: "aa", more: "ak", star: "al", from: "sa", dark: "sg", tag_yank: "h", attachment_toggle: "sj", second_attachment: "da", link: "sl", main_star: "gg" },
-  thunderbird: { reply: "aa", more: "aj", star: "ak", from: "al", dark: "sf", tag_yank: "h", attachment_toggle: "sh", second_attachment: "sl", link: "sk", main_star: "ff" },
+  betterbird: { reply: "aa", more: "ak", star: "al", from: "sa", dark: "sg", tag_yank: "h", attachment_toggle: "sj", second_attachment: "da", link: "sl", main_star: "gh" },
+  thunderbird: { reply: "aa", more: "aj", star: "ak", from: "al", dark: "sf", tag_yank: "h", attachment_toggle: "sh", second_attachment: "sl", link: "sk", main_star: "fg" },
 };
 
 const WINDOW_REGION = "0,0 1280x720";
