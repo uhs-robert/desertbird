@@ -93,6 +93,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         change_listeners.forEach((listener) => listener(changes, "local"));
     };
     const when_installed = (count: number) => wait_for(`${count} keys.install and pages.install call(s); saw ${installs.length} and ${page_installs.length}`, () => installs.length >= count && page_installs.length >= count);
+    // Limit: it sees only the counted stub calls (get, set, installs, digest) and the echo timers. Scheduler, hud, bridge and editor timers, session storage, windows.getAll and native messaging are not counted, so a negative assertion outside the install path rests on the setImmediate recheck alone.
     const when_idle = async () => {
         // The recheck after a macrotask sees a call that the last finished one queued.
         for (;;) {
