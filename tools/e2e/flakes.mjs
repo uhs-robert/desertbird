@@ -38,6 +38,15 @@ export function fold_batch(reports, { commit, at }) {
       cases.get(key).fail += 1;
     }
   }
+  // A retry is no failure, but each one is a lost key press, so the line counts them per piece and tab.
+  const retries = new Map();
+  for (const report of completed) {
+    for (const { piece, name } of report.key_retries ?? []) {
+      const key = `${piece}\n${name}`;
+      if (!retries.has(key)) retries.set(key, { piece, case: name, retried: 0 });
+      retries.get(key).retried += 1;
+    }
+  }
   const is_clean = (report) => report.exit_code === 0 && (report.failures ?? []).length === 0 && (report.failed_checks ?? []).length === 0;
   const failing = [...cases.values()].sort((left, right) => right.fail - left.fail || left.case.localeCompare(right.case));
   return {
@@ -48,6 +57,7 @@ export function fold_batch(reports, { commit, at }) {
     run_errors: reports.length - completed.length,
     too_thin: completed.length * 2 < reports.length,
     cases: failing,
+    retries: [...retries.values()].sort((left, right) => right.retried - left.retried || left.case.localeCompare(right.case)),
   };
 }
 
@@ -69,6 +79,7 @@ export function summary_lines(line) {
   const lines = [`e2e-flakes ${line.commit}: ${line.clean_runs} of ${line.runs} runs clean, ${line.run_errors} run errors`];
   if (line.too_thin) lines.push("batch too thin to read: fewer than half the runs completed");
   for (const failing of line.cases) lines.push(`${failing.piece}  "${failing.case}"  failed ${failing.fail}/${line.runs}`);
+  for (const retried of line.retries) lines.push(`${retried.piece}  "${retried.case}"  retried ${retried.retried} times`);
   return lines;
 }
 
