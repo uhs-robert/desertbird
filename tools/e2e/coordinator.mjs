@@ -203,9 +203,11 @@ export function run_sharded(setup) {
     }));
     const checks = merge_check_reports(results, ids);
     const failed_checks = checks.checks.filter((check) => !check.ok).map(({ piece, worker, name, detail }) => ({ piece, worker, name, detail }));
+    // The retry NOTE of open_key_list, so a batch can count how often a key press was lost.
+    const key_retries = checks.notes.filter((note) => note.name.startsWith("g ? drew no key list")).map(({ piece, name }) => ({ piece, name }));
     let exit_code = final_exit_code({ failed_check_count: failed_checks.length, failure_count: failures.length, incomplete, stop_reason, stop_exit_code });
     const merged = merge_reports(workers.map((entry) => ({ worker: entry.worker, report: entry.report })), { total_ms, workers: worker_info, incomplete, filter });
-    Object.assign(merged, { failed_checks, failures, exit_code });
+    Object.assign(merged, { failed_checks, key_retries, failures, exit_code });
     // A run that cannot show its evidence did not pass. A stop keeps its own code. The report goes first, so the timings file records a failed write of it.
     const write_or_fail = (path, value) => {
       try {
