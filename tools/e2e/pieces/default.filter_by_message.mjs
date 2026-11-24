@@ -1,6 +1,6 @@
 // The list and date filters by the selected message (F m l, F m d), which the `filter` Experiment applies, and their re-apply after F u, F s and the / search.
 
-import { folder_shown, listed_count, same, selects } from "../predicates.mjs";
+import { folder_shown, listed_count, pane_is, same, selects } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
 export const areas = ["views", "search"];
@@ -10,6 +10,10 @@ const ALL = 7;
 const id = (index) => `lists-${index}@fixture.invalid`;
 const ids = (...indexes) => indexes.map(id);
 const sorted = (rows) => [...rows].sort();
+// A point on the first row of the thread list in the 1280x720 output, below the Quick Filter bar and clear of the thread toggle.
+const FIRST_THREAD_ROW = [550, 170];
+const selected_ids = (state) => sorted(state.selected.map((message) => message.header_id));
+const selects_all = (header_ids) => ({ what: `the selection to be ${header_ids}`, until: (state) => same(selected_ids(state), sorted(header_ids)), show: (state) => `selected ${selected_ids(state)}` });
 
 async function run_filter_by_message(instance, ctx) {
   const { app, kind, check, shot, wait_for_state, key_and_state, open_command_line, press_in_command_line, toast_cycle } = ctx;
@@ -110,6 +114,19 @@ async function run_filter_by_message(instance, ctx) {
   await thread_keys(["F", "m", "l"], 1, "F m l on an open thread root filters on its list");
   await thread_keys(["F", "m", "d"], 1, "F m d on the thread root adds its day");
   await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the open thread");
+  // A mouse click on the closed thread row, as the owner selects a thread. G first selects the single row, so only the click can select the thread. With the message pane shown the list is one row high and scrolled to the selection, so w m hides the pane for the click and shows it again, with the thread summary, before the keys.
+  await key_and_state(instance, ["G"], selects(thread(2)));
+  await instance.press(["w"]);
+  await key_and_state(instance, ["m"], pane_is("message", false));
+  await instance.click(...FIRST_THREAD_ROW);
+  state = await wait_for_state(instance, { ...selects_all([thread(0), thread(1)]), timeout_ms: 5000, soft: true });
+  check(app, kind, "a click on the closed thread row selects both its messages", same(selected_ids(state), [thread(0), thread(1)]), `selected ${selected_ids(state)}`);
+  await instance.press(["w"]);
+  await key_and_state(instance, ["m"], pane_is("message", true));
+  await shot("filter_clicked_thread", "the Threads folder after a click on the closed thread: its row selected and the thread summary in the message pane");
+  await thread_keys(["F", "m", "d"], 1, "F m d on a clicked thread filters on the day of its root");
+  await thread_keys(["F", "m", "l"], 1, "F m l on a clicked thread adds the list of its root");
+  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the clicked thread");
 }
 
 export const piece = { ...section_piece({ section: "filter_by_message", run: run_filter_by_message }), profile_kind: "lists" };
