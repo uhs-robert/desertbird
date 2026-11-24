@@ -21,6 +21,7 @@ export interface FolderApi extends SpecialFolderApi, FolderStateApi, AccountsApi
     mailTabs: {
         query(query: { windowId?: number; active: true }): Promise<FolderMailTab[]>;
         update(tab_id: number, update: { displayedFolder: MailFolder }): Promise<unknown>;
+        create(create: { displayedFolder: MailFolder }): Promise<unknown>;
         onDisplayedFolderChanged: { addListener(listener: (tab: FolderMailTab, folder?: MailFolder) => void): void };
     };
 }
@@ -52,6 +53,12 @@ export async function show_folder(scope: FolderScope, folder: MailFolder, tab?: 
 /** Shows the folder, then moves keyboard focus to its thread list: a key that jumps to a folder asks to work in its messages. A hidden list refuses the focus, and the folder still shows. Folder search uses `show_folder` alone, to keep the folder pane focused. */
 export async function show_folder_and_focus_threads(scope: FolderFocusScope, folder: MailFolder, tab?: FolderMailTab): Promise<void> {
     await show_folder(scope, folder, tab);
+    await ignore_refusal(focus_pane(scope, { pane: "threads" }));
+}
+
+/** Opens the folder in a new mail tab. `mailTabs.create` takes no window and no `active`: the tab opens in front, in the window the app has current, which is the window of the key. The new tab is the front tab, so its thread list takes the focus. */
+async function show_folder_in_new_tab(scope: FolderFocusScope, folder: MailFolder): Promise<void> {
+    await scope.api.mailTabs.create({ displayedFolder: folder });
     await ignore_refusal(focus_pane(scope, { pane: "threads" }));
 }
 
@@ -94,11 +101,12 @@ export async function open_folder(scope: FolderFocusScope, args: CheckedArgs): P
     const account_name = String(args.account ?? "");
     const named = account_name === "" ? undefined : await account_id_named(scope.api, account_name);
     const special = String(args.special ?? "");
-    if (special !== "") return show_folder_and_focus_threads(scope, await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, named ?? account_id, named !== undefined), tab);
+    const show = (folder: MailFolder) => (args.tab === true ? show_folder_in_new_tab(scope, folder) : show_folder_and_focus_threads(scope, folder, tab));
+    if (special !== "") return show(await special_in_account_order(scope, SPECIAL_USE[special] as SpecialUse, named ?? account_id, named !== undefined));
     const path = String(args.folder);
     if (path === "") throw new RuntimeRefusal("Name a folder.");
     // A named account is the only place to look: the same path in another account is a different folder.
     const folder = named === undefined ? await folder_by_path(scope, path, account_id) : (await scope.api.folders.query({ accountId: named, path }))[0];
     if (folder === undefined) throw new RuntimeRefusal(`There is no folder ${path}${named === undefined ? "" : ` in account ${account_name}`}.`);
-    return show_folder_and_focus_threads(scope, folder, tab);
+    return show(folder);
 }

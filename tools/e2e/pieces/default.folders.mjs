@@ -1,13 +1,13 @@
 // The folder commands, with one restart of the app.
 
-import { sleep, CTRL, folder_shown, main_window_tabs } from "../predicates.mjs";
+import { sleep, CTRL, folder_shown, main_window_tabs, active_index } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
 export const areas = ["folders"];
 
 // Restarts the app, so it goes after the checks that need the session as it is.
 async function run_folders(instance, ctx) {
-  const { check, note, wait_state, wait_for_state, restart } = ctx;
+  const { check, note, wait_state, wait_for_state, restart, open_command_line } = ctx;
   const app = instance.app;
   const kind = "default";
   // db-folders-jumps: special folder keys, marks, the jump history and its chords. Local Folders holds an Inbox and a Trash and no Drafts or Sent.
@@ -64,6 +64,16 @@ async function run_folders(instance, ctx) {
   check(app, kind, "onDisplayedFolderChanged fires once for a folder the API shows for the first time", events.length === 1 && events[0].path === "/Views", `events ${JSON.stringify(events.map((event) => event.path))}`);
   note(app, kind, "first display of /Views through the API", `update error ${first_display.update_error}, query right after ${first_display.query_error ?? first_display.shown_right_after}`);
   check(app, kind, "g i after the API display shows the Inbox again", (await shown_folder(["g", "i"], "/Inbox")) === "/Inbox");
+  // O opens the command line on `open --tab `: the folder shows in a new front tab and the first tab keeps its folder.
+  const tabs_before = main_window_tabs(await instance.ask("state")).length;
+  await open_command_line(instance, ["O"]);
+  await instance.press(["/Trash"]);
+  await instance.press(["-k", "Return"]);
+  const with_new_tab = await wait_state(instance, "O /Trash Enter to open a new active tab on Trash", (state) => main_window_tabs(state).length === tabs_before + 1 && active_index(state) === tabs_before && state.mail_tab?.folder === "/Trash", { soft: true, timeout_ms: 10000 });
+  check(app, kind, "O /Trash opens one new tab, active, showing Trash", main_window_tabs(with_new_tab).length === tabs_before + 1 && active_index(with_new_tab) === tabs_before && with_new_tab.mail_tab?.folder === "/Trash", `tabs ${main_window_tabs(with_new_tab).length}, active ${active_index(with_new_tab)}, folder ${with_new_tab.mail_tab?.folder}`);
+  await instance.ask("select_tab", 20000, { index: 0 });
+  const first_tab = await wait_state(instance, "the first tab to be active", (state) => active_index(state) === 0 && state.mail_tab?.folder !== undefined, { soft: true });
+  check(app, kind, "the first tab keeps the Inbox after O /Trash", first_tab.mail_tab?.folder === "/Inbox", `folder ${first_tab.mail_tab?.folder}`);
   check(app, kind, "the app survived the folder keys", instance.exited() === null);
 }
 

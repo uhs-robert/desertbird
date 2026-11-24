@@ -293,3 +293,22 @@ test("jump.back and jump.forward focus the thread list after the folder shows", 
     await run(api, "jump.forward");
     assert.deepEqual(display_and_focus(calls).slice(-2), ["mailTabs.update 1 a1:/Trash", "paneFocus threads"]);
 });
+
+const creates = (calls: string[]) => calls.filter((call) => call.startsWith("mailTabs.create"));
+
+test("folder.open --tab creates a tab on the special and path branches, and updates no tab", async () => {
+    const accounts = [{ id: "a1", type: "imap", name: "Work" }, { id: "a2", type: "imap", name: "Home" }];
+    const { api, calls } = fake_api({ folders: FOLDERS, accounts, displayed: FOLDERS[0] as MailFolder });
+    await run(api, "folder.open", { special: "trash", tab: true } as never);
+    await run(api, "folder.open", { folder: "/Work/Plans", tab: true } as never);
+    await run(api, "folder.open", { folder: "/Inbox", account: "Home", tab: true } as never);
+    assert.deepEqual(creates(calls), ["mailTabs.create a1:/Trash", "mailTabs.create a1:/Work/Plans", "mailTabs.create a2:/Inbox"]);
+    assert.deepEqual(updates(calls), []);
+});
+
+test("folder.open --tab creates nothing for a missing folder", async () => {
+    const { api, calls } = fake_api({ folders: FOLDERS, displayed: FOLDERS[0] as MailFolder });
+    await run(api, "folder.open", { folder: "/Nope", tab: true } as never);
+    assert.deepEqual(creates(calls), []);
+    assert.deepEqual(notifications(calls), ["There is no folder /Nope."]);
+});

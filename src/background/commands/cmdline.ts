@@ -24,6 +24,7 @@ export const cmdline: CommandGroup = {
         ":": { id: "cmdline.open", label: "Command line" },
         mt: { id: "cmdline.open", args: { text: "tag " }, label: "Tag" },
         o: { id: "cmdline.open", args: { text: "open " }, label: "Open folder" },
+        O: { id: "cmdline.open", args: { text: "open --tab " }, label: "Open folder in tab" },
         tm: { id: "cmdline.open", args: { text: "tab.move " }, label: "Move tab" },
         tM: { id: "cmdline.open", args: { text: "tab.move --offset=" }, label: "Move tab by offset" },
         mm: { id: "cmdline.open", args: { text: "move " }, label: "Move to" },

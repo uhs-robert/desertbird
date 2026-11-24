@@ -13,7 +13,7 @@ const SPECIAL = ["inbox", "trash", "drafts", "sent", "archive", "junk"];
 // The slot is a `key` param that the bindings leave out, so the key press after `M` or `'` fills it (`with_captures` in `commands/captures.ts` builds the branch).
 const SLOT_PARAM = { name: "slot", type: "key", description: "Name the one-key slot of the mark." } as const;
 
-// `o` opens the command line on `open `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
+// `o` opens the command line on `open `, and `O` on `open --tab `, so the path is typed or picked there. The folder pattern takes any word, because a fuzzy word like `proj` reaches the handler when Enter has no row to take. Every command here changes only what the view shows, except `mark.set`, which writes a mark.
 export const folders: CommandGroup = {
     commands: needing("list", {
         "folder.open": {
@@ -41,6 +41,7 @@ export const folders: CommandGroup = {
                     pattern: "^(\\S.*)?$",
                     pattern_arms: [{ pattern: "^$", when: { special: SPECIAL } }],
                 },
+                { name: "tab", type: "bool", short: "T", description: "Open the folder in a new tab in front." },
                 ACCOUNT_PARAM,
             ],
             needs: ["app.paneFocus"],

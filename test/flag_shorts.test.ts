@@ -27,6 +27,7 @@ test("short flags parse to the same invocation as the long flags", () => {
     assert.deepEqual(invocation("filter -u"), invocation("filter --unread"));
     assert.deepEqual(invocation("filter -t -T=work"), invocation("filter --tag --tag=work"));
     assert.deepEqual(invocation("open -A=Work -a"), invocation("open --account=Work --archive"));
+    assert.deepEqual(invocation("open -T /Trash"), invocation("open --tab /Trash"));
     assert.deepEqual(invocation("snooze -t"), invocation("snooze --tomorrow"));
     assert.deepEqual(invocation("filter -s"), invocation("filter --toggle-starred"));
     assert.deepEqual(invocation("filter -S"), invocation("filter --starred"));
