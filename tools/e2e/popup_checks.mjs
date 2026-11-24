@@ -31,7 +31,8 @@ const CLOSED_AT_MOST = 0.05;
 const OPEN_AT_LEAST = 0.5;
 const panel_pixels = async (instance, name) => (await instance.shot_region(name, APP_MENU_PANEL_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
 
-const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGIONS[instance.app], "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
+// The Mark submenu region without its last 20 px on the menu's side, so a highlighted row of the menu itself cannot read as an open submenu.
+const submenu_only_region = (app) => MARK_SUBMENU_REGIONS[app].replace(/(\d+)x(\d+)$/, (_, width, height) => `${Number(width) - 20}x${height}`);
 
 export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected }) {
   const app = instance.app;
@@ -48,6 +49,8 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   await sleep(1000);
   const pinned = app === "betterbird";
   const menu_before = pinned && (await menu_pixels("popup_menu_before"));
+  const submenu_pixels = async (name) => (await instance.shot_region(name, submenu_only_region(app), "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
+  const submenu_closed = await submenu_pixels("popup_submenu_closed");
   let state = await key_and_state(instance, ["j"], 1200);
   check(app, kind, "context menu open by keyboard: j marks nothing as junk and moves nothing in the list", untouched(state), detail(state));
   // j and k move the menu's selection, read as pixels.
@@ -71,7 +74,9 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
     state = await key_and_state(instance, ["k"], 800);
     note(app, kind, "context menu j and k move the selection", "not read as pixels: the menu position is pinned on Betterbird only");
   }
-  check(app, kind, "context menu open: j and k leave the list alone, and k opens no Mark submenu", untouched(state), detail(state));
+  check(app, kind, "context menu open: j and k leave the list alone", untouched(state), detail(state));
+  const submenu_after_k = await submenu_pixels("popup_submenu_after_k");
+  check(app, kind, "context menu open: k opens no Mark submenu", submenu_after_k.equals(submenu_closed));
   await instance.press(["-k", "Escape"]);
   await instance.press(["-k", "Escape"]);
   await sleep(800);

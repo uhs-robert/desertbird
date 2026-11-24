@@ -5,7 +5,7 @@ import { default_keymap_of } from "../src/background/commands/tab_keymaps.ts";
 import { effective_keymap } from "../src/background/config/keymap.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
-import { default_typing_keymap } from "../src/background/commands/tab_keymaps.ts";
+import { default_typing_keymap, effective_menu_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { help_groups } from "../src/help/model.ts";
 
 const all_entries = (keymap = DEFAULT_KEYMAP) => help_groups(registry, keymap).flatMap((group) => group.entries);
@@ -161,4 +161,10 @@ test("the typing keys list under their commands, marked as working in a text fie
     const entries = help_groups(registry, DEFAULT_KEYMAP, {}, default_typing_keymap()).flatMap((group) => group.entries);
     assert.deepEqual(entries.find((entry) => entry.id === "mode.escape")?.keys.map((key) => [key.keys, key.where]), [["<Escape>", "typing"], ["<C-[>", "typing"]]);
     assert.ok(entries.find((entry) => entry.id === "tab.next")?.keys.some((key) => key.keys === "<A-j>" && key.where === "typing"));
+});
+
+test("the menu keys list under menu.down and menu.up, marked as working in an open menu", () => {
+    const entries = help_groups(registry, DEFAULT_KEYMAP, {}, {}, effective_menu_keymap({ n: { id: "menu.down" } })).flatMap((group) => group.entries);
+    assert.deepEqual(entries.find((entry) => entry.id === "menu.down")?.keys.map((key) => [key.keys, key.where]), [["j", "menu"], ["n", "menu"]]);
+    assert.deepEqual(entries.find((entry) => entry.id === "menu.up")?.keys.map((key) => [key.keys, key.where]), [["k", "menu"]]);
 });

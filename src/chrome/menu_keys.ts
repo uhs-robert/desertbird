@@ -69,6 +69,7 @@ export function create_menu_runtime<Window>(deps: MenuDeps<Window>): MenuRuntime
         const popups = new Set<MenuNode>();
         const on_popup = (event: MenuEvent) => {
             const popup = (event.originalTarget ?? event.target) as MenuNode;
+            for (const stale of popups) if (!stale.isConnected) popups.delete(stale);
             popups.delete(popup);
             if (event.type === "popupshown" && (popup.localName === "menupopup" || popup.localName === "panel")) popups.add(popup);
         };
@@ -104,8 +105,8 @@ export function create_menu_runtime<Window>(deps: MenuDeps<Window>): MenuRuntime
         install(keys) {
             table = new Map(keys.map((each) => [each.key, each.direction]));
             if (listening) return;
-            listening = true;
             deps.register_window_listener({ on_load_window: hook, on_unload_window: unhook });
+            listening = true;
         },
         shutdown() {
             for (const window of [...unhooks.keys()]) unhook(window);

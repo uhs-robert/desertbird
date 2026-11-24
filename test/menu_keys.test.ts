@@ -291,3 +291,40 @@ test("shutdown removes every listener from every window and the window listener,
         done();
     }
 });
+
+test("a popup of a closed document is dropped from the set at the next popup event", async () => {
+    const win = fake_window();
+    const { done } = await setup([win]);
+    try {
+        const old = fake_node("menupopup");
+        win.show(old.node);
+        old.node.isConnected = false;
+        const fresh = fake_node("menupopup");
+        win.show(fresh.node);
+        old.node.isConnected = true;
+        assert.equal(win.press("j").taken, true);
+        assert.deepEqual([old.sent.length, fresh.sent.length], [0, 2]);
+    } finally {
+        done();
+    }
+});
+
+test("a window listener that fails to register leaves the install retryable", async () => {
+    const platform = stub_platform();
+    const api = get_menukeys_api().menukeys;
+    const real = (globalThis as unknown as { ChromeUtils: { importESModule(url: string): { ExtensionSupport?: { registerWindowListener(id: string, listener: object): void } } } }).ChromeUtils;
+    let failing = true;
+    const support = real.importESModule("resource:///modules/ExtensionSupport.sys.mjs").ExtensionSupport!;
+    const register = support.registerWindowListener;
+    support.registerWindowListener = (id, listener) => (failing ? (() => { throw new Error("no window listener"); })() : register(id, listener));
+    try {
+        await assert.rejects(api.install({ keys: [{ key: "j", direction: "down" }] }));
+        failing = false;
+        await api.install({ keys: [{ key: "j", direction: "down" }] });
+        assert.equal(platform.window_listeners.size, 1);
+    } finally {
+        support.registerWindowListener = register;
+        shutdown();
+        platform.restore();
+    }
+});

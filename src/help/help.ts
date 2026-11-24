@@ -4,7 +4,7 @@ import { effective_keymap } from "../background/config/keymap.ts";
 import { create_config_store } from "../background/config/store.ts";
 import type { ConfigStorage } from "../background/config/store.ts";
 import { registry } from "../background/commands/index.ts";
-import { default_keymap_of, default_typing_keymap } from "../background/commands/tab_keymaps.ts";
+import { default_keymap_of, default_typing_keymap, effective_menu_keymap } from "../background/commands/tab_keymaps.ts";
 import { help_groups } from "./model.ts";
 import type { HelpEntry } from "./model.ts";
 
@@ -25,7 +25,7 @@ function keys_cell(entry: HelpEntry): HTMLTableCellElement {
     if (entry.keys.length === 0) cell.append(make("span", "none", "none"));
     for (const key of entry.keys) {
         cell.append(make("kbd", key.keys));
-        const note = [{ message: "in a message", typing: "in a text field", "": "" }[key.where], key.args].filter((part) => part !== "").join(", ");
+        const note = [{ message: "in a message", typing: "in a text field", menu: "in an open menu", "": "" }[key.where], key.args].filter((part) => part !== "").join(", ");
         if (note !== "") cell.append(make("span", note, "args"));
         cell.append(document.createElement("br"));
     }
@@ -42,7 +42,7 @@ function command_cell(entry: HelpEntry): HTMLTableCellElement {
 async function render(): Promise<void> {
     const config = await store.read();
     groups_element.replaceChildren(
-        ...help_groups(registry, effective_keymap(config.user_keymap), default_keymap_of("message"), default_typing_keymap()).map((group) => {
+        ...help_groups(registry, effective_keymap(config.user_keymap), default_keymap_of("message"), default_typing_keymap(), effective_menu_keymap(config.user_keymap.menu)).map((group) => {
             const table = make("table");
             const head = make("tr");
             head.append(...["Keys", "Command", "What it does"].map((title) => make("th", title)));

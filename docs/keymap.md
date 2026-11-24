@@ -827,7 +827,7 @@ A text field in a page tab or in the mail tab (the quick filter, the search box)
 
 ### Open menus
 
-A native menu or popup is open (a context menu, a menu bar menu, a dropdown, the app menu opened by the keyboard) in any window, dialogs included. These keys move the selection and are rebindable. A key you set to `menu.down` or `menu.up` must be one typed character. The access keys of the menu lose the keys that move it.
+A native menu or popup is open (a context menu, a menu bar menu, a dropdown, the app menu opened by the keyboard) in any window, dialogs included. These keys move the selection and are rebindable in the Menu keys section of the options page, which is apart from the key bindings. A menu key must be one typed character. The access keys of the menu lose the keys that move it.
 
 #### Single keys
 

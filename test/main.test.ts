@@ -11,7 +11,7 @@ interface StorageChange {
 }
 
 /** A stand-in for the `messenger` global the background entry reads: storage that fires `onChanged` on each write, and a recording `keys.install` and `pages.install`. */
-function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}) {
+function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}, options: { menukeys_fails?: boolean; no_menukeys?: boolean } = {}) {
     const native_messages: { application: string; message: object }[] = [];
     const compose_scripts: unknown[] = [];
     const after_send_listeners: ((tab: { id?: number }, send_info: { error?: string }) => void)[] = [];
@@ -52,7 +52,11 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         },
         composeScripts: { register: async (script: unknown) => void compose_scripts.push(script) },
         compose: { onAfterSend: { addListener: (listener: (tab: { id?: number }, send_info: { error?: string }) => void) => void after_send_listeners.push(listener) } },
-        menukeys: { install: async (args: { keys: { key: string; direction: string }[] }) => void (install_log.push("menukeys"), menu_installs.push(Object.fromEntries(args.keys.map((each) => [each.key, each.direction])))) },
+        menukeys: options.no_menukeys ? undefined : { install: async (args: { keys: { key: string; direction: string }[] }) => {
+                install_log.push("menukeys");
+                if (options.menukeys_fails) throw new Error("schema rejected the keys");
+                menu_installs.push(Object.fromEntries(args.keys.map((each) => [each.key, each.direction])));
+            } },
         keys: { install: async (args: { tree: unknown; menuKeys?: string[] }) => void (install_log.push("keys"), installs.push(args.tree), menu_key_tokens.push(args.menuKeys ?? [])), onInvocation: { addListener: () => {} } },
         pages: { install: async (args: { pageTree: unknown; messageTree: unknown; windowTree: unknown; typingTree: unknown }) => void (install_log.push("pages"), page_installs.push(args.pageTree), message_installs.push(args.messageTree), window_installs.push(args.windowTree), typing_installs.push(args.typingTree)), onInvocation: { addListener: () => {} } },
         runtime: {
@@ -152,11 +156,35 @@ test("the menu keys install first, so their listener is the first on each window
 });
 
 test("a user key for a menu command changes the installed menu keys", async () => {
-    const { menu_installs, menu_key_tokens } = stub_messenger({ desertbird_user_keymap: { normal: { n: { id: "menu.down" }, "<C-n>": { id: "menu.down" }, x: { id: "msg.archive" } } } });
+    const { menu_installs, menu_key_tokens } = stub_messenger({ desertbird_user_keymap: { normal: { x: { id: "msg.archive" } }, menu: { n: { id: "menu.down" }, "<C-n>": { id: "menu.down" } } } });
     await start_background();
     await settle();
     assert.deepEqual(menu_installs.at(-1), { j: "down", k: "up", n: "down" });
     assert.deepEqual(menu_key_tokens.at(-1), ["j", "k", "n"]);
+});
+
+test("a user key in the menu section changes the menu keys and nothing else", async () => {
+    const { installs, stored } = stub_messenger({ desertbird_user_keymap: { menu: { n: { id: "menu.down" } } } });
+    await start_background();
+    await settle();
+    assert.doesNotMatch(JSON.stringify(installs), /menu\./);
+    assert.doesNotMatch(JSON.stringify(stored["desertbird_compiled_keymap"]), /menu\./);
+});
+
+test("a menukeys install that rejects leaves the other runtimes installed and the key runtime with no menu keys", async () => {
+    const { install_log, menu_key_tokens } = stub_messenger({}, [], {}, { menukeys_fails: true });
+    await start_background();
+    await settle();
+    assert.deepEqual(install_log, ["menukeys", "keys", "pages"]);
+    assert.deepEqual(menu_key_tokens, [[]]);
+});
+
+test("with no menukeys Experiment the key runtime gets no menu keys", async () => {
+    const { install_log, menu_key_tokens } = stub_messenger({}, [], {}, { no_menukeys: true });
+    await start_background();
+    await settle();
+    assert.deepEqual(install_log, ["keys", "pages"]);
+    assert.deepEqual(menu_key_tokens, [[]]);
 });
 
 test("the pages Experiment gets the message tree without the find key", async () => {

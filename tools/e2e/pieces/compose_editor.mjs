@@ -354,7 +354,7 @@ async function run_compose_window(instance, ctx) {
   await type_text("ali");
   await sleep(2000);
   await shot("popup_open", "the address popup open under To");
-  // A j typed with the popup open is text: the popup keeps its focus in the field, so the menu keys leave it alone.
+  // A j typed with the popup open is text: the popup keeps its focus in the field, so the menu keys leave it alone. The contact Alijah keeps the popup open after the j.
   await type_text("j");
   await instance.press(["-k", "Escape"]);
   await sleep(700);

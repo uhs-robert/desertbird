@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SETTING_DEFAULTS as DEFAULT_SETTINGS } from "../src/background/config/settings.ts";
-import { build_user_keymap, default_rows, edits_from_user_keymap, overrides_from_texts, parse_setting_text, setting_to_text } from "../src/options/model.ts";
+import { build_user_keymap, default_menu_rows, default_rows, edits_from_user_keymap, menu_edits_from_user_keymap, overrides_from_texts, parse_setting_text, setting_to_text } from "../src/options/model.ts";
 import { DEFAULT_KEYMAP } from "../src/background/commands/index.ts";
 import { SETTING_NAMES } from "../src/background/config/settings.ts";
 import type { SettingName } from "../src/background/config/settings.ts";
@@ -70,4 +70,28 @@ test("a custom prompt keeps its leading and trailing spaces, and a list setting 
     assert.deepEqual(parse_setting_text("statusbar_widgets", ""), { value: [] });
     assert.deepEqual(parse_setting_text("statusbar_widgets", "folder, url"), { error: "expected a list of folder, position" });
     assert.equal(setting_to_text("statusbar_widgets", ["folder", "position"]), "folder, position");
+});
+
+const no_edits = { removed: [], rows: [] };
+
+test("the default menu rows list j and k apart from the thread list rows", () => {
+    assert.deepEqual(default_menu_rows().map((row) => [row.keys, row.command]), [["j", "menu.down"], ["k", "menu.up"]]);
+    assert.equal(default_rows().some((row) => row.command.startsWith("menu.")), false);
+});
+
+test("menu edits round-trip through the menu section and leave the list keys alone", () => {
+    const menu_edits = { removed: ["j"], rows: [{ keys: "n", command: "menu.down", args: "" }] };
+    const built = build_user_keymap(no_edits, {}, menu_edits);
+    assert.ok("user_keymap" in built && !built.blocked);
+    if ("user_keymap" in built) {
+        assert.deepEqual(menu_edits_from_user_keymap(built.user_keymap), menu_edits);
+        assert.deepEqual(built.user_keymap.normal, {});
+    }
+});
+
+test("a menu key that is not one typed character, or not a menu command, is an error, and a menu command in the key bindings is too", () => {
+    for (const row of [{ keys: "gn", command: "menu.down", args: "" }, { keys: "<C-n>", command: "menu.down", args: "" }, { keys: "\u{1F600}", command: "menu.down", args: "" }, { keys: "n", command: "msg.archive", args: "" }, { keys: "", command: "menu.up", args: "" }]) {
+        assert.ok("error" in build_user_keymap(no_edits, {}, { removed: [], rows: [row] }), JSON.stringify(row));
+    }
+    assert.ok("error" in build_user_keymap({ removed: [], rows: [{ keys: "n", command: "menu.down", args: "" }] }));
 });
