@@ -3,21 +3,23 @@
 
 import { load_platform, tabmail_of } from "./platform.ts";
 import type { MainWindow } from "./platform.ts";
+import type { FocusNode } from "./focus.ts";
 
 const MAIN_WINDOW_URL = "chrome://messenger/content/messenger.xhtml";
 const WINDOW_LISTENER_ID = "desertbird@uhs-robert/pagefocus";
 
-// Nothing focused, or the tab strip. Any other element is the user's own choice (an input they clicked before switching back) and stays.
+// Nothing focused, the tab strip, or an add-on's toolbar popup (DesertBird's opens the options and help tabs while it still holds the focus, and closes right after). Any other element is the user's own choice (an input they clicked before switching back) and stays.
 const YIELDS_FOCUS = new Set(["body", "tab", "tabs"]);
+const yields_focus = (active: (FocusNode & { getAttribute?(name: string): string | null }) | null): boolean => !active || YIELDS_FOCUS.has(active.localName ?? "") || active.getAttribute?.("webextension-view-type") === "popup";
 
 interface TimerWindow {
     setTimeout(run: () => void, ms: number): number;
 }
 
-/** Moves the focus into the front tab's browser when that browser is remote, the tab is a content tab and the focus is on nothing or the tab strip. */
+/** Moves the focus into the front tab's browser when that browser is remote, the tab is a content tab and the focus is on nothing, the tab strip or an add-on's popup. */
 export function focus_remote_tab(window: MainWindow): void {
     const active = window.document.activeElement;
-    if (active && !YIELDS_FOCUS.has(active.localName ?? "")) return;
+    if (!yields_focus(active)) return;
     const tab = tabmail_of(window)?.currentTabInfo;
     if (tab?.mode.name === "contentTab" && tab.browser?.isRemoteBrowser) tab.browser.focus();
 }

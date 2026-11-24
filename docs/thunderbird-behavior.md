@@ -725,5 +725,6 @@ Measured on Betterbird, headless e2e, popup opened by a click on the DesertBird 
 - A keydown in the popup reaches the main window's capture listeners first, with the popup browser as `target` and `originalTarget`. A listener that cancels it there keeps it from the page. Before the fix, the key runtime did exactly that under the open `panel`, so `j` did nothing (and with the swallow off it moved the thread list).
 - A key in the ~400 ms before the focus arrives still goes to the old focus, so the key runtime swallows it under the open panel.
 - A plain key the popup page does not cancel (`a`) archived nothing under it.
+- The popup opens the options or help tab while its own browser still holds the focus, so `TabSelect` finds the popup browser focused and not the window body. Unless the page focus hook moves the focus into the new tab, the page takes no key until a click (`q` left the help tab open).
 
 To log from the Experiment in an e2e run: call `window.dump()` and set the pref `browser.dom.window.dump.enabled` to true. The lines land in the piece's `app.log`. Run with `E2E_KEEP=1` (and `E2E_CONSOLE=1` for `console` output), because a run removes its work dir after a success.

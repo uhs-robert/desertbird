@@ -24,6 +24,17 @@ test("a remote tab gets the focus when nothing or the tab strip has it", () => {
     }
 });
 
+// The popup opens the options or help tab while its own browser still holds the focus.
+test("a remote tab gets the focus from an add-on's toolbar popup, and not from another browser", () => {
+    const popup_browser = { localName: "browser", getAttribute: (name: string) => (name === "webextension-view-type" ? "popup" : null) };
+    const from_popup = window_with(popup_browser, { isRemoteBrowser: true });
+    focus_remote_tab(from_popup.window);
+    assert.deepEqual(from_popup.focused, ["browser"]);
+    const from_other_browser = window_with({ localName: "browser", getAttribute: () => null } as never, { isRemoteBrowser: true });
+    focus_remote_tab(from_other_browser.window);
+    assert.deepEqual(from_other_browser.focused, []);
+});
+
 test("an element the user focused keeps the focus, and a page that is not remote is left alone", () => {
     const kept = window_with({ localName: "input" }, { isRemoteBrowser: true });
     focus_remote_tab(kept.window);

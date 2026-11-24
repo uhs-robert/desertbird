@@ -10,4 +10,4 @@ The `default_popup` of the `browser_action` button on the mail tab and default s
 
 ## Keys
 
-Thunderbird moves the focus into the popup's browser by itself once the panel shows (see [`../../docs/thunderbird-behavior.md`](../../docs/thunderbird-behavior.md), "Toolbar popup focus"). The chrome key runtime counts that browser as a typing target, so it neither runs nor swallows the key, and the page gets it. A key pressed in the first ~400 ms after the click, before the focus arrives, is swallowed under the open panel and does nothing.
+Thunderbird moves the focus into the popup's browser by itself once the panel shows (see [`../../docs/thunderbird-behavior.md`](../../docs/thunderbird-behavior.md), "Toolbar popup focus"). The chrome key runtime counts that browser as a typing target, so it neither runs nor swallows the key, and the page gets it. A key pressed in the first ~400 ms after the click, before the focus arrives, is swallowed under the open panel and does nothing. The options or help tab that an entry opens takes the focus from the popup on `TabSelect` (`src/chrome/page_focus.ts`), so its keys work with no click, from a key or a click alike.
