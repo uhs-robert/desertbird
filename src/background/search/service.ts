@@ -110,6 +110,9 @@ export function create_search_service(deps: SearchDeps): SearchService {
         return tab?.displayedFolder?.id === search.folder_id;
     }
 
+    // A search job rechecks right before it changes the tab, because it can wait in the tab's apply chain behind another filter key.
+    const owns_search = (window_id: number, search: LiveSearch) => async () => live.get(window_id) === search && (await still_here(window_id, search));
+
     function leave_search(window_id: number, search: LiveSearch): void {
         search.sequence++;
         if (live.get(window_id) === search) live.delete(window_id);
@@ -157,7 +160,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
                     leave_search(window_id, search);
                     return { note: "The folder changed, so the search ended.", is_error: true };
                 }
-                await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text));
+                if (!(await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text), owns_search(window_id, search)))) return { stale: true };
                 if (text === "") return { note: "", is_error: false };
                 const count = await count_rows(window_id);
                 if (mine !== search.sequence) return { stale: true };
@@ -183,7 +186,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 }
                 const wanted = with_text(search.prior, query);
                 // Enter right after the last keystroke finds its filter applied, and the search of that filter may still run. A second apply would restart it.
-                if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted)) await apply_filter(deps.api, search.tab_id, wanted);
+                if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted) && !(await apply_filter(deps.api, search.tab_id, wanted, owns_search(window_id, search)))) throw new RuntimeRefusal("The search was cancelled.");
                 if (wanted.by_message !== undefined) await terms_search_ended(window_id, search);
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
@@ -203,8 +206,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             if (search === undefined) return;
             leave_search(window_id, search);
             await in_order(search, async () => {
-                if (await owns_tab(search)) await apply_filter(deps.api, search.tab_id, search.prior);
-                else forget_filter(search.tab_id);
+                if (!(await owns_tab(search)) || !(await apply_filter(deps.api, search.tab_id, search.prior, () => owns_tab(search)))) forget_filter(search.tab_id);
             }).catch((error: unknown) => console.error("desertbird:", error));
         },
 

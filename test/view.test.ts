@@ -439,6 +439,8 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
     const tab_id = next_tab_id++;
     const steps: string[] = [];
     const notices: string[] = [];
+    // The folder the tab shows. A test sets another to stand for a folder change.
+    const view = { folder: INBOX };
     const filter_set = async (args: FilterSetArgs) => {
         if (options.filter === "failing") throw new Error("filter.set: the tab shows no message list");
         steps.push(`filter.set ${JSON.stringify({ ...args, tabId: args.tabId - tab_id })}`);
@@ -446,8 +448,8 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
     };
     const api = {
         mailTabs: {
-            query: async () => [{ id: tab_id, displayedFolder: INBOX }],
-            get: async () => ({ displayedFolder: INBOX }),
+            query: async () => [{ id: tab_id, displayedFolder: view.folder }],
+            get: async () => ({ displayedFolder: view.folder }),
             update: async () => undefined,
             setQuickFilter: async (_id: number, filter: unknown) => void steps.push(`setQuickFilter ${JSON.stringify(filter)}`),
             setSelectedMessages: async () => undefined,
@@ -474,7 +476,7 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
         timers.advance(SEARCH_DEBOUNCE_MS);
         return pending;
     };
-    return { run, steps, notices, search, type, api, timers, said };
+    return { run, steps, notices, search, type, api, timers, said, view };
 }
 
 test("F m l filters on the List-Id in angle brackets and F m d on the message date in microseconds, after a setQuickFilter that keeps the other filters", async () => {
@@ -694,6 +696,28 @@ test("Escape while a commit waits for the list search ends the wait and restores
     await assert.rejects(commit, /cancelled/);
     await cancel;
     assert.deepEqual(fake.steps.slice(-2), ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("a search keystroke queued behind another apply changes nothing when the folder changes and the search is cancelled during the wait", async () => {
+    const fake = terms_fake();
+    await fake.run("filter.by", { field: "list" });
+    await fake.search.start(3, "forward");
+    const terms = gate();
+    const set = fake.api.filter!.set;
+    fake.api.filter!.set = async (args) => (await terms.passed, set(args));
+    const unread = fake.run("filter.set", { state: "unread" });
+    while (!fake.steps.includes('setQuickFilter {"unread":true}')) await settle();
+    const typed = fake.type("inv");
+    await settle();
+    fake.view.folder = { ...INBOX, id: "f-other", path: "/Other" };
+    // The cancel's restore queues behind the keystroke, so it ends only after the gate opens.
+    const cancelled = fake.search.cancel(3);
+    await settle();
+    terms.open();
+    await Promise.all([unread, typed, cancelled]);
+    await settle();
+    // Only F u's apply reached the tab: no text filter, and no restore into the other folder.
+    assert.deepEqual(fake.steps.slice(2), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
 test(":search keeps the list filter under its text", async () => {

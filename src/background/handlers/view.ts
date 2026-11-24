@@ -146,10 +146,14 @@ export type FilterChange = AppliedFilter | ((remembered: AppliedFilter) => Appli
 // A change that builds on the remembered filter reads it inside the chain, so it builds on what the apply before it left, even one still in flight when its key was pressed.
 const applies_in_flight = new Map<number, Promise<void>>();
 
-export function apply_filter(api: FilterApis, tab_id: number, change: FilterChange): Promise<void> {
+/** Answers false, with nothing changed, when `still_owner` says at its turn in the chain that the caller no longer owns the tab. */
+export function apply_filter(api: FilterApis, tab_id: number, change: FilterChange, still_owner?: () => Promise<boolean>): Promise<boolean> {
     const apply = (applies_in_flight.get(tab_id) ?? Promise.resolve()).then(async () => {
+        // The caller checked before it queued, and the tab can change while the apply waits its turn.
+        if (still_owner !== undefined && !(await still_owner())) return false;
         await filters_ready();
         await apply_now(api, tab_id, typeof change === "function" ? change(remembered_filter(tab_id)) : change);
+        return true;
     });
     const queued = keep_chain(apply);
     applies_in_flight.set(tab_id, queued);
