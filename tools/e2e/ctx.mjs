@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assert_start_paths, start_paths_of } from "./run_dir.mjs";
 import { seed_storage } from "./seed.mjs";
-import { HUD_REGION, KEY_LIST_REGION, first_selected, QUIET_AFTER_ESCAPE_MS, TOAST_EXPIRY_MS, back_to, drawn_since, folder_shown, holds_twice, sleep } from "./predicates.mjs";
+import { normal_window_focused, HUD_REGION, KEY_LIST_REGION, first_selected, QUIET_AFTER_ESCAPE_MS, TOAST_EXPIRY_MS, back_to, drawn_since, folder_shown, holds_twice, sleep } from "./predicates.mjs";
 
 // Opens the Inbox with keys only. `folder_row_tabs` Tabs (eight) reach the Local Folders row, Right expands it, Down selects the Inbox and F6 moves focus to the thread list.
 // With no identity the New Message button is disabled and skipped by Tab, so the folder row is one Tab sooner.
@@ -106,9 +106,9 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
 
   const wait_for_state = (instance, wanted) => wait_state(instance, wanted.what, wanted.until, wanted);
 
-  // Keys go to the focused window, and under load a fresh tab can leave the main window without focus for longer than a fixed sleep. A window that never gains focus fails by name, since a timed-out wait records a FAIL. It clicks nothing, so a no-click check keeps its contract.
+  // Keys go to the focused window, and under load a fresh tab can leave the main window without focus for longer than a fixed sleep. It clicks nothing, so a no-click check keeps its contract.
   // It closes that gap but not every drop: one stressed run still lost the calendar keys after this wait passed, so a single focused read is not proof that keys arrive.
-  const wait_window_focus = (instance) => wait_for_state(instance, { what: "the normal window to report focus before the first key", until: (state) => state.windows.some((window) => window.type === "normal" && window.focused === true), timeout_ms: 15000, show: (state) => `windows ${JSON.stringify(state.windows.map((window) => [window.type, window.focused]))}` });
+  const wait_window_focus = (instance) => wait_for_state(instance, { what: "the normal window to report focus before the first key", until: normal_window_focused, timeout_ms: 15000, show: (state) => `windows ${JSON.stringify(state.windows.map((window) => [window.type, window.focused]))}` });
 
   async function show_folder(instance, path) {
     await instance.ask("show_folder", 20000, { path });
@@ -152,7 +152,7 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
   // Closes the compose windows and waits until the mail window has the focus again, since keys go to the focused window.
   async function close_compose(instance) {
     await instance.ask("close_compose");
-    return wait_state(instance, "the compose window to close and the mail window to take focus", (state) => !state.windows.some((window) => window.type === "messageCompose") && state.windows.some((window) => window.type === "normal" && window.focused === true), { timeout_ms: 8000 });
+    return wait_state(instance, "the compose window to close and the mail window to take focus", (state) => !state.windows.some((window) => window.type === "messageCompose") && normal_window_focused(state), { timeout_ms: 8000 });
   }
 
   // The clipboard text once a yank has written it. The caller clears the clipboard first, so an empty text means not yet.

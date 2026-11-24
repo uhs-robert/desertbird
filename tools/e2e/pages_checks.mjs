@@ -125,6 +125,7 @@ export async function run_pages(instance, { check, note, wait_window_focus, shot
     await sleep(500);
     await instance.ask("open_message_tab");
     await sleep(2500);
+    await wait_window_focus(instance);
     const message_tabs = await tabs_of();
     check(app, kind, `a message tab opens (${route})`, message_tabs.length === before + 1, `tabs ${JSON.stringify(message_tabs.map((tab) => tab.type))}`);
     if (route === "after F6") {
