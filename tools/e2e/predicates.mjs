@@ -21,9 +21,9 @@ export const compose_opens = (tab_is_ready) => ({ what: "a compose window with i
 export const thread_shows = (open) => ({ what: `the selected thread to ${open ? "open" : "close"}`, until: (state) => (open ? state.selected.length === 1 : state.selected.length > 1), show: (state) => `${state.selected.length} selected` });
 // A folder shown through the API lists its messages only once Thunderbird has read its mbox, so the folder alone is not the signal.
 export const folder_shown = (path) => ({ what: `${path} to show with its messages`, until: (state) => state.mail_tab?.folder === path && state.listed.length > 0, show: (state) => `folder ${state.mail_tab?.folder}, ${state.listed.length} listed`, timeout_ms: 10000 });
-// A main window the helper opened or closed: it counts when the window list shows it and, for a new one, gives it the focus that keys need.
 // The normal (mail) window reports the focus that keys need.
 export const normal_window_focused = (state) => state.windows.some((window) => window.type === "normal" && window.focused === true);
+// A main window the helper opened or closed: it counts when the window list shows it and, for a new one, gives it the focus that keys need.
 export const window_has_focus = (id) => ({ what: `main window ${id} to open and take focus`, until: (state) => state.windows.some((window) => window.id === id && window.focused === true), timeout_ms: 15000 });
 export const window_is_closed = (id) => ({ what: `main window ${id} to close`, until: (state) => !state.windows.some((window) => window.id === id) && normal_window_focused(state), timeout_ms: 10000 });
 // A hash of the bottom 80 px of the window, where the panel and the toasts draw, without the scrollbar strip. The mode label sits in it too and stays the same while the mode does. Higher up a message pane can still be loading.
