@@ -105,7 +105,7 @@
       {
         "name": "onInvocation",
         "type": "function",
-        "description": "A key sequence in a compose window finished on a command that runs in the background. The payload is output only, so it takes no argument check.",
+        "description": "A key sequence in a compose window finished on a command that runs in the background. It also carries `pending` reports of the half-typed sequence (`keys`, `source`). The payload is output only, so it takes no argument check.",
         "parameters": [
           {
             "name": "invocation",
@@ -131,6 +131,15 @@
                 "items": {
                   "type": "integer"
                 }
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source": {
+                "type": "string"
               }
             }
           }

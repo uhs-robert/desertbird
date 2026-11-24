@@ -58,6 +58,7 @@ export const compose: CommandGroup = {
         e: { id: "compose.edit_external", label: "Edit in external editor" },
         s: { id: "compose.save", label: "Save draft" },
         "?": { id: "help.open", label: "Open help" },
+        "g?": { id: "help.whichkey", label: "Show keys" },
         gt: { id: "compose.focus", args: { field: "to" }, label: "To" },
         gc: { id: "compose.focus", args: { field: "cc" }, label: "Cc" },
         gb: { id: "compose.focus", args: { field: "bcc" }, label: "Bcc" },

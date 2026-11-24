@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 455 (Mail tab 154, Message 98, Message window 80, Compose window 20, Own pages 50, Other tabs 49, Text fields 4)
+bound: 457 (Mail tab 154, Message 98, Message window 80, Compose window 22, Own pages 50, Other tabs 49, Text fields 4)
 
 ### Mail tab
 
@@ -606,6 +606,7 @@ A message being written, in normal mode: the body and the To, Cc, Bcc and Subjec
 
 | Key | Command |
 | --- | --- |
+| `g?` | `help.whichkey` |
 | `gt` | `compose.focus to` |
 | `gc` | `compose.focus cc` |
 | `gb` | `compose.focus bcc` |
@@ -618,6 +619,7 @@ A message being written, in normal mode: the body and the To, Cc, Bcc and Subjec
 | Key | Command |
 | --- | --- |
 | `,h` | `help.open` |
+| `,?` | `help.whichkey` |
 
 #### Zoom and scroll
 

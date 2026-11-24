@@ -21,7 +21,8 @@ test("the default compose keys are e, s, ?, the field jumps, q, g S and the zoom
     assert.deepEqual([binding("e")?.id, binding("s")?.id, binding("?")?.id, binding("q")?.id, binding("gS")?.id], ["compose.edit_external", "compose.save", "help.open", "compose.close", "compose.send"]);
     for (const [key, field] of [["gt", "to"], ["gc", "cc"], ["gb", "bcc"], ["gs", "subject"], ["gm", "body"]] as const) assert.deepEqual([binding(key)?.id, binding(key)?.args], ["compose.focus", { field }], key);
     for (const key of ["zi", "zo", "z+", "z-", "zm", "zr", "z=", "zI", "zO"]) assert.match(binding(key)?.id ?? "", /^zoom\./, key);
-    assert.deepEqual([...new Set(bound_ids("compose"))].sort(), ["compose.close", "compose.edit_external", "compose.focus", "compose.save", "compose.send", "help.open", "zoom.by", "zoom.set"]);
+    assert.deepEqual([...new Set(bound_ids("compose"))].sort(), ["compose.close", "compose.edit_external", "compose.focus", "compose.save", "compose.send", "help.open", "help.whichkey", "zoom.by", "zoom.set"]);
+    assert.equal(binding("g?")?.id, "help.whichkey");
 });
 
 test("no default key of a compose window removes it, deletes or opens the command line, and its close and send are Thunderbird's own commands", () => {

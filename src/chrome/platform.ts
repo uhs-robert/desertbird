@@ -53,8 +53,8 @@ export const open_windows = (type: string): MainWindow[] => Array.from(Services.
 
 export const open_main_windows = (): MainWindow[] => open_windows(MAIN_WINDOW_TYPE);
 
-/** The windows that can show the overlay: the main windows and the standalone message windows. */
-export const open_overlay_windows = (): MainWindow[] => [...open_main_windows(), ...open_windows(MESSAGE_WINDOW_TYPE)];
+/** The windows that can show the overlay: the main windows, the standalone message windows and the compose windows. */
+export const open_overlay_windows = (): MainWindow[] => [...open_main_windows(), ...open_windows(MESSAGE_WINDOW_TYPE), ...open_windows("msgcompose")];
 
 /** What a chrome window is, read from its window type. A window with no tab bar is not a message window by that alone: a compose window has none either. */
 export function window_kind_of(window: MainWindow): "main" | "message" | "other" {
