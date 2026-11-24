@@ -91,7 +91,7 @@ function views_text() {
   return entries.join("");
 }
 
-// The Lists folder serves the list and date filters (F m l, F m d), in profile kind "lists" only, so the folder pane of every other piece stays as it was. Seven single messages on three days, from two mailing lists and none. Every message is sent at 12:00 UTC plus its index in minutes, so the messages of one UTC day share a local day in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
+// The Lists folder serves the list and date filters (F m l, F m d), in profile kinds "lists" and "owner" only, so the folder pane of every other piece stays as it was and a hand test has mail with a List-Id. Seven single messages on three days, from two mailing lists and none. Every message is sent at 12:00 UTC plus its index in minutes, so the messages of one UTC day share a local day in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
 const LISTS_MAIL = [
   ["dev", 3], ["dev", 3], ["ops", 3], ["dev", 4], ["ops", 5], [null, 5], ["dev", 6],
 ];
@@ -164,7 +164,7 @@ const mail_account_inbox = () =>
     .join("");
 
 // kind "owner" is the default plus the prefs a window a person looks at needs: no first-run policy tab. owner-test uses it.
-// kind "lists" adds the Lists folder (List-Id headers and three days).
+// kind "lists" adds the Lists folder (List-Id headers and three days). kind "owner" adds it too.
 // kind "message_header" adds the Header folder (a message with Cc, a tag and an attachment) and the dark scheme.
 // kinds "quick_reply_plain" and "quick_reply_html" have an identity with a signature. kind "default" has an identity. kind "reply_no_identity" has an account with none. kind "mail_account" adds a default mail account with two identities and gives Local Folders none.
 export function build_profile(profile_dir, { kind = "default" } = {}) {
@@ -174,7 +174,7 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const scale = process.env.E2E_SCALE === "1";
   const folder_dir = write_fixtures(profile_dir, { big: scale, header: kind === "message_header" });
   writeFileSync(join(folder_dir, "Views"), views_text());
-  if (kind === "lists") writeFileSync(join(folder_dir, "Lists"), lists_text());
+  if (kind === "lists" || kind === "owner") writeFileSync(join(folder_dir, "Lists"), lists_text());
   write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   if (!scale) for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
