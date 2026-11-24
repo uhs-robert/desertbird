@@ -7,7 +7,7 @@ export const areas = ["folders"];
 
 // Restarts the app, so it goes after the checks that need the session as it is.
 async function run_folders(instance, ctx) {
-  const { check, note, wait_state, wait_for_state, restart, open_command_line } = ctx;
+  const { check, note, wait_state, wait_for_state, restart, open_command_line, shot } = ctx;
   const app = instance.app;
   const kind = "default";
   // db-folders-jumps: special folder keys, marks, the jump history and its chords. Local Folders holds an Inbox and a Trash and no Drafts or Sent.
@@ -65,6 +65,15 @@ async function run_folders(instance, ctx) {
   note(app, kind, "first display of /Views through the API", `update error ${first_display.update_error}, query right after ${first_display.query_error ?? first_display.shown_right_after}`);
   check(app, kind, "g i after the API display shows the Inbox again", (await shown_folder(["g", "i"], "/Inbox")) === "/Inbox");
   // O opens the command line on `open --tab `: the folder shows in a new front tab and the first tab keeps its folder.
+  // /Html holds mail and this piece never showed it, so the new tab's first display of it may throw the first-display error, which must reach no toast. The shot shows the toast strip.
+  const html_tabs_before = main_window_tabs(await instance.ask("state")).length;
+  await open_command_line(instance, ["O"]);
+  await instance.press(["/Html"]);
+  await instance.press(["-k", "Return"]);
+  const with_html_tab = await wait_state(instance, "O /Html Enter to open a new active tab on Html", (state) => main_window_tabs(state).length === html_tabs_before + 1 && active_index(state) === html_tabs_before && state.mail_tab?.folder === "/Html", { soft: true, timeout_ms: 10000 });
+  check(app, kind, "O on a folder not shown this session opens one new tab on it", main_window_tabs(with_html_tab).length === html_tabs_before + 1 && with_html_tab.mail_tab?.folder === "/Html", `tabs ${main_window_tabs(with_html_tab).length}, folder ${with_html_tab.mail_tab?.folder}`);
+  await wait_state(instance, "Html to list its messages", (state) => state.listed.length > 0, { soft: true, timeout_ms: 10000 });
+  await shot("folders_tab_first_display", "O /Html: the new tab shows Html with no error toast in the strip");
   const tabs_before = main_window_tabs(await instance.ask("state")).length;
   await open_command_line(instance, ["O"]);
   await instance.press(["/Trash"]);
