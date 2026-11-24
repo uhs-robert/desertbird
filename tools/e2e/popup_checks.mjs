@@ -27,6 +27,9 @@ const DESERTBIRD_HELP_ENTRY = [1100, 89];
 // The share of bytes two shots of the popup region differ in. A closed popup leaves at most a hover mark of the page below (measured 1.4%), an open one covers most of it (65%).
 const share_differing = (one, other) => one.reduce((count, byte, index) => count + (byte !== other[index] ? 1 : 0), 0) / one.length;
 const CLOSED_AT_MOST = 0.05;
+// The popup draws dark text (Options, Help and their keys: 1100 to 1900 bytes below 110 in the shots), and the region over the help tab holds none (0, measured). The popup does not stay the same while open, since a hover or the focus ring moves, so a comparison with an open shot cannot tell open from closed.
+const dark_bytes = (pixels) => pixels.reduce((count, byte) => count + (byte < 110 ? 1 : 0), 0);
+const CLOSED_DARK_BYTES_AT_MOST = 100;
 // The app menu panel region, measured on Betterbird only, over several runs: open against closed differs in 100% of the bytes, and two shots of the closed region in different runs in 0%. A menu that did not open reads 0%.
 const OPEN_AT_LEAST = 0.5;
 const panel_pixels = async (instance, name) => (await instance.shot_region(name, APP_MENU_PANEL_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
@@ -37,7 +40,7 @@ const submenu_only_region = (app) => {
   return app === "betterbird" ? `${x},${y} ${width - 20}x${height}` : `${x + 20},${y} ${width - 20}x${height}`;
 };
 
-export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected }) {
+export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected, wait_for }) {
   const app = instance.app;
   const kind = "default";
   const any_junk = (state) => Object.values(state.flags).some((flags) => flags.junk);
@@ -136,7 +139,7 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   if (!opened) {
     await instance.press(["-k", "Escape"]);
     await sleep(800);
-    await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected });
+    await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for });
     return;
   }
   await shot("popup_app_menu_open_by_keyboard", "app menu opened by Enter on the button");
@@ -159,11 +162,11 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   check(app, kind, "app menu after an arrow key inside it: j, a and n mark, archive and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_in_panel, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_in_panel}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
-  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected });
+  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for });
 }
 
 // DesertBird's own popup takes j, k and h. Thunderbird moves the focus into the popup's browser about 400 ms after it shows, so the wait after the click covers that.
-async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected }) {
+async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for }) {
   const app = instance.app;
   const kind = "default";
   const button = DESERTBIRD_BUTTON[app];
@@ -183,6 +186,16 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   check(app, kind, "DesertBird popup: j moves the focus to Help, a second j stays there, k returns to Options", !on_first.equals(on_second) && on_second.equals(still_second) && back_first.equals(on_first));
   const junk = Object.values(state.flags).some((flags) => flags.junk);
   check(app, kind, "DesertBird popup: j and k leave the thread list alone", first_selected(state) === first_selected(before) && !junk, `selected ${first_selected(state)}, expected ${first_selected(before)}, junk ${junk}`);
+  // The popup closes only after the background has run the request, which is slow under load, and a fixed sleep let the next click toggle it shut. The wait ends when the region holds still with no popup text in it. A popup that never closes ends the wait at its ceiling with a FAIL line.
+  const click_help_and_wait_for_close = async () => {
+    await instance.click(...DESERTBIRD_HELP_ENTRY);
+    let last = null;
+    await wait_for(instance, "the DesertBird popup to close after the Help click", () => ring("desertbird_popup_after_help"), (now) => {
+      const held = last !== null && now.equals(last);
+      last = now;
+      return held && dark_bytes(now) <= CLOSED_DARK_BYTES_AT_MOST;
+    }, { timeout_ms: 8000, step_ms: 100 });
+  };
   const tab_count = (each) => each.windows.reduce((sum, window) => sum + window.tabs.length, 0);
   const tabs_before = tab_count(state);
   // A page the popup opens must take keys with no click: q closes it.
@@ -193,8 +206,7 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   // A click on an entry runs the same request, so its page takes keys the same way.
   await instance.click(...button);
   await sleep(2000);
-  await instance.click(...DESERTBIRD_HELP_ENTRY);
-  await sleep(1500);
+  await click_help_and_wait_for_close();
   state = await instance.ask("state");
   const opened_by_click = tab_count(state) === tabs_before + 1;
   // The closed baseline is the help tab's own: open the popup over it, then close it with Escape, which the panel handles natively.
@@ -211,8 +223,7 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   await instance.press(["-k", "Escape"]);
   await instance.click(...button);
   await sleep(2000);
-  await instance.click(...DESERTBIRD_HELP_ENTRY);
-  await sleep(1500);
+  await click_help_and_wait_for_close();
   state = await key_and_state(instance, ["q"], 1200);
   check(app, kind, "DesertBird popup: the help page a click opened takes q with no click in it", tab_count(state) === tabs_before, `tabs ${tabs_before + 1} to ${tab_count(state)}`);
 }
