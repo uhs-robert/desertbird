@@ -173,12 +173,14 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (token === null) return;
         // A key in another window ends the mode before any early return below.
         if (resize_window && resize_window !== window) resize_window = null;
+        // Space is text in the line, and in the list it picks a row, so the hold drops it with the plain keys.
+        const held = is_plain_printable(token) || token === "<Space>";
         // The overlay's browser has the focus before its page can take a key, and the hold timer can run out first. Plain keys are dropped for as long as that lasts.
-        if (is_plain_printable(token) && deps.overlay_is_loading(window)) return swallow(event);
+        if (held && deps.overlay_is_loading(window)) return swallow(event);
         // The hold ends when the focus is in a text field, which the overlay's browser counts as.
         if (hold_until > deps.now()) {
             if (deps.is_typing_target(window, event) || hints_done_at_hold !== null && deps.hints_done_of(window) !== hints_done_at_hold) hold_until = 0;
-            else if (is_plain_printable(token)) {
+            else if (held) {
                 swallow(event);
                 return;
             }
