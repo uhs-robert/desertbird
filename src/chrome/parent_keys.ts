@@ -20,6 +20,12 @@ let runtime: Runtime | null = null;
 
 function ensure_runtime(context: ExtensionContext): Runtime {
     const mail_extension_id_of = (header: unknown): number | null => context.extension.messageManager.convert(header, { skipFolder: true })?.id ?? null;
+    // DesertBird's own toolbar popup holds the focus, so its page takes the key. Thunderbird marks a popup's browser with `webextension-view-type`, which the overlay and page tabs lack.
+    const own_popup_has_focus = (window: MainWindow): boolean => {
+        const base = context.extension.baseURL;
+        const focused = window.document.activeElement as { getAttribute?(name: string): string | null; currentURI?: { spec: string } } | null;
+        return !!base && focused?.getAttribute?.("webextension-view-type") === "popup" && !!focused.currentURI?.spec.startsWith(base);
+    };
     runtime ??= create_runtime<MainWindow>({
         register_window_listener(listener: WindowListener<MainWindow>) {
             load_platform().ExtensionSupport.registerWindowListener(WINDOW_LISTENER_ID, {
@@ -40,8 +46,7 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             // The setter selects the row, scrolls it into view and opens the folder, as Thunderbird's own Down key does.
             return tree ? { row_count: () => tree.rowCount, selected_index: () => tree.selectedIndex, select: (index) => void (tree.selectedIndex = index) } : null;
         },
-        // DesertBird's own toolbar popup holds the focus, so its page takes the key.
-        is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document) || !!(window.document.activeElement as { currentURI?: { spec: string } } | null)?.currentURI?.spec.startsWith(context.extension.baseURL!),
+        is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document) || own_popup_has_focus(window),
         menu_takes_key: (window: MainWindow, key: string) => menu_takes_key(window.document, key),
         overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),

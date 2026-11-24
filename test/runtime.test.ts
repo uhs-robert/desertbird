@@ -713,7 +713,7 @@ test("the parent resets on a blur only when the window lost focus, not when focu
 });
 
 // Thunderbird moves the focus into an add-on's popup browser once the panel shows. DesertBird's own popup takes its keys there, and any other open panel keeps the swallow, so `j` never marks junk under it.
-test("the parent lets plain keys through to DesertBird's own popup and swallows them under another add-on's popup or the app menu", async () => {
+async function popup_parent(base_url: string | undefined) {
     const window = new FakeWindow();
     const about_3pane = { threadTree: { currentIndex: 0 }, gDBView: { rowCount: 5, getSelectedMsgHdrs: () => [] } };
     const focused: { active: unknown } = { active: null };
@@ -724,21 +724,43 @@ test("the parent lets plain keys through to DesertBird's own popup and swallows 
     Object.defineProperty(window.document, "activeElement", { get: () => focused.active });
     const platform = stub_platform([window]);
     const keys_parent = await import("../src/chrome/parent_keys.ts");
-    const keys = keys_parent.get_keys_api({ extension: { baseURL: "moz-extension://desertbird-uuid/", windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
+    const keys = keys_parent.get_keys_api({ extension: { ...(base_url === undefined ? {} : { baseURL: base_url }), windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
     const emitted: KeysInvocation[] = [];
     (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void ("keys" in invocation || emitted.push(invocation)));
     await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
-    const popup_browser = (url: string) => ({ localName: "browser", currentURI: { spec: url } });
+    const cancelled = (active: unknown, key = "j") => {
+        focused.active = active;
+        return press(window, key, { target: active }).cancelled;
+    };
+    const stop = () => (keys_parent.shutdown(), platform.restore());
+    return { cancelled, emitted, stop };
+}
 
-    focused.active = popup_browser("moz-extension://desertbird-uuid/popup/popup.html");
-    assert.deepEqual(["j", "k", "o"].map((key) => press(window, key, { target: focused.active }).cancelled), [false, false, false]);
-    focused.active = popup_browser("moz-extension://other-uuid/popup.html");
-    assert.equal(press(window, "j", { target: focused.active }).cancelled, true);
-    focused.active = { localName: "toolbarbutton" };
-    assert.equal(press(window, "j", { target: focused.active }).cancelled, true);
+const OWN_BASE = "moz-extension://desertbird-uuid/";
+const browser_at = (url: string, attributes: Record<string, string> = {}, id = "") => ({ localName: "browser", id, currentURI: { spec: url }, getAttribute: (name: string) => attributes[name] ?? null });
+const popup_browser_at = (url: string) => browser_at(url, { "webextension-view-type": "popup" });
+
+test("the parent lets plain keys through to DesertBird's own popup and swallows them under another add-on's popup or the app menu", async () => {
+    const { cancelled, emitted, stop } = await popup_parent(OWN_BASE);
+    assert.deepEqual(["j", "k", "o"].map((key) => cancelled(popup_browser_at(`${OWN_BASE}popup/popup.html`), key)), [false, false, false]);
+    assert.equal(cancelled(popup_browser_at("moz-extension://other-uuid/popup.html")), true);
+    assert.equal(cancelled({ localName: "toolbarbutton" }), true);
     assert.deepEqual(emitted, []);
-    keys_parent.shutdown();
-    platform.restore();
+    stop();
+});
+
+test("a DesertBird page browser that is no popup, the loading overlay included, keeps the swallow under an open panel", async () => {
+    const { cancelled, emitted, stop } = await popup_parent(OWN_BASE);
+    assert.equal(cancelled(browser_at(`${OWN_BASE}overlay/overlay.html`, {}, OVERLAY_LOADING_ID)), true);
+    assert.equal(cancelled(browser_at(`${OWN_BASE}help/help.html`)), true);
+    assert.deepEqual(emitted, []);
+    stop();
+});
+
+test("with no base URL no popup counts as DesertBird's own", async () => {
+    const { cancelled, stop } = await popup_parent(undefined);
+    assert.equal(cancelled(popup_browser_at("undefinedpopup/popup.html")), true);
+    stop();
 });
 
 test("an unloaded window stops listening while another keeps its listener", () => {
