@@ -73,41 +73,51 @@ test("the filter is defined once, and its terms come from the state Thunderbird 
     assert.equal(terms.length, 1);
 });
 
-/** An about:3pane whose search runs for `polls` timer turns after updateSearch, and whose timer fires at once and counts the waited ms. */
-function fake_pane(steps: string[], polls: number) {
-    const pane = {
-        waited_ms: 0,
-        gViewWrapper: { searching: false },
-        setTimeout(run: () => void, ms: number) {
-            pane.waited_ms += ms;
-            if (--polls <= 0) pane.gViewWrapper.searching = false;
-            setImmediate(run);
+/** An about:3pane whose search runs for `waits` clock waits after updateSearch, and a fake clock that moves on each wait. */
+function fake_pane(steps: string[], waits: number) {
+    const pane = { closed: false, gViewWrapper: { searching: false } };
+    const clock = {
+        at: 0,
+        now: () => clock.at,
+        async wait(ms: number) {
+            clock.at += ms;
+            if (--waits <= 0) pane.gViewWrapper.searching = false;
         },
     };
     const started = () => {
         steps.push("search");
-        pane.gViewWrapper.searching = polls > 0;
+        pane.gViewWrapper.searching = waits > 0;
     };
-    return { pane, started };
+    return { pane, clock, started };
 }
 
 test("showing the filter makes the bar visible before it sets the value, draws the bar, runs the search and waits for it to end", async () => {
     const { bar, steps } = fake_bar();
-    const { pane, started } = fake_pane(steps, 3);
+    const { pane, clock, started } = fake_pane(steps, 3);
     bar.updateSearch = async () => started();
-    await show_message_filter(pane, bar, { listId: "<a.b>" });
+    assert.equal(await show_message_filter(pane, bar, { listId: "<a.b>" }, clock), true);
     assert.deepEqual(steps, [`value ${MESSAGE_FILTER_NAME} {"listId":"<a.b>"} visible=true`, "reflect", "search"]);
     assert.equal(pane.gViewWrapper.searching, false);
-    assert.equal(pane.waited_ms, 30);
+    assert.equal(clock.at, 30);
 });
 
-test("a search that does not end stops the wait at the limit", async () => {
+test("a search still running at the limit of wall time answers false", async () => {
     const { bar, steps } = fake_bar();
-    const { pane, started } = fake_pane(steps, Infinity);
+    const { pane, clock, started } = fake_pane(steps, Infinity);
     bar.updateSearch = async () => started();
-    await show_message_filter(pane, bar, { dateUs: 1 });
-    assert.equal(pane.gViewWrapper.searching, true);
-    assert.equal(pane.waited_ms, SEARCH_WAIT_LIMIT_MS);
+    // A late timer moves the clock further than it asked, and the limit counts the clock.
+    clock.wait = async () => void (clock.at += 1000);
+    assert.equal(await show_message_filter(pane, bar, { dateUs: 1 }, clock), false);
+    assert.equal(clock.at, SEARCH_WAIT_LIMIT_MS);
+});
+
+test("a pane that closes during the search ends the wait at once", async () => {
+    const { bar, steps } = fake_bar();
+    const { pane, clock, started } = fake_pane(steps, Infinity);
+    bar.updateSearch = async () => started();
+    clock.wait = async () => void (pane.closed = true);
+    assert.equal(await show_message_filter(pane, bar, { dateUs: 1 }, clock), true);
+    assert.equal(clock.at, 0);
 });
 
 test("filter.set finds the bar of the tab by id, drops the empty optional args, and shutdown removes the filter", async () => {
@@ -115,14 +125,15 @@ test("filter.set finds the bar of the tab by id, drops the empty optional args, 
     const manager = fake_manager();
     const globals = globalThis as Record<string, unknown>;
     const chrome_utils = globals["ChromeUtils"] as { importESModule(url: string): unknown };
-    globals["ChromeUtils"] = { importESModule: (url: string) => (url === "resource:///modules/QuickFilterManager.sys.mjs" ? { QuickFilterManager: manager } : chrome_utils.importESModule(url)) };
+    const modules: Record<string, unknown> = { "resource:///modules/QuickFilterManager.sys.mjs": { QuickFilterManager: manager }, "resource://gre/modules/Timer.sys.mjs": { setTimeout } };
+    globals["ChromeUtils"] = { importESModule: (url: string) => modules[url] ?? chrome_utils.importESModule(url) };
     globals["Ci"] = CONSTANTS;
     const { bar, steps } = fake_bar();
     const { pane } = fake_pane(steps, 0);
     const tabs: Record<number, unknown> = { 5: { nativeTab: { chromeBrowser: { contentWindow: { ...pane, quickFilterBar: bar } } } }, 6: { nativeTab: { chromeBrowser: null } } };
     const api = get_filter_api({ extension: { windowManager: { getWrapper: () => null }, messageManager: { convert: () => null }, tabManager: { get: (id: number) => tabs[id] } } } as never);
     try {
-        await api.filter.set({ tabId: 5, listId: "<a.b>", dateUs: null as never });
+        assert.equal(await api.filter.set({ tabId: 5, listId: "<a.b>", dateUs: null as never }), true);
         assert.equal(steps[0], `value ${MESSAGE_FILTER_NAME} {"listId":"<a.b>"} visible=true`);
         assert.ok(MESSAGE_FILTER_NAME in manager.filterDefsByName);
         await assert.rejects(api.filter.set({ tabId: 6, listId: "<a.b>" }), /filter\.set: tab 6 shows no message list/);

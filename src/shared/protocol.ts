@@ -333,9 +333,9 @@ export interface FilterSetArgs {
     dateUs?: number;
 }
 
-/** The `browser.filter` API: the add-on's own part of the quick filter of a mail tab. Its script loads when the first call is made. `set` adds the part to the filters the tab shows and shows the filter bar. `mailTabs.setQuickFilter` removes the part again. */
+/** The `browser.filter` API: the add-on's own part of the quick filter of a mail tab. Its script loads when the first call is made. `set` adds the part to the filters the tab shows, shows the filter bar and answers once the search ends: true, or false when it still ran after 5 s and the rows can still change. `mailTabs.setQuickFilter` removes the part again. */
 export interface FilterApi {
-    set(args: FilterSetArgs): Promise<void>;
+    set(args: FilterSetArgs): Promise<boolean>;
 }
 
 export type Pane = "folders" | "threads" | "message";

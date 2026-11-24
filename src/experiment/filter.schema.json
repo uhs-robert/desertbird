@@ -7,7 +7,7 @@
         "name": "set",
         "type": "function",
         "async": true,
-        "description": "Adds a List-Id filter, a same-day filter or both to the filters the mail tab shows, and shows the filter bar. A later mailTabs.setQuickFilter removes them.",
+        "description": "Adds a List-Id filter, a same-day filter or both to the filters the mail tab shows, and shows the filter bar. Answers when the search ends: true, or false when it still ran after 5 seconds. A later mailTabs.setQuickFilter removes them.",
         "parameters": [
           {
             "name": "args",

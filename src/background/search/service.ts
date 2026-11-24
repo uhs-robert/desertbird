@@ -168,10 +168,12 @@ export function create_search_service(deps: SearchDeps): SearchService {
                     leave_search(window_id, search);
                     throw new RuntimeRefusal("The folder changed, so the search ended.");
                 }
-                await apply_filter(deps.api, search.tab_id, with_text(search.prior, query));
+                const search_ended = await apply_filter(deps.api, search.tab_id, with_text(search.prior, query));
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
                 if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
+                // The list and date terms were still searching, so no rows yet does not mean no match. The search stays open for another Enter.
+                if (count === 0 && !search_ended) throw new RuntimeRefusal("The list is still filtering. Press Enter again.");
                 // No match keeps the search open, so the user can edit the text. Escape still restores the earlier filter.
                 if (count === 0) throw new RuntimeRefusal(describe_match(query, 0, 0, undefined));
                 await deps.register.write({ text: query, direction: search.direction, kind: "threads" });

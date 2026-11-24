@@ -6,7 +6,7 @@ import { guard } from "./platform.ts";
 import type { ExtensionContext } from "./platform.ts";
 import type { FilterSetArgs } from "../shared/protocol.ts";
 
-declare const ChromeUtils: { importESModule(url: string): { QuickFilterManager: QuickFilterManagerLike } };
+declare const ChromeUtils: { importESModule(url: string): { QuickFilterManager: QuickFilterManagerLike; setTimeout(run: () => void, ms: number): unknown } };
 declare const Ci: SearchConstants;
 
 /** The tab manager maps a MailExtension tab id to its tab of `tabmail`. A mail tab's browser holds `about:3pane`, which holds the bar. */
@@ -18,7 +18,7 @@ let defined_in: QuickFilterManagerLike | null = null;
 export function get_filter_api(context: FilterContext) {
     return {
         filter: {
-            set: guard("filter.set", async ({ tabId, listId, dateUs }: FilterSetArgs): Promise<void> => {
+            set: guard("filter.set", async ({ tabId, listId, dateUs }: FilterSetArgs): Promise<boolean> => {
                 const pane = context.extension.tabManager.get(tabId).nativeTab.chromeBrowser?.contentWindow;
                 const bar = pane?.quickFilterBar;
                 if (!pane || !bar) throw new Error(`tab ${tabId} shows no message list`);
@@ -28,7 +28,8 @@ export function get_filter_api(context: FilterContext) {
                 const state: MessageFilterState = {};
                 if (typeof listId === "string") state.listId = listId;
                 if (typeof dateUs === "number") state.dateUs = dateUs;
-                await show_message_filter(pane, bar, state);
+                const { setTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
+                return show_message_filter(pane, bar, state, { now: () => Date.now(), wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) });
             }),
         },
     };

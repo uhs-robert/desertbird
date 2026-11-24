@@ -45,11 +45,17 @@ export interface QuickFilterBarLike {
     updateSearch(): Promise<void>;
 }
 
-/** The `about:3pane` of a mail tab: its bar, the view that runs the search, and its timer. */
+/** The `about:3pane` of a mail tab: its bar and the view that runs the search. `closed` turns true when the tab or its window closes. */
 export interface FilterPaneLike {
     quickFilterBar?: QuickFilterBarLike;
     gViewWrapper?: { searching: boolean } | null;
-    setTimeout(run: () => void, ms: number): unknown;
+    closed?: boolean;
+}
+
+/** The wall clock and a timer of the parent. A timer of the pane dies with the pane and would never fire. */
+export interface SearchClock {
+    now(): number;
+    wait(ms: number): Promise<void>;
 }
 
 // A slow search (a large folder, a server search) ends the wait here, and the rows read later may still change.
@@ -84,16 +90,21 @@ export function define_message_filter(manager: QuickFilterManagerLike, constants
     manager.defineFilter({ name: MESSAGE_FILTER_NAME, appendTerms: (creator, terms, state) => append_message_terms(constants, creator, terms, state) });
 }
 
-// `updateSearch` resolves once the search starts, and the rows change until `searching` turns false: 88 ms later on 10,000 messages (measured). The `/` count and commit read the rows right after the call, so the call ends with the search.
-async function search_done(pane: FilterPaneLike): Promise<void> {
-    for (let waited = 0; pane.gViewWrapper?.searching === true && waited < SEARCH_WAIT_LIMIT_MS; waited += SEARCH_POLL_MS) await new Promise<void>((resolve) => pane.setTimeout(resolve, SEARCH_POLL_MS));
+// `updateSearch` resolves once the search starts, and the rows change until `searching` turns false: 88 ms later on 10,000 messages (measured). The `/` count and commit read the rows right after the call, so the call ends with the search. A closed pane has no search left to wait for.
+async function search_done(pane: FilterPaneLike, clock: SearchClock): Promise<boolean> {
+    const deadline = clock.now() + SEARCH_WAIT_LIMIT_MS;
+    while (pane.closed !== true && pane.gViewWrapper?.searching === true) {
+        if (clock.now() >= deadline) return false;
+        await clock.wait(SEARCH_POLL_MS);
+    }
+    return true;
 }
 
-/** Sets the filter's state in the bar, runs the search and waits for it to end. The bar must be visible, as `setQuickFilter` makes it, or the toggle stays unpressed and the count does not show. */
-export async function show_message_filter(pane: FilterPaneLike, bar: QuickFilterBarLike, state: MessageFilterState): Promise<void> {
+/** Sets the filter's state in the bar, runs the search and waits for it to end. Answers false when the search still ran at the limit, so the rows can still change. The bar must be visible, as `setQuickFilter` makes it, or the toggle stays unpressed and the count does not show. */
+export async function show_message_filter(pane: FilterPaneLike, bar: QuickFilterBarLike, state: MessageFilterState, clock: SearchClock): Promise<boolean> {
     bar.filterer.visible = true;
     bar.filterer.setFilterValue(MESSAGE_FILTER_NAME, state);
     bar.reflectFiltererState();
     await bar.updateSearch();
-    await search_done(pane);
+    return search_done(pane, clock);
 }

@@ -435,13 +435,14 @@ const LIST_MAIL: Record<number, { date: Date; headers: Record<string, string[]> 
 const DEV_LIST = { tabId: 0, listId: "<dev.example.org>" };
 
 /** One mail tab whose `setQuickFilter` and `filter.set` calls land in one list, in order, so a test reads what the tab shows after each step. The live search of `/` runs on the same fake. */
-function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "missing" | "failing" } = {}) {
+function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "missing" | "failing"; search_runs_on?: boolean } = {}) {
     const tab_id = next_tab_id++;
     const steps: string[] = [];
     const notices: string[] = [];
     const filter_set = async (args: FilterSetArgs) => {
         if (options.filter === "failing") throw new Error("filter.set: the tab shows no message list");
         steps.push(`filter.set ${JSON.stringify({ ...args, tabId: args.tabId - tab_id })}`);
+        return options.search_runs_on !== true;
     };
     const api = {
         mailTabs: {
@@ -595,7 +596,7 @@ test("overlapping applies: F r pressed while F m l waits on filter.set runs afte
     assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"unread":true}']);
 });
 
-test("F u while F m l still reads the message, with the read done before F u's setQuickFilter returns: the list filter applies after it, and the tab and the memory agree", async () => {
+test("F u while F m l still reads the message, with the read done before F u's setQuickFilter returns: the list filter applies after it and keeps the unread filter", async () => {
     const fake = terms_fake();
     const read_gate = gate();
     const unread_gate = gate();
@@ -610,10 +611,44 @@ test("F u while F m l still reads the message, with the read done before F u's s
     await settle();
     unread_gate.open();
     await Promise.all([list, unread]);
-    // F m l read the memory before F u wrote it, so its filter has no unread. It runs second and wins, in the tab and in the memory alike.
-    assert.deepEqual(fake.steps, ['setQuickFilter {"unread":true}', "setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
+    // F m l builds its filter in the chain, after F u has written the memory, so the unread filter stays.
+    assert.deepEqual(fake.steps, ['setQuickFilter {"unread":true}', 'setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
     await fake.run("filter.set", { state: "toggle_starred" });
-    assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"flagged":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+    assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"unread":true,"flagged":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("F u pressed while F m l waits in filter.set builds on the list filter instead of clearing it", async () => {
+    const fake = terms_fake();
+    const terms = gate();
+    const set = fake.api.filter!.set;
+    fake.api.filter!.set = async (args) => (await terms.passed, set(args));
+    const list = fake.run("filter.by", { field: "list" });
+    while (!fake.steps.includes("setQuickFilter {}")) await settle();
+    const unread = fake.run("filter.set", { state: "unread" });
+    await settle();
+    terms.open();
+    await Promise.all([list, unread]);
+    assert.deepEqual(fake.steps, ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`, 'setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test(":search waits for the stored filters to load and keeps their list filter", async () => {
+    const fake = terms_fake();
+    const tab_id = next_tab_id - 1;
+    keep_filters({ get: async () => (await settle(), { [APPLIED_FILTERS_STORAGE_KEY]: { [tab_id]: { by_message: { list_id: "<dev.example.org>" } } } }), set: async () => undefined });
+    await fake.run("search.threads", { query: "invoice" });
+    keep_filters(undefined);
+    assert.deepEqual(fake.steps, ['setQuickFilter {"text":{"text":"invoice","subject":true,"author":true}}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
+});
+
+test("a / commit that finds no rows while the list search still runs refuses with a retry note, not a no-match, and keeps the search open", async () => {
+    const { run, search, notices, api } = terms_fake({ search_runs_on: true });
+    await run("filter.by", { field: "list" });
+    // The rows of the list search have not come in yet.
+    api.app.viewRows = async () => ({ current: -1, rows: [] }) as never;
+    await search.start(3, "forward");
+    await assert.rejects(search.commit(3, "nothing"), /still filtering/);
+    assert.deepEqual(notices, []);
+    await search.cancel(3);
 });
 
 test(":search keeps the list filter under its text", async () => {
