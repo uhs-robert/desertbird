@@ -59,7 +59,10 @@ const BASE_PREFS = {
 
 // Prefs of the e2e runs only. A person looking at an owner-test window keeps the profile users have.
 // The text caret blinks, so a region with the command line open draws two different hashes in turn. A blink time of 0 keeps the caret drawn, and a pixel poll sees only real changes.
-const E2E_ONLY_PREFS = { "ui.caretBlinkTime": 0 };
+const E2E_ONLY_PREFS = { "ui.caretBlinkTime": 0, "toolkit.legacyUserProfileCustomizations.stylesheets": true };
+
+// The red current-time line of the calendar week view moves about 1 px on each minute tick, so a region compare across a minute boundary fails. This sheet hides it (userChrome.css, loaded by the pref above).
+const E2E_ONLY_USER_CHROME = ".timeIndicator, .multiday-timebar-now-indicator { display: none !important; }\n";
 
 // The Views folder serves the view setting checks. Six single messages: 3 unread (v0 to v2), 2 starred (v0, v1), 1 with an attachment (v0). The helper add-on tags v4 and v5.
 const VIEWS_COUNT = 6;
@@ -220,6 +223,10 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const header_prefs = kind === "message_header" ? THEME_PREFS.default_os_dark : {};
   const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...header_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
+  if (kind !== "owner") {
+    mkdirSync(join(profile_dir, "chrome"), { recursive: true });
+    writeFileSync(join(profile_dir, "chrome", "userChrome.css"), E2E_ONLY_USER_CHROME);
+  }
   return { profile_dir, folder_dir };
 }
 
