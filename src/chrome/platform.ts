@@ -23,6 +23,8 @@ export interface MainWindow extends KeyTarget {
 
 export interface ExtensionContext {
     extension: {
+        /** The `moz-extension://` root of DesertBird's pages. Optional so the test fakes need not carry it. */
+        baseURL?: string;
         windowManager: { getWrapper(window: MainWindow): { id: number } | null };
         /** Present with the `messagesRead` permission. `convert` builds the whole MailExtension header of a message, `skipFolder` drops its folder part. */
         messageManager: { convert(header: unknown, options: { skipFolder: true }): { id: number } | null };

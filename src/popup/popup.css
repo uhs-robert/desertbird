@@ -12,5 +12,6 @@
     }
 }
 body { margin: 0; padding: 4px; min-width: 160px; font: 14px sans-serif; background: var(--surface); color: var(--text); }
-button { display: block; width: 100%; padding: 6px 12px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button { display: flex; justify-content: space-between; align-items: center; gap: 24px; width: 100%; padding: 6px 12px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 button:hover, button:focus-visible { background: var(--hover); }
+kbd { min-width: 1.4em; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; font: 12px monospace; text-align: center; opacity: 0.7; }

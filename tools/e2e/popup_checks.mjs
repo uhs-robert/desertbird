@@ -12,9 +12,13 @@ const APP_MENU_BUTTON = [1218, 21];
 // Where the Mark submenu draws at the e2e window size, on the thread context menu opened by Shift+F10. Thunderbird shows the Inbox as cards and opens the menu at the selected card, Betterbird as a table, so the submenu sits in different places.
 const MARK_SUBMENU_REGIONS = { thunderbird: "610,280 190x290", betterbird: "900,260 190x260" };
 
+// DesertBird's toolbar button and its open popup on Betterbird, read from the shots. Thunderbird places the button elsewhere and is not pinned.
+const DESERTBIRD_BUTTON = { betterbird: [1127, 21] };
+const DESERTBIRD_POPUP_REGION = "1066,38 170x72";
+
 const same_pixels = async (instance, name, other) => (await instance.shot_region(name, MARK_SUBMENU_REGIONS[instance.app], "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`)).equals(readFileSync(join(instance.out_dir, `${other}.ppm`)));
 
-export async function run_popup_keys(instance, { check, shot, key_and_state, first_selected }) {
+export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected }) {
   const app = instance.app;
   const kind = "default";
   const any_junk = (state) => Object.values(state.flags).some((flags) => flags.junk);
@@ -73,4 +77,33 @@ export async function run_popup_keys(instance, { check, shot, key_and_state, fir
   check(app, kind, "app menu after an arrow key inside it: j, a and n mark, archive and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_in_panel, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_in_panel}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
+  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected });
+}
+
+// DesertBird's own popup takes j, k and h. Thunderbird moves the focus into the popup's browser about 400 ms after it shows, so the wait after the click covers that.
+async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected }) {
+  const app = instance.app;
+  const kind = "default";
+  const button = DESERTBIRD_BUTTON[app];
+  if (!button) return note(app, kind, "DesertBird popup keys", "not driven: the toolbar button position is pinned on Betterbird only");
+  // Its own baseline, so a failure of an app menu check above does not fail this one.
+  const before = await instance.ask("state");
+  const ring = async (name) => (await instance.shot_region(name, DESERTBIRD_POPUP_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
+  await instance.click(...button);
+  await sleep(1500);
+  const on_first = await ring("desertbird_popup_open");
+  let state = await key_and_state(instance, ["j"], 800);
+  const on_second = await ring("desertbird_popup_after_j");
+  state = await key_and_state(instance, ["j"], 800);
+  const still_second = await ring("desertbird_popup_after_jj");
+  state = await key_and_state(instance, ["k"], 800);
+  const back_first = await ring("desertbird_popup_after_jjk");
+  check(app, kind, "DesertBird popup: j moves the focus to Help, a second j stays there, k returns to Options", !on_first.equals(on_second) && on_second.equals(still_second) && back_first.equals(on_first));
+  const junk = Object.values(state.flags).some((flags) => flags.junk);
+  check(app, kind, "DesertBird popup: j and k leave the thread list alone", first_selected(state) === first_selected(before) && !junk, `selected ${first_selected(state)}, expected ${first_selected(before)}, junk ${junk}`);
+  const tab_count = (each) => each.windows.reduce((sum, window) => sum + window.tabs.length, 0);
+  const tabs_before = tab_count(state);
+  state = await key_and_state(instance, ["h"], 1500);
+  const closed = await ring("desertbird_popup_after_h");
+  check(app, kind, "DesertBird popup: h opens the help page and closes the popup", tab_count(state) === tabs_before + 1 && !closed.equals(on_first), `tabs ${tabs_before} to ${tab_count(state)}`);
 }

@@ -712,6 +712,35 @@ test("the parent resets on a blur only when the window lost focus, not when focu
     platform.restore();
 });
 
+// Thunderbird moves the focus into an add-on's popup browser once the panel shows. DesertBird's own popup takes its keys there, and any other open panel keeps the swallow, so `j` never marks junk under it.
+test("the parent lets plain keys through to DesertBird's own popup and swallows them under another add-on's popup or the app menu", async () => {
+    const window = new FakeWindow();
+    const about_3pane = { threadTree: { currentIndex: 0 }, gDBView: { rowCount: 5, getSelectedMsgHdrs: () => [] } };
+    const focused: { active: unknown } = { active: null };
+    Object.assign(window.document, {
+        getElementById: () => ({ currentTabInfo: { mode: { name: "mail3PaneTab" }, chromeBrowser: { contentWindow: about_3pane } } }),
+        querySelectorAll: () => [{ localName: "panel", state: "open" }],
+    });
+    Object.defineProperty(window.document, "activeElement", { get: () => focused.active });
+    const platform = stub_platform([window]);
+    const keys_parent = await import("../src/chrome/parent_keys.ts");
+    const keys = keys_parent.get_keys_api({ extension: { baseURL: "moz-extension://desertbird-uuid/", windowManager: { getWrapper: () => ({ id: 1 }) }, messageManager: { convert: () => null } } }).keys;
+    const emitted: KeysInvocation[] = [];
+    (keys.onInvocation as unknown as { subscribe(listener: (invocation: KeysInvocation) => void): void }).subscribe((invocation) => void ("keys" in invocation || emitted.push(invocation)));
+    await keys.install({ tree: tree(), settings: {}, holdCommands: [] });
+    const popup_browser = (url: string) => ({ localName: "browser", currentURI: { spec: url } });
+
+    focused.active = popup_browser("moz-extension://desertbird-uuid/popup/popup.html");
+    assert.deepEqual(["j", "k", "o"].map((key) => press(window, key, { target: focused.active }).cancelled), [false, false, false]);
+    focused.active = popup_browser("moz-extension://other-uuid/popup.html");
+    assert.equal(press(window, "j", { target: focused.active }).cancelled, true);
+    focused.active = { localName: "toolbarbutton" };
+    assert.equal(press(window, "j", { target: focused.active }).cancelled, true);
+    assert.deepEqual(emitted, []);
+    keys_parent.shutdown();
+    platform.restore();
+});
+
 test("an unloaded window stops listening while another keeps its listener", () => {
     const { windows, runtime, load, unload } = setup();
     runtime.install(tree());

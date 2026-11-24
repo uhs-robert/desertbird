@@ -40,7 +40,8 @@ function ensure_runtime(context: ExtensionContext): Runtime {
             // The setter selects the row, scrolls it into view and opens the folder, as Thunderbird's own Down key does.
             return tree ? { row_count: () => tree.rowCount, selected_index: () => tree.selectedIndex, select: (index) => void (tree.selectedIndex = index) } : null;
         },
-        is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document),
+        // DesertBird's own toolbar popup holds the focus, so its page takes the key.
+        is_typing_target: (window: MainWindow, event: KeydownEvent) => is_typing(event, window.document) || !!(window.document.activeElement as { currentURI?: { spec: string } } | null)?.currentURI?.spec.startsWith(context.extension.baseURL!),
         menu_takes_key: (window: MainWindow, key: string) => menu_takes_key(window.document, key),
         overlay_is_loading: (window: MainWindow) => overlay_is_loading(window.document),
         in_reading_pane: (window: MainWindow) => in_reading_pane(window.document),
