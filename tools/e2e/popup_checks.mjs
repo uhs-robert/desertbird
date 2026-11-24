@@ -104,6 +104,14 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   const tab_count = (each) => each.windows.reduce((sum, window) => sum + window.tabs.length, 0);
   const tabs_before = tab_count(state);
   state = await key_and_state(instance, ["h"], 1500);
-  const closed = await ring("desertbird_popup_after_h");
-  check(app, kind, "DesertBird popup: h opens the help page and closes the popup", tab_count(state) === tabs_before + 1 && !closed.equals(on_first), `tabs ${tabs_before} to ${tab_count(state)}`);
+  check(app, kind, "DesertBird popup: h opens the help page", tab_count(state) === tabs_before + 1, `tabs ${tabs_before} to ${tab_count(state)}`);
+  // The closed baseline is the help tab's own: open the popup over it, then close it with Escape, which the panel handles natively.
+  const after_h = await ring("desertbird_popup_after_h");
+  await instance.click(...button);
+  await sleep(1500);
+  const reopened = await ring("desertbird_popup_reopened");
+  await instance.press(["-k", "Escape"]);
+  await sleep(800);
+  const closed = await ring("desertbird_popup_closed");
+  check(app, kind, "DesertBird popup: h closes the popup", after_h.equals(closed) && !reopened.equals(closed), `same as closed ${after_h.equals(closed)}, reopened differs ${!reopened.equals(closed)}`);
 }

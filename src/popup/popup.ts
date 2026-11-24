@@ -22,5 +22,4 @@ document.addEventListener("keydown", (event) => {
     else buttons[next_index(buttons.indexOf(document.activeElement as HTMLButtonElement), action.step, buttons.length)]?.focus();
 });
 
-window.focus();
 buttons[0]?.focus();

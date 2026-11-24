@@ -8,7 +8,8 @@ const plain = (key: string) => ({ key, ctrlKey: false, altKey: false, metaKey: f
 
 test("each popup button has a key, no key repeats, and the key cap shows it", () => {
     const html = readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8");
-    const buttons = [...html.matchAll(/data-command="([^"]+)"><span>[^<]+<\/span><kbd>([^<]+)<\/kbd>/g)].map((match) => ({ command: match[1], key: match[2] }));
+    // Reads each button whole, so attribute order and whitespace inside it do not matter.
+    const buttons = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(([button]) => ({ command: /data-command="([^"]+)"/.exec(button)?.[1], key: /<kbd>\s*([^<\s]+)\s*<\/kbd>/.exec(button)?.[1] }));
     assert.deepEqual(buttons, POPUP_KEYS.map(({ command, key }) => ({ command, key })));
     assert.equal(new Set(POPUP_KEYS.map(({ key }) => key)).size, POPUP_KEYS.length);
 });
