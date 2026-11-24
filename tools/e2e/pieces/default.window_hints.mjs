@@ -96,7 +96,7 @@ async function run_window_hints(instance, ctx) {
 }
 
 // The labels sit in the order the targets sit on screen (window toolbars, folder rows, message rows, then buttons), so a fixed window shows the same labels each run. The ones below were read from the shots of each app.
-const WINDOW_HINT_LABELS = { betterbird: { thread_row_1: "sl", folder_reading: "sh", folder_inbox: "ss" }, thunderbird: { thread_row_1: "sl", folder_reading: "sh", folder_inbox: "ss" } };
+const WINDOW_HINT_LABELS = { betterbird: { thread_row_1: "da", folder_reading: "sj", folder_inbox: "sd" }, thunderbird: { thread_row_1: "da", folder_reading: "sj", folder_inbox: "sd" } };
 
 // The labels draw over the toolbars, the folder rows and the message rows, so the whole window is the region to read.
 const WINDOW_REGION = "0,0 1280x720";
