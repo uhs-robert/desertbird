@@ -122,28 +122,42 @@ function remember_filter(tab_id: number, filter: AppliedFilter): void {
 }
 
 // `setQuickFilter` clears every filter it does not know, so the message terms go back on after each call: after `F u`, `F s`, each step of `/` and its Escape. `F r` sets no terms and leaves them off.
-async function apply_now(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
+// Answers false when the search of the terms still ran at the limit of `filter.set`, so the rows can still change.
+async function apply_now(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<boolean> {
     const { by_message, ...quick } = filter;
     const terms_api = api.filter;
     // Refused before any change, so the tab keeps its filter and its hidden-bar flag.
     if (by_message !== undefined && terms_api === undefined) throw new RuntimeRefusal("The list and date filters need the DesertBird Experiment, which is not loaded.");
     await api.mailTabs.setQuickFilter(tab_id, quick);
-    if (by_message === undefined || terms_api === undefined) return remember_filter(tab_id, filter);
+    if (by_message === undefined || terms_api === undefined) {
+        remember_filter(tab_id, filter);
+        return true;
+    }
+    let search_ended: boolean;
     try {
-        await terms_api.set(filter_set_args(tab_id, by_message));
+        search_ended = await terms_api.set(filter_set_args(tab_id, by_message));
     } catch (error) {
         // The tab now shows the quick filter alone, and the memory must say so.
         remember_filter(tab_id, quick);
         throw error;
     }
     remember_filter(tab_id, filter);
+    return search_ended;
 }
 
+/** A filter to apply, or how to build it from the remembered one. */
+export type FilterChange = AppliedFilter | ((remembered: AppliedFilter) => AppliedFilter);
+
 // One apply is two calls, `setQuickFilter` and then `filter.set`. Two applies that interleave would leave the tab with the quick filter of one and the terms of the other, and the memory with neither, so the applies of a tab run one after the other.
+// A change that builds on the remembered filter reads it inside the chain, so it builds on what the apply before it left, even one still in flight when its key was pressed.
 const applies_in_flight = new Map<number, Promise<void>>();
 
-export function apply_filter(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
-    const apply = (applies_in_flight.get(tab_id) ?? Promise.resolve()).then(() => apply_now(api, tab_id, filter));
+/** Answers false when the list can still change because its search ran past the limit. */
+export function apply_filter(api: FilterApis, tab_id: number, change: FilterChange): Promise<boolean> {
+    const apply = (applies_in_flight.get(tab_id) ?? Promise.resolve()).then(async () => {
+        await filters_ready();
+        return apply_now(api, tab_id, typeof change === "function" ? change(remembered_filter(tab_id)) : change);
+    });
     const queued = keep_chain(apply);
     applies_in_flight.set(tab_id, queued);
     // The chain of a tab ends with its last apply, so the map holds only the applies in flight.
@@ -173,20 +187,20 @@ function toggled_starred({ show: _hidden, flagged, ...rest }: AppliedFilter): Ap
 export async function set_filter(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const state = args["state"] as string;
     const tab = await list_mail_tab(scope);
-    await filters_ready();
-    const filter: AppliedFilter = state === "tag" ? { tags: { mode: "any" as const, tags: { [await tag_key(scope, args["tag"] as string)]: true as const } } } : state === "toggle_starred" ? toggled_starred(remembered_filter(tab.id)) : FIXED_FILTERS[state]!;
-    const { by_message } = remembered_filter(tab.id);
-    const keeps_message_terms = state !== "all" && by_message !== undefined;
-    await apply_filter(scope.api, tab.id, keeps_message_terms ? { ...filter, by_message } : filter);
+    const tag = state === "tag" ? await tag_key(scope, args["tag"] as string) : "";
+    await apply_filter(scope.api, tab.id, (remembered) => {
+        const filter: AppliedFilter = state === "tag" ? { tags: { mode: "any", tags: { [tag]: true } } } : state === "toggle_starred" ? toggled_starred(remembered) : FIXED_FILTERS[state]!;
+        const { by_message } = remembered;
+        const keeps_message_terms = state !== "all" && by_message !== undefined;
+        return keeps_message_terms ? { ...filter, by_message } : filter;
+    });
 }
 
 // The text replaces the quick filter, as before, and the list and date terms stay, as under `/`.
 export async function search_threads(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    await filters_ready();
-    const { by_message } = remembered_filter(tab.id);
     const text: AppliedFilter = { text: { text: args["query"] as string, subject: true, author: true } };
-    await apply_filter(scope.api, tab.id, by_message === undefined ? text : { ...text, by_message });
+    await apply_filter(scope.api, tab.id, ({ by_message }) => (by_message === undefined ? text : { ...text, by_message }));
 }
 
 const bare_address = (mailbox: string): string => (mailbox.match(/<([^>]+)>/)?.[1] ?? mailbox).trim();
@@ -209,36 +223,32 @@ const TEXT_FIELDS: Record<string, { flag: "author" | "subject" | "recipients"; v
 };
 
 // A text filter holds one string and Thunderbird ANDs its words, so only one message can supply it. Tags are the one field that can match any of several messages. A list or date filter takes the cursor message of several.
-// The remembered filter is read only after the message arrives, so a filter set while the read was in flight stays.
-async function filter_of_message(scope: ViewScope, tab_id: number, field: string): Promise<AppliedFilter> {
+// The answer builds on the remembered filter when the apply runs, so a filter set while the read was in flight stays.
+async function filter_of_message(scope: ViewScope, field: string): Promise<(remembered: AppliedFilter) => AppliedFilter> {
     const messages = scope.api.messages;
     if (messages === undefined) throw new RuntimeRefusal("This window cannot read messages.");
     const ids = require_messages(scope.message_ids);
     if (is_message_term_field(field)) {
         const term = await message_term({ ...scope, api: { messages, app: scope.api.app } }, ids, field);
-        await filters_ready();
-        const { show: _hidden, ...base } = remembered_filter(tab_id);
-        return { ...base, by_message: { ...base.by_message, ...term } };
+        return ({ show: _hidden, ...base }) => ({ ...base, by_message: { ...base.by_message, ...term } });
     }
     if (field !== "tag" && ids.length > 1) throw new RuntimeRefusal("Select one message.");
     const selected = await Promise.all(ids.map((id) => messages.get(id)));
-    await filters_ready();
-    const { show: _hidden, ...base } = remembered_filter(tab_id);
     if (field === "tag") {
         const keys = selected.flatMap((message) => message.tags ?? []);
         if (keys.length === 0) throw new RuntimeRefusal("The selected message has no tag.");
-        return { ...base, tags: { mode: "any", tags: Object.fromEntries(keys.map((key) => [key, true as const])) } };
+        return ({ show: _hidden, ...base }) => ({ ...base, tags: { mode: "any", tags: Object.fromEntries(keys.map((key) => [key, true as const])) } });
     }
     const { flag, value } = TEXT_FIELDS[field]!;
     const text = await value(scope, selected[0]!);
     if (text === "") throw new RuntimeRefusal(`The selected message has no ${field}.`);
-    return { ...base, text: { text, [flag]: true } };
+    return ({ show: _hidden, ...base }) => ({ ...base, text: { text, [flag]: true } });
 }
 
 // The filter is added to the remembered one, as the live search does. The hidden-bar marker goes because the user should see a filter that narrows the list.
 export async function filter_by_message(scope: ViewScope, args: CheckedArgs): Promise<void> {
     const tab = await list_mail_tab(scope);
-    await apply_filter(scope.api, tab.id, await filter_of_message(scope, tab.id, args["field"] as string));
+    await apply_filter(scope.api, tab.id, await filter_of_message(scope, args["field"] as string));
 }
 
 // A view grouped by its sort column cannot group by size or by read state. Thunderbird swaps in date without an error, so the handler refuses first.
