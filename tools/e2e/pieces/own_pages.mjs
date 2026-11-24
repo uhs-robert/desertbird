@@ -1,6 +1,6 @@
 // DesertBird's own pages: the xpi is a copy whose background page opens the options or help page when the helper add-on sends the page name.
 
-import { sleep, CTRL_SHIFT, KEY_LIST_REGION, back_to, drawn_since, main_window_tabs, PAINT_MARGIN_MS, CHROME_TAB_MARGIN_MS, tab_count_is, active_is, last_tab_loaded } from "../predicates.mjs";
+import { sleep, CTRL_SHIFT, KEY_LIST_REGION, back_to, main_window_tabs, PAINT_MARGIN_MS, CHROME_TAB_MARGIN_MS, tab_count_is, active_is, last_tab_loaded } from "../predicates.mjs";
 import { OPEN_OWN_PAGES_SCRIPT } from "../seed.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
 
@@ -8,7 +8,7 @@ export const areas = ["own_pages", "theme", "message_body", "hud", "cmdline", "p
 
 // DesertBird's own pages run the message keys themselves: q closes the page tab, and q typed in an option input stays text.
 async function run_own_pages(instance, ctx) {
-  const { report, check, open_inbox, wait_for_state, wait_window_focus, key_and_state, hud_pixels, wait_pixels, close_command_line } = ctx;
+  const { report, check, open_inbox, wait_for_state, wait_window_focus, open_key_list, key_and_state, hud_pixels, wait_pixels, close_command_line } = ctx;
   const app = instance.app;
   const kind = "own_pages";
   await open_inbox(instance);
@@ -87,10 +87,8 @@ async function run_own_pages(instance, ctx) {
     await sleep(500);
     await shot(`${name.replace(" ", "_")}_tab`, `${name} tab before the keys`);
     const list_before = await hud_pixels(instance, `${app}_${name}_list_before`, KEY_LIST_REGION);
-    await instance.press(["g"]);
-    const helped = await key_and_state(instance, ["?"], 3000);
+    const { helped, list_shown } = await open_key_list(instance, { slug: name.replace(" ", "_"), list_before });
     check(app, kind, `g ? opens no tab from the ${name} tab`, main_window_tabs(helped).length === before + 1, `tabs ${main_window_tabs(helped).length}, expected ${before + 1}`);
-    const list_shown = await wait_pixels(instance, `the key list of the ${name} tab to draw`, `${app}_${name}_list_shown`, KEY_LIST_REGION, drawn_since(list_before), { timeout_ms: 3000 });
     check(app, kind, `g ? shows the key list in the ${name} tab`, list_shown !== list_before);
     await shot(`${name.replace(" ", "_")}_key_list`, `${name} tab after g ?: the root key list shows`);
     await instance.press(["-k", "Escape"]);

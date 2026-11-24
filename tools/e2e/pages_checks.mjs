@@ -1,7 +1,7 @@
 // The `pages` kind: the keys of every tab that is not the mail tab, each opened by its own route and with no click first. A route whose click position is not pinned yet records NOTE lines and no FAIL, so the first run can measure it.
 // Departs from `run_own_pages`, which keeps the after-a-click case of the address book and calendar: this file covers the no-click case and the other tabs. It takes the helpers of `run.mjs` as arguments, as `run_tabs` does.
 
-import { back_to, drawn_since } from "./predicates.mjs";
+import { back_to } from "./predicates.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
@@ -11,7 +11,7 @@ const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-
 const SPACES = { calendar: [22, 112], tasks: [22, 157], settings: [22, 653] };
 const PAGE_REGION = "0,150 1260x480";
 
-export async function run_pages(instance, { check, note, wait_window_focus, shot, key_and_state, hud_pixels, wait_pixels, open_inbox, close_command_line, key_list_region }) {
+export async function run_pages(instance, { check, note, wait_window_focus, open_key_list, shot, key_and_state, hud_pixels, wait_pixels, open_inbox, close_command_line, key_list_region }) {
   const app = instance.app;
   const kind = "pages";
   await open_inbox(instance);
@@ -45,10 +45,8 @@ export async function run_pages(instance, { check, note, wait_window_focus, shot
     }
 
     const list_before = await hud_pixels(instance, `${app}_${slug}_list_before`, key_list_region);
-    await instance.press(["g"]);
-    const helped = await key_and_state(instance, ["?"], 3000);
+    const { helped, list_shown } = await open_key_list(instance, { slug, list_before });
     verdict(`g ? opens no tab from the ${name} tab`, (helped.windows.find((window) => window.type === "normal")?.tabs ?? []).length === before + 1);
-    const list_shown = await wait_pixels(instance, `the key list of the ${name} tab to draw`, `${app}_${slug}_list_shown`, key_list_region, drawn_since(list_before), { timeout_ms: 3000 });
     verdict(`g ? shows the key list in the ${name} tab`, list_shown !== list_before);
     await shot(`${slug}_key_list`, `${name} tab after g ?: the key list shows`);
     await instance.press(["-k", "Escape"]);
