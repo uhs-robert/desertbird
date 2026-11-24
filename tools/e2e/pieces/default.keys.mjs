@@ -89,7 +89,7 @@ async function run_keys(instance, ctx, start) {
 
   // management.setEnabled is refused for an add-on in the profile folder, so the only real restart of DesertBird is a restart of the app.
   await restart(instance, app, kind, "reload");
-  check(app, kind, "after the restart, the Inbox opens with keys", (await open_inbox(instance, 8, { expanded: true })) === "/Inbox");
+  check(app, kind, "after the restart, the Inbox opens with keys", (await open_inbox(instance, { expanded: true })) === "/Inbox");
   await instance.press(["g"]);
   state = await key_and_state(instance, ["g"], selects(rows[0]));
   const top_after_restart = first_selected(state);

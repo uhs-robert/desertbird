@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { focus_remote_tab, hook_page_focus } from "../src/chrome/page_focus.ts";
+import { focus_folder_pane_when_ready, focus_remote_tab, hook_page_focus, reset_startup_focus_claim } from "../src/chrome/page_focus.ts";
 import { stub_platform } from "./chrome_stubs.ts";
 
 function window_with(active: { localName: string } | null, browser: { isRemoteBrowser: boolean } | null, mode = "contentTab") {
@@ -12,6 +12,8 @@ function window_with(active: { localName: string } | null, browser: { isRemoteBr
         addEventListener: (type: string, listener: () => void) => void listeners.set(type, listener),
         removeEventListener: (type: string) => void listeners.delete(type),
         setTimeout: (run: () => void) => void run(),
+        clearTimeout: () => {},
+        performance: { now: () => 500 },
     };
     return { window: window as never, focused, listeners };
 }
@@ -51,6 +53,7 @@ test("an element the user focused keeps the focus, and a page that is not remote
 });
 
 test("every main window is hooked on load, and unhooked on unload and on stop", () => {
+    reset_startup_focus_claim();
     const platform = stub_platform();
     try {
         const stop = hook_page_focus();
@@ -69,4 +72,183 @@ test("every main window is hooked on load, and unhooked on unload and on stop", 
     } finally {
         platform.restore();
     }
+});
+
+// The startup focus: a fake window whose timers the test runs by hand.
+interface StartupOptions {
+    mode?: string;
+    folder_pane_visible?: boolean;
+    ready_state?: string;
+    active?: "thread_body" | "folder_tree" | "input" | "none" | "body";
+    age_ms?: number;
+    has_tab?: boolean;
+}
+
+function startup_window(options: StartupOptions = {}) {
+    const thread_body = { localName: "tbody" };
+    const folder_tree = { localName: "ul", id: "folderTree" };
+    const focused: string[] = [];
+    const pane = {
+        document: { readyState: options.ready_state ?? "complete" },
+        folderTree: { focus: () => void focused.push("folders") },
+        threadTree: { table: { body: thread_body } },
+        paneLayout: { folderPaneVisible: options.folder_pane_visible ?? true },
+    };
+    const state = { active: options.active ?? "thread_body", mode: options.mode ?? "mail3PaneTab", has_tab: options.has_tab ?? true, pane: pane as typeof pane | null };
+    const timers: (() => void)[] = [];
+    const listeners = new Map<string, () => void>();
+    const nodes = { thread_body, folder_tree, input: { localName: "input" }, none: null, body: { localName: "body" } };
+    const window = {
+        document: {
+            get activeElement() {
+                return nodes[state.active];
+            },
+            getElementById: () => ({ currentTabInfo: state.has_tab ? { mode: { name: state.mode }, chromeBrowser: { contentWindow: state.pane } } : null }),
+        },
+        performance: { now: () => options.age_ms ?? 500 },
+        setTimeout: (run: () => void) => timers.push(run),
+        clearTimeout: () => void (timers.length = 0),
+        addEventListener: (type: string, listener: () => void) => void listeners.set(type, listener),
+        removeEventListener: (type: string) => void listeners.delete(type),
+    };
+    return { window: window as never, state, focused, timers };
+}
+
+function hooked(...windows: { window: never }[]) {
+    reset_startup_focus_claim();
+    const platform = stub_platform();
+    const stop = hook_page_focus();
+    const [listener] = [...platform.window_listeners.values()] as { onLoadWindow(window: never): void }[];
+    for (const each of windows) listener!.onLoadWindow(each.window);
+    return {
+        stop() {
+            stop();
+            platform.restore();
+        },
+    };
+}
+
+test("the first window gets the folder tree focus once the mail tab is ready", () => {
+    const first = startup_window({ ready_state: "loading" });
+    const hook = hooked(first);
+    try {
+        assert.deepEqual(first.focused, [], "the page is not ready yet");
+        assert.equal(first.timers.length, 1, "a poll is waiting");
+        first.state.pane!.document.readyState = "complete";
+        first.timers.shift()!();
+        assert.deepEqual(first.focused, ["folders"]);
+        assert.equal(first.timers.length, 0, "the poll ends after the one focus");
+    } finally {
+        hook.stop();
+    }
+});
+
+test("no mail tab yet is waited out, and the focus lands once the tab appears", () => {
+    const first = startup_window({ has_tab: false });
+    const hook = hooked(first);
+    try {
+        assert.equal(first.timers.length, 1);
+        first.state.has_tab = true;
+        first.timers.shift()!();
+        assert.deepEqual(first.focused, ["folders"]);
+    } finally {
+        hook.stop();
+    }
+});
+
+test("a hidden folder pane keeps the focus where it is", () => {
+    const first = startup_window({ folder_pane_visible: false });
+    const hook = hooked(first);
+    try {
+        assert.deepEqual(first.focused, []);
+        assert.equal(first.timers.length, 0, "nothing is left to wait for");
+    } finally {
+        hook.stop();
+    }
+});
+
+test("a front tab that is not a mail tab keeps the focus", () => {
+    for (const mode of ["contentTab", "calendar", "chat", "mailMessageTab"]) {
+        const first = startup_window({ mode });
+        const hook = hooked(first);
+        try {
+            assert.deepEqual(first.focused, [], mode);
+            assert.equal(first.timers.length, 0, mode);
+        } finally {
+            hook.stop();
+        }
+    }
+});
+
+test("focus the user already moved stays, and an empty or body focus counts as untouched", () => {
+    for (const active of ["input", "folder_tree"] as const) {
+        const first = startup_window({ active });
+        const hook = hooked(first);
+        try {
+            assert.deepEqual(first.focused, [], active);
+        } finally {
+            hook.stop();
+        }
+    }
+    for (const active of ["none", "body"] as const) {
+        const first = startup_window({ active });
+        const hook = hooked(first);
+        try {
+            assert.deepEqual(first.focused, ["folders"], active);
+        } finally {
+            hook.stop();
+        }
+    }
+});
+
+test("a second main window keeps Thunderbird's focus, also when the first is gone", () => {
+    const first = startup_window();
+    const second = startup_window();
+    const hook = hooked(first, second);
+    try {
+        assert.deepEqual(first.focused, ["folders"]);
+        assert.deepEqual(second.focused, [], "only the first main window of the run");
+    } finally {
+        hook.stop();
+    }
+});
+
+test("an add-on reload with a window that has been open a while does not move the focus", () => {
+    const open = startup_window({ age_ms: 5 * 60_000 });
+    const later = startup_window();
+    const hook = hooked(open, later);
+    try {
+        assert.deepEqual(open.focused, []);
+        assert.equal(open.timers.length, 0);
+        assert.deepEqual(later.focused, [], "the open window used the claim");
+    } finally {
+        hook.stop();
+    }
+});
+
+test("a window that never gets a ready mail tab gives up after the startup window, and unhooking ends the poll", () => {
+    const slow = startup_window({ ready_state: "loading" });
+    const hook = hooked(slow);
+    try {
+        assert.equal(slow.timers.length, 1);
+        slow.timers.shift()!();
+        assert.equal(slow.timers.length, 1, "still waiting");
+    } finally {
+        hook.stop();
+    }
+    assert.equal(slow.timers.length, 0, "unhooking cancels the live poll");
+    const old = startup_window({ ready_state: "loading", age_ms: 31_000 });
+    const hook2 = hooked(old);
+    try {
+        assert.equal(old.timers.length, 0, "past the window the poll gives up");
+        assert.deepEqual(old.focused, []);
+    } finally {
+        hook2.stop();
+    }
+});
+
+test("focus_folder_pane_when_ready reports wait for a pane without its trees", () => {
+    const first = startup_window();
+    first.state.pane = { document: { readyState: "complete" } } as never;
+    assert.equal(focus_folder_pane_when_ready(first.window), "wait");
 });
