@@ -2,6 +2,7 @@
 
 interface ContextNode {
     localName: string;
+    shadowRoot?: { activeElement: ContextNode | null } | null;
     getBoundingClientRect(): { left: number; top: number; right: number; bottom: number };
     dispatchEvent(event: unknown): boolean;
 }
@@ -30,19 +31,24 @@ const MESSAGE_NAME = "DesertBird:ContextMenu";
 const POINT_WIDTH = 40;
 const POINT_HEIGHT = 20;
 
-// The element a key would act on: the focused one (a link), else the caret's, else the body. The document itself opens nothing.
+// The element a key would act on: the focused one (a link), followed into open shadow roots, else the caret's, else the body. The document itself opens nothing.
 function target_of(window: ContextWindow, document: ContextDocument): ContextNode | null {
-    const focused = document.activeElement;
+    let focused = document.activeElement;
+    for (let inner = focused?.shadowRoot?.activeElement; inner; inner = focused?.shadowRoot?.activeElement) focused = inner;
     if (focused && focused !== document.body) return focused;
     const anchor = window.getSelection()?.anchorNode;
     return (anchor && (anchor.nodeType === 1 ? anchor : anchor.parentElement)) || document.body;
 }
 
+const intersects_viewport = (box: { left: number; top: number; right: number; bottom: number }, window: ContextWindow): boolean => box.right > 0 && box.bottom > 0 && box.left < window.innerWidth && box.top < window.innerHeight;
+
 export class DesertBirdContextChild extends JSWindowActorChild {
     receiveMessage({ name }: { name: string }): boolean {
         if (name !== MESSAGE_NAME) return false;
         const window = this.contentWindow;
-        const target = target_of(window, this.document);
+        let target = target_of(window, this.document);
+        // A target scrolled out of the view has no visible point, so the body takes the menu.
+        if (target && !intersects_viewport(target.getBoundingClientRect(), window)) target = this.document.body;
         if (!target) return false;
         const box = target.getBoundingClientRect();
         const left = Math.max(box.left, 0);
@@ -51,7 +57,7 @@ export class DesertBirdContextChild extends JSWindowActorChild {
         const clientY = Math.round(top + Math.min(Math.min(box.bottom, window.innerHeight) - top, POINT_HEIGHT) / 2);
         const screenX = Math.round(window.mozInnerScreenX + clientX);
         const screenY = Math.round(window.mozInnerScreenY + clientY);
-        target.dispatchEvent(new window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, view: window, button: 0, clientX, clientY, screenX, screenY }));
+        target.dispatchEvent(new window.MouseEvent("contextmenu", { bubbles: true, composed: true, cancelable: true, view: window, button: 0, clientX, clientY, screenX, screenY }));
         return true;
     }
 }

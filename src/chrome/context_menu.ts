@@ -36,8 +36,15 @@ let resource_root: string | null = null;
 // The root takes a new name each load, as the page actor's does, so a reloaded add-on never meets the module cache of the old one. `stop_context_actor` drops it.
 function register_actor(context: ExtensionContext): void {
     const root = `desertbird-context-${Date.now()}`;
-    Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler).setSubstitution(root, (context.extension as unknown as { rootURI: unknown }).rootURI);
-    ChromeUtils.registerWindowActor(ACTOR_NAME, { child: { esModuleURI: `resource://${root}/experiment/context_actor_child.sys.mjs` }, allFrames: false });
+    const resource = Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler);
+    resource.setSubstitution(root, (context.extension as unknown as { rootURI: unknown }).rootURI);
+    try {
+        ChromeUtils.registerWindowActor(ACTOR_NAME, { child: { esModuleURI: `resource://${root}/experiment/context_actor_child.sys.mjs` }, allFrames: false });
+    } catch (error) {
+        // A failed registration leaves no root behind, so the next press starts clean.
+        resource.setSubstitution(root, null);
+        throw error;
+    }
     resource_root = root;
 }
 

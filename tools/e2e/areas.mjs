@@ -133,8 +133,9 @@ const support_rules = [
   { globs: ["tools/e2e/pages_checks.mjs"], pieces: [piece_file("pages.keys")] },
   { globs: ["tools/e2e/typing_checks.mjs"], pieces: [piece_file("pages.typing")] },
   { globs: ["tools/e2e/popup_checks.mjs"], pieces: [piece_file("default.popup")] },
-  { globs: ["tools/e2e/web_checks.mjs", "tools/e2e/web_fixture.mjs"], pieces: [piece_file("web.main")] },
-  { globs: ["tools/e2e/context_checks.mjs"], pieces: [piece_file("*.context_menu")] },
+  { globs: ["tools/e2e/web_checks.mjs"], pieces: [piece_file("web.main")] },
+  { globs: ["tools/e2e/web_fixture.mjs"], pieces: [piece_file("web.main"), piece_file("web.context_menu")] },
+  { globs: ["tools/e2e/context_checks.mjs"], pieces: [piece_file("*.context_menu"), piece_file("default.context_compose")] },
   { globs: ["tools/e2e/zoom_checks.mjs"], pieces: [piece_file("zoom.main")] },
   // Anything else in tools/e2e is the harness, and that includes the runner machinery (coordinator, worker, shards, reap), which decides how every piece starts and ends: the profile, the helper add-on, the start, the predicates and the report all sit under every piece.
   { globs: ["tools/e2e/**", "tools/build.mjs", "vendor/**", "package.json", "package-lock.json", "tsconfig.json"], pieces: "all" },

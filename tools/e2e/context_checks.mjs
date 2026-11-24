@@ -31,7 +31,7 @@ export async function close_menu(instance) {
 }
 
 export async function run_context_menu_mail_tab(instance, ctx) {
-  const { app, kind, check, note, shot } = ctx;
+  const { app, kind, check, note, shot, first_selected } = ctx;
   // Focus is in the thread list after open_inbox. The cursor row is the selected one here.
   let result = await press_context_key(instance, ctx, "context_thread", "thread list after , m: the thread context menu is open at the cursor row");
   check(app, kind, ", m in the thread list opens a menu", result.opened, `window differs by ${result.share.toFixed(4)}`);
@@ -58,6 +58,26 @@ export async function run_context_menu_mail_tab(instance, ctx) {
   check(app, kind, ", m after j opens a menu", moved.opened, `window differs by ${moved.share.toFixed(4)}`);
   note(app, kind, "menu pixels after j differ from the first menu", `${share_differing(result.open, moved.open).toFixed(4)}`);
   await close_menu(instance);
+
+  // The cursor row and the selection on different rows: Space picks the selected row and k moves the cursor off it. The menu must act on the cursor row, as a right-click on it does. The first item of the menu is the read toggle, so Down and Return run it, and the flags say which message it changed.
+  const pick_state = await instance.ask("state");
+  const picked = first_selected(pick_state);
+  const above = pick_state.listed[pick_state.listed.indexOf(picked) - 1];
+  await instance.press([" "]);
+  await instance.press(["k"]);
+  await sleep(500);
+  const read_before = { picked: pick_state.flags[picked]?.read, above: pick_state.flags[above]?.read };
+  for (const key of CONTEXT_KEYS) await instance.press([key]);
+  await sleep(1200);
+  await shot("context_thread_pick", "thread list with the selection on one row and the cursor on the row above, after , m: the menu is open at the cursor row");
+  await instance.press(["-k", "Down"]);
+  await sleep(300);
+  await instance.press(["-k", "Return"]);
+  await sleep(1500);
+  const acted = await instance.ask("state");
+  check(app, kind, ", m with the cursor off the selection acts on the cursor row and leaves the selected row alone", above !== undefined && acted.flags[above]?.read === !read_before.above && acted.flags[picked]?.read === read_before.picked, `cursor row ${above} read ${read_before.above} then ${acted.flags[above]?.read}, selected row ${picked} read ${read_before.picked} then ${acted.flags[picked]?.read}`);
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
 
   // The folder pane.
   for (const key of ["g", "f"]) await instance.press([key]);

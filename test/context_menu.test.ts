@@ -177,3 +177,18 @@ test("the handler asks the context verb once with the key's window and nothing e
     await open_context_menu({ window_id: 7, api: { context: { open: async (args: unknown) => (asked.push(args), false) } } } as never);
     assert.deepEqual(asked, [{ windowId: 7 }]);
 });
+
+test("a failed actor registration drops its root, so a press never leaks a second one", async () => {
+    const t = setup();
+    (globalThis as unknown as { ChromeUtils: Record<string, unknown> }).ChromeUtils["registerWindowActor"] = () => {
+        throw new Error("already registered");
+    };
+    const windows = [content_window(t, true)];
+    t.windows["mail:3pane"] = windows;
+    await assert.rejects(api_for(windows).open({ windowId: 1 }), /already registered/);
+    const set = t.fake.roots.filter((root) => root !== null).length;
+    assert.deepEqual([set, t.fake.roots.filter((root) => root === null).length], [1, 1]);
+    shutdown();
+    assert.equal(t.fake.roots.length, 2, "nothing left to drop at shutdown");
+    t.platform.restore();
+});

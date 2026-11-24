@@ -64,3 +64,24 @@ test("a document with no element, and any other message, do nothing", () => {
     assert.equal(child_with({ activeElement: body, body }).receiveMessage({ name: "Other" }), false);
     assert.deepEqual(sent, []);
 });
+
+test("a target scrolled out of the view gives its menu to the body, and the point stays in the view", () => {
+    const sent: Sent[] = [];
+    const body = element("body", { left: 0, top: -400, right: 800, bottom: 1600 }, sent);
+    const caret_element = element("p", { left: 8, top: 1200, right: 700, bottom: 1220 }, sent);
+    const link = element("a", { left: 8, top: -300, right: 100, bottom: -280 }, sent);
+    child_with({ activeElement: body, body }, { nodeType: 3, parentElement: caret_element }).receiveMessage({ name: "DesertBird:ContextMenu" });
+    child_with({ activeElement: link, body }).receiveMessage({ name: "DesertBird:ContextMenu" });
+    assert.deepEqual(sent.map((each) => each.on), ["body", "body"]);
+    assert.ok(Number(sent[0]!.init["clientY"]) >= 0 && Number(sent[0]!.init["clientY"]) < 600);
+});
+
+test("focus inside an open shadow root takes the event from the inner element, which crosses the root", () => {
+    const sent: Sent[] = [];
+    const body = element("body", { left: 0, top: 0, right: 800, bottom: 600 }, sent);
+    const inner = element("button", { left: 10, top: 10, right: 90, bottom: 30 }, sent);
+    const host = Object.assign(element("x-widget", { left: 0, top: 0, right: 200, bottom: 100 }, sent), { shadowRoot: { activeElement: inner } });
+    child_with({ activeElement: host, body }).receiveMessage({ name: "DesertBird:ContextMenu" });
+    assert.deepEqual(sent.map((each) => each.on), ["button"]);
+    assert.equal(sent[0]!.init["composed"], true);
+});
