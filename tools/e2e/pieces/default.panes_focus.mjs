@@ -2,6 +2,7 @@ import { sleep, CTRL_SHIFT, CTRL, first_selected, same, selects, at_bottom, at_t
 import { section_piece } from "./_default_shared.mjs";
 import { panes_helpers, show_inbox_listed } from "./_panes_shared.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
+import { insert_label } from "./_insert_label.mjs";
 
 export const areas = ["panes"];
 
@@ -206,6 +207,34 @@ async function run_panes_focus(instance, ctx) {
   await instance.ask("reset_tabs");
   await wait_for_state(instance, only_tab);
   await keys(["g", "e"]);
+
+  // Insert mode: `i` shows INSERT, plain keys then reach Thunderbird and run no binding, and Escape returns to NORMAL. Escape here starts in about:3pane, so this also proves it bubbles back to the window.
+  const label = insert_label(instance, ctx);
+  await keys(["g", "e"]);
+  const list_top = first_selected(await keys(["g", "g"], at_top));
+  let normal = await label.normal();
+  let insert = await label.enter(normal);
+  check(app, kind, "i in the thread list changes the label to insert", insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
+  // G is no Thunderbird key, so it reaches nothing here, and in normal mode it selects the last row.
+  state = await keys(["G"], 1000);
+  check(app, kind, "G in insert mode in the thread list moves no row, since no binding runs", first_selected(state) === list_top, `selected ${list_top} then ${first_selected(state)}`);
+  check(app, kind, "Escape ends insert mode in the thread list and the label returns", (await label.leave(normal)) === normal);
+  state = await keys(["G"], at_bottom);
+  check(app, kind, "G moves the row again after Escape", first_selected(state) !== list_top, `selected ${list_top} then ${first_selected(state)}`);
+  await keys(["g", "g"], at_top);
+  await keys(["g", "f"]);
+  normal = await label.normal();
+  insert = await label.enter(normal);
+  check(app, kind, "i in the folder pane changes the label to insert", insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
+  state = await keys(["G"], 1000);
+  check(app, kind, "G in insert mode in the folder pane moves no folder", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
+  // The folder tree cancels every key it handles, Escape included, so the runtime leaves on a cancelled Escape there.
+  check(app, kind, "Escape ends insert mode in the folder pane and the label returns", (await label.leave(normal)) === normal);
+  state = await keys(["G"], folder_lands_on("/Views"));
+  check(app, kind, "G selects the last folder again after Escape", folder_of(state) === "/Views", `folder ${folder_of(state)}`);
+  await keys(["g", "g"]);
+  await keys(["j"], folder_lands_on("/Inbox"));
+  await keys(["L"]);
 }
 
 export const piece = { ...section_piece({ section: "panes_focus", only: ["panes"], run: run_panes_focus }), deadline_s: LONG_PIECE_DEADLINE_S };

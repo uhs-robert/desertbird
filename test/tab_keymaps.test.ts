@@ -4,7 +4,7 @@ import type { TreeBranch, TreeNode } from "../vendor/desertfox/prefix_tree.ts";
 import { GROUPS, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { TAB_NEEDS, needing, tab_needs_of } from "../src/background/commands/define.ts";
 import { compile_effective_keymap, sanitize_user_keymap } from "../src/background/config/keymap.ts";
-import { compile_tab_keymap, compile_typing_keymap, default_keymap_of, default_menu_keymap, effective_menu_keymap, menu_key_table, offered_in, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
+import { TAB_KINDS, compile_tab_keymap, compile_typing_keymap, default_keymap_of, default_menu_keymap, effective_menu_keymap, menu_key_table, offered_in, page_message_tree } from "../src/background/commands/tab_keymaps.ts";
 import { COMPILED_KEYMAP_VERSION } from "../src/shared/protocol.ts";
 
 const root_of = (user?: Parameters<typeof compile_tab_keymap>[1]) => compile_tab_keymap("page", user).compiled.modes.normal as TreeBranch;
@@ -63,7 +63,7 @@ test("the page tree reads the same command table: the keys that gain a place are
 });
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
-    for (const id of ids_under(root_of())) assert.ok(["tab", "line", "page", "close", "main"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
+    for (const id of ids_under(root_of())) assert.ok(["tab", "line", "page", "typing", "close", "main"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
     for (const token of ["m", "d", "s", "F", "y", "]", "[", "o", "a", "r", "R", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
@@ -244,10 +244,14 @@ test("the stored menu section keeps menu commands only", () => {
     assert.deepEqual(sanitize_user_keymap({ menu: { n: { id: "menu.down" }, x: { id: "msg.archive" }, j: null } }).menu, { n: { id: "menu.down" }, j: null });
 });
 
-test("i is bound in the page tree alone, so the own and message trees and the mail tab leave it", () => {
-    assert.equal(leaf_at(root_of(), "i")?.id, "mode.insert");
-    for (const root of [own_root(), message_root()]) assert.equal(leaf_at(root, "i"), undefined);
-    assert.equal(ids_under(root_of()).includes("mode.escape"), false, "the typing layer stays out of the normal trees");
+test("i is bound in every tab tree and in the mail tab, and the typing layer stays out of the normal trees", () => {
+    for (const root of [root_of(), own_root(), message_root(), window_root(), compile_default_keymap().compiled.modes.normal as TreeBranch]) assert.equal(leaf_at(root, "i")?.id, "mode.insert");
+    for (const root of [root_of(), own_root(), message_root(), window_root()]) assert.equal(ids_under(root).includes("mode.escape"), false, "the typing layer stays out of the normal trees");
+});
+
+test("the message, own and window kinds offer the typing need, and the compose window still takes no insert key", () => {
+    for (const kind of ["message", "own", "window", "page"] as const) assert.ok((TAB_KINDS[kind] as readonly string[]).includes("typing"), kind);
+    assert.equal(leaf_at(compile_tab_keymap("compose").compiled.modes.normal as TreeBranch, "i"), undefined);
 });
 
 test("the message window tree holds the reading keys, the hint picks, the mail actions, the command line with tag, move and copy, q, zoom, new message, help, options and the Thunderbird pages, the find keys, and no tab, pane, folder or list key", () => {

@@ -7,7 +7,8 @@ import { is_typing_element } from "../chrome/focus.ts";
 import type { FocusNode } from "../chrome/focus.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, HINT_STYLE_STORAGE_KEY, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../shared/protocol.ts";
-import type { BodyFindReply, BodyFindRequest, BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue } from "../shared/protocol.ts";
+import type { BodyFindReply, BodyFindRequest, BodyHintsRequest, BodyInvokeRequest, BodyModeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue } from "../shared/protocol.ts";
+import { leaves_insert } from "../chrome/escape_rule.ts";
 import { create_finder } from "./body_find.ts";
 import type { FindWindow, Finder } from "./body_find.ts";
 import { create_hint_session } from "./body_hints.ts";
@@ -16,6 +17,7 @@ import { best_effort } from "../shared/swallow.ts";
 
 export interface BodyKeyEvent extends KeyEventLike {
     target: unknown;
+    defaultPrevented?: boolean;
     preventDefault(): void;
     stopPropagation(): void;
 }
@@ -36,7 +38,7 @@ export interface BodyStorage {
 
 /** The ways to reach the background page: send a request, and answer the ones it sends. */
 export interface BodyRuntime {
-    sendMessage(message: BodyHintsRequest | BodyInvokeRequest | BodyOpenLinkRequest | BodyPendingRequest | BodyTreeRequest | BodyYankRequest): Promise<unknown>;
+    sendMessage(message: BodyHintsRequest | BodyInvokeRequest | BodyModeRequest | BodyOpenLinkRequest | BodyPendingRequest | BodyTreeRequest | BodyYankRequest): Promise<unknown>;
     onMessage: { addListener(listener: (message: unknown) => Promise<BodyFindReply> | undefined): void };
 }
 
@@ -77,6 +79,8 @@ const ACTIONS: Record<string, Action> = {
 export type TreeField = BodyTreeField | "own_tree";
 
 const log_error = (error: unknown) => console.error("desertbird message keys:", error);
+
+const INSERT_MODE = "mode.insert";
 
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
@@ -127,10 +131,20 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         report([]);
     }
 
+    // Insert mode (`i`). A blur ends it, so it does not follow the focus to another pane.
+    let insert = false;
+    let escaped: BodyKeyEvent | null = null;
+    function set_insert(on: boolean): void {
+        if (insert === on) return;
+        insert = on;
+        void best_effort(runtime.sendMessage({ type: "body.mode", mode: on ? "insert" : "normal" }));
+    }
+
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {
             const count = typed_count ?? step.invocation.count ?? 1;
-            if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count, step.invocation.args ?? {});
+            if (step.invocation.id === INSERT_MODE) (reset_sequence(), cancel(), set_insert(true));
+            else if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count, step.invocation.args ?? {});
             // The background checks the command and its args again. A refusal there is shown as a notification.
             else if (step.runs_in === "background") runtime.sendMessage({ type: "body.invoke", command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count }).catch(log_error);
         }
@@ -147,9 +161,10 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     function on_keydown(event: BodyKeyEvent): void {
         if (context.hints.active()) return on_hint_key(event);
         if (!matcher) return;
-        if (is_typing_element(event.target as FocusNode | null)) return reset_sequence();
         const token = event_to_token(event);
         if (token === null) return;
+        if (insert) return void (token === "<Escape>" || token === "<C-[>" ? escaped = event : undefined);
+        if (is_typing_element(event.target as FocusNode | null)) return reset_sequence();
         if (hold_until > Date.now() && is_plain_printable(token)) return void (event.preventDefault(), event.stopPropagation());
         // Escape ends a half-typed sequence or count. With a sequence pending it is cancelled too, or Thunderbird closes a message window under the open panel. With none pending it goes on to Thunderbird, which may use it.
         if (token === "<Escape>") {
@@ -188,10 +203,11 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     }
 
     window.addEventListener("keydown", on_keydown, true);
+    window.addEventListener("keydown", (event) => leaves_insert(escaped, event) && set_insert(false), false);
     // The labels sit at fixed places. They end when the page moves under them, the window loses the focus or a click lands elsewhere.
     for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, cancel, true);
     // A half-typed `d` must not wait across a tab switch, or `d`, `J`, `K`, `d` trashes a message.
-    window.addEventListener("blur", reset_sequence, true);
+    window.addEventListener("blur", () => (reset_sequence(), set_insert(false)), true);
     runtime.onMessage.addListener((message) => {
         const request = message as Partial<BodyFindRequest> | null;
         return request?.type === "body.find" && typeof request.pattern === "string" ? Promise.resolve({ found: context.finder.start(request.pattern) }) : undefined;

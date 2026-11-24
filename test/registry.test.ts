@@ -212,7 +212,7 @@ test("the message keymap carries the mail keys of the message-capable groups wit
     for (const [keys, binding] of Object.entries(message)) {
         const id = binding && !Array.isArray(binding) ? binding.id : "";
         assert.equal(excluded.test(id), false, keys);
-        assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? ""), keys);
+        assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? "") || id === "mode.insert", keys);
     }
     for (const keys of ["mR", "Ft", "Ff", "ss", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "wm", "wf", "gi"]) assert.equal(message[keys], undefined, keys);
 });

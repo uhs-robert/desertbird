@@ -2,14 +2,14 @@
 
 import type { Registry } from "../../vendor/desertfox/registry/define.ts";
 import { check_args } from "../../vendor/desertfox/registry/check_args.ts";
-import type { BodyHintsRequest, BodyInvokeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { BodyHintsRequest, BodyInvokeRequest, BodyModeRequest, BodyOpenLinkRequest, BodyPendingRequest, BodyTreeField, BodyTreeRequest, BodyYankRequest, HintAction, JsonValue, KeysInvocation, KeysMode } from "../shared/protocol.ts";
 import type { ThemedHints } from "./handlers/hint_window.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import type { NotificationsApi } from "./notify.ts";
 
 export interface BodyRequestApi extends NotificationsApi {
-    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number }[]> };
+    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number }[]>; onMessageDisplayed?: { addListener(listener: (tab: { id?: number }) => void): void } };
     windows: { get(window_id: number): Promise<{ type?: string }> };
 }
 
@@ -24,6 +24,8 @@ export interface BodyRequestDeps {
     write_text?: ((text: string) => Promise<void>) | undefined;
     /** The hud, told which keys a message document has typed of a sequence. Absent in a setup with no hud. */
     which_key?: { on_body_pending(window_id: number, keys: string[], source: "message" | "window" | "own"): Promise<void> } | undefined;
+    /** Takes the mode a message document reports (insert mode), as the key runtimes' own mode events are taken. */
+    on_mode?: ((event: KeysMode) => void) | undefined;
     /** Runs one invocation through the router and its validator. It reports its own failures. */
     run(invocation: KeysInvocation): Promise<void>;
 }
@@ -45,10 +47,26 @@ function read_pending(message: unknown): BodyPendingRequest | undefined {
     return Array.isArray(keys) && keys.every((key) => typeof key === "string") ? { type: "body.pending", keys: keys as string[], ...(tree === "own" || tree === "window" ? { tree } : {}) } : undefined;
 }
 
+function read_mode(message: unknown): BodyModeRequest | undefined {
+    const request = message as Partial<Record<string, unknown>> | null;
+    if (typeof request !== "object" || request === null || request["type"] !== "body.mode") return undefined;
+    return request["mode"] === "insert" || request["mode"] === "normal" ? { type: "body.mode", mode: request["mode"] } : undefined;
+}
+
 type Sender = { tab?: { id?: number; windowId?: number } };
 
 /** Answers a runtime message of the body script, or returns undefined for a message that is not one. The window and the messages come from the sender, which a mail cannot write. */
 export function create_body_requests(deps: BodyRequestDeps): (message: unknown, sender: Sender) => Promise<unknown> | undefined {
+    // A new message loads into the same browser and its fresh body script starts in normal mode, so insert mode that a body reported ends there.
+    // Keyed by tab, since another tab of the window may show a message while this body stays in insert mode.
+    const inserting = new Map<number, number>();
+    deps.api.messageDisplay?.onMessageDisplayed?.addListener(({ id }) => {
+        const window_id = id === undefined ? undefined : inserting.get(id);
+        if (id === undefined || window_id === undefined) return;
+        inserting.delete(id);
+        deps.on_mode?.({ command: "mode", mode: "normal", windowId: window_id });
+    });
+
     async function invoke(request: BodyInvokeRequest, sender: Sender): Promise<unknown> {
         const { id: tab_id, windowId: window_id } = sender.tab ?? {};
         if (tab_id === undefined || window_id === undefined) return {};
@@ -93,6 +111,15 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
     return (message, sender) => {
         const pending = read_pending(message);
         if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys, pending.tree ?? "message").then(() => ({}));
+        const mode = read_mode(message);
+        if (mode !== undefined) {
+            const window_id = sender.tab?.windowId;
+            if (window_id !== undefined) {
+                if (sender.tab?.id !== undefined) (mode.mode === "insert" ? inserting.set(sender.tab.id, window_id) : inserting.delete(sender.tab.id));
+                deps.on_mode?.({ command: "mode", mode: mode.mode, windowId: window_id });
+            }
+            return Promise.resolve({});
+        }
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);
         if ((message as Partial<BodyTreeRequest> | null)?.type === "body.tree") return tree_field_of(sender);
         const hints = message as Partial<BodyHintsRequest> | null;
