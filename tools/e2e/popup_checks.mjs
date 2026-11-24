@@ -2,6 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { last_tab_loaded } from "./predicates.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const SHIFT_F10 = ["-M", "shift", "-k", "F10", "-m", "shift"];
@@ -41,7 +42,7 @@ const submenu_only_region = (app) => {
   return app === "betterbird" ? `${x},${y} ${width - 20}x${height}` : `${x + 20},${y} ${width - 20}x${height}`;
 };
 
-export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected, wait_for }) {
+export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected, wait_for, wait_for_state }) {
   const app = instance.app;
   const kind = "default";
   const any_junk = (state) => Object.values(state.flags).some((flags) => flags.junk);
@@ -140,7 +141,7 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   if (!opened) {
     await instance.press(["-k", "Escape"]);
     await sleep(800);
-    await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for });
+    await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state });
     return;
   }
   await shot("popup_app_menu_open_by_keyboard", "app menu opened by Enter on the button");
@@ -163,11 +164,11 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   check(app, kind, "app menu after an arrow key inside it: j, a and n mark, archive and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_in_panel, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_in_panel}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
-  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for });
+  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state });
 }
 
 // DesertBird's own popup takes j, k and h. Thunderbird moves the focus into the popup's browser about 400 ms after it shows, so the wait after the click covers that.
-async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for }) {
+async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state }) {
   const app = instance.app;
   const kind = "default";
   const button = DESERTBIRD_BUTTON[app];
@@ -199,15 +200,17 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   };
   const tab_count = (each) => each.windows.reduce((sum, window) => sum + window.tabs.length, 0);
   const tabs_before = tab_count(state);
-  // A page the popup opens must take keys with no click: q closes it.
+  // A page the popup opens must take keys with no click: q closes it. The page binds its keys once loaded, which the close of the popup does not wait for, so each q follows a wait for the help tab to finish loading.
   state = await key_and_state(instance, ["h"], 1500);
   check(app, kind, "DesertBird popup: h opens the help page", tab_count(state) === tabs_before + 1, `tabs ${tabs_before} to ${tab_count(state)}`);
+  await wait_for_state(instance, last_tab_loaded(tabs_before + 1));
   state = await key_and_state(instance, ["q"], 1200);
   check(app, kind, "DesertBird popup: the help page h opened takes q with no click", tab_count(state) === tabs_before, `tabs ${tabs_before + 1} to ${tab_count(state)}`);
   // A click on an entry runs the same request, so its page takes keys the same way.
   await instance.click(...button);
   await sleep(2000);
   await click_help_and_wait_for_close();
+  await wait_for_state(instance, last_tab_loaded(tabs_before + 1));
   state = await instance.ask("state");
   const opened_by_click = tab_count(state) === tabs_before + 1;
   // The closed baseline is the help tab's own: open the popup over it, then close it with Escape, which the panel handles natively.
@@ -225,6 +228,7 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   await instance.click(...button);
   await sleep(2000);
   await click_help_and_wait_for_close();
+  await wait_for_state(instance, last_tab_loaded(tabs_before + 1));
   state = await key_and_state(instance, ["q"], 1200);
   check(app, kind, "DesertBird popup: the help page a click opened takes q with no click in it", tab_count(state) === tabs_before, `tabs ${tabs_before + 1} to ${tab_count(state)}`);
 }
