@@ -22,13 +22,26 @@ export interface FilterTermsApi {
 
 export const is_message_term_field = (field: string): field is MessageTermField => field === "list" || field === "date";
 
+// The message at the cursor row, or none. The row moves with j and k while nothing is selected.
+async function cursor_row_message_id(scope: HandlerScope<FilterTermsApi>): Promise<number | null> {
+    if (scope.api.app === undefined) return null;
+    const { current } = await scope.api.app.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
+    if (current < 0) return null;
+    return (await scope.api.app.viewRows({ windowId: scope.window_id, first: current, last: current })).rows[0]?.id ?? null;
+}
+
+/** The messages a filter by the message reads: the selection, or the cursor message when nothing is selected. */
+export async function selected_or_cursor_ids(scope: HandlerScope<FilterTermsApi>): Promise<number[]> {
+    if (scope.message_ids.length > 0) return scope.message_ids;
+    const cursor_id = await cursor_row_message_id(scope);
+    return cursor_id === null ? [] : [cursor_id];
+}
+
 // The selection comes with the key, and its order is the list's, not the cursor's. The cursor row counts only while it is still part of that selection.
 async function cursor_message_id(scope: HandlerScope<FilterTermsApi>, ids: number[]): Promise<number> {
-    if (ids.length === 1 || scope.api.app === undefined) return ids[0]!;
-    const { current } = await scope.api.app.viewRows({ windowId: scope.window_id, first: 0, last: 0 });
-    if (current < 0) return ids[0]!;
-    const cursor_id = (await scope.api.app.viewRows({ windowId: scope.window_id, first: current, last: current })).rows[0]?.id;
-    return cursor_id !== undefined && cursor_id !== null && ids.includes(cursor_id) ? cursor_id : ids[0]!;
+    if (ids.length === 1) return ids[0]!;
+    const cursor_id = await cursor_row_message_id(scope);
+    return cursor_id !== null && ids.includes(cursor_id) ? cursor_id : ids[0]!;
 }
 
 /** The `<...>` part of a List-Id header. RFC 2919 puts the id in angle brackets after an optional phrase, so the last such part is the id even when the phrase holds brackets. */

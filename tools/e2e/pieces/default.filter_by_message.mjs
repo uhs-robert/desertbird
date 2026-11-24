@@ -67,6 +67,18 @@ async function run_filter_by_message(instance, ctx) {
   const refused = await toast_cycle(instance, `${app}_list_none`, ["l"], ["F", "m"]);
   check(app, kind, "F m l on a message with no List-Id shows the refusal as a toast", refused.shown, `listed ${refused.state.listed.length}`);
   check(app, kind, "F m l on a message with no List-Id leaves the list as it was", refused.state.listed.length === ALL, `listed ${refused.state.listed.length}`);
+
+  // The cursor alone: Space picks the read row and a second Space drops it, so nothing is selected, and j then moves only the cursor. A cursor move has no state of its own, so it gets a fixed wait.
+  const listed = (await instance.ask("state")).listed;
+  await instance.press(["g"]);
+  await key_and_state(instance, ["g"], selects(listed[0]));
+  await key_and_state(instance, ["-k", "space"], 700);
+  await key_and_state(instance, ["-k", "space"], 700);
+  await key_and_state(instance, ["j"], 700);
+  state = await key_and_state(instance, ["j"], 700);
+  check(app, kind, "Space twice and j j leave no row selected", state.selected.length === 0, `selected ${state.selected.map((message) => message.header_id)}`);
+  rows = await keys_to_count(["F", "m", "l"], 2);
+  check(app, kind, "F m l with nothing selected filters on the list of the message at the cursor", shows(rows, ids(2, 4)), `listed ${rows}, cursor row 2 (${listed[2]})`);
 }
 
 export const piece = { ...section_piece({ section: "filter_by_message", run: run_filter_by_message }), profile_kind: "lists" };

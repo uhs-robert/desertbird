@@ -512,6 +512,24 @@ test("with several messages selected, F m l takes the cursor message, or the fir
     assert.equal(outside.steps.at(-1), `filter.set ${JSON.stringify(DEV_LIST)}`);
 });
 
+test("with nothing selected, F m l, F m d and F m f read the message at the cursor row", async () => {
+    const fake = terms_fake({ ids: [], cursor_row: 4 });
+    await fake.run("filter.by", { field: "list" });
+    await fake.run("filter.by", { field: "date" });
+    assert.deepEqual(fake.notices, []);
+    assert.equal(fake.steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<ops.example.org>", dateUs: LIST_MAIL[2]!.date.getTime() * 1000 })}`);
+    fake.api.messages.get = async (id: number) => ({ id, date: DEV_DAY, author: `Cursor <c${id}@example.org>` }) as never;
+    await fake.run("filter.by", { field: "from" });
+    assert.ok(fake.steps.some((step) => step.includes('"text":{"text":"c2@example.org","author":true}')), fake.steps.join("\n"));
+});
+
+test("with nothing selected and no cursor row, F m l refuses", async () => {
+    const fake = terms_fake({ ids: [] });
+    fake.api.app.viewRows = (async () => ({ current: -1, rows: [] })) as never;
+    await fake.run("filter.by", { field: "list" });
+    assert.deepEqual(fake.notices, ["No message is selected."]);
+});
+
 test("re-apply after F u: the unread filter replaces the earlier quick filter and the list filter goes back on", async () => {
     const { run, steps } = terms_fake();
     await run("filter.by", { field: "list" });

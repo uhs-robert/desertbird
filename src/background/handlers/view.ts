@@ -8,7 +8,7 @@ import type { IdentityApi } from "./identity.ts";
 import type { HandlerScope, MessageHeader } from "./message.ts";
 import { APPLIED_FILTERS_STORAGE_KEY } from "../../shared/protocol.ts";
 import type { FilterApi } from "../../shared/protocol.ts";
-import { filter_set_args, is_message_term_field, message_term } from "./filter_terms.ts";
+import { filter_set_args, is_message_term_field, message_term, selected_or_cursor_ids } from "./filter_terms.ts";
 import type { FilterTermsApi, MessageTerms } from "./filter_terms.ts";
 
 /** The `mailTabs.setQuickFilter` state. `{}` clears every filter. */
@@ -219,14 +219,15 @@ const TEXT_FIELDS: Record<string, { flag: "author" | "subject" | "recipients"; v
     recipient: { flag: "recipients", value: chosen_recipient },
 };
 
-// A text filter holds one string and Thunderbird ANDs its words, so only one message can supply it. Tags are the one field that can match any of several messages. A list or date filter takes the cursor message of several.
+// A text filter holds one string and Thunderbird ANDs its words, so only one message can supply it. Tags are the one field that can match any of several messages. A list or date filter takes the cursor message of several. With nothing selected, every field reads the cursor message.
 // The answer builds on the remembered filter when the apply runs, so a filter set while the read was in flight stays.
 async function filter_of_message(scope: ViewScope, field: string): Promise<(remembered: AppliedFilter) => AppliedFilter> {
     const messages = scope.api.messages;
     if (messages === undefined) throw new RuntimeRefusal("This window cannot read messages.");
-    const ids = require_messages(scope.message_ids);
+    const terms_scope = { ...scope, api: { messages, app: scope.api.app } };
+    const ids = require_messages(await selected_or_cursor_ids(terms_scope));
     if (is_message_term_field(field)) {
-        const term = await message_term({ ...scope, api: { messages, app: scope.api.app } }, ids, field);
+        const term = await message_term(terms_scope, ids, field);
         return ({ show: _hidden, ...base }) => ({ ...base, by_message: { ...base.by_message, ...term } });
     }
     if (field !== "tag" && ids.length > 1) throw new RuntimeRefusal("Select one message.");
