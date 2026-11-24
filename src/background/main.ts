@@ -189,18 +189,16 @@ async function install_keymap(): Promise<void> {
     const { tree, page_tree, message_tree, window_tree, typing_tree, compose_tree } = await load_record();
     const config = await config_store.read();
     const { compose_send: allow_send, mode_indicator_style: label_style, theme } = config.settings;
-    let menu_keys = menu_key_table(config.user_keymap.menu);
+    const menu_keys = menu_key_table(config.user_keymap.menu);
     const label_colors = mode_label_colors(resolve_theme(theme));
     const tree_json = JSON.stringify([tree, page_tree, message_tree, window_tree, typing_tree, compose_tree, allow_send, label_style, label_colors, menu_keys]);
     if (tree_json === installed_tree_json) return;
     // First, so the menu keys listener is the first on each window root and takes a key before the runtimes of the keys below.
-    // The menu keys are optional: a missing or failing Experiment must not stop the other runtimes. Then no key is a menu key, so keys.js keeps swallowing j and k under an open menu.
+    // The menu keys are optional: a missing or failing Experiment must not stop the other runtimes. keys.js then swallows j and k under an open menu.
     try {
         await messenger.menukeys?.install({ keys: Object.entries(menu_keys).map(([key, direction]) => ({ key, direction })) });
-        if (messenger.menukeys === undefined) menu_keys = {};
     } catch (error) {
         console.error("desertbird: the menu keys did not install:", error);
-        menu_keys = {};
     }
     await keys.install({ tree, settings: {}, holdCommands: HOLD_COMMANDS });
     await messenger.pages?.install({ pageTree: page_tree, messageTree: page_message_tree(message_tree), windowTree: page_message_tree(window_tree), typingTree: typing_tree, holdCommands: HOLD_COMMANDS });

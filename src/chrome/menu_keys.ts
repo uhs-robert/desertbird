@@ -1,5 +1,5 @@
 // The keys that move the selection of an open Thunderbird menu or popup, in every window. It holds no Thunderbird global: the parent hands in a `MenuDeps`, so node tests drive every path with fakes.
-// The arrow goes out as a chrome `KeyboardEvent` dispatched at once at the open popup (at the focused element inside a panel). The popup manager listens on the popup's own document, so an event at the key's target does not reach a popup that sits in another document (measured, docs/thunderbird-behavior.md, "Arrow keys into native menus").
+// The arrow goes out as a chrome `KeyboardEvent` dispatched at once at the open popup (in a panel, at the focused element inside it, or at the panel itself when the focus is outside it). The popup manager listens on the popup's own document, so an event at the key's target does not reach a popup that sits in another document (measured, docs/thunderbird-behavior.md, "Arrow keys into native menus").
 
 import type { WindowListener } from "./runtime.ts";
 import type { MenuDirection, MenuKey } from "../shared/protocol.ts";

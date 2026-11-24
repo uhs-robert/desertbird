@@ -23,7 +23,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const message_installs: unknown[] = [];
     const window_installs: unknown[] = [];
     const typing_installs: unknown[] = [];
-    // Each Experiment install in the order it was made, with the menu key table and the menu key tokens the key runtime got.
+    // Each Experiment install in the order it was made, with the menu key table.
     const install_log: string[] = [];
     const menu_installs: Record<string, string>[] = [];
     const new_mail_listeners: unknown[] = [];
