@@ -114,7 +114,7 @@ async function run_filter_by_message(instance, ctx) {
   await thread_keys(["F", "m", "l"], 1, "F m l on an open thread root filters on its list");
   await thread_keys(["F", "m", "d"], 1, "F m d on the thread root adds its day");
   await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the open thread");
-  // A mouse click on the closed thread row, as the owner selects a thread. G first selects the single row, so only the click can select the thread. With the message pane shown the list is one row high and scrolled to the selection, so w m hides the pane for the click and shows it again, with the thread summary, before the keys.
+  // A mouse click on the closed thread row, as a user selects a thread. G first selects the single row, so only the click can select the thread. With the message pane shown the list is one row high and scrolled to the selection, so w m hides the pane for the click and shows it again, with the thread summary, before the keys.
   await key_and_state(instance, ["G"], selects(thread(2)));
   await instance.press(["w"]);
   await key_and_state(instance, ["m"], pane_is("message", false));
