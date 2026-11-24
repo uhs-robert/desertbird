@@ -110,6 +110,23 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
   // It closes that gap but not every drop: one stressed run still lost the calendar keys after this wait passed, so a single focused read is not proof that keys arrive.
   const wait_window_focus = (instance) => wait_for_state(instance, { what: "the normal window to report focus before the first key", until: normal_window_focused, timeout_ms: 15000, show: (state) => `windows ${JSON.stringify(state.windows.map((window) => [window.type, window.focused]))}` });
 
+  // Presses g ? and waits for the key list. Under load wtype keys sometimes never reach the window although every focus read says true (issue #139), so a first press that draws no list gets one retry after the window manager focuses the window again. The retry prints a NOTE, and a second miss stays a failure for the caller's check.
+  async function open_key_list(instance, { slug, list_before }) {
+    const attempt = async () => {
+      await instance.press(["g"]);
+      const helped = await key_and_state(instance, ["?"], 3000);
+      const list_shown = await wait_pixels(instance, `the key list of the ${slug} tab to draw`, `${instance.app}_${slug}_list_shown`, KEY_LIST_REGION, drawn_since(list_before), { timeout_ms: 3000 });
+      return { helped, list_shown };
+    };
+    const first = await attempt();
+    if (first.list_shown !== list_before) return first;
+    note(instance.app, instance.kind ?? "default", `g ? drew no key list in the ${slug} tab`, "retrying once after a window manager focus");
+    instance.focus_window();
+    await wait_window_focus(instance);
+    await instance.press(["-k", "Escape"]);
+    return attempt();
+  }
+
   async function show_folder(instance, path) {
     await instance.ask("show_folder", 20000, { path });
     return wait_for_state(instance, folder_shown(path));
@@ -247,7 +264,7 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
     extra_instances: [],
     report, wait_stats,
     check, note, shot, timed,
-    sleep, wait_for, wait_state, wait_for_state, wait_window_focus, key_and_state, barrier, expect_absent, wait_pixels, drawn_since, back_to, holds_twice,
+    sleep, wait_for, wait_state, wait_for_state, wait_window_focus, open_key_list, key_and_state, barrier, expect_absent, wait_pixels, drawn_since, back_to, holds_twice,
     wait_message_loaded, wait_for_clipboard, close_compose, settled_state,
     open_inbox, restart, show_folder, hud_pixels, first_selected,
     open_command_line, press_in_command_line, close_command_line, toast_cycle, key_list_region: KEY_LIST_REGION,
