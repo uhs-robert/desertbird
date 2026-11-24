@@ -732,3 +732,15 @@ test("a toast for a compose window shows nowhere and reports it, so the caller s
     assert.equal(await hud.toast(9, "saved", false), false);
     assert.deepEqual(log, ["mount hud@9"]);
 });
+
+test("a late end report of one window leaves the panel of another window up", async () => {
+    const { hud, log, timers, pending } = compose_setup();
+    await hud.track(9, "compose");
+    await hud.track(10, "compose");
+    await pending(["g"], 10);
+    timers.advance(200);
+    await settle();
+    await pending([], 9);
+    await settle();
+    assert.deepEqual(log, ["mount hud@10"]);
+});

@@ -134,10 +134,11 @@ export function create_hud_service(deps: HudDeps): HudService {
     async function on_pending(window_id: number, keys: string[], source: WhichKeySource): Promise<void> {
         // A window with no id has no hud to mount.
         if (window_id < 0) return;
+        const hud = hud_of(window_id);
+        // An end report may come late from a closing window, so it must not close the panel of the window that has the sequence now.
+        if (keys.length === 0) return end_which_key(window_id, hud);
         // The sequence moved to this window, so another window's panel is stale.
         for (const [other_id, other] of windows) if (other_id !== window_id) void end_which_key(other_id, other);
-        const hud = hud_of(window_id);
-        if (keys.length === 0) return end_which_key(window_id, hud);
         const sequence = ++hud.sequence;
         deps.timers.clear(hud.delay_timer);
         hud.delay_timer = undefined;
