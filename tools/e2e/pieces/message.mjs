@@ -2,6 +2,7 @@
 
 import { sleep, first_selected, selects, flag_becomes, main_window_tabs, active_index, tab_count_is, active_is, ppm_colors, drawn_since, holds_twice } from "../predicates.mjs";
 import { LONG_PIECE_DEADLINE_S } from "../registry.mjs";
+import { insert_label } from "./_insert_label.mjs";
 
 export const areas = ["message_body", "hints", "tabs", "mail_keys", "theme", "panes"];
 
@@ -92,6 +93,18 @@ async function run_message_scripts(instance, ctx) {
     await instance.press(["-k", "Escape"]);
     body = await keys(["j"], scrolls_near(LINE_STEP_PX));
     check(app, kind, `${where}: Escape drops a pending count`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
+    await instance.press(["g"]);
+    await keys(["g"], scrolls_near(0));
+    // Insert mode in the body: `i` shows INSERT, j reaches Thunderbird and does not scroll, Escape returns to NORMAL and j scrolls again.
+    const label = insert_label(instance, ctx);
+    const normal = await label.normal();
+    const insert = await label.enter(normal);
+    check(app, kind, `${where}: i changes the label to insert`, insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
+    body = await keys(["j"], 1000);
+    check(app, kind, `${where}: j in insert mode does not scroll`, body.scroll_y === 0, `scrollY ${body.scroll_y}`);
+    check(app, kind, `${where}: Escape ends insert mode and the label returns`, (await label.leave(normal)) === normal);
+    body = await keys(["j"], scrolls_near(LINE_STEP_PX));
+    check(app, kind, `${where}: j scrolls again after Escape`, near(body.scroll_y, LINE_STEP_PX), `scrollY ${body.scroll_y}`);
     await instance.press(["g"]);
     await keys(["g"], scrolls_near(0));
   };

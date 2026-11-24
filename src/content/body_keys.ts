@@ -143,7 +143,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     function run_leaf(leaf: TreeLeaf, typed_count: number | undefined): void {
         for (const step of leaf.steps) {
             const count = typed_count ?? step.invocation.count ?? 1;
-            if (step.invocation.id === INSERT_MODE) (reset_sequence(), set_insert(true));
+            if (step.invocation.id === INSERT_MODE) (reset_sequence(), cancel(), set_insert(true));
             else if (step.runs_in === "message") ACTIONS[step.invocation.id]?.(context, count, step.invocation.args ?? {});
             // The background checks the command and its args again. A refusal there is shown as a notification.
             else if (step.runs_in === "background") runtime.sendMessage({ type: "body.invoke", command: step.invocation.id, args: (step.invocation.args ?? {}) as Record<string, JsonValue>, count }).catch(log_error);
@@ -163,7 +163,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         if (!matcher) return;
         const token = event_to_token(event);
         if (token === null) return;
-        if (insert) return void (token === "<Escape>" ? escaped = event : undefined);
+        if (insert) return void (token === "<Escape>" || token === "<C-[>" ? escaped = event : undefined);
         if (is_typing_element(event.target as FocusNode | null)) return reset_sequence();
         if (hold_until > Date.now() && is_plain_printable(token)) return void (event.preventDefault(), event.stopPropagation());
         // Escape ends a half-typed sequence or count. With a sequence pending it is cancelled too, or Thunderbird closes a message window under the open panel. With none pending it goes on to Thunderbird, which may use it.

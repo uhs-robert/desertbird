@@ -9,7 +9,7 @@ import { MESSAGE_WINDOW_TYPE } from "./window_types.ts";
 import type { NotificationsApi } from "./notify.ts";
 
 export interface BodyRequestApi extends NotificationsApi {
-    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number }[]> };
+    messageDisplay: { getDisplayedMessages(tab_id: number): Promise<{ id: number }[]>; onMessageDisplayed?: { addListener(listener: (tab: { windowId?: number }) => void): void } };
     windows: { get(window_id: number): Promise<{ type?: string }> };
 }
 
@@ -57,6 +57,12 @@ type Sender = { tab?: { id?: number; windowId?: number } };
 
 /** Answers a runtime message of the body script, or returns undefined for a message that is not one. The window and the messages come from the sender, which a mail cannot write. */
 export function create_body_requests(deps: BodyRequestDeps): (message: unknown, sender: Sender) => Promise<unknown> | undefined {
+    // A new message loads into the same browser and its fresh body script starts in normal mode, so insert mode that a body reported ends there.
+    const inserting = new Set<number>();
+    deps.api.messageDisplay?.onMessageDisplayed?.addListener((tab) => {
+        if (tab.windowId !== undefined && inserting.delete(tab.windowId)) deps.on_mode?.({ command: "mode", mode: "normal", windowId: tab.windowId });
+    });
+
     async function invoke(request: BodyInvokeRequest, sender: Sender): Promise<unknown> {
         const { id: tab_id, windowId: window_id } = sender.tab ?? {};
         if (tab_id === undefined || window_id === undefined) return {};
@@ -103,7 +109,12 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         if (pending !== undefined) return sender.tab?.windowId === undefined ? Promise.resolve({}) : deps.which_key?.on_body_pending(sender.tab.windowId, pending.keys, pending.tree ?? "message").then(() => ({}));
         const mode = read_mode(message);
         if (mode !== undefined) {
-            if (sender.tab?.windowId !== undefined) deps.on_mode?.({ command: "mode", mode: mode.mode, windowId: sender.tab.windowId });
+            const window_id = sender.tab?.windowId;
+            if (window_id !== undefined) {
+                if (mode.mode === "insert") inserting.add(window_id);
+                else inserting.delete(window_id);
+                deps.on_mode?.({ command: "mode", mode: mode.mode, windowId: window_id });
+            }
             return Promise.resolve({});
         }
         if ((message as Partial<BodyOpenLinkRequest> | null)?.type === "body.open_link") return open_link(sender);

@@ -135,7 +135,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         const id = leaf.steps[0]?.invocation.id;
         if (id === "repeat.last") return last && run_leaf(last.leaf, port, window, count ?? last.count);
         if (id === "pane.resize_mode") return void ((resize_window = window), (resize_count = 0), (visual_anchor = -1));
-        if (id === "mode.insert") return void ((insert_window = window), (visual_anchor = -1), (picking = false));
+        if (id === "mode.insert") return void ((insert_window = window), (resize_window = null), (visual_anchor = -1), (picking = false));
         // Space in visual mode leaves it as `v` does, since Space is a toggle of normal mode. It is still unrepeatable, so it clears `.`.
         if (id === "select.toggle" && visual_anchor >= 0) last = null;
         if (id === "visual.toggle" || (id === "select.toggle" && visual_anchor >= 0)) return void (visual_anchor < 0 ? ((visual_anchor = port.selected_index()), (visual_base = port.selected_rows())) : ((visual_anchor = -1), (picking = true)));
@@ -186,10 +186,10 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         if (deps.tab_kind_of(window)) return matcher.reset();
         const typing = deps.is_typing_target(window, event);
         const menu_takes = typing ? null : deps.menu_takes_key(window, token);
-        if (insert_window && (insert_window !== window || deps.in_reading_pane(window))) insert_window = null;
+        if (insert_window && (insert_window !== window || (typing && deps.in_reading_pane(window)))) insert_window = null;
         // No key runs or is cancelled here. Escape alone is read, by `settle`.
         if (insert_window) {
-            if (token === "<Escape>") escaped = event;
+            if (token === "<Escape>" || token === "<C-[>") escaped = event;
             return;
         }
         if (resize_window && (deps.in_text_field(window) || menu_takes !== null)) resize_window = null;
@@ -222,6 +222,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
             // A menu opened by a click leaves the focus in the list, so Thunderbird's single-key shortcuts (`j` marks junk) would act under the menu.
             if (is_plain_printable(token) && (port || menu_takes === false)) {
                 swallow(event);
+                // The message header takes `i` here, since the keys of the reading pane are not run by the tree.
+                if (token === "i" && port) insert_window = window;
             }
             return;
         }
@@ -249,7 +251,8 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
     function hook(window: Window): void {
         if (hooked.has(window)) return;
         const handler = (event: KeydownEvent) => (on_keydown(window, event), tell_mode(window));
-        const settle = (event: KeydownEvent) => leaves_insert(escaped, event) && ((insert_window = null), tell_mode(window));
+        // The folder tree cancels every key it handles, Escape included, so a cancelled Escape there is no sign that Thunderbird used it.
+        const settle = (event: KeydownEvent) => (leaves_insert(escaped, event) || (escaped === event && deps.folder_port_of(window))) && ((insert_window = null), tell_mode(window));
         const reset_typing = () => {
             insert_window = null;
             matcher?.reset();

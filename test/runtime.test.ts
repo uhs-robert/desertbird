@@ -161,6 +161,7 @@ const tree = () => ({
             ".": leaf("repeat.last", "chrome"),
             v: leaf("visual.toggle", "chrome"),
             i: leaf("mode.insert", "chrome"),
+            "<C-i>": leaf("mode.insert", "chrome"),
             "<Space>": unrepeatable_chrome("select.toggle"),
             w: { kind: "branch", children: { r: leaf("pane.resize_mode", "chrome") } },
             "<C-b>": { kind: "branch", children: { y: leaf("msg.read", "background") } },
@@ -2036,9 +2037,11 @@ test("a key in the reading pane ends insert mode and runs as it does in normal m
     pane.runtime.install(tree());
     enter_insert(pane.windows[0]!);
     pane.windows[0]!.in_reading_pane = true;
-    assert.equal(press(pane.windows[0]!, "j").cancelled, true, "the reading pane swallows plain keys in normal mode");
+    pane.windows[0]!.body_script_live = true;
+    assert.equal(press(pane.windows[0]!, "j").cancelled, false, "the body script takes the key, so it is not cancelled here");
     assert.deepEqual(pane.modes, ["insert", "normal"]);
     pane.windows[0]!.in_reading_pane = false;
+    pane.windows[0]!.body_script_live = false;
     assert.equal(press(pane.windows[0]!, "j").cancelled, true);
     assert.equal(pane.windows[0]!.selected, 1, "insert mode did not come back");
 
@@ -2085,4 +2088,53 @@ test("a count before i does not start a repeat of it, and . after insert mode ru
     press(window, "Escape");
     press(window, ".");
     assert.deepEqual(emitted.map((event) => event.command), ["msg.archive", "msg.archive"], "the dot repeats x, the last repeatable key, not i");
+});
+
+test("Ctrl+[ ends insert mode as Escape does", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    enter_insert(windows[0]!);
+    press(windows[0]!, "[", { ctrlKey: true });
+    assert.deepEqual(modes, ["insert", "normal"]);
+    enter_insert(windows[0]!);
+    press(windows[0]!, "[", { ctrlKey: true, defaultPrevented: true });
+    assert.deepEqual(modes, ["insert", "normal", "insert"], "a Ctrl+[ that Thunderbird used keeps the mode too");
+});
+
+test("i in the message header of the mail tab starts insert mode, which then lets the header keys through until Escape", () => {
+    const { windows, emitted, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.in_reading_pane = true;
+    assert.equal(press(window, "i").cancelled, true);
+    assert.deepEqual(modes, ["insert"]);
+    assert.equal(press(window, "j").cancelled, false, "the header key reaches Thunderbird");
+    press(window, "Escape");
+    assert.deepEqual(modes, ["insert", "normal"]);
+    assert.equal(press(window, "j").cancelled, true, "plain keys are swallowed in the header again");
+    assert.deepEqual(emitted, []);
+});
+
+test("insert mode ends resize mode when it starts, so Escape leaves no resize behind", () => {
+    const { windows, modes, emitted, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    enter_resize(window);
+    // A chord runs as in normal mode while resize mode is on, so a user key can start insert mode there.
+    press(window, "i", { ctrlKey: true });
+    assert.deepEqual(modes, ["resize", "insert"]);
+    press(window, "Escape");
+    assert.deepEqual(modes, ["resize", "insert", "normal"]);
+    press(window, "l");
+    assert.deepEqual(resizes(emitted), []);
+});
+
+test("Escape leaves insert mode in the folder pane even though the folder tree cancels it, since the tree cancels every key it handles", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.folder = { rows: 5, selected: 2 };
+    enter_insert(window);
+    press(window, "Escape", { defaultPrevented: true });
+    assert.deepEqual(modes, ["insert", "normal"]);
 });
