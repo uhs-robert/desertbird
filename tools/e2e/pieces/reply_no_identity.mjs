@@ -9,7 +9,7 @@ async function run_no_identity(instance, ctx) {
   const app = instance.app;
   const kind = "reply_no_identity";
   const shot = async (name, line) => { const path = await instance.shot(`${app}_${name}`); report.shots.push({ app, kind, path, name, line }); return path; };
-  const opened = await open_inbox(instance, 7);
+  const opened = await open_inbox(instance);
   check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
   await instance.press(["g"]);
   let state = await key_and_state(instance, ["g"], { what: "g g to select the first row", until: (current) => first_selected(current) !== null && first_selected(current) === current.listed[0], show: (current) => `selected ${first_selected(current)}` });

@@ -33,7 +33,7 @@ async function run_followup(instance, ctx) {
   check(app, kind, "m f d stores a reminder for the message in the profile", stored_after_d, `${target} in the stored record`);
   await restart(instance, app, kind, "reminder");
   check(app, kind, "the reminder is still stored after the restart", holds_target());
-  await open_inbox(instance, 8, { expanded: true });
+  await open_inbox(instance, { expanded: true });
   await instance.ask(`select:${target}`, 30000);
   state = await wait_for_state(instance, selects(target));
   check(app, kind, "the reminded message is selected again after the restart", first_selected(state) === target, `selected ${first_selected(state)}, expected ${target}`);
