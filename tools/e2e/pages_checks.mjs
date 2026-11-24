@@ -11,7 +11,7 @@ const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-
 const SPACES = { calendar: [22, 112], tasks: [22, 157], settings: [22, 653] };
 const PAGE_REGION = "0,150 1260x480";
 
-export async function run_pages(instance, { check, note, shot, key_and_state, hud_pixels, wait_pixels, open_inbox, close_command_line, key_list_region }) {
+export async function run_pages(instance, { check, note, wait_window_focus, shot, key_and_state, hud_pixels, wait_pixels, open_inbox, close_command_line, key_list_region }) {
   const app = instance.app;
   const kind = "pages";
   await open_inbox(instance);
@@ -24,6 +24,7 @@ export async function run_pages(instance, { check, note, shot, key_and_state, hu
     const verdict = (label, ok, detail = "") => (pinned ? check(app, kind, label, ok, detail) : note(app, kind, label, `${ok ? "as expected" : "not as expected"} ${detail}`));
     await open();
     await sleep(3000);
+    await wait_window_focus(instance);
     const opened = await tabs_of();
     verdict(`the ${name} tab opens`, opened.length === before + 1, `tabs ${JSON.stringify(opened.map((tab) => tab.type))}`);
     if (opened.length !== before + 1) return;
