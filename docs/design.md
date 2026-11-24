@@ -261,7 +261,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 
 | Bundle | Guard | Ceiling |
 | --- | --- | --- |
-| `experiment/keys.js` | 25916 | 40960 |
+| `experiment/keys.js` | 26428 | 40960 |
 | `experiment/overlay.js` | 27212 | 40960 |
 | `experiment/app.js` | 11109 | 12800 |
 | `experiment/folderpane.js` | 5900 | 10240 |
@@ -302,6 +302,7 @@ The first measured size of `keys.js` as its own bundle was 15003 bytes. That plu
 - Resize mode (`w r`: the flag, its key branch before the reading-pane and typing branches, the count and the report of the mode; clause: decides what happens to a key) made it 24361 (1499 over main's 22862). A shared `swallow` helper for the six places that cancel a key took 200 bytes of the cost back. The guard rose by two 512-byte steps to 24380, under the 40960 ceiling.
 - Ending the hold after `f` when the labels end (the read of the labels-done mark, clause: decides what happens to a key) made it 24837 (457 over 24380). The guard rose by one 512-byte step to 24892.
 - Picking rows with Space (`select.toggle`, the pick flag, cursor-only motions with two or more rows, Escape that drops a selection, visual mode that keeps the selection; clause: decides what happens to a key) made it 25639 (802 over main's 24837). Hoisting the leaf id in `run_leaf`, a shorter Space branch and one stale-list check shared by visual mode and the pick took 415 bytes of the cost back. The guard rose by two 512-byte steps to 25916, under the 40960 ceiling.
+- Letting plain keys through to DesertBird's own toolbar popup while its browser holds the focus (clause: decides what happens to a key) made it 25922 (175 over main's 25747). The guard rose by one 512-byte step to 26428, under the 40960 ceiling.
 
 ### Backspace in an open which-key
 
