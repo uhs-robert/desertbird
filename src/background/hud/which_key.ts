@@ -12,6 +12,13 @@ const is_branch = (node: TreeNode | undefined): node is TreeBranch => node?.kind
 /** A leaf that runs nothing, or a branch that leads only to such leaves. The message tree holds them so that a mail sequence ends there and runs nothing (see `complete_mail_sequences` in `commands/tab_keymaps.ts`). They have no row, so a prefix that holds only them has no panel. */
 export const runs_nothing = (node: TreeNode): boolean => (is_branch(node) ? Object.values(node.children).every(runs_nothing) : node.steps.length === 0);
 
+/** A copy of the tree where each leaf that runs only `id` runs nothing, so it has no row. The compose tree holds the send key while `compose_send` is off, and the runtime holds that key back, so the panel must not offer it. */
+export function without_leaf(root: TreeBranch, id: string): TreeBranch {
+    const strip = (node: TreeNode): TreeNode =>
+        is_branch(node) ? { ...node, children: Object.fromEntries(Object.entries(node.children).map(([token, child]) => [token, strip(child)])) } : node.steps.length > 0 && node.steps.every((step) => step.invocation.id === id) ? { ...node, steps: [] } : node;
+    return strip(root) as TreeBranch;
+}
+
 const shown_children = (branch: TreeBranch): [string, TreeNode][] => Object.entries(branch.children).filter(([, child]) => !runs_nothing(child));
 
 /** The branch the typed keys lead to, or null when they lead to a leaf or nowhere. */

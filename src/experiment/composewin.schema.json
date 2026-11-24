@@ -131,6 +131,15 @@
                 "items": {
                   "type": "integer"
                 }
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source": {
+                "type": "string"
               }
             }
           }

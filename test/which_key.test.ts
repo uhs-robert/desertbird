@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TreeBranch } from "../vendor/desertfox/prefix_tree.ts";
-import { branch_at, may_open_by_itself, which_key_panel } from "../src/background/hud/which_key.ts";
+import { branch_at, may_open_by_itself, which_key_panel, without_leaf } from "../src/background/hud/which_key.ts";
 import { compile_default_keymap } from "../src/background/commands/index.ts";
 import { compile_tab_keymap } from "../src/background/commands/tab_keymaps.ts";
 import { sample_root, settings_with } from "./hud_fakes.ts";
@@ -91,4 +91,15 @@ test("every panel reads in DesertFox order: letters, other keys, chords, groups 
         children: { g: { kind: "branch", children: { "<Escape>": leaf("e"), r: group("zed"), "<C-x>": leaf("c"), B: leaf("B"), "1": leaf("1"), p: group("Alpha"), b: leaf("b"), a: leaf("a"), ".": leaf("d") } } },
     };
     assert.deepEqual(which_key_panel(root, ["g"], settings_with({}))?.rows.map((row) => row.key), ["a", "b", "B", ".", "1", "<C-x>", "p", "r", "<Escape>"]);
+});
+
+test("the compose panel lists the send key only when it is offered: without_leaf drops its row and keeps the others", () => {
+    const root = compile_tab_keymap("compose", {}).compiled.modes.normal as unknown as TreeBranch;
+    const settings = settings_with({});
+    const keys = (tree: TreeBranch) => which_key_panel(tree, ["g"], settings)?.rows.map((row) => row.key);
+    assert.ok(keys(root)?.includes("S"));
+    const hidden = without_leaf(root, "compose.send");
+    assert.deepEqual(keys(hidden), keys(root)?.filter((key) => key !== "S"));
+    assert.ok(keys(root)?.includes("S"), "the tree it was given is left alone");
+    assert.equal(which_key_panel(without_leaf(sample_root(), "no.such.id"), ["g"], settings)?.rows.length, 2);
 });

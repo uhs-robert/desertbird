@@ -1,7 +1,7 @@
 // The keys of a compose window: one mode per window, shared by the body and the address and subject fields. It holds no Thunderbird global: the parent hands in a `ComposeDeps`, so node tests drive every path with fakes.
 
 import { COMPILED_KEYMAP_VERSION } from "../shared/protocol.ts";
-import type { JsonValue, KeysInvocation } from "../shared/protocol.ts";
+import type { JsonValue, KeysInvocation, KeysPending } from "../shared/protocol.ts";
 import type { LeafStep } from "../../vendor/desertfox/prefix_tree.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "./runtime.ts";
 
@@ -42,7 +42,7 @@ export interface ComposeDeps<Window> {
     /** Draws the mode label of the window, or removes it for null. */
     show_mode(window: Window, mode: ComposeMode | null): void;
     window_id_of(window: Window): number;
-    emit(event: KeysInvocation): void;
+    emit(event: KeysInvocation | KeysPending): void;
 }
 
 export interface ComposeRuntime {
@@ -74,12 +74,26 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
     // The branch of a half-typed sequence and its window. A key in another window starts over.
     let pending: ComposeNode | null = null;
     let sequence_window: Window | null = null;
+    // The typed tokens of `pending`, and the ones last reported, so the background hears only a change.
+    let typed: string[] = [];
+    let told = "";
     let allow_send = false;
     let listening = false;
 
+    // Sets the half-typed sequence and reports it to the hud of its window. An empty report ends the panel.
+    const set_pending = (window: Window | null, node: ComposeNode | null, tokens: string[] = []) => {
+        pending = node;
+        typed = node ? tokens : [];
+        const keys = typed.join(" ");
+        // `told` is empty until a prefix is reported, and a prefix is reported only for a window, so a null window never reaches the emit.
+        if (keys === told) return;
+        told = keys;
+        deps.emit({ command: "pending", keys: typed, windowId: deps.window_id_of(window!), source: "compose" });
+    };
+
     const set_mode = (window: Window, mode: ComposeMode) => {
         modes.set(window, mode);
-        pending = null;
+        set_pending(window, null);
         deps.show_mode(window, mode);
     };
 
@@ -97,12 +111,12 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
     function on_keydown(window: Window, event: ComposeKeyEvent): void {
         if (!root || event.isComposing) return;
         const target = deps.target_of(window);
-        if (target === "other" || sequence_window !== window) pending = null;
+        if (target === "other" || sequence_window !== window) set_pending(sequence_window, null);
         sequence_window = window;
         if (target === "other") return;
         const take = () => void (event.preventDefault(), event.stopPropagation());
         if (event.key === "Escape") {
-            pending = null;
+            set_pending(window, null);
             // Escape in normal mode passes, so Thunderbird still closes the find bar and a notification with it.
             if (!deps.field_takes_escape(window) && modes.get(window) !== "normal") (take(), set_mode(window, "normal"));
             return;
@@ -112,7 +126,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
         if (token === "i" && !pending) return void (take(), set_mode(window, "insert"));
         // A held key repeats. Only the first press runs, so a held `q` asks to close once.
         const next = token === null || event.repeat ? undefined : (pending ?? root).children?.[token];
-        if (!event.repeat && (token !== null || EDITING_KEYS.has(event.key))) pending = next?.children ? next : null;
+        if (!event.repeat && (token !== null || EDITING_KEYS.has(event.key))) set_pending(window, next?.children ? next : null, [...typed, token ?? ""]);
         if (next?.steps) run_leaf(window, next.steps);
         // An unbound chord stays Thunderbird's (Ctrl+Enter, Ctrl+S). Any other key that would type is held back.
         const chord = event.ctrlKey || event.altKey || event.metaKey;
@@ -136,7 +150,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
         hooked.delete(window);
         modes.delete(window);
         deps.show_mode(window, null);
-        if (sequence_window === window) sequence_window = pending = null;
+        if (sequence_window === window) (set_pending(window, null), (sequence_window = null));
     }
 
     return {
@@ -144,7 +158,7 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
             if (tree.version !== COMPILED_KEYMAP_VERSION) throw new Error(`keymap version ${tree.version} is not ${COMPILED_KEYMAP_VERSION}`);
             root = tree.root as ComposeNode;
             allow_send = send;
-            pending = null;
+            set_pending(sequence_window, null);
             // A change of the label look redraws the open windows.
             hooked.forEach((_, window) => deps.show_mode(window, modes.get(window)!));
             if (listening) return;
@@ -157,6 +171,8 @@ export function create_compose_runtime<Window>(deps: ComposeDeps<Window>): Compo
             if (listening) deps.unregister_window_listener();
             listening = false;
             root = sequence_window = pending = null;
+            typed = [];
+            told = "";
         },
     };
 }

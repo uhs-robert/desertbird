@@ -103,7 +103,7 @@ export interface KeysPending {
     keys: string[];
     windowId: number;
     /** The tree the panel lists: a page tab names its own (`page`, `message` in a message tab, `window` in a message window). A report without one is the mail tab's. */
-    source?: "page" | "message" | "window";
+    source?: "page" | "message" | "window" | "compose";
     /** With no keys: show the root of the tree at once (`g ?`) and not end the panel. */
     root?: true;
 }

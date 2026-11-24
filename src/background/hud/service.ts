@@ -8,7 +8,7 @@ import { create_toasts } from "./toasts.ts";
 import type { Timers, Toasts } from "./toasts.ts";
 import { may_open_by_itself, which_key_panel, with_stored_marks } from "./which_key.ts";
 
-export type WhichKeySource = "main" | "message" | "window" | "own" | "page";
+export type WhichKeySource = "main" | "message" | "window" | "own" | "page" | "compose";
 
 export interface HudDeps {
     /** Absent when the Experiment failed to load. Nothing shows then, and `toast` reports that it showed nothing. */
@@ -39,8 +39,8 @@ export interface HudService {
     show_root(window_id: number, source?: WhichKeySource): Promise<void>;
     /** Closes the which-key panel of every window, or of every window but one. A tab change or a window losing focus calls this. */
     close_which_key(except_window_id?: number): void;
-    /** A main window or a message window exists. A main window may need the mode label. A message window has no status bar, so it makes no label call. */
-    track(window_id: number, kind?: "main" | "message"): Promise<void>;
+    /** A main window, a message window or a compose window exists. A main window may need the mode label. The others make no label call: a message window has no status bar and the compose runtime draws its own label. A compose window shows the panel only: its toasts stay system notifications. */
+    track(window_id: number, kind?: "main" | "message" | "compose"): Promise<void>;
     /** The window is gone, or its hud left on its own. */
     forget(window_id: number): void;
     /** The settings changed: the mode settings may add, remove or restyle the label, and the border may change. */
@@ -54,6 +54,8 @@ interface WindowHud {
     tracked: boolean;
     /** False for a message window: it has no status bar to hold the mode label. */
     has_label: boolean;
+    /** False for a compose window, where a toast would draw over the body being typed. */
+    shows_toasts: boolean;
     toasts: Toasts;
     /** The typed keys the panel lists the continuations of, or null when no panel shows. */
     which_key_keys: string[] | null;
@@ -77,7 +79,7 @@ export function create_hud_service(deps: HudDeps): HudService {
     function hud_of(window_id: number): WindowHud {
         let hud = windows.get(window_id);
         if (hud === undefined) {
-            hud = { tracked: false, has_label: true, toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
+            hud = { tracked: false, has_label: true, shows_toasts: true, toasts: create_toasts(deps.timers, () => void changed(window_id)), which_key_keys: null, which_key_source: "main", sequence: 0, lifted: false, mode: "normal", delay_timer: undefined, mounted: false, queue: Promise.resolve() };
             windows.set(window_id, hud);
         }
         return hud;
@@ -207,7 +209,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         // Only a tracked window gets a hud page. `set_lifted` makes no entry, so the command line alone never starts one.
         on_body_pending: async (window_id, keys, source) => (windows.has(window_id) ? on_pending(window_id, keys, source) : undefined),
         async toast(window_id, text, is_error) {
-            if (deps.overlay === undefined || window_id < 0) return false;
+            if (deps.overlay === undefined || window_id < 0 || windows.get(window_id)?.shows_toasts === false) return false;
             const settings = await deps.read_settings();
             const ms = is_error ? settings.toast_error_ms : settings.toast_ms;
             if (ms <= 0) return false;
@@ -236,6 +238,7 @@ export function create_hud_service(deps: HudDeps): HudService {
             const hud = hud_of(window_id);
             hud.tracked = true;
             hud.has_label = kind === "main";
+            hud.shows_toasts = kind !== "compose";
             await Promise.all([changed(window_id), sync_label(window_id)]);
         },
         forget(window_id) {

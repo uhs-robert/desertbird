@@ -80,13 +80,15 @@ type FakeCompose = ReturnType<typeof compose_window>;
 
 async function setup(open: FakeCompose[] = [compose_window(1)], { tree = compose_tree(), allow_send = false } = {}) {
     const platform = stub_platform(open.map((each) => each.window));
+    // `emitted` holds the finished commands and `reports` the pending-prefix events for the hud.
     const emitted: KeysEvent[] = [];
+    const reports: KeysEvent[] = [];
     const context = { extension: { windowManager: { getWrapper: (window: { id: number }) => ({ id: window.id }) }, messageManager: { convert: () => null } } };
     const api = get_composewin_api(context as never).composewin;
-    (api.onInvocation as unknown as { subscribe(listener: (event: KeysEvent) => void): void }).subscribe((event) => void emitted.push(event));
+    (api.onInvocation as unknown as { subscribe(listener: (event: KeysEvent) => void): void }).subscribe((event) => void (event.command === "pending" ? reports : emitted).push(event));
     await api.install({ composeTree: tree as never, allowSend: allow_send, ...LABEL });
     const listener = () => platform.window_listeners.get("desertbird@uhs-robert/composewin");
-    return { api, platform, emitted, listener, done: () => (shutdown(), platform.restore()) };
+    return { api, platform, emitted, reports, listener, done: () => (shutdown(), platform.restore()) };
 }
 
 const taken = (event: { cancelled: boolean }) => event.cancelled;
@@ -562,6 +564,113 @@ test("the label takes the mode color of the scheme the window shows, and a new i
         await api.install({ composeTree: compose_tree() as never, allowSend: false, labelStyle: "badge", labelColors: LABEL.labelColors });
         assert.match(a.label_css()!, /background-color: #111111; color: #000000;/);
         assert.equal(a.label(), "NORMAL");
+    } finally {
+        done();
+    }
+});
+
+const pending_of = (reports: KeysEvent[]) => reports.map((event) => ("keys" in event ? `${event.windowId}:${event.keys.join(" ")}` : ""));
+
+test("a prefix key reports its typed keys for the hud and each way out reports an end: a leaf, an unbound key, Escape and Enter", async () => {
+    const a = compose_window(4);
+    const { reports, done } = await setup([a]);
+    try {
+        a.press("g");
+        assert.deepEqual(reports, [], "insert mode has no prefix");
+        a.press("Escape");
+        a.press("j");
+        assert.deepEqual(reports, [], "a key that starts no prefix reports nothing");
+        // A leaf that stays in normal mode: send, held back while compose_send is off.
+        for (const ending of ["S", "x", "Escape", "Enter"]) {
+            a.press("g");
+            a.press(ending, ending === "S" ? { shiftKey: true } : {});
+        }
+        assert.deepEqual(pending_of(reports), ["4:g", "4:", "4:g", "4:", "4:g", "4:", "4:g", "4:"]);
+        assert.ok(reports.every((event) => (event as { source?: string }).source === "compose"));
+    } finally {
+        done();
+    }
+});
+
+test("a held prefix key reports once", async () => {
+    const a = compose_window(4);
+    const { reports, done } = await setup([a]);
+    try {
+        a.press("Escape");
+        a.press("g");
+        a.press("g", { repeat: true });
+        assert.deepEqual(pending_of(reports), ["4:g"]);
+    } finally {
+        done();
+    }
+});
+
+test("a window that closes with a prefix pending reports the end for its own id, once, and later keys elsewhere report nothing more", async () => {
+    const a = compose_window(1);
+    const b = compose_window(2);
+    const { reports, listener, done } = await setup([a, b]);
+    try {
+        a.press("Escape");
+        b.press("Escape");
+        a.press("g");
+        listener()!.onUnloadWindow(a.window);
+        assert.deepEqual(pending_of(reports), ["1:g", "1:"]);
+        b.press("j");
+        b.press("t");
+        assert.deepEqual(pending_of(reports), ["1:g", "1:"]);
+    } finally {
+        done();
+    }
+});
+
+test("a key in another window ends the prefix of the first window and a prefix there starts its own", async () => {
+    const a = compose_window(1);
+    const b = compose_window(2);
+    const { reports, done } = await setup([a, b]);
+    try {
+        a.press("Escape");
+        b.press("Escape");
+        a.press("g");
+        b.press("g");
+        assert.deepEqual(pending_of(reports), ["1:g", "1:", "2:g"]);
+        b.press("t");
+        assert.deepEqual(pending_of(reports), ["1:g", "1:", "2:g", "2:"]);
+    } finally {
+        done();
+    }
+});
+
+test("focus moving to another place of the window ends the reported prefix, and a draft save that moves the focus inside the window does not", async () => {
+    const a = compose_window(1);
+    const { reports, done } = await setup([a]);
+    try {
+        a.press("Escape");
+        a.press("g");
+        a.focus("from");
+        a.press("g");
+        assert.deepEqual(pending_of(reports), ["1:g", "1:"]);
+        a.focus("body");
+        a.press("g");
+        a.focus("subject");
+        assert.deepEqual(pending_of(reports), ["1:g", "1:", "1:g"]);
+        a.press("t");
+        assert.deepEqual(pending_of(reports), ["1:g", "1:", "1:g", "1:"]);
+    } finally {
+        done();
+    }
+});
+
+test("a replaced tree and a shutdown end the reported prefix", async () => {
+    const a = compose_window(1);
+    const { api, reports, done } = await setup([a]);
+    try {
+        a.press("Escape");
+        a.press("g");
+        await api.install({ composeTree: compose_tree() as never, allowSend: false, ...LABEL });
+        assert.deepEqual(pending_of(reports), ["1:g", "1:"]);
+        a.press("g");
+        shutdown();
+        assert.deepEqual(pending_of(reports), ["1:g", "1:", "1:g", "1:"]);
     } finally {
         done();
     }
