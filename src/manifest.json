@@ -92,6 +92,14 @@
                 "script": "experiment/zoom.js"
             }
         },
+        "context": {
+            "schema": "experiment/context.schema.json",
+            "parent": {
+                "scopes": ["addon_parent"],
+                "paths": [["context"]],
+                "script": "experiment/context.js"
+            }
+        },
         "hints": {
             "schema": "experiment/hints.schema.json",
             "parent": {

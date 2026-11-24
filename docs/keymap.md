@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 463 (Mail tab 155, Message 99, Message window 81, Compose window 22, Own pages 51, Other tabs 49, Text fields 4, Open menus 2)
+bound: 469 (Mail tab 156, Message 100, Message window 82, Compose window 23, Own pages 52, Other tabs 50, Text fields 4, Open menus 2)
 
 ### Mail tab
 
@@ -160,6 +160,7 @@ The thread list and the folder pane.
 | `,h` | `help.open` |
 | `,s` | `options` |
 | `,?` | `help.whichkey` |
+| `,m` | `context.menu` |
 
 #### Sort
 
@@ -378,6 +379,7 @@ A message in a tab or the message pane.
 | `,h` | `help.open` |
 | `,s` | `options` |
 | `,?` | `help.open` |
+| `,m` | `context.menu` |
 
 #### Tabs
 
@@ -541,6 +543,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `,h` | `help.open` |
 | `,s` | `options` |
 | `,?` | `help.open` |
+| `,m` | `context.menu` |
 
 #### Zoom and scroll
 
@@ -623,6 +626,7 @@ A message being written, in normal mode: the body and the To, Cc, Bcc and Subjec
 | --- | --- |
 | `,h` | `help.open` |
 | `,?` | `help.whichkey` |
+| `,m` | `context.menu` |
 
 #### Zoom and scroll
 
@@ -692,6 +696,7 @@ The options page and the help page.
 | `,h` | `help.open` |
 | `,s` | `options` |
 | `,?` | `help.open` |
+| `,m` | `context.menu` |
 
 #### Tabs
 
@@ -779,6 +784,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `,h` | `help.open` |
 | `,s` | `options` |
 | `,?` | `help.whichkey` |
+| `,m` | `context.menu` |
 
 #### Tabs
 

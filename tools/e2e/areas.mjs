@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 const pieces_dir = join(import.meta.dirname, "pieces");
 
-export const area_names = ["motions", "mail_keys", "threads", "search", "views", "cmdline", "hud", "hints", "visual", "panes", "tabs", "folders", "message_body", "compose", "quick_reply", "own_pages", "mode_label", "theme", "followup", "pages", "web", "zoom", "popup"];
+export const area_names = ["motions", "mail_keys", "threads", "search", "views", "cmdline", "hud", "hints", "visual", "panes", "tabs", "folders", "message_body", "compose", "quick_reply", "own_pages", "mode_label", "theme", "followup", "pages", "web", "zoom", "popup", "context_menu"];
 
 // Key path and command contract: any change here can break any piece.
 const shared_files = [
@@ -56,6 +56,8 @@ export const area_rules = [
   { globs: ["src/chrome/{compose_runtime,parent_composewin}.ts", "src/experiment/composewin.schema.json"], areas: ["mode_label", "compose", "quick_reply"] },
   // The menu keys move an open menu in the mail window (the popup piece) and in a compose window (the compose pieces).
   { globs: ["src/chrome/{menu_keys,parent_menukeys}.ts", "src/background/commands/menu.ts", "src/experiment/menukeys.schema.json"], areas: ["popup", "compose"] },
+  // The context menu key opens a menu in every window kind, so its pieces run in the mail tab, a message window, a compose window and a page tab.
+  { globs: ["src/chrome/{context_menu,context_actor_child,parent_context}.ts", "src/background/{commands,handlers}/context.ts", "src/experiment/context.schema.json"], areas: ["context_menu"] },
   { globs: ["src/chrome/{pane_resize,readable_focus}.ts"], areas: ["panes"] },
   { globs: ["src/background/commands/motion.ts"], areas: ["motions", "visual"] },
   { globs: ["src/background/{commands,handlers}/step.ts"], areas: ["motions", "views", "panes"] },
@@ -132,6 +134,7 @@ const support_rules = [
   { globs: ["tools/e2e/typing_checks.mjs"], pieces: [piece_file("pages.typing")] },
   { globs: ["tools/e2e/popup_checks.mjs"], pieces: [piece_file("default.popup")] },
   { globs: ["tools/e2e/web_checks.mjs", "tools/e2e/web_fixture.mjs"], pieces: [piece_file("web.main")] },
+  { globs: ["tools/e2e/context_checks.mjs"], pieces: [piece_file("*.context_menu")] },
   { globs: ["tools/e2e/zoom_checks.mjs"], pieces: [piece_file("zoom.main")] },
   // Anything else in tools/e2e is the harness, and that includes the runner machinery (coordinator, worker, shards, reap), which decides how every piece starts and ends: the profile, the helper add-on, the start, the predicates and the report all sit under every piece.
   { globs: ["tools/e2e/**", "tools/build.mjs", "vendor/**", "package.json", "package-lock.json", "tsconfig.json"], pieces: "all" },

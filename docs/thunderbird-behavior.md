@@ -819,6 +819,10 @@ Yes, for content documents, and not at all for chrome documents.
 - **The message pane is not remote.** The message pane browser reports `remote: false` on both apps, so an actor reaches it in the main process. The existing page actor does not match message documents (`mailbox:` and `imap:` URLs) or the compose editor (`about:blank?compose`). The probe reached them with a second registration that has no `matches`.
 - **Two attempts at the body runtimes.** Attempt 1, an untrusted event from the body script, failed. Attempt 2, the same event from an actor child, worked. No further attempt was needed.
 
+### Through the key
+
+The command `, m` (`context.menu`) was run on both apps in the e2e pieces `default/context_menu`, `default/context_compose`, `message/context_menu` and `web/context_menu`, and each screenshot was read. The thread list, the folder pane, the message body, a message window opened after startup (body, sender, recipient pill and subject), a compose window opened after startup (body, Subject and To, in normal mode, since a field jump enters insert mode) and a web page and an extension page in a tab each opened the menu Thunderbird shows for them. An empty list opened nothing. With a menu already open the comma did nothing and the m was the access key of Move To, so the menu stayed one menu.
+
 ### Not measured
 
 - A message tab. It shows the same `about:message` document as the pane and the window, so it is expected to behave like them.

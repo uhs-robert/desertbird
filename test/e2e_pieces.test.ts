@@ -40,7 +40,7 @@ test("E2E_ONLY narrows the pieces by section name or alias, across kinds when E2
   assert.deepEqual(names(select_pieces(pieces, { E2E_ONLY: "typing,keys" })), ["default/keys", "pages/keys", "pages/typing"]);
 });
 
-const DEFAULT_SECTIONS = ["cmdline", "cmdline_launch", "filter_by_message", "folders", "followup", "hud", "keys", "mode_label", "panes_chrome", "panes_focus", "panes_undo", "popup", "search", "steps", "tabs", "threads", "view_settings", "visual", "window_hints"];
+const DEFAULT_SECTIONS = ["cmdline", "cmdline_launch", "context_compose", "context_menu", "filter_by_message", "folders", "followup", "hud", "keys", "mode_label", "panes_chrome", "panes_focus", "panes_undo", "popup", "search", "steps", "tabs", "threads", "view_settings", "visual", "window_hints"];
 
 test("the default kind is one piece per section, popup included and scale left out", () => {
   assert.deepEqual(names(select_pieces(pieces, { E2E_KINDS: "default" })), DEFAULT_SECTIONS.map((section) => `default/${section}`));
