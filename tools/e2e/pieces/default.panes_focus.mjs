@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { sleep, CTRL_SHIFT, CTRL, first_selected, same, selects, at_bottom, at_top, leaves_row, listed_count, pane_is } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 import { panes_helpers, show_inbox_listed } from "./_panes_shared.mjs";
@@ -192,6 +194,55 @@ async function run_panes_focus(instance, ctx) {
     await wait_for_state(instance, only_tab);
     await keys(["g", "e"]);
   }
+  // The spaces and account pages. A page that is no plain URL tab matches by the tab type the helper reports. Each opens in a tab of the window, and g p m then the same key again switch between tabs without opening a second one.
+  const tab_list = (current) => current.windows.flatMap((window) => window.tabs);
+  const describe_tabs = (current) => tab_list(current).map((tab) => `${tab.type} ${tab.raw.url ?? tab.title}`).join(", ");
+  const is_url = (address) => (tab) => tab.raw.url === address;
+  const is_type = (type) => (tab) => tab.type === type;
+  const active_is = (test) => ({ what: "the active tab to change", until: (current) => tab_list(current).some((tab) => tab.active && test(tab)), show: describe_tabs, timeout_ms: 8000 });
+  for (const [key, page, is_page, takes_typing] of [
+    ["i", "troubleshooting", is_url("about:support")],
+    ["l", "calendar", is_type("calendar")],
+    ["k", "tasks", is_type("tasks")],
+    ["n", "account settings", is_url("about:accountsettings")],
+    ["d", "saved files", is_url("about:downloads")],
+    // These two focus a search field when they open, which takes g p m as typing, so the helper selects the mail tab for them.
+    ["b", "address book", is_type("addressBook"), true],
+    ["s", "settings", (tab) => tab.type === "special" || (tab.raw.url ?? "").includes("preferences"), true],
+    // Betterbird opens the activity manager in a tab (mail.activity.managerInTab is on there). Thunderbird shows a window, checked below.
+    ...(app === "betterbird" ? [["y", "activity manager", is_url("chrome://messenger/content/activity.xhtml")]] : []),
+  ]) {
+    state = await keys(["g", "p", key], { what: `the ${page} page to open in a tab`, until: (current) => tab_list(current).some(is_page), show: describe_tabs, timeout_ms: 15000 });
+    check(app, kind, `g p ${key} opens the ${page} page in a tab`, tab_list(state).some(is_page), `tabs ${describe_tabs(state)}`);
+    const count = tab_list(state).length;
+    if (takes_typing) await instance.ask("select_tab", 20000, { index: 0 });
+    else state = await keys(["g", "p", "m"], active_is(is_type("mail")));
+    if (!takes_typing) check(app, kind, "g p m switches to the mail tab and opens no tab", tab_list(state).some((tab) => tab.active && tab.type === "mail") && tab_list(state).length === count, `tabs ${describe_tabs(state)}`);
+    state = await keys(["g", "p", key], active_is(is_page));
+    check(app, kind, `g p ${key} again switches to the ${page} tab and opens no second one`, tab_list(state).some((tab) => tab.active && is_page(tab)) && tab_list(state).length === count, `tabs ${describe_tabs(state)}`);
+    await shot(`panes_gp${key}`, `the page g p ${key} opened`);
+    await instance.ask("reset_tabs");
+    await wait_for_state(instance, only_tab);
+    await keys(["g", "e"]);
+  }
+  // Thunderbird shows the activity manager as a window of its own, so a changed middle of the screen shows it, and Escape closes it. Betterbird opens a tab, which the loop above checks.
+  if (app !== "betterbird") {
+    const activity_region = "400,200 480x320";
+    const activity_pixels = async (name) => (await instance.shot_region(name, activity_region, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
+    const before_activity = await activity_pixels("panes_gp_y_before");
+    await keys(["g", "p", "y"], 2500);
+    const with_activity = await activity_pixels("panes_gp_y_open");
+    check(app, kind, "g p y opens the activity manager", !before_activity.equals(with_activity), "the middle of the window did not change");
+    await shot("panes_gpy", "the activity manager g p y opened");
+    await instance.press(["-k", "Escape"]);
+    await sleep(800);
+    const after_activity = await activity_pixels("panes_gp_y_after");
+    check(app, kind, "Escape closes the activity manager", !after_activity.equals(with_activity), "the middle of the window still shows it");
+    await keys(["g", "e"]);
+  }
+  // The e2e profile turns chat off, so g p h opens nothing.
+  state = await keys(["g", "p", "h"], 2000);
+  check(app, kind, "g p h opens no chat tab while chat is turned off", !tab_list(state).some(is_type("chat")) && tab_list(state).length === 1, `tabs ${describe_tabs(state)}`);
   // The leader: , h opens the help page and , s the options page, each in a tab of the window.
   for (const [key, page, fragment] of [["h", "help", "help/help.html"], ["s", "options", "options"]]) {
     const is_page = (tab) => tab.startsWith("moz-extension:") && tab.includes(fragment);

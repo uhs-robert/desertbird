@@ -221,7 +221,8 @@ export interface AppApi {
     paneFocus(args: AppPaneFocusArgs): Promise<boolean>;
     paneResize(args: AppPaneResizeArgs): Promise<boolean>;
     appCommand(args: AppCommandArgs): Promise<boolean>;
-    appOpenPage(args: AppOpenPageArgs): Promise<void>;
+    /** False when the page is not offered (chat while turned off). */
+    appOpenPage(args: AppOpenPageArgs): Promise<boolean>;
 }
 
 /** Installs the page keymap: the keys of the tabs that are not the mail tab. */
@@ -411,7 +412,7 @@ export interface AppCommandArgs {
 }
 
 /** The pages the Experiment opens. The parent holds the addresses and no caller names one. */
-export const APP_PAGES = ["addons", "themes", "config"] as const;
+export const APP_PAGES = ["addons", "themes", "config", "mail", "addressbook", "calendar", "tasks", "chat", "settings", "accountsettings", "activity", "downloads", "support"] as const;
 
 export interface AppOpenPageArgs {
     windowId: number;

@@ -135,7 +135,7 @@ test("a hello from the front tab's page turns the child on, ends insert mode the
     // The skeleton keeps the tree's shape: `m`, `0` and `?` only follow a prefix, so they are no first keys.
     for (const token of ["j", "G", "<C-d>"]) assert.equal(state.page[token], "run", token);
     assert.equal(state.page["i"], "insert");
-    assert.deepEqual(state.page["g"], { "?": "run", g: "run", p: { a: "run", t: "run", c: "run" } });
+    assert.deepEqual(state.page["g"], { "?": "run", g: "run", p: { a: "run", t: "run", c: "run", m: "run", b: "run", l: "run", k: "run", h: "run", s: "run", n: "run", d: "run", y: "run", i: "run" } });
     for (const token of ["x", "m", "0", "?"]) assert.equal(state.page[token], undefined, token);
     assert.equal((state.page["t"] as PageActor.Skeleton)["0"], "run");
     assert.deepEqual(state.typing, { "<A-j>": "run", "<A-k>": "run", "<Escape>": "normal", "<C-[>": "normal" });

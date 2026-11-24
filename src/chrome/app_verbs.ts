@@ -18,7 +18,17 @@ interface Controller {
 interface AppWindow extends MainWindow {
     openAddonsMgr(view: string): void;
     openContentTab(url: string): void;
+    openActivityMgr(): void;
 }
+
+/** The tab bar of one main window. `openTab` switches to the open tab of a mode that has one tab at most, or of the same address. */
+interface PagesTabmail {
+    tabInfo: unknown[];
+    openTab(mode: string, args: object): void;
+    switchToTab(info: unknown): void;
+}
+
+declare const Services: { prefs: { getBoolPref(name: string): boolean } };
 
 interface MessageBodyBrowser {
     focus(): void;
@@ -65,10 +75,25 @@ function controller_holder_of(context: ExtensionContext, window_id: number): Con
     return main_window && (tabmail_of(main_window)?.currentTabInfo?.chromeBrowser?.contentWindow as ControllerHolder | null | undefined);
 }
 
+// Every page opens in the tab bar of the window the key came from, never the most recent window: the global opener functions of the app (toAddressBook, MsgAccountManager, openAboutSupport) pick that one.
+const tabmail_in = (window: AppWindow) => tabmail_of(window) as unknown as PagesTabmail;
+const space_tab = (mode: string) => (window: AppWindow) => tabmail_in(window).openTab(mode, {});
+
 const PAGES = {
     addons: (window: AppWindow) => window.openAddonsMgr("addons://list/extension"),
     themes: (window: AppWindow) => window.openAddonsMgr("addons://list/theme"),
     config: (window: AppWindow) => window.openContentTab("about:config"),
+    // The first tab is always a mail tab, and it is the one the spaces bar switches to.
+    mail: (window: AppWindow) => tabmail_in(window).switchToTab(tabmail_in(window).tabInfo[0]),
+    addressbook: space_tab("addressBookTab"),
+    calendar: space_tab("calendar"),
+    tasks: space_tab("tasks"),
+    chat: space_tab("chat"),
+    settings: space_tab("preferencesTab"),
+    accountsettings: (window: AppWindow) => window.openContentTab("about:accountsettings"),
+    activity: (window: AppWindow) => window.openActivityMgr(),
+    downloads: (window: AppWindow) => window.openContentTab("about:downloads"),
+    support: (window: AppWindow) => window.openContentTab("about:support"),
 };
 
 // The panes in their order on screen, which `focused_pane` counts by, each giving the element to focus. A pane gives none where keys would reach nothing: a collapsed pane hides its focus, and a message pane with no body script (no message, a thread summary) swallows every plain key.
@@ -109,11 +134,14 @@ export function app_verbs(context: ExtensionContext) {
             if (enabled) controller.doCommand(name);
             return enabled;
         }),
-        appOpenPage: guard("app.appOpenPage", ({ windowId, page }: AppOpenPageArgs): void => {
-            // Found by id, not through the mail pane: the key may come from a page tab, which has no `about:3pane` in front.
+        // False means the page is not offered: with chat turned off Thunderbird has no chat button, so the chat tab would open with no way in.
+        appOpenPage: guard("app.appOpenPage", ({ windowId, page }: AppOpenPageArgs): boolean => {
+            if (page === "chat" && !Services.prefs.getBoolPref("mail.chat.enabled")) return false;
+            // The window is found by id and not through the mail pane: the key may come from a page tab, which has no `about:3pane` in front.
             const window = open_main_windows().find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === windowId) as AppWindow | undefined;
             if (!window) throw new Error("no such window");
             PAGES[page](window);
+            return true;
         }),
     };
 }
