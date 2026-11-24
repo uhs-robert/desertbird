@@ -50,18 +50,19 @@ test("a mode report of the body script reaches the mode sink with the window of 
     assert.deepEqual(modes, ["7 insert", "7 normal"]);
 });
 
-test("a message displayed in a window ends the insert mode its body reported there, and only there", async () => {
+test("a message displayed in a tab ends the insert mode its body reported, and a message in another tab of the window does not", async () => {
     const modes: string[] = [];
-    let displayed: (tab: { windowId?: number }) => void = () => {};
+    let displayed: (tab: { id?: number }) => void = () => {};
     const api = { messageDisplay: { getDisplayedMessages: async () => [], onMessageDisplayed: { addListener: (listener: typeof displayed) => void (displayed = listener) } } } as unknown as BodyRequestApi;
     const { handle } = setup({ api, on_mode: (event) => void modes.push(`${event.windowId} ${event.mode}`) });
-    await handle({ type: "body.mode", mode: "insert" }, { tab: { windowId: 7 } });
-    displayed({ windowId: 8 });
-    displayed({ windowId: 7 });
-    displayed({ windowId: 7 });
-    assert.deepEqual(modes, ["7 insert", "7 normal"], "one end, for the window that reported");
-    await handle({ type: "body.mode", mode: "insert" }, { tab: { windowId: 7 } });
-    await handle({ type: "body.mode", mode: "normal" }, { tab: { windowId: 7 } });
-    displayed({ windowId: 7 });
+    await handle({ type: "body.mode", mode: "insert" }, { tab: { id: 3, windowId: 7 } });
+    displayed({ id: 4 });
+    assert.deepEqual(modes, ["7 insert"], "another tab of the same window leaves the label alone");
+    displayed({ id: 3 });
+    displayed({ id: 3 });
+    assert.deepEqual(modes, ["7 insert", "7 normal"], "one end, for the tab that reported");
+    await handle({ type: "body.mode", mode: "insert" }, { tab: { id: 3, windowId: 7 } });
+    await handle({ type: "body.mode", mode: "normal" }, { tab: { id: 3, windowId: 7 } });
+    displayed({ id: 3 });
     assert.deepEqual(modes, ["7 insert", "7 normal", "7 insert", "7 normal"], "a body that ended it already leaves nothing to end");
 });

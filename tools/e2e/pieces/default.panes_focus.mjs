@@ -215,22 +215,25 @@ async function run_panes_focus(instance, ctx) {
   let normal = await label.normal();
   let insert = await label.enter(normal);
   check(app, kind, "i in the thread list changes the label to insert", insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
-  state = await keys(["j"], 1000);
-  check(app, kind, "j in insert mode in the thread list moves no row, since it reaches Thunderbird", first_selected(state) === list_top, `selected ${list_top} then ${first_selected(state)}`);
+  // G is no Thunderbird key, so it reaches nothing here, and in normal mode it selects the last row.
+  state = await keys(["G"], 1000);
+  check(app, kind, "G in insert mode in the thread list moves no row, since no binding runs", first_selected(state) === list_top, `selected ${list_top} then ${first_selected(state)}`);
   check(app, kind, "Escape ends insert mode in the thread list and the label returns", (await label.leave(normal)) === normal);
-  state = await keys(["j"], leaves_row(list_top));
-  check(app, kind, "j moves the row again after Escape", first_selected(state) !== list_top, `selected ${list_top} then ${first_selected(state)}`);
+  state = await keys(["G"], at_bottom);
+  check(app, kind, "G moves the row again after Escape", first_selected(state) !== list_top, `selected ${list_top} then ${first_selected(state)}`);
+  await keys(["g", "g"], at_top);
   await keys(["g", "f"]);
   normal = await label.normal();
   insert = await label.enter(normal);
   check(app, kind, "i in the folder pane changes the label to insert", insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
-  state = await keys(["j"], 1000);
-  check(app, kind, "j in insert mode in the folder pane moves no folder", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
+  state = await keys(["G"], 1000);
+  check(app, kind, "G in insert mode in the folder pane moves no folder", folder_of(state) === "/Inbox", `folder ${folder_of(state)}`);
   // The folder tree cancels every key it handles, Escape included, so the runtime leaves on a cancelled Escape there.
   check(app, kind, "Escape ends insert mode in the folder pane and the label returns", (await label.leave(normal)) === normal);
-  state = await keys(["j"], folder_leaves("/Inbox"));
-  check(app, kind, "j moves the folder again after Escape", folder_of(state) !== "/Inbox" && folder_of(state) !== null, `folder ${folder_of(state)}`);
-  await keys(["k"], folder_lands_on("/Inbox"));
+  state = await keys(["G"], folder_lands_on("/Views"));
+  check(app, kind, "G selects the last folder again after Escape", folder_of(state) === "/Views", `folder ${folder_of(state)}`);
+  await keys(["g", "g"]);
+  await keys(["j"], folder_lands_on("/Inbox"));
   await keys(["L"]);
 }
 
