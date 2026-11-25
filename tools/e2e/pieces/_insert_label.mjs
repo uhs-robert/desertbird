@@ -15,15 +15,15 @@ export function insert_label(instance, ctx, region = LABEL_STRIP) {
       await poll("the strip to hold still", holds_twice());
       return strip_of("normal");
     },
-    // Presses `i` and returns the strip once it differs from `normal`.
-    async enter(normal) {
-      await instance.press(["i"]);
-      await poll("i to change the label", drawn_since(normal));
+    // Presses `enter_key` (`i` by default) and returns the strip once it differs from `normal`.
+    async enter(normal, enter_key = "i") {
+      await instance.press([enter_key]);
+      await poll(`${enter_key} to change the label`, drawn_since(normal));
       return strip_of("insert");
     },
-    // Presses Escape (or `leave_keys`) and returns the strip once it is back to `normal`, or what it holds when the wait ends.
+    // Presses Escape (or `leave_keys`) and returns the strip once it is back to `normal`, or what it holds when the wait ends. With `leave_keys` null it presses nothing, for a caller that moved the focus by a click.
     async leave(normal, leave_keys = ["-k", "Escape"]) {
-      await instance.press(leave_keys);
+      if (leave_keys) await instance.press(leave_keys);
       await poll("Escape to bring the label back", back_to(normal));
       return strip_of("after");
     },

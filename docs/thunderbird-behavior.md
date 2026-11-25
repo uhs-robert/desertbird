@@ -474,7 +474,7 @@ Measured with the e2e piece `message/window_cmdline` on Betterbird 153.7.0 and T
 - Escape from the line: the first Escape hides the completion list and the second closes the line. A further Escape reaches Thunderbird, which closes a message window on an Escape that no line takes. A test that presses Escape until nothing changes closes the window.
 - Focus after the line closes needs no fallback. The focus capture takes the `messagepane` browser when the body had the focus, and the header element when the header had it, and both take the focus back. This holds after a command ran, after Escape, with the focus in the header, and when the message under the line changed (a message archived through the API while the line was open: the window shows the next message and `j` still scrolls it after two Escapes). No case left the keyboard stranded.
 - What the window shows after the shown message leaves its folder (archive, delete, move to a folder, each from a window opened from the list): the window stays open and shows the next message of the list, and the line is gone with the command. For the last message of the list the window closes, with an open line too. No case left a blank window.
-- The mode label of the main window does not draw in a message window: no `-- NORMAL --` shows there.
+- A message window has the same status bar ids as the main window (`#statusTextBox`, `#status-bar`), and the mode label draws at the start of it: `-- NORMAL --` shows there, and `i` in the body draws `-- INSERT --` (e2e, both apps). A hidden status bar hides the label.
 
 ### Message header controls
 

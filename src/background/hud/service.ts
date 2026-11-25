@@ -1,4 +1,4 @@
-// The hud in the background: the which-key panel and the toasts of each main window and message window, and the mode label of the status bar of a main window. The page draws the panel and the toasts. The label is drawn by the Experiment, which this side tells what to show. This side decides what shows and when, and mounts the page while something shows.
+// The hud in the background: the which-key panel and the toasts of each main window and message window, and the mode label of the status bar of a main window and a message window. The page draws the panel and the toasts. The label is drawn by the Experiment, which this side tells what to show. This side decides what shows and when, and mounts the page while something shows.
 
 import type { Settings } from "../config/settings.ts";
 import type { TreeBranch } from "../../../vendor/desertfox/prefix_tree.ts";

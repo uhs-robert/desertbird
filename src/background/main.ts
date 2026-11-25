@@ -417,7 +417,7 @@ messenger.windows.onFocusChanged.addListener((window_id) => {
     if (window_id !== NO_WINDOW) void bridge.mode_changed();
 });
 
-// The hud draws in main windows, message windows and compose windows. Only a main window has a status bar for the mode label.
+// The hud draws in main windows, message windows and compose windows. A main window and a message window draw the mode label in their status bar. A compose window draws its own.
 const HUD_WINDOW_KINDS: Record<string, "main" | "message" | "compose"> = { normal: "main", [MESSAGE_WINDOW_TYPE]: "message", [COMPOSE_WINDOW_TYPE]: "compose" };
 const track_window = (window: { id?: number; type?: string }) => {
     const kind = HUD_WINDOW_KINDS[window.type ?? "normal"];
