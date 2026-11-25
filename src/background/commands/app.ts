@@ -15,8 +15,8 @@ const PANE_CHORDS = {
     "<A-l>": { id: "pane.right", label: "Pane right" },
 };
 
-// The one place the fetch key is set: `U` in every tree that offers `app.get_mail`.
-const FETCH_KEY = "U";
+// The one place the fetch key is set: `e` in every tree that offers `app.get_mail`.
+const FETCH_KEY = "e";
 
 // Undo and the conversation view act on the displayed message as well as on the list, so the message tree binds them too.
 const MESSAGE_ACTIONS = {

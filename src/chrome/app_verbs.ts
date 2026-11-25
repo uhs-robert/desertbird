@@ -58,8 +58,8 @@ const MESSAGE_WINDOW_TYPE = "mail:messageWindow";
 
 // Thunderbird answers the step commands as enabled at the ends too (next and previous stay put, next unread wraps), so the view is asked first, with no wrap. The answer is the message key, and the all-ones key means none. The index is no help: previous unread with none left gives index 0 and no key. At the first or last message the view answers the shown message itself, which Thunderbird then ignores, so that is no row to step to either.
 const NO_KEY = 0xffffffff;
-// The fixed table of the commands `appCommand` runs, as the `APP_COMMANDS` list names them (the type makes the two agree). A step command carries its `nsMsgNavigationType` value for the view check (nextMessage 2, previousMessage 3, nextUnreadMessage 7, previousUnreadMessage 8, read from `viewNavigate` calls on Betterbird and Thunderbird 153.7.0). A name outside the table throws.
-const COMMAND_MOTIONS = { cmd_openConversation: 0, cmd_nextMsg: 2, cmd_previousMsg: 3, cmd_nextUnreadMsg: 7, cmd_previousUnreadMsg: 8, cmd_getNewMessages: 0, cmd_getMsgsForAuthAccounts: 0 } as const satisfies Record<AppCommandName, number>;
+// The fixed table of the commands `appCommand` runs, as the `APP_COMMANDS` list names them (the type makes the two agree). A step command carries its `nsMsgNavigationType` value for the view check (nextMessage 2, previousMessage 3, nextUnreadMessage 7, previousUnreadMessage 8, read from `viewNavigate` calls on Betterbird and Thunderbird 153.7.0). The two fetch commands carry -1: they run on the top window's controller, which a page controller lacks. From the source, not run live: a message window fetches for its message's account. A name outside the table throws.
+const COMMAND_MOTIONS = { cmd_openConversation: 0, cmd_nextMsg: 2, cmd_previousMsg: 3, cmd_nextUnreadMsg: 7, cmd_previousUnreadMsg: 8, cmd_getNewMessages: -1, cmd_getMsgsForAuthAccounts: -1 } as const satisfies Record<AppCommandName, number>;
 
 function view_has_row_to_step_to(holder: ControllerHolder, motion: number): boolean {
     const key = { value: NO_KEY };
@@ -73,11 +73,9 @@ function controller_holder_of(context: ExtensionContext, window_id: number): Con
     const message_window = open_windows(MESSAGE_WINDOW_TYPE).find(is_window) as (MainWindow & { messageBrowser?: { contentWindow?: ControllerHolder | null } }) | undefined;
     if (message_window) return message_window.messageBrowser?.contentWindow;
     const main_window = open_main_windows().find(is_window);
-    return main_window && (tabmail_of(main_window)?.currentTabInfo?.chromeBrowser?.contentWindow as ControllerHolder | null | undefined);
+    // A tab with no page (calendar, settings) still has the window controller.
+    return main_window && ((tabmail_of(main_window)?.currentTabInfo?.chromeBrowser?.contentWindow as ControllerHolder | null | undefined) ?? { browsingContext: { topChromeWindow: main_window as never } });
 }
-
-// The fetch commands live on the controller of the top window, not of a page. A message window fetches for the account of its message.
-const WINDOW_COMMANDS: readonly string[] = ["cmd_getNewMessages", "cmd_getMsgsForAuthAccounts"];
 
 // Every page opens in the tab bar of the window the key came from, never the most recent window: the global opener functions of the app (toAddressBook, MsgAccountManager, openAboutSupport) pick that one.
 const tabmail_in = (window: AppWindow) => tabmail_of(window) as unknown as PagesTabmail;
@@ -132,9 +130,11 @@ export function app_verbs(context: ExtensionContext) {
             const motion = COMMAND_MOTIONS[name];
             if (motion === undefined) throw new Error("bad name");
             const holder = controller_holder_of(context, windowId);
-            const controller = holder && (WINDOW_COMMANDS.includes(name) ? holder.browsingContext?.topChromeWindow.controllers.getControllerForCommand(name) : holder.commandController);
-            if (!holder || !controller) throw new Error("the window shows no message");
-            const enabled = controller.isCommandEnabled(name) && (!motion || view_has_row_to_step_to(holder, motion));
+            const on_window = motion < 0;
+            const controller = holder && (on_window ? holder.browsingContext?.topChromeWindow.controllers.getControllerForCommand(name) : holder.commandController);
+            if (!holder || (!controller && !on_window)) throw new Error("the window shows no message");
+            if (!controller) return false;
+            const enabled = controller.isCommandEnabled(name) && (motion < 1 || view_has_row_to_step_to(holder, motion));
             if (enabled) controller.doCommand(name);
             return enabled;
         }),

@@ -170,8 +170,8 @@ test("app.get_mail fetches for the current account, or for every account with --
     assert.deepEqual(fake.calls, ["appCommand cmd_getNewMessages", "appCommand cmd_getMsgsForAuthAccounts"]);
 });
 
-test("app.get_mail has one default key, U, and refuses with a message when Thunderbird has the command disabled", async () => {
-    assert.deepEqual(DEFAULT_KEYMAP.normal?.["U"], { id: "app.get_mail", label: "Fetch mail" });
+test("app.get_mail has one default key, e, and refuses with a message when Thunderbird has the command disabled", async () => {
+    assert.deepEqual(DEFAULT_KEYMAP.normal?.["e"], { id: "app.get_mail", label: "Fetch mail" });
     assert.equal(registry.get("app.get_mail")?.bridge, false);
     const fake = app_fake(false);
     await fake.run("app.get_mail");
