@@ -34,7 +34,7 @@ export const area_rules = [
   { globs: ["src/background/cmdline/**", "src/background/{commands,handlers}/cmdline.ts", "src/overlay/{cmdline,confirm,line_edit}.*"], areas: ["cmdline"] },
   // The message window type is read by the command line, the body requests and the tab close.
   { globs: ["src/background/window_types.ts"], areas: ["cmdline", "message_body", "tabs"] },
-  { globs: ["src/background/hud/**", "src/overlay/hud.*", "src/background/new_mail_notify.ts", "src/background/commands/new_mail.ts"], areas: ["hud"] },
+  { globs: ["src/background/hud/**", "src/overlay/{hud,which_key_height}.*", "src/background/new_mail_notify.ts", "src/background/commands/new_mail.ts"], areas: ["hud"] },
   // The help page shows in the hud piece and the own_pages piece.
   { globs: ["src/help/**", "src/background/{commands,handlers}/help.ts"], areas: ["hud", "own_pages"] },
   { globs: ["src/options/**"], areas: ["own_pages"] },
