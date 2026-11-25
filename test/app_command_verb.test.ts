@@ -163,3 +163,12 @@ test("a fetch command in a tab with no page of its own runs on the window contro
     await assert.rejects(verbs().appCommand({ windowId: 1, name: "cmd_nextMsg" }), /shows no message/, "a page command still needs its page controller");
     platform.restore();
 });
+
+test("a page command from a tab with no page throws and never reaches the window controller", async () => {
+    const log: string[] = [];
+    const top = { controllers: { getControllerForCommand: (name: string) => (log.push(`asked ${name}`), controller_for("top", log)) } };
+    const platform = with_windows({ "mail:3pane": [{ ...main_window("calendar", undefined), ...top }] });
+    await assert.rejects(verbs().appCommand({ windowId: 1, name: "cmd_nextMsg" }), /shows no message/);
+    assert.deepEqual(log, []);
+    platform.restore();
+});
