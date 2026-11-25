@@ -27,13 +27,23 @@ function command_text(binding: Exclude<KeyBinding, null>, registry: Lookup): str
 }
 
 // The group of a key is its longest proper prefix that has a name. A key with none is a single key or sits under an unnamed prefix.
+// Groups are keyed by prefix and not by name, because two groups can share a name ("Message" is both `m` and `bm`).
 function group_of(key: string, group_names: Record<string, string>): string {
   const tokens = parse_sequence(key).tokens ?? [key];
   for (let length = tokens.length - 1; length > 0; length--) {
-    const name = group_names[tokens.slice(0, length).join("")];
-    if (name !== undefined) return name;
+    const prefix = tokens.slice(0, length).join("");
+    if (group_names[prefix] !== undefined) return prefix;
   }
   return UNGROUPED;
+}
+
+// A nested group whose name another group also has reads after its parent, so `bm` is "Filter by message" and not a second "Message".
+function heading_of(prefix: string, group_names: Record<string, string>): string {
+  if (prefix === UNGROUPED) return UNGROUPED;
+  const name = group_names[prefix]!;
+  const parent = group_of(prefix, group_names);
+  const is_duplicate = Object.values(group_names).filter((other) => other === name).length > 1;
+  return parent === UNGROUPED || !is_duplicate ? name : `${heading_of(parent, group_names)} ${name.toLowerCase()}`;
 }
 
 function table(rows: readonly Row[]): string {
@@ -43,15 +53,15 @@ function table(rows: readonly Row[]): string {
 
 function section_text({ title, about, keymap }: KeymapSection, registry: Lookup, group_names: Record<string, string>): { text: string; count: number } {
   const by_group = new Map<string, Row[]>();
-  for (const name of [UNGROUPED, ...Object.values(group_names)]) by_group.set(name, []);
+  for (const prefix of [UNGROUPED, ...Object.keys(group_names)]) by_group.set(prefix, []);
   let count = 0;
   for (const [key, binding] of Object.entries(keymap.normal ?? {})) {
     if (!binding) continue;
-    const name = group_of(key, group_names);
-    by_group.set(name, [...(by_group.get(name) ?? []), { key, command: command_text(binding, registry) }]);
+    const prefix = group_of(key, group_names);
+    by_group.set(prefix, [...(by_group.get(prefix) ?? []), { key, command: command_text(binding, registry) }]);
     count++;
   }
-  const tables = [...by_group].filter(([, rows]) => rows.length > 0).map(([name, rows]) => `#### ${name}\n\n${table(rows)}`);
+  const tables = [...by_group].filter(([, rows]) => rows.length > 0).map(([prefix, rows]) => `#### ${heading_of(prefix, group_names)}\n\n${table(rows)}`);
   return { text: [`### ${title}`, about, ...tables].join("\n\n"), count };
 }
 

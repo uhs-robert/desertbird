@@ -143,7 +143,7 @@ The thread list and the folder pane.
 | `mfw` | `msg.remind one_week` |
 | `mfc` | `msg.remind_cancel` |
 
-#### Filter
+#### Filter by
 
 | Key | Command |
 | --- | --- |
@@ -154,7 +154,7 @@ The thread list and the folder pane.
 | `bf` | `cmdline.open 'filter '` |
 | `bt` | `cmdline.open filter --tag --tag=` |
 
-#### By message
+#### Filter by message
 
 | Key | Command |
 | --- | --- |

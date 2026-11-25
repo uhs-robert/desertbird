@@ -4,6 +4,7 @@ import type { HudChanged, HudRequest, HudState } from "../shared/protocol.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
 import { choose_columns, fit_title } from "../../vendor/desertfox/whichkey_layout.ts";
 import { STYLE } from "../../vendor/desertfox/whichkey_style.ts";
+import { height_for_column_chooser } from "./which_key_height.ts";
 
 declare const messenger: {
     runtime: {
@@ -36,7 +37,7 @@ function draw_which_key(panel: HudState["which_key"]): void {
     drawn_panel = panel;
     which_key_element.hidden = panel === null;
     if (panel === null) return;
-    const columns = choose_columns(panel.rows.length, window.innerHeight);
+    const columns = choose_columns(panel.rows.length, height_for_column_chooser(window.innerHeight));
     const list = make("div", "rows");
     list.style.gridTemplateColumns = `repeat(${columns}, auto)`;
     for (const row of panel.rows) {
