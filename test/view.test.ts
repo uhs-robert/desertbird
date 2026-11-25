@@ -115,13 +115,13 @@ test("toggle_starred sets the starred filter and clears it when it already shows
     assert.deepEqual(calls.filter((call) => call.startsWith("mailTabs.setQuickFilter")), ['mailTabs.setQuickFilter 77 {"flagged":true}', "mailTabs.setQuickFilter 77 {}"]);
 });
 
-test("F f and , , open the filter and sort pickers, F s toggles starred, F a is the attachment filter, F r resets it, and C-x C-c close the tab", () => {
+test("b f and , , open the filter and sort pickers, b s toggles starred, b a is the attachment filter, b r resets it, and C-x C-c close the tab", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(normal["Ff"], { id: "cmdline.open", args: { text: "filter " }, label: "By text" });
+    assert.deepEqual(normal["bf"], { id: "cmdline.open", args: { text: "filter " }, label: "By text" });
     assert.deepEqual(normal["ss"], { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" });
-    assert.deepEqual(normal["Fs"], { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" });
-    assert.deepEqual(normal["Fa"], { id: "filter.set", args: { state: "attachment" }, label: "Attachments" });
-    assert.deepEqual(normal["Fr"], { id: "filter.set", args: { state: "all" }, label: "Reset" });
+    assert.deepEqual(normal["bs"], { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" });
+    assert.deepEqual(normal["ba"], { id: "filter.set", args: { state: "attachment" }, label: "Attachments" });
+    assert.deepEqual(normal["br"], { id: "filter.set", args: { state: "all" }, label: "Reset" });
     assert.equal(normal["FA"], undefined);
     for (const key of ["<C-x>", "<C-c>"]) assert.deepEqual(normal[key], { id: "tab.close_mail", label: "Close tab" }, key);
     assert.equal(normal["<C-h>"], undefined);
@@ -285,13 +285,13 @@ test("tab_kind: the mail tab is 0 and every other tab 1", () => {
 
 test("the close chords of the mail tab are in the mail keymap and not in the message keymap", async () => {
     const { default_keymap_of } = await import("../src/background/commands/tab_keymaps.ts");
-    for (const key of ["<C-x>", "<C-c>", "Ff", "ss", ";;"]) {
+    for (const key of ["<C-x>", "<C-c>", "bf", "ss", ";;"]) {
         assert.ok(DEFAULT_KEYMAP.normal?.[key], key);
         assert.equal(default_keymap_of("message").normal?.[key], undefined, key);
     }
 });
 
-test("F s flips only the star and keeps the other filters", async () => {
+test("b s flips only the star and keeps the other filters", async () => {
     const { run, calls } = view_fake({ id: 78, messagePaneVisible: true, folderPaneVisible: false, displayedFolder: INBOX });
     await run("filter.set", { state: "unread" });
     await run("filter.set", { state: "toggle_starred" });
@@ -479,7 +479,7 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
     return { run, steps, notices, search, type, api, timers, said, view };
 }
 
-test("F m l filters on the List-Id in angle brackets and F m d on the message date in microseconds, after a setQuickFilter that keeps the other filters", async () => {
+test("b m l filters on the List-Id in angle brackets and b m d on the message date in microseconds, after a setQuickFilter that keeps the other filters", async () => {
     const list = terms_fake();
     await list.run("filter.by", { field: "list" });
     assert.deepEqual(list.steps, ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
@@ -489,21 +489,21 @@ test("F m l filters on the List-Id in angle brackets and F m d on the message da
     assert.deepEqual(date.steps.slice(1), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify({ tabId: 0, dateUs: DEV_DAY.getTime() * 1000 })}`]);
 });
 
-test("F m l and F m d stack, and a later F m l swaps only the list", async () => {
+test("b m l and b m d stack, and a later b m l swaps only the list", async () => {
     const { run, steps } = terms_fake();
     await run("filter.by", { field: "list" });
     await run("filter.by", { field: "date" });
     assert.equal(steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<dev.example.org>", dateUs: DEV_DAY.getTime() * 1000 })}`);
 });
 
-test("F m l refuses a message with no List-Id and changes nothing", async () => {
+test("b m l refuses a message with no List-Id and changes nothing", async () => {
     const { run, steps, notices } = terms_fake({ ids: [3] });
     await run("filter.by", { field: "list" });
     assert.deepEqual(notices, ["The selected message is not from a mailing list."]);
     assert.deepEqual(steps, []);
 });
 
-test("with several messages selected, F m l takes the cursor message, or the first selected when the cursor is outside the selection", async () => {
+test("with several messages selected, b m l takes the cursor message, or the first selected when the cursor is outside the selection", async () => {
     const at_cursor = terms_fake({ ids: [1, 2], cursor_row: 4 });
     await at_cursor.run("filter.by", { field: "list" });
     assert.equal(at_cursor.steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<ops.example.org>" })}`);
@@ -512,7 +512,7 @@ test("with several messages selected, F m l takes the cursor message, or the fir
     assert.equal(outside.steps.at(-1), `filter.set ${JSON.stringify(DEV_LIST)}`);
 });
 
-test("a closed thread selects its root and replies, and F m l and F m d take the root at the cursor row", async () => {
+test("a closed thread selects its root and replies, and b m l and b m d take the root at the cursor row", async () => {
     // Message 2 is the root at the cursor row, and 3 a reply the closed row also selects.
     const fake = terms_fake({ ids: [3, 2], cursor_row: 4 });
     await fake.run("filter.by", { field: "list" });
@@ -521,7 +521,7 @@ test("a closed thread selects its root and replies, and F m l and F m d take the
     assert.equal(fake.steps.at(-1), `filter.set ${JSON.stringify({ tabId: 0, listId: "<ops.example.org>", dateUs: LIST_MAIL[2]!.date.getTime() * 1000 })}`);
 });
 
-test("on a closed thread, F m f, F m s and F m r read the root at the cursor row and do not refuse", async () => {
+test("on a closed thread, b m f, b m s and b m r read the root at the cursor row and do not refuse", async () => {
     // Message 2 is the root at the cursor row, and 3 a reply the closed row also selects, listed first.
     const fake = terms_fake({ ids: [3, 2], cursor_row: 4 });
     fake.api.messages.get = async (id: number) => ({ id, date: DEV_DAY, author: `Sender <s${id}@example.org>`, subject: `Re: Subject ${id}`, recipients: [`r${id}@example.org`] }) as never;
@@ -531,7 +531,7 @@ test("on a closed thread, F m f, F m s and F m r read the root at the cursor row
     assert.deepEqual(texts, [{ text: "s2@example.org", author: true }, { text: "Subject 2", subject: true }, { text: "r2@example.org", recipients: true }]);
 });
 
-test("with nothing selected, F m l, F m d and F m f read the message at the cursor row", async () => {
+test("with nothing selected, b m l, b m d and b m f read the message at the cursor row", async () => {
     const fake = terms_fake({ ids: [], cursor_row: 4 });
     await fake.run("filter.by", { field: "list" });
     await fake.run("filter.by", { field: "date" });
@@ -542,21 +542,21 @@ test("with nothing selected, F m l, F m d and F m f read the message at the curs
     assert.ok(fake.steps.some((step) => step.includes('"text":{"text":"c2@example.org","author":true}')), fake.steps.join("\n"));
 });
 
-test("with nothing selected and no cursor row, F m l refuses", async () => {
+test("with nothing selected and no cursor row, b m l refuses", async () => {
     const fake = terms_fake({ ids: [] });
     fake.api.app.viewRows = (async () => ({ current: -1, rows: [] })) as never;
     await fake.run("filter.by", { field: "list" });
     assert.deepEqual(fake.notices, ["No message is selected."]);
 });
 
-test("re-apply after F u: the unread filter replaces the earlier quick filter and the list filter goes back on", async () => {
+test("re-apply after b u: the unread filter replaces the earlier quick filter and the list filter goes back on", async () => {
     const { run, steps } = terms_fake();
     await run("filter.by", { field: "list" });
     await run("filter.set", { state: "unread" });
     assert.deepEqual(steps.slice(2), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
-test("re-apply after F s: the star toggles on and off and the list filter goes back on each time", async () => {
+test("re-apply after b s: the star toggles on and off and the list filter goes back on each time", async () => {
     const { run, steps } = terms_fake();
     await run("filter.by", { field: "list" });
     await run("filter.set", { state: "toggle_starred" });
@@ -564,7 +564,7 @@ test("re-apply after F s: the star toggles on and off and the list filter goes b
     assert.deepEqual(steps.slice(2), ['setQuickFilter {"flagged":true}', `filter.set ${JSON.stringify(DEV_LIST)}`, "setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
-test("F r clears the list and date filters, and a later F u brings neither back", async () => {
+test("b r clears the list and date filters, and a later b u brings neither back", async () => {
     const { run, steps } = terms_fake();
     await run("filter.by", { field: "list" });
     await run("filter.by", { field: "date" });
@@ -573,7 +573,7 @@ test("F r clears the list and date filters, and a later F u brings neither back"
     assert.deepEqual(steps.slice(4), ["setQuickFilter {}", 'setQuickFilter {"unread":true}']);
 });
 
-test("F m f after F m l keeps the list filter beside the sender text", async () => {
+test("b m f after b m l keeps the list filter beside the sender text", async () => {
     const fake = terms_fake();
     fake.api.messages.get = async (id: number) => ({ id, date: DEV_DAY, author: "Ann <ann@example.org>" }) as never;
     await fake.run("filter.by", { field: "list" });
@@ -594,7 +594,7 @@ test("re-apply after /: each keystroke, the commit and Escape put the list filte
     assert.deepEqual(steps.slice(6, 8), [`setQuickFilter ${text}`, `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
-test("a re-apply the Experiment refuses leaves the quick filter alone in memory, so the next F u sends no list filter", async () => {
+test("a re-apply the Experiment refuses leaves the quick filter alone in memory, so the next b u sends no list filter", async () => {
     const { run, steps, notices } = terms_fake({ filter: "failing" });
     await run("filter.by", { field: "list" });
     assert.equal(notices.length, 1);
@@ -602,7 +602,7 @@ test("a re-apply the Experiment refuses leaves the quick filter alone in memory,
     assert.deepEqual(steps, ["setQuickFilter {}", 'setQuickFilter {"unread":true}']);
 });
 
-test("F m l refuses when the filter Experiment did not load, and changes nothing", async () => {
+test("b m l refuses when the filter Experiment did not load, and changes nothing", async () => {
     const { run, notices, steps } = terms_fake({ filter: "missing" });
     await run("filter.by", { field: "list" });
     assert.deepEqual(notices, ["The list and date filters need the DesertBird Experiment, which is not loaded."]);
@@ -619,7 +619,7 @@ function gate(): { passed: Promise<void>; open: () => void } {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-test("overlapping applies: F r pressed while F m l waits on filter.set runs after it, so the tab and the memory both end cleared", async () => {
+test("overlapping applies: b r pressed while b m l waits on filter.set runs after it, so the tab and the memory both end cleared", async () => {
     const fake = terms_fake();
     const terms = gate();
     const set = fake.api.filter!.set;
@@ -631,12 +631,12 @@ test("overlapping applies: F r pressed while F m l waits on filter.set runs afte
     terms.open();
     await Promise.all([list, reset]);
     assert.deepEqual(fake.steps, ["setQuickFilter {}", `filter.set ${JSON.stringify(DEV_LIST)}`, "setQuickFilter {}"]);
-    // The memory holds no list filter, so F u sends none.
+    // The memory holds no list filter, so b u sends none.
     await fake.run("filter.set", { state: "unread" });
     assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"unread":true}']);
 });
 
-test("F u while F m l still reads the message, with the read done before F u's setQuickFilter returns: the list filter applies after it and keeps the unread filter", async () => {
+test("b u while b m l still reads the message, with the read done before b u's setQuickFilter returns: the list filter applies after it and keeps the unread filter", async () => {
     const fake = terms_fake();
     const read_gate = gate();
     const unread_gate = gate();
@@ -651,13 +651,13 @@ test("F u while F m l still reads the message, with the read done before F u's s
     await settle();
     unread_gate.open();
     await Promise.all([list, unread]);
-    // F m l builds its filter in the chain, after F u has written the memory, so the unread filter stays.
+    // b m l builds its filter in the chain, after b u has written the memory, so the unread filter stays.
     assert.deepEqual(fake.steps, ['setQuickFilter {"unread":true}', 'setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
     await fake.run("filter.set", { state: "toggle_starred" });
     assert.deepEqual(fake.steps.slice(3), ['setQuickFilter {"unread":true,"flagged":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
-test("F u pressed while F m l waits in filter.set builds on the list filter instead of clearing it", async () => {
+test("b u pressed while b m l waits in filter.set builds on the list filter instead of clearing it", async () => {
     const fake = terms_fake();
     const terms = gate();
     const set = fake.api.filter!.set;
@@ -770,7 +770,7 @@ test("a search keystroke queued behind another apply changes nothing when the fo
     terms.open();
     await Promise.all([unread, typed, cancelled]);
     await settle();
-    // Only F u's apply reached the tab: no text filter, and no restore into the other folder.
+    // Only b u's apply reached the tab: no text filter, and no restore into the other folder.
     assert.deepEqual(fake.steps.slice(2), ['setQuickFilter {"unread":true}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
@@ -781,7 +781,7 @@ test(":search keeps the list filter under its text", async () => {
     assert.deepEqual(steps.slice(2), ['setQuickFilter {"text":{"text":"invoice","subject":true,"author":true}}', `filter.set ${JSON.stringify(DEV_LIST)}`]);
 });
 
-test("the list filter survives a restart of the background page through session storage, and F u re-applies it", async () => {
+test("the list filter survives a restart of the background page through session storage, and b u re-applies it", async () => {
     const fake = terms_fake();
     const tab_id = next_tab_id - 1;
     const stored: Record<string, unknown> = {};
@@ -791,7 +791,7 @@ test("the list filter survives a restart of the background page through session 
     // A new page starts with an empty map and reads the stored one.
     keep_filters(undefined);
     forget_filter(tab_id);
-    // F u comes before the stored filters have loaded and must wait for them.
+    // b u comes before the stored filters have loaded and must wait for them.
     keep_filters({ get: async () => (await settle(), stored), set: async () => undefined });
     await fake.run("filter.set", { state: "unread" });
     keep_filters(undefined);

@@ -154,14 +154,14 @@ test("every default key runs a registered command and no key is bound in two gro
 test("the view keys run the planned commands with the planned args", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
     const planned: Record<string, { id: string; args: Record<string, string>; label: string }> = {
-        Fu: { id: "filter.set", args: { state: "unread" }, label: "Unread" },
-        Fr: { id: "filter.set", args: { state: "all" }, label: "Reset" },
-        Fs: { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" },
-        Fa: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
-        Fmf: { id: "filter.by", args: { field: "from" }, label: "Sender" },
-        Fmt: { id: "filter.by", args: { field: "tag" }, label: "Tag" },
-        Fml: { id: "filter.by", args: { field: "list" }, label: "Mailing list" },
-        Fmd: { id: "filter.by", args: { field: "date" }, label: "Same day" },
+        bu: { id: "filter.set", args: { state: "unread" }, label: "Unread" },
+        br: { id: "filter.set", args: { state: "all" }, label: "Reset" },
+        bs: { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" },
+        ba: { id: "filter.set", args: { state: "attachment" }, label: "Attachments" },
+        bmf: { id: "filter.by", args: { field: "from" }, label: "Sender" },
+        bmt: { id: "filter.by", args: { field: "tag" }, label: "Tag" },
+        bml: { id: "filter.by", args: { field: "list" }, label: "Mailing list" },
+        bmd: { id: "filter.by", args: { field: "date" }, label: "Same day" },
         sd: { id: "sort.set", args: { by: "date", order: "descending" }, label: "Date" },
         so: { id: "sort.set", args: { by: "current", order: "toggle" }, label: "Toggle direction" },
         wm: { id: "pane.toggle", args: { pane: "message" }, label: "Message pane" },
@@ -215,7 +215,7 @@ test("the message keymap carries the mail keys of the message-capable groups wit
         assert.equal(excluded.test(id), false, keys);
         assert.ok(["message", "background"].includes(registry.get(id)?.runs_in ?? "") || id === "mode.insert", keys);
     }
-    for (const keys of ["mR", "Ft", "Ff", "ss", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "wm", "wf", "gi"]) assert.equal(message[keys], undefined, keys);
+    for (const keys of ["mR", "bt", "bf", "ss", ";;", "<C-x>", "<C-c>", "<C-h>", "zz", "]u", "wm", "wf", "gi"]) assert.equal(message[keys], undefined, keys);
 });
 
 // Every id here was audited for the bridge: it moves the view or the selection and does no harm doing so. A command newly marked `bridge: true` fails this test until it is reviewed and added. The bridge rules still refuse `repeat.last` and `hint.pick`, and every command that does not run in the background.

@@ -1,4 +1,4 @@
-// The list and date filters by the selected message (F m l, F m d), which the `filter` Experiment applies, and their re-apply after F u, F s and the / search.
+// The list and date filters by the selected message (b m l, b m d), which the `filter` Experiment applies, and their re-apply after b u, b s and the / search.
 
 import { folder_shown, listed_count, pane_is, same, selects } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
@@ -34,43 +34,43 @@ async function run_filter_by_message(instance, ctx) {
   const shows = (rows, expected) => same(sorted(rows), sorted(expected));
 
   await select(id(0));
-  let rows = await keys_to_count(["F", "m", "l"], 4);
-  check(app, kind, "F m l shows only the mail of the selected message's list", shows(rows, ids(0, 1, 3, 6)), `listed ${rows}`);
-  await shot("filter_by_list", "the Lists folder after F m l: four rows, the Quick Filter bar shown and its toggle pressed");
-  rows = await keys_to_count(["F", "u"], 2);
-  check(app, kind, "F u after F m l keeps the list filter and adds unread", shows(rows, ids(3, 6)), `listed ${rows}`);
-  rows = await keys_to_count(["F", "r"], ALL);
-  check(app, kind, "F r clears the list filter with the others", rows.length === ALL, `listed ${rows.length}`);
+  let rows = await keys_to_count(["b", "m", "l"], 4);
+  check(app, kind, "b m l shows only the mail of the selected message's list", shows(rows, ids(0, 1, 3, 6)), `listed ${rows}`);
+  await shot("filter_by_list", "the Lists folder after b m l: four rows, the Quick Filter bar shown and its toggle pressed");
+  rows = await keys_to_count(["b", "u"], 2);
+  check(app, kind, "b u after b m l keeps the list filter and adds unread", shows(rows, ids(3, 6)), `listed ${rows}`);
+  rows = await keys_to_count(["b", "r"], ALL);
+  check(app, kind, "b r clears the list filter with the others", rows.length === ALL, `listed ${rows.length}`);
 
   await select(id(0));
-  await keys_to_count(["F", "m", "l"], 4);
-  rows = await keys_to_count(["F", "s"], 1);
-  check(app, kind, "F s after F m l keeps the list filter and adds starred", shows(rows, ids(1)), `listed ${rows}`);
-  rows = await keys_to_count(["F", "s"], 4);
-  check(app, kind, "a second F s takes starred off and keeps the list filter", shows(rows, ids(0, 1, 3, 6)), `listed ${rows}`);
+  await keys_to_count(["b", "m", "l"], 4);
+  rows = await keys_to_count(["b", "s"], 1);
+  check(app, kind, "b s after b m l keeps the list filter and adds starred", shows(rows, ids(1)), `listed ${rows}`);
+  rows = await keys_to_count(["b", "s"], 4);
+  check(app, kind, "a second b s takes starred off and keeps the list filter", shows(rows, ids(0, 1, 3, 6)), `listed ${rows}`);
 
   await open_command_line(instance, ["/"]);
   await press_in_command_line(instance, ["Lists 3"]);
   state = await wait_for_state(instance, listed_count(1));
-  check(app, kind, "/ after F m l keeps the list filter under the typed text", shows(state.listed, ids(3)), `listed ${state.listed}`);
+  check(app, kind, "/ after b m l keeps the list filter under the typed text", shows(state.listed, ids(3)), `listed ${state.listed}`);
   await press_in_command_line(instance, ["-k", "Escape"]);
   state = await wait_for_state(instance, listed_count(4));
   check(app, kind, "Escape ends the search and the list filter shows again", shows(state.listed, ids(0, 1, 3, 6)), `listed ${state.listed}`);
 
   await select(id(0));
-  rows = await keys_to_count(["F", "m", "d"], 2);
-  check(app, kind, "F m d after F m l shows the list's mail of the selected message's day", shows(rows, ids(0, 1)), `listed ${rows}`);
-  await keys_to_count(["F", "r"], ALL);
+  rows = await keys_to_count(["b", "m", "d"], 2);
+  check(app, kind, "b m d after b m l shows the list's mail of the selected message's day", shows(rows, ids(0, 1)), `listed ${rows}`);
+  await keys_to_count(["b", "r"], ALL);
   await select(id(0));
-  rows = await keys_to_count(["F", "m", "d"], 3);
-  check(app, kind, "F m d shows only the mail of the selected message's day", shows(rows, ids(0, 1, 2)), `listed ${rows}`);
-  rows = await keys_to_count(["F", "r"], ALL);
-  check(app, kind, "F r clears the date filter", rows.length === ALL, `listed ${rows.length}`);
+  rows = await keys_to_count(["b", "m", "d"], 3);
+  check(app, kind, "b m d shows only the mail of the selected message's day", shows(rows, ids(0, 1, 2)), `listed ${rows}`);
+  rows = await keys_to_count(["b", "r"], ALL);
+  check(app, kind, "b r clears the date filter", rows.length === ALL, `listed ${rows.length}`);
 
   await select(id(5));
-  const refused = await toast_cycle(instance, `${app}_list_none`, ["l"], ["F", "m"]);
-  check(app, kind, "F m l on a message with no List-Id shows the refusal as a toast", refused.shown, `listed ${refused.state.listed.length}`);
-  check(app, kind, "F m l on a message with no List-Id leaves the list as it was", refused.state.listed.length === ALL, `listed ${refused.state.listed.length}`);
+  const refused = await toast_cycle(instance, `${app}_list_none`, ["l"], ["b", "m"]);
+  check(app, kind, "b m l on a message with no List-Id shows the refusal as a toast", refused.shown, `listed ${refused.state.listed.length}`);
+  check(app, kind, "b m l on a message with no List-Id leaves the list as it was", refused.state.listed.length === ALL, `listed ${refused.state.listed.length}`);
 
   // The cursor alone: Space picks the read row and a second Space drops it, so nothing is selected, and j then moves only the cursor. A cursor move has no state of its own, so it gets a fixed wait.
   const listed = (await instance.ask("state")).listed;
@@ -81,8 +81,8 @@ async function run_filter_by_message(instance, ctx) {
   await key_and_state(instance, ["j"], 700);
   state = await key_and_state(instance, ["j"], 700);
   check(app, kind, "Space twice and j j leave no row selected", state.selected.length === 0, `selected ${state.selected.map((message) => message.header_id)}`);
-  rows = await keys_to_count(["F", "m", "l"], 2);
-  check(app, kind, "F m l with nothing selected filters on the list of the message at the cursor", shows(rows, ids(2, 4)), `listed ${rows}, cursor row 2 (${listed[2]})`);
+  rows = await keys_to_count(["b", "m", "l"], 2);
+  check(app, kind, "b m l with nothing selected filters on the list of the message at the cursor", shows(rows, ids(2, 4)), `listed ${rows}, cursor row 2 (${listed[2]})`);
 
   // A thread row: the Threads folder opens threaded with its thread of two closed. g g selects the closed thread, which selects both its messages.
   const thread = (index) => `threads-${index}@fixture.invalid`;
@@ -97,12 +97,12 @@ async function run_filter_by_message(instance, ctx) {
   state = await key_and_state(instance, ["g"], 700);
   check(app, kind, "g g in the Threads folder selects the closed thread of two", same(sorted(state.selected.map((message) => message.header_id)), [thread(0), thread(1)]), `selected ${state.selected.map((message) => message.header_id)}`);
   // The list shows the closed thread as one row, so the list filter leaves that row and drops the ops row.
-  await thread_keys(["F", "m", "l"], 1, "F m l on a closed thread filters on the list of its root");
-  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again");
+  await thread_keys(["b", "m", "l"], 1, "b m l on a closed thread filters on the list of its root");
+  await thread_keys(["b", "r"], 2, "b r shows the Threads folder again");
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], 700);
-  await thread_keys(["F", "m", "d"], 1, "F m d on a closed thread filters on the day of its root");
-  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after F m d");
+  await thread_keys(["b", "m", "d"], 1, "b m d on a closed thread filters on the day of its root");
+  await thread_keys(["b", "r"], 2, "b r shows the Threads folder again after b m d");
   // An open thread: l opens it, and g g then selects its root alone.
   await instance.press(["g"]);
   await key_and_state(instance, ["g"], 700);
@@ -111,9 +111,9 @@ async function run_filter_by_message(instance, ctx) {
   state = await key_and_state(instance, ["g"], 700);
   check(app, kind, "l opens the thread and g g selects its root alone", same(state.selected.map((message) => message.header_id), [thread(0)]) && state.listed.length === 3, `selected ${state.selected.map((message) => message.header_id)}, listed ${state.listed}`);
   // The search rebuilds the view, which closes the thread again, so the filtered list is its one row.
-  await thread_keys(["F", "m", "l"], 1, "F m l on an open thread root filters on its list");
-  await thread_keys(["F", "m", "d"], 1, "F m d on the thread root adds its day");
-  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the open thread");
+  await thread_keys(["b", "m", "l"], 1, "b m l on an open thread root filters on its list");
+  await thread_keys(["b", "m", "d"], 1, "b m d on the thread root adds its day");
+  await thread_keys(["b", "r"], 2, "b r shows the Threads folder again after the open thread");
   // A mouse click on the closed thread row, as a user selects a thread. G first selects the single row, so only the click can select the thread. With the message pane shown the list is one row high and scrolled to the selection, so w m hides the pane for the click and shows it again, with the thread summary, before the keys.
   await key_and_state(instance, ["G"], selects(thread(2)));
   await instance.press(["w"]);
@@ -124,14 +124,14 @@ async function run_filter_by_message(instance, ctx) {
   await instance.press(["w"]);
   await key_and_state(instance, ["m"], pane_is("message", true));
   await shot("filter_clicked_thread", "the Threads folder after a click on the closed thread: its row selected and the thread summary in the message pane");
-  await thread_keys(["F", "m", "d"], 1, "F m d on a clicked thread filters on the day of its root");
-  await thread_keys(["F", "m", "l"], 1, "F m l on a clicked thread adds the list of its root");
-  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after the clicked thread");
+  await thread_keys(["b", "m", "d"], 1, "b m d on a clicked thread filters on the day of its root");
+  await thread_keys(["b", "m", "l"], 1, "b m l on a clicked thread adds the list of its root");
+  await thread_keys(["b", "r"], 2, "b r shows the Threads folder again after the clicked thread");
   // The sender and subject keys read the root of the selected closed thread too, and refuse nothing.
-  await thread_keys(["F", "m", "f"], 1, "F m f on a closed thread filters on the sender of its root");
-  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after F m f");
-  await thread_keys(["F", "m", "s"], 1, "F m s on a closed thread filters on the subject of its root");
-  await thread_keys(["F", "r"], 2, "F r shows the Threads folder again after F m s");
+  await thread_keys(["b", "m", "f"], 1, "b m f on a closed thread filters on the sender of its root");
+  await thread_keys(["b", "r"], 2, "b r shows the Threads folder again after b m f");
+  await thread_keys(["b", "m", "s"], 1, "b m s on a closed thread filters on the subject of its root");
+  await thread_keys(["b", "r"], 2, "b r shows the Threads folder again after b m s");
 }
 
 export const piece = { ...section_piece({ section: "filter_by_message", run: run_filter_by_message }), profile_kind: "lists" };

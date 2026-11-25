@@ -418,7 +418,7 @@ test("the default keys: : opens an empty line and the typed-value keys open it w
         return binding.args?.["text"];
     };
     assert.equal(text_of(":"), undefined);
-    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["mc", "copy "], ["Ft", "filter --tag --tag="], ["T", "tab "], ["o", "open "], ["O", "open --tab "], [";;", "hint "]] as const) {
+    for (const [keys, text] of [["mt", "tag "], ["mm", "move "], ["mc", "copy "], ["bt", "filter --tag --tag="], ["T", "tab "], ["o", "open "], ["O", "open --tab "], [";;", "hint "]] as const) {
         assert.equal(text_of(keys), text);
         // The text each key types must name a command and parse as far as the word before the value.
         const first_word = text.split(" ")[0]!;

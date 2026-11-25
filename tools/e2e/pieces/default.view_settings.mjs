@@ -14,26 +14,26 @@ async function run_view_settings(instance, ctx) {
   let state = await wait_state(instance, "the Views folder to list its 6 messages", (current) => current.mail_tab?.folder === "/Views" && current.listed.length === 6, { soft: true, timeout_ms: 10000 });
   check(app, kind, "the Views folder is displayed with 6 messages", state.mail_tab?.folder === "/Views" && state.listed.length === 6, `folder ${state.mail_tab?.folder}, listed ${state.listed.length}`);
   const listed_after = async (args, count) => (await key_and_state(instance, args, listed_count(count))).listed.length;
-  for (const [name, keys, expected] of [["unread", ["F", "u"], 3], ["starred", ["F", "s"], 2], ["attachment", ["F", "a"], 1], ["reset", ["F", "r"], 6]]) {
+  for (const [name, keys, expected] of [["unread", ["b", "u"], 3], ["starred", ["b", "s"], 2], ["attachment", ["b", "a"], 1], ["reset", ["b", "r"], 6]]) {
     await instance.press([keys[0]]);
     const count = await listed_after([keys[1]], expected);
     check(app, kind, `F ${keys[1]} (${name}) shows ${expected} rows`, count === expected, `listed ${count}`);
   }
-  // F s from the unfiltered list, with no F u before it, must switch starred on and a second F s off again.
-  await instance.press(["F"]);
+  // b s from the unfiltered list, with no b u before it, must switch starred on and a second b s off again.
+  await instance.press(["b"]);
   const starred_alone = await listed_after(["s"], 2);
-  await instance.press(["F"]);
+  await instance.press(["b"]);
   const starred_off = await listed_after(["s"], 6);
-  check(app, kind, "F s on its own shows 2 rows and a second F s shows all 6 again", starred_alone === 2 && starred_off === 6, `listed ${starred_alone} then ${starred_off}`);
-  // F f is no filter key: it opens the command line, where j types text instead of moving, and Escape closes it.
+  check(app, kind, "b s on its own shows 2 rows and a second b s shows all 6 again", starred_alone === 2 && starred_off === 6, `listed ${starred_alone} then ${starred_off}`);
+  // b f is no filter key: it opens the command line, where j types text instead of moving, and Escape closes it.
   const selection_of = (current) => current.selected.map((message) => message.header_id).join(",");
   const selected_before_f = selection_of(await instance.ask("state"));
-  await instance.press(["F"]);
+  await instance.press(["b"]);
   await open_command_line(instance, ["f"]);
   // The line draws the j, which proves it took the key and the list did not.
   await press_in_command_line(instance, ["j"]);
   state = await instance.ask("state");
-  check(app, kind, "F f opens the command line, so j typed into it moves no selection", selection_of(state) === selected_before_f, `selected ${selected_before_f} then ${selection_of(state)}`);
+  check(app, kind, "b f opens the command line, so j typed into it moves no selection", selection_of(state) === selected_before_f, `selected ${selected_before_f} then ${selection_of(state)}`);
   await close_command_line(instance);
   state = await key_and_state(instance, ["j"], { what: "j to move the selection after the line closed", until: (current) => selection_of(current) !== selected_before_f, show: (current) => `selected ${selection_of(current)}` });
   check(app, kind, "Escape closes the command line, so j moves the selection again", selection_of(state) !== selected_before_f, `selected ${selected_before_f} then ${selection_of(state)}`);
@@ -47,7 +47,7 @@ async function run_view_settings(instance, ctx) {
   await instance.ask("api_view", 20000, { filter: {} });
   state = await wait_for_state(instance, listed_count(6));
   check(app, kind, "clearing with {} restores 6 rows", state.listed.length === 6);
-  // F m f, s and t read (F m r has no row count to show here, since every Views message has the same recipient, and the unit tests cover it) the selected message. Each sender and subject in the folder is its own, so one row stays, and the two tagged rows stay for the tag. The sender names hold spaces, so the sender row also shows that the address matches a header with a spaced name.
+  // b m f, s and t read (b m r has no row count to show here, since every Views message has the same recipient, and the unit tests cover it) the selected message. Each sender and subject in the folder is its own, so one row stays, and the two tagged rows stay for the tag. The sender names hold spaces, so the sender row also shows that the address matches a header with a spaced name.
   const rows = state.listed;
   const select_row = async (header_id) => {
     await instance.press(["g"]);
@@ -55,26 +55,26 @@ async function run_view_settings(instance, ctx) {
     for (let step = 0; step < rows.indexOf(header_id); step += 1) await key_and_state(instance, ["j"], selects(rows[step + 1]));
   };
   const filtered_by = async (field_key, count) => {
-    await instance.press(["F"]);
+    await instance.press(["b"]);
     await instance.press(["m"]);
     return (await key_and_state(instance, [field_key], listed_count(count))).listed;
   };
   const clear_to_all = async () => {
-    await instance.press(["F"]);
+    await instance.press(["b"]);
     await key_and_state(instance, ["r"], listed_count(6));
   };
   await select_row(rows[3]);
-  check(app, kind, "F m f shows only the mail of the selected sender", same(await filtered_by("f", 1), [rows[3]]));
+  check(app, kind, "b m f shows only the mail of the selected sender", same(await filtered_by("f", 1), [rows[3]]));
   await clear_to_all();
-  check(app, kind, "F m s shows only the mail with the selected subject", same(await filtered_by("s", 1), [rows[3]]));
+  check(app, kind, "b m s shows only the mail with the selected subject", same(await filtered_by("s", 1), [rows[3]]));
   await clear_to_all();
   await select_row("views-4@fixture.invalid");
-  check(app, kind, "F m t shows the mail with a tag of the selected message", same(await filtered_by("t", 2), ["views-4@fixture.invalid", "views-5@fixture.invalid"]));
+  check(app, kind, "b m t shows the mail with a tag of the selected message", same(await filtered_by("t", 2), ["views-4@fixture.invalid", "views-5@fixture.invalid"]));
   await clear_to_all();
   await select_row("views-1@fixture.invalid");
-  await instance.press(["F"]);
+  await instance.press(["b"]);
   await key_and_state(instance, ["s"], listed_count(2));
-  check(app, kind, "F s then F m s keeps the starred filter and adds the subject", same(await filtered_by("s", 1), ["views-1@fixture.invalid"]));
+  check(app, kind, "b s then b m s keeps the starred filter and adds the subject", same(await filtered_by("s", 1), ["views-1@fixture.invalid"]));
   await clear_to_all();
   // The Views messages rise in date and subject with their number, and the sender names follow the order in profile.mjs, so each sort key shows as the row order.
   const views_rows = (by, order) => {

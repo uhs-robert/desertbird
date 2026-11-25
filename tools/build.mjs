@@ -91,7 +91,7 @@ const CONTEXT_CEILING_BYTES = 9216;
 const CONTEXT_ACTOR_MAX_BYTES = 1898;
 const CONTEXT_ACTOR_CEILING_BYTES = 3072;
 
-// `experiment/filter.js`, the add-on's own quick filter for the list and date terms, loaded on the first `filter.set` call: the first `F m l` or `F m d`, typed or keyed. See docs/design.md, "Filter bundle".
+// `experiment/filter.js`, the add-on's own quick filter for the list and date terms, loaded on the first `filter.set` call: the first `b m l` or `b m d`, typed or keyed. See docs/design.md, "Filter bundle".
 const FILTER_MAX_BYTES = 5632;
 const FILTER_CEILING_BYTES = 8192;
 

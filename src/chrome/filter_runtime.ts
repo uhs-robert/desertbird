@@ -1,4 +1,4 @@
-// The add-on's own quick filter: a List-Id term and a same-day term, which `mailTabs.setQuickFilter` cannot set. It is a filter of Thunderbird's quick filter manager, so `F r` and the bar clear it with the others, and the bar counts it as active.
+// The add-on's own quick filter: a List-Id term and a same-day term, which `mailTabs.setQuickFilter` cannot set. It is a filter of Thunderbird's quick filter manager, so `b r` and the bar clear it with the others, and the bar counts it as active.
 // Nothing here reads a Thunderbird global, so node tests drive it with fakes. `parent_filter.ts` passes the real manager and constants.
 
 /** The filter's value in a tab's quick filter state. Thunderbird keeps the state as JSON, so it holds plain values only. */

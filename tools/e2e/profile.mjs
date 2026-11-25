@@ -94,7 +94,7 @@ function views_text() {
   return entries.join("");
 }
 
-// The Lists folder serves the list and date filters (F m l, F m d), in profile kinds "lists" and "owner" only, so the folder pane of every other piece stays as it was and a hand test has mail with a List-Id. Seven single messages on three days, from two mailing lists and none. Every message is sent at 12:00 UTC plus its index in minutes, so the messages of one UTC day share a local day in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
+// The Lists folder serves the list and date filters (b m l, b m d), in profile kinds "lists" and "owner" only, so the folder pane of every other piece stays as it was and a hand test has mail with a List-Id. Seven single messages on three days, from two mailing lists and none. Every message is sent at 12:00 UTC plus its index in minutes, so the messages of one UTC day share a local day in any zone a run uses. Lists 1 is starred, Lists 3 and 6 are unread.
 const LISTS_MAIL = [
   ["dev", 3], ["dev", 3], ["ops", 3], ["dev", 4], ["ops", 5], [null, 5], ["dev", 6],
 ];
