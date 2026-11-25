@@ -106,6 +106,31 @@ test("hints.pick labels a mail tab, takes the keys on the window root ahead of t
     }
 });
 
+test("hints.pick labels a mail tab with the hint letters it is given", async () => {
+    const added: string[] = [];
+    const listeners = (name: string) => ({ addEventListener: (type: string) => void added.push(`${name} ${type}`), removeEventListener: (type: string) => void added.push(`${name} -${type}`) });
+    const label_host: unknown[] = [];
+    const label_texts: unknown[] = [];
+    const shown = { top: 10, left: 10, width: 20, height: 10 };
+    const button = { getBoundingClientRect: () => shown, contains: () => true, focus() {}, click() {}, matches: () => false, closest: () => null };
+    const make_document = (matching: unknown[]) => ({ querySelectorAll: (selector: string) => (selector.startsWith("button") ? matching : []), elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => label_host.push("removed"), append() {}, attachShadow: () => ({ append: (span: { textContent?: string }) => void label_texts.push(span.textContent) }) }), documentElement: { append: (child: unknown) => label_host.push(child), getAttribute: () => null, setAttribute() {}, removeAttribute() {} } });
+    const window_like = (matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(matching) });
+    const pane = { ...window_like([button]), ...listeners("pane"), messageBrowser: { contentWindow: null } };
+    const main = { ...window_like([]), ...listeners("main"), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), document: { ...make_document([]), hasFocus: () => true, getElementById: () => ({ currentTabInfo: { mode: { name: "mail3PaneTab" }, chromeBrowser: { contentWindow: pane } } }) } };
+    (pane as Record<string, unknown>)["browsingContext"] = { topChromeWindow: main };
+    const platform = stub_platform([main]);
+    try {
+        const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
+        const context = { extension: { windowManager: { getWrapper: (candidate: unknown) => (candidate === main ? { id: 7 } : null) }, messageManager: { convert: () => null }, tabManager: { getWrapper: () => null } } };
+        const colors = { dark: { fill: "#000001", text: "#000002" }, light: { fill: "#000003", text: "#000004" } };
+        assert.equal(await get_hints_api(context).hints.pick({ windowId: 7, colors, hintLetters: "jk" }), 1);
+        assert.deepEqual(label_texts, ["J"], "the label comes from the alphabet of the setting");
+        shutdown();
+    } finally {
+        platform.restore();
+    }
+});
+
 test("hints.pick in a page tab labels the window and the tab's own page, and marks the window root while the labels show", async () => {
     const added: string[] = [];
     const listeners = (name: string) => ({ addEventListener: (type: string) => void added.push(`${name} ${type}`), removeEventListener: (type: string) => void added.push(`${name} -${type}`) });
@@ -146,8 +171,8 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
         tab["browser"] = { isRemoteBrowser: true, contentDocument: null, focus: () => void focused++, browsingContext: { currentWindowGlobal: { getExistingActor: (name: string) => (name === "DesertBirdPage" ? actor : undefined) } } };
         drawn_in.length = 0;
         added.length = 0;
-        assert.equal(await pick({ windowId: 7, colors, action: "yank" }), 4);
-        assert.deepEqual(queries, [["DesertBird:Hints", { scheme: colors.dark, action: "yank" }]], "only the colors and the action cross");
+        assert.equal(await pick({ windowId: 7, colors, action: "yank", hintLetters: "jk" }), 4);
+        assert.deepEqual(queries, [["DesertBird:Hints", { scheme: colors.dark, action: "yank", letters: "jk" }]], "only the colors, the action and the alphabet cross");
         assert.equal(focused, 1, "the page gets the focus, so its child reads the label keys");
         assert.deepEqual(drawn_in, []);
         assert.deepEqual(added, []);

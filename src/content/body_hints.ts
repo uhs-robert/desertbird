@@ -28,7 +28,7 @@ export interface HintSession {
 }
 
 /** `open` runs on a picked link or button, after it has the focus. In a mail it asks for a trusted Enter, since a script click would skip Thunderbird's check for a link that lies about its address. */
-export function create_hint_session(window: HintWindow, open: (element: HintElement) => void, colors: () => string, copy: (text: string) => void, letters?: () => string): HintSession {
+export function create_hint_session(window: HintWindow, open: (element: HintElement) => void, colors: () => string, copy: (text: string) => void, letters?: () => string | undefined): HintSession {
     let targets: { label: string; element: HintElement; node: HintLabelNode }[] = [];
     let container: HintLabelNode | null = null;
     let typed = "";

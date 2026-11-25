@@ -84,6 +84,17 @@ test("start labels the controls on screen, hands the child the key reader, and a
     assert.deepEqual(listening(), []);
 });
 
+test("start labels from the letters the parent sends, and a typed digit of that alphabet picks", () => {
+    const first = control("button", "First");
+    const second = control("link", "Second", "https://example.org/b");
+    const { page } = fake_page([first, second]);
+    const child: HintsChild = { contentWindow: page, pick: null };
+    assert.equal(start(child, { scheme: SCHEME, action: "activate", letters: "j1" }), 2);
+    child.pick!.key(key("1"));
+    assert.equal(second.clicked, 1, "the second label is 1");
+    assert.equal(first.clicked, 0);
+});
+
 test("a key no label starts ends the labels and acts on nothing", () => {
     const button = control("button", "Button");
     const { page, containers } = fake_page([button]);
