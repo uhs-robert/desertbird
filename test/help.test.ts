@@ -65,9 +65,10 @@ test("the user's bindings change the listed keys: a rebound key moves and an unb
     assert.deepEqual(archive?.keys.map((key) => key.keys), ["a", "X"]);
 });
 
-test("g? shows the root keys and the help page keeps no key outside a message", async () => {
-    assert.deepEqual(all_entries().find((entry) => entry.id === "help.whichkey")?.keys, [{ keys: "g?", args: "", where: "" }, { keys: ",?", args: "", where: "" }]);
-    assert.deepEqual(DEFAULT_KEYMAP.normal?.["g?"], { id: "help.whichkey", label: "Show keys" });
+test("Alt+? and ,? show the root keys, g? opens help and the help page keeps no key outside a message", async () => {
+    assert.deepEqual(all_entries().find((entry) => entry.id === "help.whichkey")?.keys, [{ keys: ",?", args: "", where: "" }, { keys: "<A-?>", args: "", where: "" }]);
+    assert.deepEqual(DEFAULT_KEYMAP.normal?.["g?"], { id: "help.open", label: "Help" });
+    assert.deepEqual(DEFAULT_KEYMAP.normal?.["<A-?>"], { id: "help.whichkey", label: "Show keys" });
     const shown: number[] = [];
     const api = { notifications: { create: async () => "n" }, keys: undefined, which_key: { show_root: async (window_id: number) => void shown.push(window_id) } };
     await create_router(registry, api as unknown as RouterApi).run({ command: "help.whichkey", args: {}, count: 1, windowId: 4, messageIds: [] });

@@ -52,6 +52,7 @@ test("both own pages load the page key script before their own script", () => {
     }
 });
 
-test("the message keys bind g? to the help page", () => {
-    assert.deepEqual(default_keymap_of("message").normal?.["g?"], { id: "help.open", label: "Open help" });
+test("the message keys open the help page on g?, ,? and Alt+?, since no key could close a panel there", () => {
+    const normal = default_keymap_of("message").normal;
+    for (const key of ["g?", ",?", "<A-?>"]) assert.equal((normal?.[key] as { id: string } | undefined)?.id, "help.open", key);
 });

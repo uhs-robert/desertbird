@@ -28,8 +28,9 @@ test("the default page tree holds the reading keys, the tab keys, the command li
     const root = root_of();
     assert.deepEqual(
         [["j"], ["k"], ["<C-d>"], ["<C-u>"], ["g", "g"], ["G"], ["q"], ["<A-q>"], [":"], ["g", "?"], ["J"], ["K"], ["<A-j>"], ["<A-k>"], ["t", "n"], ["t", "p"], ["t", "0"], ["t", "T"], ["w", "m"], ["<C-j>"], ["g", "p", "a"], ["g", "p", "t"], ["g", "p", "c"]].map((tokens) => leaf_at(root, ...tokens)?.id),
-        ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom", "tab.close", "tab.close", "cmdline.open", "help.whichkey", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.switch", "cmdline.open", undefined, undefined, "app.open_page", "app.open_page", "app.open_page"],
+        ["page.scroll_down", "page.scroll_up", "page.half_down", "page.half_up", "page.top", "page.bottom", "tab.close", "tab.close", "cmdline.open", "help.open", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.next", "tab.prev", "tab.switch", "cmdline.open", undefined, undefined, "app.open_page", "app.open_page", "app.open_page"],
     );
+    assert.deepEqual([leaf_at(root, "<A-?>")?.id, leaf_at(root, ",", "?")?.id], ["help.whichkey", "help.whichkey"]);
     assert.deepEqual(leaf_at(root, "g", "p", "c")?.args, { page: "config" });
     assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["page.scroll_left", "page.scroll_right", "page.page_down", "page.page_up"]);
 });
