@@ -412,13 +412,13 @@ test("the search keys open the line as a search line and a failed mount drops th
     assert.ok(calls.includes("search.step 3 same") && calls.includes("search.step 3 opposite"));
 });
 
-test("? is backward search and g? is the key list, / and n and N are bound in the mail tab and ? is free in no other place", async () => {
+test("? is backward search and g? is help, / and n and N are bound in the mail tab and ? is free in no other place", async () => {
     const { DEFAULT_KEYMAP } = await import("../src/background/commands/index.ts");
     const { default_keymap_of } = await import("../src/background/commands/tab_keymaps.ts");
     const normal = DEFAULT_KEYMAP.normal as Record<string, { id: string; args?: Record<string, unknown> }>;
     assert.deepEqual(normal["?"], { id: "search.open", args: { direction: "backward" }, label: "Search list backward" });
     assert.deepEqual(normal["/"], { id: "search.open", args: { direction: "forward" }, label: "Search list" });
-    assert.equal(normal["g?"]?.id, "help.whichkey");
+    assert.equal(normal["g?"]?.id, "help.open");
     assert.deepEqual([normal["n"]?.id, normal["N"]?.id], ["search.next", "search.prev"]);
     // The message pane keeps its own find on / n N.
     const message = default_keymap_of("message").normal as Record<string, { id: string }>;

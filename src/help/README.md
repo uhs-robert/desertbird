@@ -1,6 +1,6 @@
 # Help page
 
-An extension page that lists every command with the keys bound to it and its usage on the command line. `help.open` (`:help`, and `g?` in a message document) opens it in a tab and shows the tab again when it is already open. `g?` elsewhere runs `help.whichkey`, which shows the root keys in the hud panel instead.
+An extension page that lists every command with the keys bound to it and its usage on the command line. `help.open` (`:help`, `g?` and `,h`) opens it in a tab and shows the tab again when it is already open. `<A-?>` and `,?` run `help.whichkey`, which shows the root keys in the hud panel instead. A message document cannot close that panel, so there both keys open this page.
 
 | File | Role |
 | --- | --- |
