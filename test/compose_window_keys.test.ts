@@ -42,7 +42,9 @@ test("a user key for a command outside the compose set is dropped from the compo
 test("the compose keys appear in no other tab kind, and compose.save is in no message set", () => {
     for (const kind of ["message", "window", "own", "page"] as const) {
         const keys = default_keymap_of(kind).normal ?? {};
-        for (const key of ["e", "s", "?"]) assert.equal(keys[key], undefined, `${kind} ${key}`);
+        for (const key of ["s", "?"]) assert.equal(keys[key], undefined, `${kind} ${key}`);
+        // `e` is the fetch key in these kinds, and compose binds it to the external editor.
+        assert.equal((keys["e"] as { id?: string })?.id, "app.get_mail", kind);
         assert.equal(bound_ids(kind).includes("compose.save"), false, kind);
     }
     assert.equal(message_background_commands().has("compose.save"), false);
