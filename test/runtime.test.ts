@@ -18,6 +18,7 @@ class FakeWindow implements KeyTarget {
     bubble_listeners = new Set<(event: KeydownEvent) => void>();
     tab_listeners = new Set<() => void>();
     blur_listeners = new Set<() => void>();
+    pane_focus_listeners = new Set<() => void>();
     adds = 0;
     in_mail_tab = true;
     in_reading_pane = false;
@@ -54,7 +55,9 @@ class FakeWindow implements KeyTarget {
     addEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     addEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     addEventListener(type: "blur", listener: () => void, capture: boolean): void;
+    addEventListener(type: "focusin", listener: () => void, capture: boolean): void;
     addEventListener(type: string, listener: (event?: any) => void, capture?: boolean) {
+        if (type === "focusin") return;
         if (type === "blur") return void this.blur_listeners.add(listener);
         if (type === "TabSelect") return void this.tab_listeners.add(listener as () => void);
         if (capture === false) return void this.bubble_listeners.add(listener);
@@ -64,7 +67,9 @@ class FakeWindow implements KeyTarget {
     removeEventListener(type: "keydown", listener: (event: KeydownEvent) => void, capture: boolean): void;
     removeEventListener(type: "TabSelect", listener: () => void, capture: boolean): void;
     removeEventListener(type: "blur", listener: () => void, capture: boolean): void;
+    removeEventListener(type: "focusin", listener: () => void, capture: boolean): void;
     removeEventListener(type: string, listener: (event?: any) => void, capture?: boolean) {
+        if (type === "focusin") return;
         if (type === "blur") return void this.blur_listeners.delete(listener);
         if (type === "TabSelect") return void this.tab_listeners.delete(listener as () => void);
         (capture === false ? this.bubble_listeners : this.listeners).delete(listener);
@@ -72,6 +77,12 @@ class FakeWindow implements KeyTarget {
     /** A tab switch with no key: a click on the tab bar. */
     select_tab() {
         for (const listener of [...this.tab_listeners]) listener();
+    }
+    /** Focus moves into the reading pane with no key (a click or `<A-l>`), or back out of it. Only the move in is reported, as the real listener does. */
+    move_focus(to_reading_pane: boolean) {
+        const entered = to_reading_pane && !this.in_reading_pane;
+        this.in_reading_pane = to_reading_pane;
+        if (entered) for (const listener of [...this.pane_focus_listeners]) listener();
     }
     /** A blur event. `window_lost_focus` is whether the whole window deactivated (an alt-tab) or focus only moved between elements inside it. */
     blur(window_lost_focus = true) {
@@ -206,6 +217,10 @@ function setup(list_port_of?: (window: FakeWindow) => ListPort) {
         on_tab_select: (window, listener) => {
             window.tab_listeners.add(listener);
             return () => void window.tab_listeners.delete(listener);
+        },
+        on_reading_pane_focus: (window, listener) => {
+            window.pane_focus_listeners.add(listener);
+            return () => void window.pane_focus_listeners.delete(listener);
         },
         on_window_blur: (window, listener) => {
             window.blur_listeners.add(listener);
@@ -2075,6 +2090,46 @@ test("a key in the reading pane ends insert mode and runs as it does in normal m
     press(second, "j");
     assert.deepEqual(other.modes, ["insert", "normal"]);
     assert.equal(press(other.windows[0]!, "j").cancelled, true, "the first window is in normal mode again");
+});
+
+test("focus moving into the reading pane with no key ends insert mode and visual mode at once, and the label hears it", () => {
+    for (const [name, start, mode] of [["insert", "i", "insert"], ["visual", "v", "visual"]] as const) {
+        const { windows, modes, runtime } = setup();
+        runtime.install(tree());
+        const window = windows[0]!;
+        press(window, start);
+        assert.deepEqual(modes, [mode], name);
+        window.move_focus(true);
+        assert.deepEqual(modes, [mode, "normal"], name);
+    }
+});
+
+test("focus moving into the reading pane ends a pick, so the first Escape there belongs to Thunderbird", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, " ");
+    window.move_focus(true);
+    window.move_focus(false);
+    assert.equal(press(window, "Escape").cancelled, false);
+});
+
+test("focus moving into the reading pane keeps resize mode, and focus moving back to the list changes no mode", () => {
+    const { windows, modes, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    press(window, "w");
+    press(window, "r");
+    window.move_focus(true);
+    assert.deepEqual(modes, ["resize"]);
+    window.move_focus(false);
+    assert.deepEqual(modes, ["resize"]);
+    const insert = setup();
+    insert.runtime.install(tree());
+    press(insert.windows[0]!, "i");
+    insert.windows[0]!.move_focus(true);
+    insert.windows[0]!.move_focus(false);
+    assert.deepEqual(insert.modes, ["insert", "normal"], "the move back tells nothing more");
 });
 
 test("a text field keeps insert mode, and its Escape that cleared the filter leaves insert mode on", () => {

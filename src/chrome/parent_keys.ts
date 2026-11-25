@@ -58,6 +58,16 @@ function ensure_runtime(context: ExtensionContext): Runtime {
         },
         hints_done_of: (window: MainWindow) => hints_done(window.document),
         now: () => Date.now(),
+        on_reading_pane_focus(window, listener) {
+            let inside = in_reading_pane(window.document);
+            const on_focus = () => {
+                const now = in_reading_pane(window.document);
+                if (now && !inside) listener();
+                inside = now;
+            };
+            window.addEventListener("focusin", on_focus, true);
+            return () => window.removeEventListener("focusin", on_focus, true);
+        },
         on_window_blur(window, listener) {
             // The blur lands on the focused element when the whole window deactivates, so the target does not tell a window blur from a focus move inside it. Focus does.
             const on_blur = () => {
