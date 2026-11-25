@@ -39,12 +39,17 @@ async function run_window_hints(instance, ctx) {
   check(app, kind, "window hints: after Escape a bound key runs again", selection_of(state) !== selection_of(top), `selected ${selection_of(top)} then ${selection_of(state)}`);
   await instance.press(["g"]);
   const burst_before = selection_of(await key_and_state(instance, ["g"], selects(COLLAPSED_ROWS[0])));
-  // The whole gesture in one burst. `c` is bound (msg.new opens a compose window) and is no hint label. The first `c` ends the labels and is swallowed, and the hold after `f` must drop the second, so no compose window may open.
+  // The whole gesture in one burst. `c` is bound (msg.new opens a compose window) and is no hint label. The key runtime's hold drops a `c` that lands before the pick starts, the first `c` the pick sees ends the labels, and the hold must drop the rest, so no compose window may open.
   // A compose window opens many seconds late, so this negative check keeps its margin.
+  hold_from = Date.now();
   await instance.press(["fcc"]);
   await sleep(2000);
   state = await instance.ask("state");
   check(app, kind, "window hints: f c c in one burst opens no compose window and changes no mail", !state.windows.some((window) => window.type === "messageCompose") && state.listed.length === rows_before && selection_of(state) === burst_before, `compose windows ${state.windows.filter((window) => window.type === "messageCompose").length}, listed ${state.listed.length} of ${rows_before}`);
+  // Both c can land before the pick starts, and the key runtime drops them, so the labels may still show. Left up, they would take the next f as a label letter.
+  await instance.press(["-k", "Escape"]);
+  await sleep(500);
+  await hold_over();
   // The same at human pace, which the burst does not reach: the second c comes later inside the hold. Then an f typed again inside the hold labels again.
   await show_labels();
   await instance.press(["c"]);
