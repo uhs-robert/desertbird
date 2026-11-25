@@ -837,3 +837,11 @@ The command `, m` (`context.menu`) was run on both apps in the e2e pieces `defau
 - `about:` pages (settings, add-ons, address book). The page actor does not match them and they bring their own menus.
 - The folder pane override of a button 2 event on another row, and what a chosen item then acts on. Only the opening was measured.
 - Which header element holds the focus after a key. The probe focused the element itself.
+
+## Fetching mail (read from the source, not run)
+
+Read from the 153.8.0 `mail3PaneWindowCommands.js`, `messageWindow.js` and `mailWindowOverlay.js`. No window ran it.
+
+- `cmd_getNewMessages` and `cmd_getMsgsForAuthAccounts` sit on the controller of the top window (`DefaultController` in the main window, `MessageWindowController` in a message window), not on the controller of `about:3pane` or `about:message`. `app.appCommand` reaches them through `topChromeWindow.controllers`.
+- Both are enabled when any account is not Local Folders. Offline, `MsgGetMessage` asks first through `MailOfflineMgr.getNewMail()`, so the command can open a dialog.
+- Which account: `GetSelectedMsgFolders` answers the folder of the mail tab, the `gFolder` of the displayed message in a message window, and nothing in a message tab. With nothing selected (or a message from an .eml file) the default account fetches.

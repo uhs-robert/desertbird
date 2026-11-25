@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 522 (Mail tab 167, Message 110, Message window 92, Compose window 23, Own pages 62, Other tabs 60, Text fields 4, Open menus 4)
+bound: 527 (Mail tab 168, Message 111, Message window 93, Compose window 23, Own pages 63, Other tabs 61, Text fields 4, Open menus 4)
 
 ### Mail tab
 
@@ -50,6 +50,7 @@ The thread list and the folder pane.
 | `<C-d>` | `view.half_page next` |
 | `<C-u>` | `view.half_page previous` |
 | `u` | `undo` |
+| `U` | `fetch` |
 | `H` | `pane.left` |
 | `<A-h>` | `pane.left` |
 | `L` | `pane.right` |
@@ -311,6 +312,7 @@ A message in a tab or the message pane.
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
 | `u` | `undo` |
+| `U` | `fetch` |
 | `H` | `pane.left` |
 | `<A-h>` | `pane.left` |
 | `L` | `pane.right` |
@@ -492,6 +494,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `u` | `undo` |
+| `U` | `fetch` |
 | `i` | `mode.insert` |
 
 #### Go
@@ -703,6 +706,7 @@ The options page and the help page.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
+| `U` | `fetch` |
 | `i` | `mode.insert` |
 
 #### Go
@@ -791,6 +795,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
+| `U` | `fetch` |
 | `f` | `hint` |
 | `i` | `mode.insert` |
 | `j` | `page.scroll_down` |

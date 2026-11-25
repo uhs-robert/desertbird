@@ -119,3 +119,29 @@ test("the conversation command never asks the view", async () => {
     assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_openConversation" }), true);
     platform.restore();
 });
+
+/** A page holder whose top window has the controller that answers the fetch commands. */
+const holder_with_top = (log: string[], enabled = true) => ({ ...holder_for("page", log), browsingContext: { topChromeWindow: { controllers: { getControllerForCommand: (name: string) => (log.push(`asked ${name}`), controller_for("top", log, enabled)) } } } });
+
+test("the fetch commands run on the controller of the top window, in the mail tab and in a message window", async () => {
+    for (const name of ["cmd_getNewMessages", "cmd_getMsgsForAuthAccounts"] as const) {
+        let log: string[] = [];
+        let platform = with_windows({ "mail:3pane": [main_window("mail3PaneTab", holder_with_top(log))] });
+        assert.equal(await verbs().appCommand({ windowId: 1, name }), true, name);
+        assert.deepEqual(log, [`asked ${name}`, `top ${name}`], "the page controller is not used");
+        platform.restore();
+        log = [];
+        platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: holder_with_top(log) } }] });
+        assert.equal(await verbs().appCommand({ windowId: 1, name }), true, name);
+        assert.deepEqual(log, [`asked ${name}`, `top ${name}`]);
+        platform.restore();
+    }
+});
+
+test("a fetch command the top window has disabled answers false and does not run", async () => {
+    const log: string[] = [];
+    const platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: holder_with_top(log, false) } }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_getNewMessages" }), false);
+    assert.deepEqual(log, ["asked cmd_getNewMessages"]);
+    platform.restore();
+});
