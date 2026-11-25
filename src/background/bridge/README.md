@@ -17,7 +17,7 @@ The bridge needs the DesertFox host and its `desertbird_bridge.json` manifest. A
 
 ## Rules
 
-- `bridge` (default `false`) gates everything. While it is off, `connectNative` is never called. Turning it off closes the port and stops the retry timer. A `run` reads the stored setting again before it runs, so a frame that lands between the write and `storage.onChanged` is refused.
+- `bridge` (default `false`) gates everything. While it is off, `connectNative` is never called. While it is on, `permissions.contains` for `nativeMessaging` runs before each connect. A missing grant means no connect, one console warning and one notice that names the options page, and the next change of the setting tries again. Turning it off closes the port and stops the retry timer. A `run` reads the stored setting again before it runs, so a frame that lands between the write and `storage.onChanged` is refused.
 - A command runs only when its `bridge` field is `true`, it is not on the never-list, and it runs in the background. Chrome and message commands (`motion.down`, `message.scroll_down`) run on a key in the window. The background has no verb to start them, so the bridge refuses them.
 - The never-list wins over the `bridge` field. Groups `config`, `settings`, `native`, `permissions`, `clipboard` and `hint` (as an id prefix or a group file). `repeat.last` is on it because it replays any command a key ran. So are `mark.set`, `msg.undo`, every command that sends, deletes or moves mail, and every command that opens an address (`hint.pick`, `msg.open`, `msg.unsubscribe`, `app.open_page`, `help.open`).
 - A refused command is refused on its first word, before its args are parsed. The parse and the validator read no dynamic value list. `list` gives a folder, tag or tab param only its `{ from }` source, so no folder name or tag leaves.
@@ -110,7 +110,7 @@ A `draft` frame needs `bridge` and `bridge_allow_drafts`, both off by default an
 - Every check runs before the first compose call. Each refusal is a fixed text and never echoes the request.
 - The reply is `ok` or a refusal. It never carries the draft, its id or any mail data.
 - The add-on never sends. It has no send call and holds no `compose.send` permission. `test/bridge_drafts.test.ts` checks both.
-- Saving needs the `compose.save` permission. Thunderbird has no other way to save a draft that it builds itself (threading, identity, Drafts folder). An add-on with an Experiment cannot ask for it as optional, so it is always granted.
+- Saving needs the `compose.save` permission. Thunderbird has no other way to save a draft that it builds itself (threading, identity, Drafts folder). It is a required permission, so it is always granted.
 - Thunderbird saves only from a compose window. The add-on opens one, saves it with `compose.saveMessage` in `draft` mode, and closes that window, matched by the id the compose call returned, on every path, a failed save included. The window shows for that moment and takes the focus. Then the add-on gives the focus back to the Thunderbird window that had it. When another program had the focus, it raises no Thunderbird window.
 - Drafts run one at a time, so a second compose window never opens while the first is still up.
 - A draft that is not saved within 30 s answers `timed out` and frees the next draft. Its window stays open, because a save can wait on a Thunderbird prompt (a failed copy to an IMAP Drafts folder, a passphrase), and closing it could drop the draft. Check Drafts before you retry.

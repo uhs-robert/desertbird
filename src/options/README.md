@@ -8,6 +8,10 @@ The `options_ui` page of the add-on. It opens in a tab, lists the settings, the 
 - `options.ts`: builds the form, the Menu keys table (apart from the key bindings, saved in the `menu` section of the user keymap) and the bindings table with DOM calls and saves. It reads the DOM and nothing else.
 - `model.ts`: the logic without the DOM: form text to setting values, binding rows to a user keymap, and the compiler check. A binding the compiler skips blocks the save, so a typo never reaches storage. The tests drive this file.
 
+## Native host settings
+
+A save that sets `external_editor` or `bridge` to true first calls `permissions.request` for `nativeMessaging`, before any other await, because the request needs the user gesture of the Save click. A denial stops the save and says so in the status line. Nothing else is written then.
+
 ## Quick replies
 
 The Quick replies section has one textarea per slot and its own Save button, so a bad key binding never blocks it. The texts are free text and keep their line breaks. The command `msg.reply_with` (keys `g r 1` to `g r 9`) reads them. A newer-version lock on the config store does not disable this section, because it has its own record.

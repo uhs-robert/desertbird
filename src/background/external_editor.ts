@@ -7,6 +7,7 @@ import { ignore_refusal, keep_chain } from "../shared/swallow.ts";
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import type { ComposeEditRequest } from "../shared/protocol.ts";
 import type { ComposeMarkdown } from "./compose_markdown.ts";
+import { NativePermissionMissing } from "./native_permission.ts";
 
 export const EDITOR_HOST_NAME = "desertbird_host";
 export const EDITOR_JOBS_STORAGE_KEY = "desertbird_editor_jobs";
@@ -30,6 +31,7 @@ export function create_editor_client(send: (message: object) => Promise<unknown>
         try {
             reply = await send(request);
         } catch (error) {
+            if (error instanceof NativePermissionMissing) throw error;
             const text = error instanceof Error ? error.message : String(error);
             // Thunderbird words this failure differently across versions, so only the stable part is matched.
             if (/no such native application/i.test(text)) throw new Error(`The native host desertbird_host is not installed (Thunderbird: ${text}). ${INSTALL_HINT}`);

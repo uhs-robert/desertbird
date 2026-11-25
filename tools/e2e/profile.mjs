@@ -223,6 +223,8 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const header_prefs = kind === "message_header" ? THEME_PREFS.default_os_dark : {};
   const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...header_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
+  // nativeMessaging is an optional permission that the options page asks for with a prompt, and a headless run has no one to allow it. The app keeps granted optional permissions in the profile's extension-preferences.json. The editor kinds need the grant for the native host.
+  if (kind.startsWith("compose_editor")) writeFileSync(join(profile_dir, "extension-preferences.json"), JSON.stringify({ "desertbird@uhs-robert": { permissions: ["nativeMessaging"], origins: [] } }));
   if (kind !== "owner") {
     mkdirSync(join(profile_dir, "chrome"), { recursive: true });
     writeFileSync(join(profile_dir, "chrome", "userChrome.css"), E2E_ONLY_USER_CHROME);

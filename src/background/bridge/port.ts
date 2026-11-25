@@ -27,6 +27,10 @@ export interface ModeSnapshot {
 
 export interface BridgePortDeps {
     connect(): NativePort;
+    /** Whether the `nativeMessaging` permission is granted. Checked before each connect. */
+    native_permission_granted(): Promise<boolean>;
+    /** Tells the person that the bridge is on but cannot connect without the permission. Called once per time the setting turns on. */
+    say_permission_missing(): void;
     /** The stored `bridge` setting, read again on each call. */
     read_bridge_setting(): Promise<boolean>;
     timers: Timers;
@@ -74,6 +78,7 @@ export function create_bridge_port(deps: BridgePortDeps) {
     let up_since_ms = 0;
     let failures = 0;
     let retry_timer: unknown;
+    let told_permission_missing = false;
     let detach: (() => void) | undefined;
     // Setting reads and publishes each run one after another, so an older read or state never lands after a newer one.
     let settings_queue: Promise<void> = Promise.resolve();
@@ -164,11 +169,18 @@ export function create_bridge_port(deps: BridgePortDeps) {
         failures++;
         retry_timer = deps.timers.set(() => {
             retry_timer = undefined;
-            connect();
+            void connect();
         }, delay_ms);
     }
 
-    function connect(): void {
+    async function connect(): Promise<void> {
+        if (!bridge_on || port) return;
+        if (!(await deps.native_permission_granted())) {
+            if (!told_permission_missing) deps.say_permission_missing();
+            told_permission_missing = true;
+            return;
+        }
+        // The setting can turn off, or another connect can win, while the permission is checked.
         if (!bridge_on || port) return;
         let opened: NativePort;
         try {
@@ -204,7 +216,8 @@ export function create_bridge_port(deps: BridgePortDeps) {
                 if (on === bridge_on) return;
                 bridge_on = on;
                 failures = 0;
-                if (on) connect();
+                told_permission_missing = false;
+                if (on) await connect();
                 else disconnect();
             })
             .catch((error: unknown) => console.warn("desertbird: the bridge could not read its setting", error));
