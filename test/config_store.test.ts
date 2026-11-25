@@ -125,7 +125,7 @@ test("a read that began before a change does not fill the copy with the old data
 });
 
 test("unknown and mistyped stored settings are ignored and reported", async () => {
-    const { api } = stub_storage({ [SETTINGS_KEY]: { toast_ms: "soon", mode_indicator: "off", nonsense: true, which_key_skip: ["a", 1] } });
+    const { api } = stub_storage({ [VERSION_KEY]: CONFIG_VERSION, [SETTINGS_KEY]: { toast_ms: "soon", mode_indicator: "off", nonsense: true, which_key_skip: ["a", 1] } });
     const problems: string[] = [];
     const config = await create_config_store(api, { report: (message) => problems.push(message) }).read();
     assert.deepEqual(config.setting_overrides, { mode_indicator: "off" });
@@ -159,9 +159,25 @@ test("the store runs its migrations on read and writes the result with the new v
     assert.deepEqual(stored[SETTINGS_KEY], { toast_ms: 4200 });
 });
 
-test("the scaffold ships no migration yet and the version matches", () => {
-    assert.equal(MIGRATIONS.length, 0);
-    assert.equal(CONFIG_VERSION, 1);
+test("the version is one above the number of migrations", () => {
+    assert.equal(CONFIG_VERSION, MIGRATIONS.length + 1);
+});
+
+test("migrating from version 1 clamps and rounds the toast times and drops which_key_skip entries that are no key sequence", () => {
+    const stored = { [SETTINGS_KEY]: { toast_ms: 1, toast_error_ms: 1e9, which_key_skip: ["gu", "", 3, "<C-w>"], theme: "oasis_sol" }, [VERSION_KEY]: 1 };
+    const result = migrate(stored, 1);
+    assert.equal(result.version, CONFIG_VERSION);
+    assert.deepEqual(result.stored[SETTINGS_KEY], { toast_ms: 500, toast_error_ms: 30000, which_key_skip: ["gu", "<C-w>"], theme: "oasis_sol" });
+    assert.deepEqual((migrate({ [SETTINGS_KEY]: { toast_ms: 1500.6 } }, 1).stored[SETTINGS_KEY] as { toast_ms: number }).toast_ms, 1501);
+    assert.deepEqual(migrate({}, 1).stored, {}, "no stored settings stay none");
+    assert.deepEqual(migrate({ [SETTINGS_KEY]: { toast_ms: "soon" } }, 1).stored[SETTINGS_KEY], { toast_ms: "soon" }, "a value of another type is left to the sanitizer");
+});
+
+test("the store reads a version 1 record with out of range toast times as the nearest valid values", async () => {
+    const { api, stored } = stub_storage({ [SETTINGS_KEY]: { toast_ms: 100 } });
+    const config = await create_config_store(api).read();
+    assert.equal(config.settings.toast_ms, 500);
+    assert.deepEqual(stored[SETTINGS_KEY], { toast_ms: 500 });
 });
 
 test("a stored version of 0, below 0 or not a whole number reads as the first version", async () => {
