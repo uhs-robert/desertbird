@@ -48,6 +48,10 @@ const CLOSED_AT_MOST = 0.05;
 const DARK_BELOW = 110;
 const dark_bytes = (pixels) => pixels.reduce((count, byte) => count + (byte < DARK_BELOW ? 1 : 0), 0);
 const CLOSED_DARK_BYTES_AT_MOST = 100;
+// Half the 1100 dark bytes the open popup's text measured at its least, and the time its region must hold still (the popup browser takes the focus about 400 ms after it shows).
+const POPUP_TEXT_DARK_BYTES_AT_LEAST = 550;
+const POPUP_STILL_MS = 600;
+const J_ATTEMPTS = 4;
 // The app menu panel region, measured on Betterbird only, over several runs: open against closed differs in 100% of the bytes, and two shots of the closed region in different runs in 0%. A menu that did not open reads 0%.
 const OPEN_AT_LEAST = 0.5;
 const panel_pixels = async (instance, name) => (await instance.shot_region(name, APP_MENU_PANEL_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
@@ -58,7 +62,7 @@ const submenu_only_region = (app) => {
   return app === "betterbird" ? `${x},${y} ${width - 20}x${height}` : `${x + 20},${y} ${width - 20}x${height}`;
 };
 
-export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected, wait_for, wait_for_state }) {
+export async function run_popup_keys(instance, { check, note, shot, key_and_state, first_selected, wait_for, wait_for_state, wait_window_focus }) {
   const app = instance.app;
   const kind = "default";
   const any_junk = (state) => Object.values(state.flags).some((flags) => flags.junk);
@@ -214,7 +218,7 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   if (!opened) {
     await instance.press(["-k", "Escape"]);
     await sleep(800);
-    await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state });
+    await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state, wait_window_focus });
     return;
   }
   await shot("popup_app_menu_open_by_keyboard", "app menu opened by Enter on the button");
@@ -237,11 +241,11 @@ export async function run_popup_keys(instance, { check, note, shot, key_and_stat
   check(app, kind, "app menu after an arrow key inside it: j, a and n mark, archive and move nothing", untouched(state) && JSON.stringify(state.folders) === folders_in_panel, `${detail(state)}, folders changed ${JSON.stringify(state.folders) !== folders_in_panel}`);
   await instance.press(["-k", "Escape"]);
   await sleep(800);
-  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state });
+  await run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state, wait_window_focus });
 }
 
 // DesertBird's own popup takes j, k and h. Thunderbird moves the focus into the popup's browser about 400 ms after it shows, so the wait after the click covers that.
-async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state }) {
+async function run_desertbird_popup_keys(instance, { check, note, key_and_state, first_selected, wait_for, wait_for_state, wait_window_focus }) {
   const app = instance.app;
   const kind = "default";
   const button = DESERTBIRD_BUTTON[app];
@@ -249,11 +253,28 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   // Its own baseline, so a failure of an app menu check above does not fail this one.
   const before = await instance.ask("state");
   const ring = async (name) => (await instance.shot_region(name, DESERTBIRD_POPUP_REGION, "ppm")) && readFileSync(join(instance.out_dir, `${name}.ppm`));
+  const popup_text_shows = (pixels) => dark_bytes(pixels) > POPUP_TEXT_DARK_BYTES_AT_LEAST;
+  // The window must have the focus before the click, or the popup opens in an inactive window and its page never takes the keys (issue #178).
+  await wait_window_focus(instance);
   await instance.click(...button);
-  await sleep(2000);
-  const on_first = await ring("desertbird_popup_open");
-  let state = await key_and_state(instance, ["j"], 800);
-  const on_second = await ring("desertbird_popup_after_j");
+  // The popup shows its text, then the region holds still: the focus ring is drawn once the popup's browser has the focus, about 400 ms after it shows, and a key sent before that is swallowed.
+  let last_read = null;
+  let still_since = 0;
+  const on_first = await wait_for(instance, "the DesertBird popup to show its text and hold still", () => ring("desertbird_popup_open"), (now) => {
+    const held = last_read !== null && now.equals(last_read);
+    last_read = now;
+    if (!held || !popup_text_shows(now)) still_since = 0;
+    else still_since ||= Date.now();
+    return still_since > 0 && Date.now() - still_since >= POPUP_STILL_MS;
+  }, { timeout_ms: 8000, step_ms: 100 });
+  // A j sent while the popup page lacks the focus, or lost on the way to the window, moves nothing. j is idempotent at the end of the list, so it repeats until the ring moves.
+  let state = null;
+  let on_second = on_first;
+  for (let attempt = 1; attempt <= J_ATTEMPTS && on_second.equals(on_first); attempt++) {
+    if (attempt > 1) note(app, kind, "DesertBird popup: j moved no focus ring", `pressing j again (attempt ${attempt} of ${J_ATTEMPTS})`);
+    state = await key_and_state(instance, ["j"], 500);
+    on_second = await ring(`desertbird_popup_after_j${attempt > 1 ? `_attempt_${attempt}` : ""}`);
+  }
   state = await key_and_state(instance, ["j"], 800);
   const still_second = await ring("desertbird_popup_after_jj");
   state = await key_and_state(instance, ["k"], 800);
@@ -274,7 +295,16 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
   const tab_count = (each) => each.windows.reduce((sum, window) => sum + window.tabs.length, 0);
   const tabs_before = tab_count(state);
   // A page the popup opens must take keys with no click: q closes it. The page binds its keys once loaded, which the close of the popup does not wait for, so each q follows a wait for the help tab to finish loading.
-  state = await key_and_state(instance, ["h"], 1500);
+  // One retry, and only while the popup text still shows: a popup that closed took the first h, and a second h would go to the new help tab or the list.
+  const press_h_and_wait_for_tab = async () => {
+    await instance.press(["h"]);
+    return wait_for_state(instance, { what: "the help tab h opens", until: (each) => tab_count(each) > tabs_before, timeout_ms: 2500, soft: true });
+  };
+  state = await press_h_and_wait_for_tab();
+  if (tab_count(state) === tabs_before && popup_text_shows(await ring("desertbird_popup_after_h_miss"))) {
+    note(app, kind, "DesertBird popup: h opened no help tab", "the popup text still shows, pressing h once more");
+    state = await press_h_and_wait_for_tab();
+  }
   check(app, kind, "DesertBird popup: h opens the help page", tab_count(state) === tabs_before + 1, `tabs ${tabs_before} to ${tab_count(state)}`);
   await wait_for_state(instance, last_tab_loaded(tabs_before + 1));
   state = await key_and_state(instance, ["q"], 1200);
