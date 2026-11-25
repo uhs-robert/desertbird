@@ -23,6 +23,7 @@ import { publish_theme } from "./theme/publish.ts";
 import { themed_hints } from "./theme/themed_hints.ts";
 import { write_to_clipboard } from "./handlers/clipboard.ts";
 import { compile_effective_keymap, effective_keymap, mark_steps } from "./config/keymap.ts";
+import { as_event_keys, hint_key_sequences } from "../shared/hint_hold.ts";
 import { SETTINGS_KEY, USER_KEYMAP_KEY, create_config_store } from "./config/store.ts";
 import type { Config } from "./config/store.ts";
 import type { CompileResult } from "../../vendor/desertfox/keys/compiler.ts";
@@ -183,6 +184,13 @@ async function load_record(): Promise<KeymapRecord> {
     return (cached_record = record);
 }
 
+// Every tree that can start a pick, so a sequence of one tab passes the hold after a typo in any. The keymaps bind the same keys by default.
+async function read_hint_keys(): Promise<string[][]> {
+    const { tree, message_tree, window_tree, page_tree, own_tree } = await load_record();
+    const sequences = [tree, message_tree, window_tree, page_tree, own_tree].flatMap((each) => hint_key_sequences(each.root as object));
+    return as_event_keys([...new Map(sequences.map((sequence) => [JSON.stringify(sequence), sequence])).values()]);
+}
+
 async function install_keymap(): Promise<void> {
     const keys = messenger.keys;
     if (keys === undefined) throw new Error("the DesertBird Experiment is not loaded");
@@ -325,7 +333,7 @@ const external_editor = create_external_editor({
 });
 
 // The keys and the bridge `act` frame share this API, so a bridge move lands in the same undo log as a key move.
-const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme), keys: messenger.keys, app: messenger.app, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS }, external_editor };
+const handler_api = { ...messenger, hints: themed_hints(messenger.hints, async () => (await config_store.read()).settings.theme, read_hint_keys), keys: messenger.keys, app: messenger.app, overlay: command_line_overlay, cmdline, search, toasts: hud, which_key: hud, quick_replies: create_quick_reply_store(messenger), snooze: { items: snoozes, now: () => new Date(), create_timeout_ms: CREATE_FOLDER_TIMEOUT_MS }, followup: { items: followups, now: () => new Date() }, undo: { log: create_undo_log(messenger), retry_delays_ms: UNDO_RETRY_DELAYS_MS }, external_editor };
 const router = create_router(registry, handler_api);
 
 // The bridge to the native host. It connects only while the `bridge` setting is on, and runs a command only through the bridge rules and the router.

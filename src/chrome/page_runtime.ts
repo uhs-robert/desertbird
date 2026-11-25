@@ -3,6 +3,8 @@
 import type { JsonValue, KeysEvent } from "../shared/protocol.ts";
 import { event_to_token } from "../../vendor/desertfox/keys/token.ts";
 import { NORMAL_MODE, is_plain_printable, matcher_for_tree } from "../shared/keymap_tree.ts";
+import { hint_key_sequences, is_typed_character } from "../shared/hint_hold.ts";
+import type { MatchResult } from "../../vendor/desertfox/keys/matcher.ts";
 import { leaves_insert } from "./escape_rule.ts";
 import type { KeydownEvent, KeyTarget, WindowListener } from "./runtime.ts";
 import type { Situation } from "./readable_focus.ts";
@@ -32,6 +34,8 @@ export interface PageDeps<Window> {
     window_id_of(window: Window): number;
     /** How many hint picks have ended in the window. A change since a hold began means the labels came and went, so the hold ends. */
     hints_done_of(window: Window): number;
+    /** When the hold of a hint pick after a typo ends, in `now` time. NaN or 0 with none. */
+    hint_hold_ends_at(window: Window): number;
     /** Milliseconds, for the hold timeout. */
     now(): number;
     emit(event: KeysEvent): void;
@@ -65,6 +69,9 @@ const HOLD_MS = 1500;
 
 const KEY_LIST = "help.whichkey";
 const CLOSE_TAB = "tab.close";
+
+// A count or a register is no start of a pick, though the matcher waits at the root for it.
+const reaches_hint = (result: MatchResult): boolean => hint_key_sequences(result.kind_ === "match" ? result.leaf : result.kind_ === "pending" && result.typed_.length ? result.node : {}).length > 0;
 
 export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime {
     const hooked = new Map<Window, { target: KeyTarget; handler: (event: KeydownEvent) => void; settle: (event: KeydownEvent) => void; reset_typing: () => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
@@ -140,6 +147,8 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         sequence_window = window;
         const sequence_open = key_list_shown;
         const result = active.feed(NORMAL_MODE, token);
+        // After a hint typo the pick drops the same keys, but it listens on the window root after this bundle, so it would see them too late.
+        if (is_typed_character(event) && deps.hint_hold_ends_at(window) > deps.now() && !reaches_hint(result)) return void (active.reset(), end_key_list(window), event.preventDefault(), event.stopPropagation());
         const source = situation !== "message" ? "page" : in_window ? "window" : "message";
         if (result.kind_ === "pending") {
             key_list_shown = true;

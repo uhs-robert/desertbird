@@ -4,6 +4,7 @@ import { pick_in_window } from "../src/background/handlers/hint_window.ts";
 import type { HintWindowApi } from "../src/background/handlers/hint_window.ts";
 import { contrast_ratio, hint_label_colors, hint_label_style, resolve_theme } from "../src/background/theme/palette.ts";
 import { themed_hints } from "../src/background/theme/themed_hints.ts";
+import type { HintsPickArgs } from "../src/shared/protocol.ts";
 import { OASIS_THEME_NAMES } from "../src/shared/theme_choice.ts";
 
 test("the hint label is the brand color with the theme background as its letters", () => {
@@ -27,10 +28,13 @@ test("the themed hints fill in the colors of the setting at each pick, and pass 
     await hints!.pick({ windowId: 4 });
     await hints!.sendEnter({ windowId: 4 });
     await hints!.pick({ windowId: 4, action: "yank" });
-    assert.deepEqual(calls, [["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_sol")) }], ["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_moonlight")) }], ["enter", { windowId: 4 }], ["pick", { windowId: 4, action: "yank", colors: hint_label_colors(resolve_theme("oasis_moonlight")) }]]);
+    assert.deepEqual(calls, [["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_sol")), hintKeys: [] }], ["pick", { windowId: 4, colors: hint_label_colors(resolve_theme("oasis_moonlight")), hintKeys: [] }], ["enter", { windowId: 4 }], ["pick", { windowId: 4, action: "yank", colors: hint_label_colors(resolve_theme("oasis_moonlight")), hintKeys: [] }]]);
     calls.length = 0;
     await hints!.pick({ windowId: 4, tabId: 7, place: "message" });
-    assert.deepEqual(calls, [["pick", { windowId: 4, place: "message", tabId: 7, colors: hint_label_colors(resolve_theme("oasis_moonlight")) }]], "a message pick carries the tab of the body that asked, or the parent answers 0");
+    assert.deepEqual(calls, [["pick", { windowId: 4, place: "message", tabId: 7, colors: hint_label_colors(resolve_theme("oasis_moonlight")), hintKeys: [] }]], "a message pick carries the tab of the body that asked, or the parent answers 0");
+    const keyed: HintsPickArgs[] = [];
+    await themed_hints({ sendEnter: async () => {}, pick: async (args) => (keyed.push(args), 1) }, async () => name, async () => [["f"], [";", "f"]])!.pick({ windowId: 4 });
+    assert.deepEqual(keyed[0]?.hintKeys, [["f"], [";", "f"]], "each pick carries the keys that start one");
     assert.equal(themed_hints(undefined, async () => name), undefined, "no Experiment, no hints");
 });
 

@@ -29,6 +29,9 @@ export const HINTS_LIVE_ATTRIBUTE = "data-desertbird-hints";
 /** Bumped on the main window's root element each time a hint pick ends, by a pick or a cancel, and never removed. The key runtimes of `keys.js` and `pages.js` read it to end their hold after `f`: the labels have taken and given back the keys, so a plain key is no longer a stray one. A counter and not a flag, so a runtime sees an end that happened after its own hold began. */
 export const HINTS_DONE_ATTRIBUTE = "data-desertbird-hints-done";
 
+/** Set on the main window's root element while a hint pick holds the keys after a typo, to the time in milliseconds the hold ends. The page keys see a key before the pick, so they read it and drop the same plain keys the pick drops. The pick removes it when it ends. A marker whose time has passed holds nothing, so one left behind is harmless. */
+export const HINTS_HOLD_ATTRIBUTE = "data-desertbird-hints-hold";
+
 /** The storage key of the settings the user changed. The body script reads its scroll step from here. */
 export const SETTINGS_STORAGE_KEY = "desertbird_settings";
 /** The command line history: a list of lines, oldest first. The background writes it and the command line page reads it. */
@@ -459,6 +462,8 @@ export interface HintsPickArgs {
     action?: HintAction;
     /** `message`: label the header and body of the message that holds the focus, in the mail tab's reading pane, a message tab or a message window. The answer is then 0 when the focus is no longer in a message body, and -1 when the parent cannot read the body, so the body script labels the body itself. */
     place?: "message";
+    /** The key sequences bound to a pick, as tokens. After a typo ends the labels, they pass the hold that drops the other plain keys. */
+    hintKeys?: string[][];
 }
 
 /** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */

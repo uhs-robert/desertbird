@@ -53,6 +53,12 @@
                 "optional": true,
                 "description": "Label the header and body of the message that holds the focus, in the reading pane or a message tab, as one set. The answer is 0 when the focus is not in a message body and -1 when the body is not readable or the window has no tabs."
               },
+              "hintKeys": {
+                "type": "array",
+                "items": { "type": "array", "items": { "type": "string", "pattern": "^(?:.|<[^<>]+>)$" } },
+                "optional": true,
+                "description": "The key sequences bound to a pick, as tokens. After a typo ends the labels, the parent drops plain keys until 1.5 s after the pick began, apart from these."
+              },
               "colors": {
                 "type": "object",
                 "description": "The label box and letter colors as #rrggbb for each color scheme. The parent uses the scheme Thunderbird itself shows.",

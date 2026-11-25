@@ -42,8 +42,11 @@ export function start(child: HintsChild, { scheme, action }: HintsRequest): numb
             on_key(listener) {
                 // `end_pick` ends the one pick of the process, which is this one while `pick` is set: a new pick ends the old one first, and that end clears the old child's `pick`.
                 child.pick = { key: listener, end: end_pick };
-                return () => (child.pick = null);
+                // A typo ends the keys here too: the chrome's hold after `f` never ends early for a remote page, since its labels-done mark never moves, so it drops the keys after the typo.
+                const stop = () => void (child.pick = null);
+                return { hold: stop, stop };
             },
+            now: () => Date.now(),
             on_disturb(listener) {
                 // A blur of an element inside the page also reaches this capture listener, and the focus stays in the page then.
                 const on_event = (event: DisturbEvent) => (event.type !== "blur" || event.target === page) && listener();

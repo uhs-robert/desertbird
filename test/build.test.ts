@@ -31,8 +31,8 @@ const PARENT_ALLOWED_INPUTS = [
     /^src\/chrome\/[a-z_]+\.ts$/,
     // The tree reader both sides share, and the handoff names. Neither reaches the registry.
     /^src\/shared\/(keymap_tree|protocol)\.ts$/,
-    // The hint labels and the on-screen check, which the body script and the hints bundle share.
-    /^src\/shared\/hint_(labels|view)\.ts$/,
+    // The hint labels and the on-screen check, which the body script and the hints bundle share, and the rule of the hold after a hint typo, which the hints and pages bundles share.
+    /^src\/shared\/hint_(labels|view|hold)\.ts$/,
 ];
 
 // The body script bundle may take the same matcher side and the shared files, plus its own folder and the typing check of the chrome runtime. It never takes the registry or the background.
@@ -192,8 +192,8 @@ const ACTOR_ALLOWED_INPUTS: Record<string, RegExp[]> = {
     page_actor_parent: [/^src\/chrome\/page_actor_parent\.ts$/],
     // The context menu actor holds its one file and nothing of the key runtime.
     context_actor_child: [/^src\/chrome\/context_actor_child\.ts$/],
-    // The hint module a child loads on the first pick: the pick, the page controls and the shared labels and on-screen check.
-    page_hints_child: [/^src\/chrome\/(page_hints_child|hint_pick|hint_targets)\.ts$/, /^src\/shared\/hint_(labels|view)\.ts$/],
+    // The hint module a child loads on the first pick: the pick, the page controls, the shared labels and on-screen check, and the plain-key rule of the hold after a typo.
+    page_hints_child: [/^src\/chrome\/(page_hints_child|hint_pick|hint_targets)\.ts$/, /^src\/shared\/hint_(labels|view|hold)\.ts$/],
 };
 
 const bytes_by_input = (name: string) => {

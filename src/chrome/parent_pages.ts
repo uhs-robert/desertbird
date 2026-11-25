@@ -9,7 +9,7 @@ import { MAIN_WINDOW_TYPE, MESSAGE_WINDOW_TYPE, guard, load_platform, open_windo
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { MESSAGE_TAB_MODE, situation_of } from "./readable_focus.ts";
 import type { KeyTarget, WindowListener } from "./runtime.ts";
-import { HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
+import { HINTS_HOLD_ATTRIBUTE, HINTS_LIVE_ATTRIBUTE } from "../shared/protocol.ts";
 import type { KeysEvent, PagesInstallArgs } from "../shared/protocol.ts";
 import type * as PageActor from "./page_actor_parent.ts";
 
@@ -111,6 +111,7 @@ function ensure_runtime(context: ExtensionContext): PageRuntime {
             return () => window.removeEventListener("blur", on_blur, true);
         },
         hints_done_of: (window) => hints_done(window.document),
+        hint_hold_ends_at: (window) => Number(window.document.documentElement?.getAttribute?.(HINTS_HOLD_ATTRIBUTE)),
         now: () => Date.now(),
         window_id_of: (window) => context.extension.windowManager.getWrapper(window)?.id ?? NO_WINDOW_ID,
         emit: (invocation) => {

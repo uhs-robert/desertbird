@@ -22,6 +22,8 @@ class FakeWindow {
     overlay_loading = false;
     /** The count of ended hint picks the runtime reads through `hints_done_of`. */
     hints_done = 0;
+    /** The end of a hint pick's hold after a typo, read through `hint_hold_ends_at`. */
+    hint_hold_ends_at = 0;
     /** Whether the page actor's child of the front tab takes the keys. */
     child_takes = false;
     pushed_insert: boolean[] = [];
@@ -76,6 +78,7 @@ function setup(window_count = 1) {
         is_message_window: (window) => window.message_window,
         overlay_is_loading: (window) => window.overlay_loading,
         hints_done_of: (window) => window.hints_done,
+        hint_hold_ends_at: (window) => window.hint_hold_ends_at,
         blur_focused: (window) => void window.blurs++,
         child: () => ({
             takes_keys: (window) => (window as FakeWindow).child_takes,
@@ -947,4 +950,45 @@ test("a key that arrives in the message body while the header was in insert mode
     assert.deepEqual(modes(events), ["insert", "normal"]);
     window.situation = "message";
     assert.equal(press(window, "j").cancelled, true, "the header scrolls again: the mode is gone, not just hidden");
+});
+
+// f, the labels, c (no label), then c again: the pick holds the keys, but this bundle listens on the window root ahead of it, so it must drop them too.
+test("after a hint typo the header keys drop the plain keys that start no pick, run the keys of a new pick and the chords, and run keys again once the hold ends", () => {
+    for (const in_window of [false, true]) {
+        const { windows, runtime, invocations, scrolls, advance } = setup();
+        runtime.install(tree(), ["hint.window"]);
+        const window = windows[0]!;
+        window.situation = "message";
+        window.message_window = in_window;
+        const commands = () => invocations().map((event) => event.command);
+        press(window, "f");
+        // The pick labels, then a typo ends its labels and starts its hold.
+        window.hints_done++;
+        window.hint_hold_ends_at = 1500;
+        advance(200);
+        for (const key of ["c", " ", "2", "j", "\"", "a"]) assert.equal(press(window, key).cancelled, true, `${key}, in_window ${in_window}`);
+        assert.deepEqual(commands(), ["hint.window"], "no c, no scroll, no count");
+        assert.equal(scrolls.length, 0);
+        press(window, ";");
+        press(window, "f");
+        assert.deepEqual(commands(), ["hint.window", "hint.window"], "; f labels again");
+        // The new pick labels and has its own typo.
+        window.hints_done++;
+        window.hint_hold_ends_at = 1700;
+        press(window, "f");
+        assert.deepEqual(commands(), ["hint.window", "hint.window", "hint.window"], "f labels again");
+        window.hints_done++;
+        window.hint_hold_ends_at = 1900;
+        press(window, "d", { ctrlKey: true });
+        assert.deepEqual(scrolls.map(([id]) => id), ["message.half_page_down"], "a chord is no plain key and runs");
+        press(window, ";");
+        assert.equal(press(window, "j").cancelled, true, "; j starts no pick");
+        assert.equal(scrolls.length, 1, "and j after it does not scroll");
+        press(window, "c");
+        assert.equal(commands().length, 3, "the matcher started over at j, so this c is dropped too");
+        advance(1700);
+        press(window, "c");
+        assert.deepEqual(commands().at(-1), "msg.new", "the hold is over");
+        runtime.shutdown();
+    }
 });

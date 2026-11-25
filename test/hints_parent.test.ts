@@ -168,18 +168,31 @@ test("hints.pick in a page tab labels the window and the tab's own page, and mar
 // The reading pane or a message tab with the focus in the body: the main window holds the about:message browser, which holds `#messagepane`, which holds the mail.
 function message_setup() {
     const heard = new Map<string, (event?: unknown) => void>();
+    // Every listener of each target and type in the order added, capture first, as a key reaches them on the window root.
+    const chains = new Map<string, { listener: (event?: unknown) => void; capture: boolean }[]>();
     const added: string[] = [];
     const listeners = (name: string) => ({
-        addEventListener: (type: string, listener: (event?: unknown) => void) => (added.push(`${name} ${type}`), heard.set(`${name} ${type}`, listener)),
-        removeEventListener: (type: string) => (added.push(`${name} -${type}`), heard.delete(`${name} ${type}`)),
+        addEventListener: (type: string, listener: (event?: unknown) => void, capture = false) => (added.push(`${name} ${type}`), heard.set(`${name} ${type}`, listener), chains.set(`${name} ${type}`, [...(chains.get(`${name} ${type}`) ?? []), { listener, capture }])),
+        removeEventListener: (type: string, listener: (event?: unknown) => void) => (added.push(`${name} -${type}`), heard.delete(`${name} ${type}`), chains.set(`${name} ${type}`, (chains.get(`${name} ${type}`) ?? []).filter((each) => each.listener !== listener))),
     });
+    const dispatch = (name: string, event: { stopped?: boolean }) => {
+        const chain = chains.get(name) ?? [];
+        for (const { listener } of chain.filter((each) => each.capture)) listener(event);
+        if (!event.stopped) for (const { listener } of chain.filter((each) => !each.capture)) listener(event);
+    };
     const drawn_in: string[] = [];
     const removed: string[] = [];
     const shown = { top: 10, left: 10, width: 20, height: 10 };
     const log: string[] = [];
     const element = (name: string, openable: boolean) => ({ name, isConnected: true, getBoundingClientRect: () => shown, contains: () => true, focus: () => void log.push(`focus ${name}`), click: () => void log.push(`click ${name}`), matches: (selector: string) => openable && selector === "a[href], button", closest: () => null });
-    const attributes = new Map<string, string>();
-    const make_document = (name: string, matching: unknown[]) => ({ querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => void removed.push(name), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(name), getAttribute: (name: string) => attributes.get(name) ?? null, setAttribute: (name: string, value: string) => void attributes.set(name, value), removeAttribute: (name: string) => void attributes.delete(name) } });
+    // The root element attributes of each document by its name: the markers of a pick sit on its window's.
+    const attribute_maps = new Map<string, Map<string, string>>();
+    const attributes_of = (document_name: string) => attribute_maps.get(document_name) ?? attribute_maps.set(document_name, new Map()).get(document_name)!;
+    const attributes = attributes_of("main");
+    const make_document = (document_name: string, matching: unknown[]) => {
+        const own = attributes_of(document_name);
+        return { querySelectorAll: () => matching, elementFromPoint: () => null, createElement: () => ({ style: {}, remove: () => void removed.push(document_name), append() {}, attachShadow: () => ({ append() {} }) }), documentElement: { append: () => void drawn_in.push(document_name), hasAttribute: (name: string) => own.has(name), getAttribute: (name: string) => own.get(name) ?? null, setAttribute: (name: string, value: string) => void own.set(name, value), removeAttribute: (name: string) => void own.delete(name) } };
+    };
     const window_like = (name: string, matching: unknown[]) => ({ innerHeight: 600, innerWidth: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", opacity: "1" }), document: make_document(name, matching), ...listeners(name) });
     const reply = element("reply", false);
     const link = element("link", true);
@@ -195,7 +208,7 @@ function message_setup() {
     const main = { ...window_like("main", []), windowRoot: listeners("root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } }, document: { ...make_document("main", []), activeElement: message_browser as unknown, hasFocus: () => has_focus, getElementById: () => ({ currentTabInfo: tab }) } };
     // A message window has no tabmail. Its about:message sits in `messageBrowser`, and the focus goes down through it to the body.
     const message_window = { ...window_like("message window", []), windowRoot: listeners("window root"), matchMedia: () => ({ matches: true }), setTimeout: (callback: () => void) => void queued.push(callback), KeyboardEvent: main.KeyboardEvent, messageBrowser: { contentWindow: message }, document: { ...make_document("message window", []), activeElement: message_browser as unknown, hasFocus: () => true, getElementById: () => null } };
-    return { attributes, heard, added, drawn_in, removed, log, reply, link, message, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
+    return { attributes, attributes_of, heard, dispatch, added, drawn_in, removed, log, reply, link, message, messagepane, main, message_window, queued, tab, set_focus: (value: boolean) => void (has_focus = value) };
 }
 
 test("hints.pick at the message labels the header and the body in one set, and the Enter of a body link waits for the end of the key and for the focus", async () => {
@@ -287,6 +300,22 @@ test("hints.pick at the message removes every listener it added on each way it e
         await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         press("a");
         assert.equal(done(), done_before + 2, "a pick bumps it again");
+        // f c c from the message body at a human pace: the body's own hold ended with the parent's answer, so only the pick can drop the second c.
+        const held = (key: string) => {
+            let prevented = false;
+            setup.heard.get("root keydown")!({ key, ctrlKey: false, altKey: false, metaKey: false, preventDefault: () => void (prevented = true), stopPropagation() {} } as never);
+            return prevented;
+        };
+        await pick({ windowId: 7, tabId: 5, colors, place: "message", hintKeys: [["f"], [";", "f"]] });
+        held("c");
+        assert.equal(done(), done_before + 3, "a typo moves the mark, so the key runtimes end their hold and a second f labels again");
+        assert.ok(live().includes("root keydown 1"), "the pick keeps its key listener after the typo");
+        assert.equal(held("c"), true, "the second c runs nothing");
+        assert.equal(held("f"), false, "f reaches the key runtime, which starts a new pick");
+        assert.ok(setup.attributes.has("data-desertbird-hints-hold"), "the page keys read the end of the hold from the window root");
+        setup.heard.get("message MsgLoading")!();
+        assert.deepEqual(live(), [], "a disturb ends the hold after a typo");
+        assert.ok(!setup.attributes.has("data-desertbird-hints-hold"), "and its marker");
         setup.removed.length = 0;
         await pick({ windowId: 7, tabId: 5, colors, place: "message" });
         setup.heard.get("main blur")!();
@@ -391,5 +420,64 @@ test("hints.pick in a message window labels the header and the body from the bod
         delete globals["Cc"];
         delete globals["Ci"];
         platform.restore();
+    }
+});
+
+// The page keys of `pages.js` listen on the window root ahead of the pick. f c c in one burst from a message header: the first c ends the labels as a typo, and the second must reach neither bundle as a command.
+test("f c c in one burst from a message tab header and from a message window header opens no compose, f labels again, and the hold marker goes when the pick ends", async () => {
+    const { compile_tab_keymap, compile_typing_keymap, page_message_tree } = await import("../src/background/commands/tab_keymaps.ts");
+    const { COMPILED_KEYMAP_VERSION, HINTS_HOLD_ATTRIBUTE } = await import("../src/shared/protocol.ts");
+    const { hint_key_sequences } = await import("../src/shared/hint_hold.ts");
+    const tree_of = (result: ReturnType<typeof compile_tab_keymap>) => ({ version: COMPILED_KEYMAP_VERSION, root: JSON.parse(JSON.stringify(result.compiled.modes.normal)) as unknown });
+    for (const in_window of [false, true]) {
+        const setup = message_setup();
+        const header_focus = { id: "messageBrowser", contentDocument: { activeElement: setup.reply } };
+        Object.assign(setup.tab, { mode: { name: "mailMessageTab" }, chromeBrowser: { contentWindow: setup.message } });
+        setup.main.document.activeElement = header_focus;
+        setup.message_window.document.activeElement = header_focus;
+        setup.attributes_of("message window").set("windowtype", "mail:messageWindow");
+        const [window_id, root, marks] = in_window ? [9, "window root keydown", setup.attributes_of("message window")] : [7, "root keydown", setup.attributes];
+        const platform = stub_platform([setup.main, setup.message_window]);
+        const real_now = Date.now;
+        try {
+            const { get_pages_api, shutdown: stop_pages } = await import("../src/chrome/parent_pages.ts");
+            const { get_hints_api, shutdown: stop_hints } = await import("../src/chrome/parent_hints.ts");
+            const pages = get_pages_api(message_context(setup) as never).pages;
+            const { pick } = get_hints_api(message_context(setup)).hints;
+            const ran: string[] = [];
+            (pages.onInvocation as { subscribe(listener: (event: { command: string }) => void): void }).subscribe((event) => event.command === "pending" || ran.push(event.command));
+            const trees = { pageTree: tree_of(compile_tab_keymap("page")), messageTree: page_message_tree(tree_of(compile_tab_keymap("message")) as never), windowTree: page_message_tree(tree_of(compile_tab_keymap("window")) as never), typingTree: tree_of(compile_typing_keymap()) };
+            await pages.install({ ...trees, holdCommands: ["hint.window"] } as never);
+            const hint_keys = hint_key_sequences(trees.windowTree.root as object);
+            const press = (key: string) => {
+                const event = { key, code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, target: setup.reply, stopped: false, preventDefault() {}, stopPropagation: () => void (event.stopped = true) };
+                setup.dispatch(root, event);
+            };
+            // The background answers hint.window with a pick, which lands between f and the first c.
+            const answer = async () => assert.ok((await pick({ windowId: window_id, colors: message_colors, hintKeys: hint_keys })) > 0);
+            press("f");
+            assert.deepEqual(ran, ["hint.window"]);
+            await answer();
+            press("c");
+            assert.ok(marks.has(HINTS_HOLD_ATTRIBUTE), "the typo starts the hold and marks the window");
+            press("c");
+            assert.deepEqual(ran, ["hint.window"], `the second c opens no compose, in_window ${in_window}`);
+            press("f");
+            assert.deepEqual(ran, ["hint.window", "hint.window"], "f labels again at once");
+            await answer();
+            assert.ok(!marks.has(HINTS_HOLD_ATTRIBUTE), "a new pick ends the old hold and its marker");
+            press("c");
+            assert.ok(marks.has(HINTS_HOLD_ATTRIBUTE));
+            // Past the hold: the next key ends the pick and runs.
+            Date.now = () => real_now() + 2000;
+            press("c");
+            assert.ok(!marks.has(HINTS_HOLD_ATTRIBUTE), "the first key after the hold ends the pick and its marker");
+            assert.deepEqual(ran, ["hint.window", "hint.window", "msg.new"], "and runs");
+            stop_hints();
+            stop_pages();
+        } finally {
+            Date.now = real_now;
+            platform.restore();
+        }
     }
 });

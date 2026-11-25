@@ -44,7 +44,7 @@ export const area_rules = [
   // The own pages (options, help) run these same body scripts for j, q and /.
   { globs: ["src/content/{body_find,body_keys}.ts"], areas: ["message_body", "own_pages"] },
   { globs: ["src/content/page_keys.ts"], areas: ["own_pages"] },
-  { globs: ["src/chrome/{hint_pick,hint_targets,parent_hints,page_hints_child}.ts", "src/shared/{hint_labels,hint_view}.ts", "src/background/commands/hints.ts", "src/background/handlers/hint_window.ts", "src/experiment/hints.schema.json"], areas: ["hints"] },
+  { globs: ["src/chrome/{hint_pick,hint_targets,parent_hints,page_hints_child}.ts", "src/shared/{hint_hold,hint_labels,hint_view}.ts", "src/background/commands/hints.ts", "src/background/handlers/hint_window.ts", "src/experiment/hints.schema.json"], areas: ["hints", "pages"] },
   { globs: ["src/content/message_display.ts", "src/background/{body_requests,handlers/message_find}.ts", "src/background/commands/reading.ts"], areas: ["message_body"] },
   { globs: ["src/background/search/**", "src/background/{commands,handlers}/search.ts"], areas: ["search"] },
   { globs: ["src/background/handlers/{folder_collapse,folder_marks,folder_open,folder_state,special_folder,displayed_folder,jump_history}.ts", "src/background/commands/folders.ts", "src/chrome/parent_folderpane.ts", "src/experiment/folderpane.schema.json"], areas: ["folders", "panes"] },

@@ -1,7 +1,7 @@
 // The mail window hint labels (f): the fixed labels per app, shown and ended.
 
 import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
-import { sleep, first_selected, selects, folder_shown, holds_twice, drawn_since } from "../predicates.mjs";
+import { sleep, first_selected, selects, folder_shown, holds_twice, drawn_since, back_to } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
 export const areas = ["hints", "folders", "cmdline", "theme"];
@@ -45,6 +45,22 @@ async function run_window_hints(instance, ctx) {
   await sleep(2000);
   state = await instance.ask("state");
   check(app, kind, "window hints: f c c in one burst opens no compose window and changes no mail", !state.windows.some((window) => window.type === "messageCompose") && state.listed.length === rows_before && selection_of(state) === burst_before, `compose windows ${state.windows.filter((window) => window.type === "messageCompose").length}, listed ${state.listed.length} of ${rows_before}`);
+  // The same at human pace, which the burst does not reach: the second c comes later inside the hold. Then an f typed again inside the hold labels again.
+  await show_labels();
+  await instance.press(["c"]);
+  await sleep(250);
+  await instance.press(["c"]);
+  await sleep(2000);
+  state = await instance.ask("state");
+  check(app, kind, "window hints: f, c, c at human pace opens no compose window and changes no mail", !state.windows.some((window) => window.type === "messageCompose") && selection_of(state) === burst_before, `compose windows ${state.windows.filter((window) => window.type === "messageCompose").length}`);
+  const { before: before_again } = await show_labels();
+  await instance.press(["c"]);
+  await instance.press(["f"]);
+  hold_from = Date.now();
+  await window_pixels("f typed again to label again", drawn_since(before_again));
+  await instance.press(["-k", "Escape"]);
+  await window_pixels("Escape to end the second labels", back_to(before_again));
+  await hold_over();
   // A key that no label continues with ends the labels, and swallows the key.
   const { before: before_z, labelled: labelled_z } = await show_labels();
   await instance.press(["z"]);

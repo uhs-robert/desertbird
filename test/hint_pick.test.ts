@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { end_pick, start_pick } from "../src/chrome/hint_pick.ts";
+import { as_event_keys } from "../src/shared/hint_hold.ts";
 import type { PickHost, PickKeyEvent, PickTarget } from "../src/chrome/hint_pick.ts";
 import type { HintLabelNode, HintWindow } from "../src/shared/hint_view.ts";
 
@@ -23,10 +24,11 @@ function fake_window(name: string): { window: HintWindow; containers: FakeNode[]
 }
 
 function fake_host() {
-    const state = { key: null as null | ((event: PickKeyEvent) => void), disturb: null as null | (() => void), stopped: [] as string[], copied: [] as string[] };
+    const state = { key: null as null | ((event: PickKeyEvent) => void), disturb: null as null | (() => void), stopped: [] as string[], copied: [] as string[], holds: [] as number[], now: 1000 };
     const host: PickHost = {
         copy: (text) => void state.copied.push(text),
-        on_key: (listener) => ((state.key = listener), () => void state.stopped.push("keys")),
+        on_key: (listener) => ((state.key = listener), { hold: (ends_at) => void state.holds.push(ends_at), stop: () => void state.stopped.push("keys") }),
+        now: () => state.now,
         on_disturb: (listener) => ((state.disturb = listener), () => void state.stopped.push("disturb")),
     };
     const press = (key: string, chord: Partial<PickKeyEvent> = {}) => {
@@ -85,19 +87,63 @@ test("a typed letter removes the labels that no longer match", () => {
     assert.equal(spans.filter((span) => !span.removed).length, 3);
 });
 
-test("a key no label continues with, a chord and Escape end the labels and act on nothing, and a lone modifier does not", () => {
-    for (const [key, chord, ends] of [["z", {}, true], ["Escape", {}, true], ["a", { ctrlKey: true }, true], ["Shift", {}, false], ["Tab", {}, true]] as const) {
+test("a typed character no label continues with is a typo: it ends the labels and keeps the keys. A chord and named keys cancel. A lone modifier does neither", () => {
+    for (const [key, chord, kind] of [["z", {}, "typo"], [" ", {}, "typo"], ["1", {}, "typo"], [";", {}, "typo"], ["Escape", {}, "cancel"], ["Tab", {}, "cancel"], ["a", { ctrlKey: true }, "cancel"], ["Shift", {}, "none"]] as const) {
         const { host, state, press } = fake_host();
         const { window, containers } = fake_window("only");
         const acted: string[] = [];
         start_pick(host, targets_in(window, 12, acted), SCHEME);
         const seen = press(key, chord);
         assert.equal(seen.prevented && seen.stopped, true, key);
-        assert.equal(containers[0]!.removed, ends, key);
-        assert.equal(state.stopped.length > 0, ends, key);
+        assert.equal(containers[0]!.removed, kind !== "none", key);
+        assert.deepEqual(state.holds, kind === "typo" ? [2500] : [], `${key}: a typo holds until 1.5 s after the pick began`);
+        assert.equal(state.stopped.includes("keys"), kind === "cancel", key);
         assert.deepEqual(acted, []);
         end_pick();
     }
+});
+
+// f, the labels, c (no label), then c again at a human pace: the second c must not run a command, in the body as in the list.
+test("after a typo the pick drops plain keys until 1.5 s after it began, and lets the keys of a new pick through", () => {
+    const { host, state, press } = fake_host();
+    const { window } = fake_window("only");
+    start_pick(host, targets_in(window, 12, []), SCHEME, "activate", [["f"], [";", "f"]]);
+    state.now += 300;
+    press("c");
+    state.now += 150;
+    assert.equal(press("c").prevented, true, "the second c is dropped");
+    assert.equal(press("a").prevented, true, "so is a label letter typed from memory");
+    assert.equal(press("Escape").prevented, false, "a named key passes");
+    assert.equal(press(";").prevented, false, "the start of ; f passes");
+    assert.equal(press("f").prevented, false, "and its end, so the runtime labels again");
+    assert.equal(press("f").prevented, false, "a lone f passes too");
+    assert.equal(press("d").prevented, true);
+    assert.deepEqual(state.stopped, [], "the keys are still held");
+    state.now += 1100;
+    assert.equal(press("d").prevented, false, "once the hold is over, keys run");
+    assert.deepEqual(state.stopped.sort(), ["disturb", "keys"]);
+});
+
+test("Backspace in the hold steps the held prefix back, so a c after ; Backspace is dropped but an unbroken ; c restarts", () => {
+    const { host, state, press } = fake_host();
+    const { window } = fake_window("only");
+    start_pick(host, targets_in(window, 12, []), SCHEME, "activate", [["f"], [";", "c"]]);
+    press("z");
+    assert.equal(press(";").prevented, false);
+    assert.equal(press("Backspace").prevented, false, "Backspace passes");
+    assert.equal(press("c").prevented, true, "the matcher dropped the ;, so c stands alone");
+    assert.equal(press(";").prevented, false);
+    assert.equal(press("c").prevented, false, "an unbroken ; c is a restart");
+    assert.deepEqual(state.stopped, []);
+});
+
+test("a hint binding that starts with Space passes the hold, where the tree token is <Space> and the event key is a space", () => {
+    const { host, press } = fake_host();
+    const { window } = fake_window("only");
+    start_pick(host, targets_in(window, 12, []), SCHEME, "activate", as_event_keys([["<Space>", "f"]]));
+    press("z");
+    assert.equal(press(" ").prevented, false);
+    assert.equal(press("f").prevented, false);
 });
 
 test("a scroll, a click or a lost focus ends the labels through the host", () => {
