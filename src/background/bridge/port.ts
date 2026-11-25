@@ -180,8 +180,8 @@ export function create_bridge_port(deps: BridgePortDeps) {
             told_permission_missing = true;
             return;
         }
-        // The setting can turn off, or another connect can win, while the permission is checked.
-        if (!bridge_on || port) return;
+        // The setting can turn off, or another connect can win, while the permission is checked. The stored setting is read again because the queued change that turns it off waits behind this connect.
+        if (!bridge_on || port || !(await deps.read_bridge_setting())) return;
         let opened: NativePort;
         try {
             opened = deps.connect();
@@ -213,7 +213,8 @@ export function create_bridge_port(deps: BridgePortDeps) {
         settings_queue = settings_queue
             .then(async () => {
                 const on = await deps.read_bridge_setting();
-                if (on === bridge_on) return;
+                // A grant that arrives later, or a Save that leaves the value as it was, lands here with the bridge on and no port: connect then.
+                if (on === bridge_on) return on && !port ? await connect() : undefined;
                 bridge_on = on;
                 failures = 0;
                 told_permission_missing = false;

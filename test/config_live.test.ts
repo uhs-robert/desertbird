@@ -34,6 +34,7 @@ function stub_messenger(hold_first_get = false) {
             onChanged: { addListener: (listener: Listener) => void listeners.push(listener) },
         },
         keys: { install: async (args: { tree: { root: { children: Record<string, unknown> } } }) => void installs.push(args.tree), onInvocation: { addListener: () => {} } },
+        permissions: { contains: async () => true, onAdded: { addListener: () => {} } },
         runtime: { onInstalled: { addListener: () => {} }, onMessage: { addListener: () => {} } },
         notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: () => {} }, onClosed: { addListener: () => {} } },
         messages: { onNewMailReceived: { addListener: () => {} } },

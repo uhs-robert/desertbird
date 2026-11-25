@@ -201,6 +201,8 @@ export function create_external_editor(deps: ExternalEditorDeps) {
                     reply = await deps.client.editor_collect(held.job);
                     failures = 0;
                 } catch (error) {
+                    // A missing grant does not heal by waiting, and the scratch folder hint would blame the host.
+                    if (error instanceof NativePermissionMissing) return await drop(held, failure_text(error));
                     const unknown_job = UNKNOWN_JOB.test(failure_text(error));
                     if (!unknown_job && ++failures < MAX_COLLECT_FAILURES) {
                         await deps.pause(MIN_POLL_MS);
