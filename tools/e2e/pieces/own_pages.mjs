@@ -75,7 +75,7 @@ async function run_own_pages(instance, ctx) {
   check(app, kind, "Alt+q closes a remote page tab, input focused", main_window_tabs(chord_closed).length === before, `tabs ${main_window_tabs(chord_closed).length}, expected ${before}`);
   await instance.ask("select_tab", 20000, { index: 0 });
   await wait_for_state(instance, active_is(0));
-  // The readable tabs take q, : and g? through the main-window runtime. Each opens by its Thunderbird shortcut.
+  // The readable tabs take q, : and g? (help) through the main-window runtime. Each opens by its Thunderbird shortcut.
   // The address book focuses its search field, which keeps q as text, so a click on the folder list or the grid first puts the focus in the tab as a user's click does. g ? shows the root key list, and the next key removes it.
   for (const [name, open, click_at] of [["address book", () => instance.press(CTRL_SHIFT("b")), [165, 151]], ["calendar", () => instance.click(22, 112), [700, 400]]]) {
     await open();
@@ -88,9 +88,9 @@ async function run_own_pages(instance, ctx) {
     await shot(`${name.replace(" ", "_")}_tab`, `${name} tab before the keys`);
     const list_before = await hud_pixels(instance, `${app}_${name}_list_before`, KEY_LIST_REGION);
     const { helped, list_shown } = await open_key_list(instance, { slug: name.replace(" ", "_"), list_before });
-    check(app, kind, `g ? opens no tab from the ${name} tab`, main_window_tabs(helped).length === before + 1, `tabs ${main_window_tabs(helped).length}, expected ${before + 1}`);
-    check(app, kind, `g ? shows the key list in the ${name} tab`, list_shown !== list_before);
-    await shot(`${name.replace(" ", "_")}_key_list`, `${name} tab after g ?: the root key list shows`);
+    check(app, kind, `Alt+? opens no tab from the ${name} tab`, main_window_tabs(helped).length === before + 1, `tabs ${main_window_tabs(helped).length}, expected ${before + 1}`);
+    check(app, kind, `Alt+? shows the key list in the ${name} tab`, list_shown !== list_before);
+    await shot(`${name.replace(" ", "_")}_key_list`, `${name} tab after Alt+?: the root key list shows`);
     await instance.press(["-k", "Escape"]);
     const list_gone = await wait_pixels(instance, `the key list of the ${name} tab to go`, `${app}_${name}_list_gone`, KEY_LIST_REGION, back_to(list_before), { timeout_ms: 3000 });
     check(app, kind, `the next key removes the key list in the ${name} tab`, list_gone === list_before);

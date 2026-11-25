@@ -4,6 +4,8 @@ import { E2E_SETTINGS } from "./profile.mjs";
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export const CTRL_SHIFT = (key) => ["-M", "ctrl", "-M", "shift", key, "-m", "shift", "-m", "ctrl"];
+/** Alt+? is the which-key key. Alt and Shift are held around the slash key, which types the question mark. */
+export const ALT_QUESTION = ["-M", "alt", "-M", "shift", "-k", "slash", "-m", "shift", "-m", "alt"];
 export const CTRL = (key) => ["-M", "ctrl", key, "-m", "ctrl"];
 export const first_selected = (state) => state.selected[0]?.header_id ?? null;
 export const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);

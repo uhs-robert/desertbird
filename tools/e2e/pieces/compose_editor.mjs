@@ -1,7 +1,7 @@
 // The external editor kinds: a fake editor behind the native host rewrites the scratch file. Plain text, and Markdown with the reply below or above the quote.
 
 import { existsSync } from "node:fs";
-import { sleep, HUD_REGION, drawn_since, compose_opens, compose_tab, reply_is_loaded, mail_window_ready, selects_inbox_s2 } from "../predicates.mjs";
+import { ALT_QUESTION, sleep, HUD_REGION, drawn_since, compose_opens, compose_tab, reply_is_loaded, mail_window_ready, selects_inbox_s2 } from "../predicates.mjs";
 import { EDITED_TEXT, DESERTFOX_HOST, COMPOSE_EDITOR_HTML_KINDS, install_editor_host } from "../seed.mjs";
 
 export const areas = ["compose", "mode_label"];
@@ -253,12 +253,11 @@ async function run_compose_window(instance, ctx) {
   await instance.press(["-k", "Escape"]);
   const panel_gone = await wait_pixels(instance, "the which-key panel to go", `${app}_compose_panel_gone`, HUD_REGION, (hash) => hash === panel_bare, { timeout_ms: 5000 });
   check(app, kind, "Escape after g removes the which-key panel of the compose window", panel_gone === panel_bare);
-  // g ? shows the root keys of the compose tree at once and the next key ends the panel.
-  await instance.press(["g"]);
-  await instance.press(["?"]);
+  // Alt+? shows the root keys of the compose tree at once and the next key ends the panel.
+  await instance.press(ALT_QUESTION);
   const root_shown = await wait_pixels(instance, "the root key panel to draw in the compose window", `${app}_compose_root_shown`, HUD_REGION, drawn_since(panel_bare), { timeout_ms: 8000 });
-  check(app, kind, "g ? draws the root key panel in the compose window", root_shown !== panel_bare);
-  await shot("which_key_root", "the root key panel after g ? in a compose window");
+  check(app, kind, "Alt+? draws the root key panel in the compose window", root_shown !== panel_bare);
+  await shot("which_key_root", "the root key panel after Alt+? in a compose window");
   await instance.press(["-k", "Escape"]);
   const root_gone = await wait_pixels(instance, "the root key panel to go", `${app}_compose_root_gone`, HUD_REGION, (hash) => hash === panel_bare, { timeout_ms: 5000 });
   check(app, kind, "Escape removes the root key panel of the compose window", root_gone === panel_bare);
