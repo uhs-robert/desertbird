@@ -297,20 +297,6 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
       await new Promise((done) => setTimeout(done, 300));
       pointer("click", "left");
     },
-    // Asks the window manager to focus the app's window again. It sends no click, so a no-click check keeps its contract.
-    // The app id differs per app and build (Thunderbird ESR reports thunderbird-esr), and the headless session holds only the app's windows, so the first listed window names it.
-    // It returns a text for the caller's NOTE: why it did not focus, or the error wlrctl gave.
-    wm_focus_window: () => {
-      try {
-        const listed = execFileSync("wlrctl", ["toplevel", "list"], { env: session.env, encoding: "utf8" }).split("\n").filter((line) => line !== "");
-        // app_id:X focuses every match, so a second window would take the focus too.
-        if (listed.length > 1) return `skipped, ${listed.length} toplevels are open`;
-        execFileSync("wlrctl", ["toplevel", "focus", `app_id:${listed[0].split(":")[0]}`], { env: session.env });
-        return "focused";
-      } catch (error) {
-        return `wlrctl failed: ${error.message}`;
-      }
-    },
     // A screenshot of a region, "x,y WxH" as grim reads it. A region that leaves out the scrollbar draws the same twice when nothing in it changed.
     shot_region: async (name, region, format = "png") => { const path = join(out_dir, `${name}.${format}`); execFileSync("grim", ["-t", format, "-g", region, path], { env: session.env }); return path; },
     read_state: (name) => { const path = join(out_dir, `state_${name}.json`); return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null; },

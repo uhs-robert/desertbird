@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 // The .mjs modules carry no types, so they load through a dynamic import.
-const { start_session } = await import(join(import.meta.dirname, "..", "..", "tools", "measure", "session.mjs"));
+const { start_session, holder_argv } = await import(join(import.meta.dirname, "..", "..", "tools", "measure", "session.mjs"));
 
 const { sweep_dead_runs } = await import(join(import.meta.dirname, "..", "..", "tools", "e2e", "sweep.mjs"));
 
@@ -47,6 +47,16 @@ async function until_empty(list: () => string[], deadline_ms = 8000) {
   for (let waited = 0; list().length > 0 && waited <= deadline_ms; waited += 50) await new Promise((wake) => setTimeout(wake, 50));
   return list();
 }
+
+// wtype multiplies each -s value by 1000 in an unsigned 32-bit int. 86400000 wrapped to about 510 s and the holder died mid-run. This needs no compositor, so it runs everywhere.
+test("the holder argv keeps every sleep below the wtype overflow and lasts a day", () => {
+  const [command, ...args]: string[] = holder_argv();
+  assert.equal(command, "wtype");
+  const sleeps = args.flatMap((arg, at) => (arg === "-s" ? [Number(args[at + 1])] : []));
+  assert.equal(args.length, sleeps.length * 2, "the argv holds only -s pairs");
+  for (const ms of sleeps as number[]) assert.ok(ms * 1000 < 2 ** 32, `${ms} ms wraps in wtype`);
+  assert.ok((sleeps as number[]).reduce((sum: number, ms: number) => sum + ms, 0) >= 86_400_000, "the holder lasts at least a day");
+});
 
 test("the seat keeps its keyboard after a key and a click", { skip, timeout: 60_000 }, async () => {
   const work_dir = mkdtempSync(join(tmpdir(), "session-keyboard-test-"));

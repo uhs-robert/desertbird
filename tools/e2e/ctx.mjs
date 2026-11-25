@@ -105,7 +105,7 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
   const wait_for_state = (instance, wanted) => wait_state(instance, wanted.what, wanted.until, wanted);
 
   // Keys go to the focused window, and under load a fresh tab can leave the main window without focus for longer than a fixed sleep. It clicks nothing, so a no-click check keeps its contract.
-  // It closes that gap but not every drop: one stressed run still lost the calendar keys after this wait passed, so a single focused read is not proof that keys arrive.
+  // A focused read is not proof that keys arrive: the keys were once lost with every focus read true (issue #139), until the session kept a keyboard on its seat (tools/measure/session.mjs).
   const wait_window_focus = (instance) => wait_for_state(instance, { what: "the normal window to report focus before the first key", until: normal_window_focused, timeout_ms: 15000, show: (state) => `windows ${JSON.stringify(state.windows.map((window) => [window.type, window.focused]))}` });
 
   // Presses g ? and waits for the key list.
