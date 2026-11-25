@@ -13,7 +13,7 @@ const api: BodyRequestApi = {
 
 test("the body yank request writes its text through the clipboard writer, and an empty one or another shape writes nothing", async () => {
     const written: string[] = [];
-    const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {}, write_text: async (text) => void written.push(text) });
+    const handle = create_body_requests({ registry, api, allowed: async () => new Set(), run: async () => {}, write_text: async (text) => void written.push(text) });
     await handle({ type: "body.yank", text: "https://example.org/x" }, { tab: { id: 5, windowId: 9 } });
     await handle({ type: "body.yank", text: "  " }, { tab: { id: 5, windowId: 9 } });
     assert.equal(handle({ type: "body.yank", text: 5 }, {}), undefined);
@@ -22,7 +22,7 @@ test("the body yank request writes its text through the clipboard writer, and an
 
 test("the body open_link request presses Enter in the window of the sender and in no other", async () => {
     const sent: unknown[] = [];
-    const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {}, hints: { sendEnter: async (args) => void sent.push(args) } });
+    const handle = create_body_requests({ registry, api, allowed: async () => new Set(), run: async () => {}, hints: { sendEnter: async (args) => void sent.push(args) } });
     await handle({ type: "body.open_link", windowId: 99 }, { tab: { id: 5, windowId: 9 } });
     assert.deepEqual(sent, [{ windowId: 9 }]);
     await handle({ type: "body.open_link" }, {});
@@ -30,14 +30,14 @@ test("the body open_link request presses Enter in the window of the sender and i
 });
 
 test("the request does nothing when the hints Experiment is not loaded", async () => {
-    const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {} });
+    const handle = create_body_requests({ registry, api, allowed: async () => new Set(), run: async () => {} });
     assert.deepEqual(await handle({ type: "body.open_link" }, { tab: { id: 5, windowId: 9 } }), {});
 });
 
 test("the body hints request checks the action with the command's validator, names the sender's window and the message place, and answers -1 when it cannot ask", async () => {
     const asked: unknown[] = [];
     const hints = { sendEnter: async () => {}, pick: async (args: unknown) => (asked.push(args), 4) };
-    const handle = create_body_requests({ registry, api, allowed: new Set(), run: async () => {}, hints });
+    const handle = create_body_requests({ registry, api, allowed: async () => new Set(), run: async () => {}, hints });
     assert.equal(await handle({ type: "body.hints", windowId: 99 }, { tab: { id: 5, windowId: 9 } }), 4);
     assert.equal(await handle({ type: "body.hints", action: "yank" }, { tab: { id: 5, windowId: 9 } }), 4);
     assert.deepEqual(asked, [{ windowId: 9, tabId: 5, action: "activate", place: "message" }, { windowId: 9, tabId: 5, action: "yank", place: "message" }], "the default action comes from the params, and the window and tab from the sender");
@@ -45,7 +45,7 @@ test("the body hints request checks the action with the command's validator, nam
     assert.equal(await handle({ type: "body.hints" }, {}), -1, "a sender with no window asks nothing");
     assert.equal(await handle({ type: "body.hints" }, { tab: { windowId: 9 } }), -1, "a sender with no tab asks nothing");
     assert.equal(asked.length, 2);
-    const without = create_body_requests({ registry, api, allowed: new Set(), run: async () => {} });
+    const without = create_body_requests({ registry, api, allowed: async () => new Set(), run: async () => {} });
     assert.equal(await without({ type: "body.hints" }, { tab: { id: 5, windowId: 9 } }), -1, "no hints Experiment: the body labels itself");
 });
 
@@ -55,7 +55,7 @@ test("hints.sendEnter presses Enter through the text input processor in the name
     const window = { KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } }, document: { activeElement: { id: "messagepane", contentDocument: { activeElement: link } } } };
     const platform = stub_platform([window]);
     const globals = globalThis as Record<string, unknown>;
-    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransactionForTests: () => true, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup: (event: { key: string }) => events.push(`up ${event.key}`) }) } };
+    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransaction: (_window: unknown, callback: { onNotify?: () => boolean }) => typeof callback.onNotify === "function" && callback.onNotify() === true, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup: (event: { key: string }) => events.push(`up ${event.key}`) }) } };
     globals["Ci"] = { nsITextInputProcessor: {} };
     try {
         const { get_hints_api } = await import("../src/chrome/parent_hints.ts");
@@ -216,7 +216,7 @@ test("hints.pick at the message labels the header and the body in one set, and t
     const events: string[] = [];
     const platform = stub_platform([setup.main, setup.message_window]);
     const globals = globalThis as Record<string, unknown>;
-    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransactionForTests: () => true, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup() {} }) } };
+    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransaction: () => true, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup() {} }) } };
     globals["Ci"] = { nsITextInputProcessor: {} };
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");
@@ -393,7 +393,7 @@ test("hints.pick in a message window labels the header and the body from the bod
     const events: string[] = [];
     const platform = stub_platform([setup.main, setup.message_window]);
     const globals = globalThis as Record<string, unknown>;
-    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransactionForTests: (window: unknown) => window === setup.message_window, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup() {} }) } };
+    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransaction: (window: unknown) => window === setup.message_window, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup() {} }) } };
     globals["Ci"] = { nsITextInputProcessor: {} };
     try {
         const { get_hints_api, shutdown } = await import("../src/chrome/parent_hints.ts");

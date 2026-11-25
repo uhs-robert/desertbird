@@ -5,7 +5,7 @@ import type { KeyTrees } from "./cmdline/completion.ts";
 import type { TreeBranch } from "../../vendor/desertfox/prefix_tree.ts";
 import type { AppApi, ComposewinApi, HintsApi, HudChanged, KeymapTree, KeysApi, KeysEvent, MenukeysApi, OverlayApi, PagesApi } from "../shared/protocol.ts";
 import { KEEPS_SELECTION_IDS, UNREPEATABLE_IDS, hold_command_ids, registry } from "./commands/index.ts";
-import { COMPOSE_COMMANDS, compile_tab_keymap, compile_typing_keymap, keymap_of, menu_key_table, message_background_commands, page_message_tree } from "./commands/tab_keymaps.ts";
+import { COMPOSE_COMMANDS, compile_tab_keymap, compile_typing_keymap, bound_message_commands, keymap_of, menu_key_table, page_message_tree } from "./commands/tab_keymaps.ts";
 import { record_activation, tab_choices } from "./handlers/tabs.ts";
 import type { TabsApi } from "./handlers/tabs.ts";
 import { create_folder_source } from "./cmdline/folder_rows.ts";
@@ -364,12 +364,15 @@ const bridge = create_bridge_port({
 });
 
 const compose_requests = create_compose_requests((window_id) => router.run({ command: "compose.edit_external", args: {}, count: 1, windowId: window_id, messageIds: [] }));
-const body_requests = create_body_requests({ registry, api: messenger, allowed: message_background_commands(), which_key: hud, on_mode: (event) => on_key_event(event), run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
+const body_requests = create_body_requests({ registry, api: messenger, allowed: async () => bound_message_commands(await load_record()), which_key: hud, on_mode: (event) => on_key_event(event), run: (invocation) => router.run(invocation), hints: handler_api.hints, write_text: write_to_clipboard });
 
 const popup_requests = create_popup_requests({ popup_url: () => messenger.runtime.getURL(POPUP_PAGE), target_window: last_focused_main_window, run: (invocation) => router.run(invocation) });
 
 // The prompt answers first: it takes `cmdline.hello` from its own page while it shows.
-messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? cmdline.handle(message) ?? hud.handle(message) ?? popup_requests(message, sender) ?? compose_requests(message, sender) ?? body_requests(message, sender));
+// The command line and hud requests come from the overlay pages only. The sender address tells them apart: a content script carries the address of its mail, and another extension page carries its own. The tab is not checked, because the overlay page of a message window has one.
+const from_overlay_page = (sender: { url?: string }, page: string): boolean => sender.url?.split(/[?#]/)[0] === messenger.runtime.getURL(page);
+
+messenger.runtime.onMessage.addListener((message, sender) => confirm.handle(message, sender) ?? (from_overlay_page(sender, "overlay/cmdline.html") ? cmdline.handle(message) : undefined) ?? (from_overlay_page(sender, "overlay/hud.html") ? hud.handle(message) : undefined) ?? popup_requests(message, sender) ?? compose_requests(message, sender) ?? body_requests(message, sender));
 // A surface left a window on its own (a tab change or a closed window), so its state for that window is dropped.
 messenger.overlay?.onClosed.addListener(({ windowId, surface, reason }) => {
     if (surface !== "cmdline") return hud.forget(windowId);

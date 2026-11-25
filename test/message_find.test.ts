@@ -80,7 +80,7 @@ function body_requests(window_type: string, displayed = [{ id: 11 }, { id: 12 }]
         windows: { get: async (window_id) => (calls.push(`windows.get ${window_id}`), { type: window_type }) },
         notifications: { create: async (_id, notification) => (calls.push(`notify ${notification.message}`), "n1") },
     };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: async () => message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     return { handle, calls, ran };
 }
 
@@ -112,7 +112,7 @@ test("body.invoke runs a mail command on the displayed message of the sender's w
 test("a mail key with no displayed message refuses with a notification and acts on nothing", async () => {
     const base = fake_api();
     const router = create_router(registry, base.api);
-    const refusing = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => ({ type: "normal" }) }, notifications: { create: async (_id, notification) => (base.calls.push(`notify ${notification.message}`), "n1") } }, allowed: message_background_commands(), run: (invocation) => router.run(invocation) });
+    const refusing = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => ({ type: "normal" }) }, notifications: { create: async (_id, notification) => (base.calls.push(`notify ${notification.message}`), "n1") } }, allowed: async () => message_background_commands(), run: (invocation) => router.run(invocation) });
     for (const command of ["msg.delete", "msg.archive"]) await refusing({ type: "body.invoke", command, args: {}, count: 1 }, sender);
     assert.equal(notifications(base.calls).length, 2);
     assert.equal(base.calls.some((call) => /messages\.(delete|archive)/.test(call)), false);
@@ -121,7 +121,7 @@ test("a mail key with no displayed message refuses with a notification and acts 
 test("body.invoke from a page of the add-on runs the key with no messages when the tab shows none", async () => {
     const ran: KeysInvocation[] = [];
     const api: BodyRequestApi = { messageDisplay: { getDisplayedMessages: async () => Promise.reject(new Error("not a message tab")) }, windows: { get: async () => ({ type: "normal" }) }, notifications: { create: async () => "n1" } };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: async () => message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     await handle({ type: "body.invoke", command: "tab.close", args: {}, count: 1 }, sender);
     assert.deepEqual(ran, [{ command: "tab.close", args: {}, count: 1, windowId: 9, messageIds: [] }]);
 });
@@ -137,7 +137,7 @@ test("body.tree answers the window tree to a message window and the message tree
     assert.equal(await body_requests("messageDisplay").handle({ type: "body.tree" }, sender), "window_tree");
     assert.equal(await body_requests("normal").handle({ type: "body.tree" }, sender), "message_tree");
     assert.equal(await body_requests("messageDisplay").handle({ type: "body.tree" }, {}), "message_tree");
-    const gone = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => Promise.reject(new Error("no window")) }, notifications: { create: async () => "n1" } }, allowed: new Set(), run: async () => {} });
+    const gone = create_body_requests({ registry, api: { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => Promise.reject(new Error("no window")) }, notifications: { create: async () => "n1" } }, allowed: async () => new Set(), run: async () => {} });
     assert.equal(await gone(({ type: "body.tree" }), sender), "message_tree");
 });
 

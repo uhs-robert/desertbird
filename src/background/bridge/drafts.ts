@@ -29,7 +29,7 @@ interface ComposeTab {
 
 export interface DraftsApi extends IdentityApi {
     messages: { get(id: number): Promise<IdentityContext | null> };
-    // Only the calls a draft needs. The add-on holds no `compose.send` permission, so Thunderbird refuses a send even if one were added here.
+    // Only the calls a draft needs. The add-on holds no `compose.send` permission, so the MailExtension API refuses a send even if one were added here. The Experiment sends through Thunderbird's own command on the send key, which the bridge cannot reach.
     compose: {
         beginNew(message_id: undefined, details: DraftDetails): Promise<ComposeTab>;
         beginReply(message_id: number, reply_type: "replyToSender", details: DraftDetails): Promise<ComposeTab>;

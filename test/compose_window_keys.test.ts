@@ -58,7 +58,7 @@ function compose_requests(window_type: string) {
         windows: { get: async () => ({ type: window_type }) },
         notifications: { create: async () => "n1" },
     };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: async () => message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     return { handle, ran, calls };
 }
 
@@ -106,7 +106,7 @@ test("compose.save from the main window refuses and saves nothing, as :edit does
 test("a sender whose window cannot be read runs nothing, in neither set", async () => {
     const ran: KeysInvocation[] = [];
     const api: BodyRequestApi = { messageDisplay: { getDisplayedMessages: async () => [] }, windows: { get: async () => Promise.reject(new Error("gone")) }, notifications: { create: async () => "n1" } };
-    const handle = create_body_requests({ registry, api, allowed: message_background_commands(), run: async (invocation) => void ran.push(invocation) });
+    const handle = create_body_requests({ registry, api, allowed: async () => message_background_commands(), run: async (invocation) => void ran.push(invocation) });
     for (const command of ["tab.close", "compose.save"]) await handle({ type: "body.invoke", command, args: {}, count: 1 }, compose_sender);
     assert.deepEqual(ran, []);
 });

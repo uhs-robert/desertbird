@@ -21,7 +21,7 @@ declare const Cc: Record<string, { createInstance(iface: unknown): TextInputProc
 declare const Ci: Record<string, unknown>;
 
 interface TextInputProcessor {
-    beginInputTransactionForTests(window: EnterWindow): boolean;
+    beginInputTransaction(window: EnterWindow, callback: { onNotify(): boolean }): boolean;
     keydown(event: unknown): void;
     keyup(event: unknown): void;
 }
@@ -42,7 +42,8 @@ function focus_is_picked_target(window: EnterWindow): boolean {
 /** Presses Enter through the text input processor, so the key is trusted and reaches the focused element, in this process or another. */
 function press_enter(window: EnterWindow): void {
     const processor = Cc["@mozilla.org/text-input-processor;1"]!.createInstance(Ci["nsITextInputProcessor"]);
-    if (!processor.beginInputTransactionForTests(window)) throw new Error("the window takes no key press");
+    // The callback answers true to every notification (the processor only reports composition and focus events, and none is wanted).
+    if (!processor.beginInputTransaction(window, { onNotify: () => true })) throw new Error("the window takes no key press");
     const enter = new window.KeyboardEvent("", { key: "Enter", code: "Enter", keyCode: 13 });
     processor.keydown(enter);
     processor.keyup(enter);

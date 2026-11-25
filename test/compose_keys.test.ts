@@ -10,7 +10,7 @@ function setup() {
     const types: string[] = [];
     start_compose_keys({ addEventListener: (type, added, use_capture) => void (types.push(type), (key_listener = added), (capture = use_capture)) }, { sendMessage: async (message) => void sent.push(message) });
     const press = (key: string, modifiers: Partial<ComposeKeyEvent> = {}) => {
-        const event = { key, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false, cancelled: false, stopped: false, preventDefault() { this.cancelled = true; }, stopPropagation() { this.stopped = true; }, ...modifiers };
+        const event = { key, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, repeat: false, isTrusted: true, cancelled: false, stopped: false, preventDefault() { this.cancelled = true; }, stopPropagation() { this.stopped = true; }, ...modifiers };
         key_listener!(event);
         return event;
     };
@@ -48,5 +48,11 @@ test("the script holds no mode: Escape, letters, i and the other chords pass unt
 test("a Ctrl+E during an IME composition passes and asks nothing", () => {
     const { sent, press } = setup();
     assert.ok(untouched(press("e", { ctrlKey: true, isComposing: true })));
+    assert.deepEqual(sent, []);
+});
+
+test("a Ctrl+E that page script dispatched is left alone and asks nothing", () => {
+    const { sent, press } = setup();
+    assert.ok(untouched(press("e", { ctrlKey: true, isTrusted: false })));
     assert.deepEqual(sent, []);
 });

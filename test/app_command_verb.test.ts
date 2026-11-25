@@ -172,3 +172,14 @@ test("a page command from a tab with no page throws and never reaches the window
     assert.deepEqual(log, []);
     platform.restore();
 });
+
+test("an inherited property name is no command and no page", async () => {
+    const log: string[] = [];
+    const platform = with_windows({ "mail:3pane": [main_window("mail3PaneTab", holder_for("tab", log))] });
+    for (const name of ["constructor", "toString", "__proto__"]) {
+        await assert.rejects(verbs().appCommand({ windowId: 1, name: name as never }), /bad name/, name);
+        assert.equal(await verbs().appOpenPage({ windowId: 1, page: name as never }), false, name);
+    }
+    assert.deepEqual(log, []);
+    platform.restore();
+});

@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { COMPILED_KEYMAP_VERSION } from "../vendor/desertfox/prefix_tree.ts";
 import { start_body_script } from "../src/content/body_keys.ts";
 import type { BodyKeyEvent, BodyRuntime, BodyStorage, BodyWindow } from "../src/content/body_keys.ts";
-import { compile_tab_keymap, message_background_commands } from "../src/background/commands/tab_keymaps.ts";
-import { compile_effective_keymap } from "../src/background/config/keymap.ts";
+import { bound_message_commands, compile_tab_keymap, message_background_commands } from "../src/background/commands/tab_keymaps.ts";
+import { compile_effective_keymap, mark_steps } from "../src/background/config/keymap.ts";
 import { BODY_SCRIPT_LIVE_ATTRIBUTE, KEYMAP_STORAGE_KEY, MESSAGE_SCROLL_STEP_PX, SETTINGS_STORAGE_KEY } from "../src/shared/protocol.ts";
 import type { HintAction } from "../src/shared/protocol.ts";
 
@@ -143,6 +143,7 @@ class StubWindow implements BodyWindow {
             shiftKey: key.length === 1 && key !== key.toLowerCase(),
             metaKey: false,
             target: { localName: "body" },
+            isTrusted: true,
             preventDefault: () => void (result.cancelled = true),
             stopPropagation: () => void (result.stopped = true),
             ...options,
@@ -988,4 +989,59 @@ test("i cancels a pick whose answer is still out, so the late answer draws no la
     await settle();
     assert.equal(window.appended.length, 0, "no hint labels were drawn");
     assert.deepEqual(window.press("j"), { cancelled: false, stopped: false }, "insert mode keeps the keys");
+});
+
+function bound_commands(user: Parameters<typeof compile_tab_keymap>[1] = {}): Set<string> {
+    const tree_of = (kind: "message" | "window" | "own") => {
+        const root = JSON.parse(JSON.stringify(compile_tab_keymap(kind, user).compiled.modes.normal));
+        mark_steps(root);
+        return { version: COMPILED_KEYMAP_VERSION as 13, root };
+    };
+    return bound_message_commands({ message_tree: tree_of("message"), window_tree: tree_of("window"), own_tree: tree_of("own") });
+}
+
+// Every background step of the three trees a body script runs, whatever the key.
+function background_ids_of(kind: "message" | "window" | "own", user: Parameters<typeof compile_tab_keymap>[1] = {}): Set<string> {
+    const ids = new Set<string>();
+    const root = JSON.parse(JSON.stringify(compile_tab_keymap(kind, user).compiled.modes.normal));
+    mark_steps(root);
+    const walk = (node: { steps?: { invocation: { id: string }; runs_in?: string }[]; children?: Record<string, never>; otherwise?: never }): void => {
+        for (const step of node.steps ?? []) if (step.runs_in === "background") ids.add(step.invocation.id);
+        for (const child of Object.values(node.children ?? {})) walk(child);
+    };
+    walk(root);
+    return ids;
+}
+
+test("every background command the default keys of a message tab, a message window and an own page bind is allowed to the body script", () => {
+    const allowed = bound_commands();
+    for (const kind of ["message", "window", "own"] as const) {
+        const ids = background_ids_of(kind);
+        assert.ok(ids.size > 10, `${kind} binds background commands`);
+        for (const id of ids) assert.ok(allowed.has(id), `${kind}: ${id}`);
+    }
+    for (const id of ["msg.archive", "msg.delete", "cmdline.open", "tab.close", "help.open"]) assert.ok(allowed.has(id), id);
+});
+
+test("a command that a message tab could serve but no key binds is not allowed, and a user key adds it", () => {
+    const servable = message_background_commands();
+    const unbound = [...servable].filter((id) => !bound_commands().has(id));
+    assert.ok(unbound.length > 0, "the default keys leave some servable command unbound");
+    const [id] = unbound;
+    assert.ok(!bound_commands().has(id!));
+    assert.ok(bound_commands({ X: { id: id! } }).has(id!), "a user key binds it");
+});
+
+test("a user key bound to a command a message tab cannot serve never reaches the allowed set", () => {
+    assert.ok(!bound_commands({ X: { id: "tab.close_mail" } }).has("tab.close_mail"));
+});
+
+test("a keydown that page script dispatched runs nothing, in normal mode and while hints show", async () => {
+    const { window, sent } = await started();
+    window.press("d", { isTrusted: false });
+    window.press("j", { isTrusted: false });
+    assert.deepEqual(window.scrolls, [], "an untrusted j does not scroll");
+    assert.deepEqual(sent.filter((each) => (each as { type?: string }).type === "body.invoke"), []);
+    assert.equal(window.press("j", { isTrusted: false }).cancelled, false, "an untrusted key is left alone");
+    assert.equal(window.press("j").cancelled, true, "a trusted key still runs");
 });
