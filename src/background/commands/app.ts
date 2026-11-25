@@ -1,4 +1,4 @@
-import { focus_pane, focus_pane_beside, open_conversation, open_page, resize_pane } from "../handlers/app.ts";
+import { focus_pane, focus_pane_beside, get_mail, open_conversation, open_page, resize_pane } from "../handlers/app.ts";
 import { undo } from "../handlers/undo.ts";
 import type { UndoApi } from "../handlers/undo.ts";
 import type { AppHandlerApi } from "../handlers/app.ts";
@@ -14,6 +14,9 @@ const PANE_CHORDS = {
     L: { id: "pane.right", label: "Pane right" },
     "<A-l>": { id: "pane.right", label: "Pane right" },
 };
+
+// The one place the fetch key is set: `U` in every tree that offers `app.get_mail`.
+const FETCH_KEY = "U";
 
 // Undo and the conversation view act on the displayed message as well as on the list, so the message tree binds them too.
 const MESSAGE_ACTIONS = {
@@ -39,6 +42,16 @@ export const app: CommandGroup = {
             intent: "Open the conversation view of the selected message.",
             needs: ["app.appCommand"],
             run: scoped<AppHandlerApi>(open_conversation),
+        },
+        "app.get_mail": {
+            bridge: false,
+            runs_in: "background",
+            name: "fetch",
+            label: "Fetch new mail",
+            intent: "Fetch new mail for this account, or all with --all.",
+            needs: ["main", "app.appCommand"],
+            params: [{ name: "all", type: "bool", short: "a", description: "Fetch every account." }],
+            run: scoped<AppHandlerApi>(get_mail),
         },
         "app.open_page": {
             bridge: false,
@@ -87,6 +100,7 @@ export const app: CommandGroup = {
     }),
     normal_keys: {
         ...MESSAGE_ACTIONS,
+        [FETCH_KEY]: { id: "app.get_mail", label: "Fetch mail" },
         gpa: { id: "app.open_page", args: { page: "addons" }, label: "Add-ons" },
         gpt: { id: "app.open_page", args: { page: "themes" }, label: "Themes" },
         gpc: { id: "app.open_page", args: { page: "config" }, label: "Config" },

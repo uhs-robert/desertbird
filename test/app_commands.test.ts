@@ -158,3 +158,22 @@ test("the window keys J, K, ] u and [ u step the message, and only a message win
     assert.equal((DEFAULT_KEYMAP.normal?.["]u"] as { id: string }).id, "step.unread");
     assert.equal((DEFAULT_KEYMAP.normal?.["J"] as { id: string }).id, "tab.next");
 });
+
+test("app.get_mail fetches for the current account, or for every account with --all, and checks its args", async () => {
+    assert.equal(registry.get("app.get_mail")?.name, "fetch");
+    assert.equal(ok("app.get_mail", {}), true);
+    assert.equal(ok("app.get_mail", { all: true }), true);
+    assert.equal(ok("app.get_mail", { all: "yes" }), false);
+    const fake = app_fake();
+    await fake.run("app.get_mail");
+    await fake.run("app.get_mail", { all: true });
+    assert.deepEqual(fake.calls, ["appCommand cmd_getNewMessages", "appCommand cmd_getMsgsForAuthAccounts"]);
+});
+
+test("app.get_mail has one default key, U, and refuses with a message when Thunderbird has the command disabled", async () => {
+    assert.deepEqual(DEFAULT_KEYMAP.normal?.["U"], { id: "app.get_mail", label: "Fetch mail" });
+    assert.equal(registry.get("app.get_mail")?.bridge, false);
+    const fake = app_fake(false);
+    await fake.run("app.get_mail");
+    assert.deepEqual(fake.calls, ["appCommand cmd_getNewMessages", "notify Thunderbird cannot fetch mail now. There may be no mail account."]);
+});

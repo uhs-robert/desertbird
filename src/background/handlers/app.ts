@@ -16,6 +16,12 @@ export async function open_conversation(scope: AppScope): Promise<void> {
     if (!(await scope.api.app.appCommand({ windowId: scope.window_id, name: "cmd_openConversation" }))) throw new RuntimeRefusal("Thunderbird cannot open a conversation for this selection.");
 }
 
+// The window runs the command itself, so a message window fetches for the account of its message and a mail tab for the account of its folder.
+export async function get_mail(scope: AppScope, args: CheckedArgs): Promise<void> {
+    const name = args["all"] === true ? "cmd_getMsgsForAuthAccounts" : "cmd_getNewMessages";
+    if (!(await scope.api.app.appCommand({ windowId: scope.window_id, name }))) throw new RuntimeRefusal("Thunderbird cannot fetch mail now. There may be no mail account.");
+}
+
 // The page opens in a tab, so a key in a message window opens it in the main window.
 export async function open_page(scope: HandlerScope<AppHandlerApi & MainWindowApi>, args: CheckedArgs): Promise<void> {
     const page = args["page"] as AppOpenPageArgs["page"];
