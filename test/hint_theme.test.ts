@@ -35,6 +35,9 @@ test("the themed hints fill in the colors of the setting at each pick, and pass 
     const keyed: HintsPickArgs[] = [];
     await themed_hints({ sendEnter: async () => {}, pick: async (args) => (keyed.push(args), 1) }, async () => name, async () => [["f"], [";", "f"]])!.pick({ windowId: 4 });
     assert.deepEqual(keyed[0]?.hintKeys, [["f"], [";", "f"]], "each pick carries the keys that start one");
+    const lettered: HintsPickArgs[] = [];
+    await themed_hints({ sendEnter: async () => {}, pick: async (args) => (lettered.push(args), 1) }, async () => name, async () => [], async () => "JFkd")!.pick({ windowId: 4 });
+    assert.equal(lettered[0]?.hintLetters, "jfkd", "each pick carries the hint alphabet setting, lowered");
     assert.equal(themed_hints(undefined, async () => name), undefined, "no Experiment, no hints");
 });
 

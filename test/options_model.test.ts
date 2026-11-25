@@ -9,7 +9,7 @@ import type { SettingName } from "../src/background/config/settings.ts";
 const default_texts = () => Object.fromEntries(SETTING_NAMES.map((name) => [name, setting_to_text(name, DEFAULT_SETTINGS[name])])) as Record<SettingName, string>;
 
 test("form text parses by kind", () => {
-    assert.deepEqual(parse_setting_text("toast_ms", " 250 "), { value: 250 });
+    assert.deepEqual(parse_setting_text("toast_ms", " 2500 "), { value: 2500 });
     assert.deepEqual(parse_setting_text("layout_fallback", "false"), { value: false });
     assert.deepEqual(parse_setting_text("which_key_skip", "a, b"), { value: ["a", "b"] });
     assert.deepEqual(parse_setting_text("which_key_skip", ""), { value: [] });
@@ -25,8 +25,8 @@ test("bad form text is an error", () => {
 
 test("a form equal to the defaults has no overrides, and a changed field is one", () => {
     assert.deepEqual(overrides_from_texts(default_texts(), DEFAULT_SETTINGS), { overrides: {}, errors: {} });
-    const result = overrides_from_texts({ ...default_texts(), toast_ms: "10", which_key_skip: "gg" }, DEFAULT_SETTINGS);
-    assert.deepEqual(result.overrides, { toast_ms: 10, which_key_skip: ["gg"] });
+    const result = overrides_from_texts({ ...default_texts(), toast_ms: "600", which_key_skip: "gg" }, DEFAULT_SETTINGS);
+    assert.deepEqual(result.overrides, { toast_ms: 600, which_key_skip: ["gg"] });
 });
 
 test("the default rows list every default key with its command", () => {
@@ -104,4 +104,13 @@ test("a menu key that is not one typed character, or not a menu command, is an e
         assert.ok("error" in build_user_keymap(no_edits, {}, { removed: [], rows: [row] }), JSON.stringify(row));
     }
     assert.ok("error" in build_user_keymap({ removed: [], rows: [{ keys: "n", command: "menu.down", args: "" }] }));
+});
+
+test("toast times are whole numbers from 500 to 30000, which_key_skip holds key sequences and hint_letters holds distinct letters", () => {
+    for (const [name, text] of [["toast_ms", "1"], ["toast_ms", "1e9"], ["toast_error_ms", "499"], ["toast_ms", "600.5"], ["which_key_skip", "g,,u"], ["hint_letters", "a"], ["hint_letters", "aab"], ["hint_letters", "aA"], ["hint_letters", "ab/"]] as [SettingName, string][]) {
+        assert.ok("error" in parse_setting_text(name, text), `${name} ${text}`);
+    }
+    for (const [name, text, value] of [["toast_ms", "500", 500], ["toast_error_ms", "30000", 30000], ["which_key_skip", "gu, <C-w>", ["gu", "<C-w>"]], ["hint_letters", "jfkdls", "jfkdls"]] as [SettingName, string, unknown][]) {
+        assert.deepEqual(parse_setting_text(name, text), { value }, `${name} ${text}`);
+    }
 });

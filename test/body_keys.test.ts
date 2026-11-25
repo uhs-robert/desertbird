@@ -725,7 +725,7 @@ test("the scroll step setting rejects 0 and anything below 1, and the body scrip
     assert.equal(setting_problem("message_scroll_step_px", 0) !== undefined, true);
     assert.equal(setting_problem("message_scroll_step_px", 0.5) !== undefined, true);
     assert.equal(setting_problem("message_scroll_step_px", 1), undefined);
-    assert.equal(setting_problem("toast_ms", 0), undefined, "other number settings still take 0");
+    assert.equal(setting_problem("which_key_delay_ms", 0), undefined, "other number settings still take 0");
     const { window, change } = await started({ [KEYMAP_STORAGE_KEY]: record() });
     change({ message_scroll_step_px: 0 }, "local", SETTINGS_STORAGE_KEY);
     window.press("j");
