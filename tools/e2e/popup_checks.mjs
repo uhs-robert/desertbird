@@ -266,7 +266,7 @@ async function run_desertbird_popup_keys(instance, { check, note, key_and_state,
     if (!held || !popup_text_shows(now)) still_since = 0;
     else still_since ||= Date.now();
     return still_since > 0 && Date.now() - still_since >= POPUP_STILL_MS;
-  }, { timeout_ms: 8000, step_ms: 100 });
+  }, { timeout_ms: 8000, step_ms: 100, show: (now) => `dark bytes ${dark_bytes(now)}` });
   // A j sent while the popup page lacks the focus, or lost on the way to the window, moves nothing. j is idempotent at the end of the list, so it repeats until the ring moves.
   let state = null;
   let on_second = on_first;
