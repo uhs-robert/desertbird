@@ -192,10 +192,11 @@ export function create_page_runtime<Window>(deps: PageDeps<Window>): PageRuntime
         const handler = (event: KeydownEvent) => on_keydown(window, event);
         const settle = (event: KeydownEvent) => {
             if (!leaves_insert(escaped, event)) return;
+            const was_insert = insert.has(window);
             set_insert(window, false);
             escaped_in_field && deps.blur_focused(window);
             // Thunderbird closes a message window on an Escape nobody cancelled. Cancelling here, not at capture, keeps leaves_insert reading the Escape as unused.
-            if (event.key === "Escape" && deps.is_message_window(window)) event.preventDefault();
+            if (was_insert && event.key === "Escape" && deps.is_message_window(window)) event.preventDefault();
         };
         const reset_typing = () => {
             set_insert(window, false);

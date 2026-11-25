@@ -635,6 +635,16 @@ test("Escape that leaves insert mode is cancelled in a message window only", () 
     assert.equal(press(in_tab, "Escape").cancelled, false, "tab, insert");
 });
 
+test("Escape in a text field of a message window outside insert mode is not cancelled", () => {
+    const { windows, runtime } = setup();
+    runtime.install(tree());
+    const window = windows[0]!;
+    window.message_window = true;
+    window.situation = "field";
+    assert.equal(press(window, "Escape").cancelled, false);
+    assert.equal(window.blurs, 1);
+});
+
 test("Escape in insert mode blurs only when the key was typed in a text field", () => {
     const { windows, runtime } = setup();
     runtime.install(tree());
