@@ -46,9 +46,9 @@ export async function run_pages(instance, { check, note, wait_window_focus, open
 
     const list_before = await hud_pixels(instance, `${app}_${slug}_list_before`, key_list_region);
     const { helped, list_shown } = await open_key_list(instance, { slug, list_before });
-    verdict(`g ? opens no tab from the ${name} tab`, (helped.windows.find((window) => window.type === "normal")?.tabs ?? []).length === before + 1);
-    verdict(`g ? shows the key list in the ${name} tab`, list_shown !== list_before);
-    await shot(`${slug}_key_list`, `${name} tab after g ?: the key list shows`);
+    verdict(`Alt+? opens no tab from the ${name} tab`, (helped.windows.find((window) => window.type === "normal")?.tabs ?? []).length === before + 1);
+    verdict(`Alt+? shows the key list in the ${name} tab`, list_shown !== list_before);
+    await shot(`${slug}_key_list`, `${name} tab after Alt+?: the key list shows`);
     await instance.press(["-k", "Escape"]);
     const list_gone = await wait_pixels(instance, `the key list of the ${name} tab to go`, `${app}_${slug}_list_gone`, key_list_region, back_to(list_before), { timeout_ms: 3000 });
     verdict(`the next key removes the key list in the ${name} tab`, list_gone === list_before);

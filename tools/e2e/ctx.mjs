@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assert_start_paths, start_paths_of } from "./run_dir.mjs";
 import { seed_storage } from "./seed.mjs";
-import { normal_window_focused, HUD_REGION, KEY_LIST_REGION, first_selected, QUIET_AFTER_ESCAPE_MS, TOAST_EXPIRY_MS, back_to, drawn_since, folder_shown, holds_twice, sleep } from "./predicates.mjs";
+import { ALT_QUESTION, normal_window_focused, HUD_REGION, KEY_LIST_REGION, first_selected, QUIET_AFTER_ESCAPE_MS, TOAST_EXPIRY_MS, back_to, drawn_since, folder_shown, holds_twice, sleep } from "./predicates.mjs";
 
 // Opens the Inbox with keys only. DesertBird gives the folder tree the focus at launch, so it already holds the Local Folders row: Right expands it, Down selects the Inbox and F6 moves focus to the thread list.
 // F6 cycles the panes: folder pane, thread list, message body (when a message shows), spaces toolbar, global search. Measured on both apps through the focus chain.
@@ -108,10 +108,9 @@ export function create_ctx({ app, kind, section, piece_dir, deps }) {
   // A focused read is not proof that keys arrive: the keys were once lost with every focus read true (issue #139), until the session kept a keyboard on its seat (tools/measure/session.mjs).
   const wait_window_focus = (instance) => wait_for_state(instance, { what: "the normal window to report focus before the first key", until: normal_window_focused, timeout_ms: 15000, show: (state) => `windows ${JSON.stringify(state.windows.map((window) => [window.type, window.focused]))}` });
 
-  // Presses g ? and waits for the key list.
+  // Presses Alt+? (g ? opens the help page) and waits for the key list.
   async function open_key_list(instance, { slug, list_before }) {
-    await instance.press(["g"]);
-    const helped = await key_and_state(instance, ["?"], 3000);
+    const helped = await key_and_state(instance, ALT_QUESTION, 3000);
     const list_shown = await wait_pixels(instance, `the key list of the ${slug} tab to draw`, `${instance.app}_${slug}_list_shown`, KEY_LIST_REGION, drawn_since(list_before), { timeout_ms: 3000 });
     return { helped, list_shown };
   }

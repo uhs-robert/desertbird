@@ -1,7 +1,7 @@
 // The which-key panel, toasts and the help page.
 
 import { COLLAPSED_ROWS } from "../fixture_rows.mjs";
-import { sleep, selects, HUD_REGION, holds_twice, drawn_since, back_to, KEY_LIST_REGION, TOAST_EXPIRY_MS } from "../predicates.mjs";
+import { ALT_QUESTION, sleep, selects, HUD_REGION, holds_twice, drawn_since, back_to, KEY_LIST_REGION, TOAST_EXPIRY_MS } from "../predicates.mjs";
 import { section_piece } from "./_default_shared.mjs";
 
 export const areas = ["hud", "theme"];
@@ -84,17 +84,16 @@ async function run_hud(instance, ctx) {
   check(app, kind, "a click under the toast reaches the folder pane", folder_after !== displayed, `displayed folder was ${displayed}, after ${folder_after}`);
   // The click moves the focus into the folder pane and loads the folder. Nothing shows when keys reach the runtime again, so this keeps a margin (keys pressed 1 s after the click went nowhere in measured runs).
   await sleep(2500);
-  // g ? shows the root key list in the window. ? is a backward search now. The new folder first draws its status text, so the list is compared with the strip once that holds still.
+  // Alt+? shows the root key list in the window (g? opens help). ? is a backward search. The new folder first draws its status text, so the list is compared with the strip once that holds still.
   // The toast of J lasts 3 s from its key and would sit in the baseline of the key list.
   await sleep(Math.max(0, TOAST_EXPIRY_MS - (Date.now() - click_toast_at)));
   const key_list_base = await wait_pixels(instance, "the key list region to hold still", `${app}_key_list_base_${theme}`, KEY_LIST_REGION, holds_twice(), { timeout_ms: 5000 });
-  await instance.press(["g"]);
-  await instance.press(["?"]);
+  await instance.press(ALT_QUESTION);
   const key_list_shown = await wait_pixels(instance, "the key list to show", `${app}_key_list_shown_${theme}`, KEY_LIST_REGION, drawn_since(key_list_base), { timeout_ms: 5000 });
   await shot(`hud_key_list_${theme}`, "the root key list panel");
   await instance.press(["-k", "Escape"]);
   const key_list_gone = await wait_pixels(instance, "Escape to remove the key list", `${app}_key_list_gone_${theme}`, KEY_LIST_REGION, drawn_since(key_list_shown), { timeout_ms: 5000 });
-  check(app, kind, "the next key after g ? removes the key list", key_list_gone !== key_list_shown);
+  check(app, kind, "the next key after Alt+? removes the key list", key_list_gone !== key_list_shown);
   check(app, kind, "the app survived the hud keys", instance.exited() === null);
   // The click above moved the shown folder, and the steps after this one start in the Inbox.
   await instance.press(["g"]);
