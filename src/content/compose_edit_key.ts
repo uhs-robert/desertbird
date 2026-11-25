@@ -9,6 +9,7 @@ export interface ComposeKeyEvent {
     metaKey: boolean;
     shiftKey: boolean;
     repeat: boolean;
+    isTrusted: boolean;
     isComposing?: boolean;
     preventDefault(): void;
     stopPropagation(): void;
@@ -30,7 +31,7 @@ export function start_compose_keys(window: ComposeWindow, runtime: ComposeRuntim
     window.addEventListener(
         "keydown",
         (event) => {
-            if (event.isComposing || !is_ctrl_e(event)) return;
+            if (!event.isTrusted || event.isComposing || !is_ctrl_e(event)) return;
             event.preventDefault();
             event.stopPropagation();
             // A held chord repeats. Only the first press asks, so a hold does not stack refusals.

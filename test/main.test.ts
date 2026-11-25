@@ -27,6 +27,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const install_log: string[] = [];
     const menu_installs: Record<string, string>[] = [];
     const new_mail_listeners: unknown[] = [];
+    const message_listeners: ((message: unknown, sender: unknown) => unknown)[] = [];
     const native = fake_native_messaging();
     // Calls in flight plus pending echo timers. A test that asserts "only once" waits for zero, so a second install an echo causes has landed.
     let busy = 0;
@@ -82,7 +83,8 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         keys: { install: (args: { tree: unknown }) => counted(async () => void (install_log.push("keys"), installs.push(args.tree))), onInvocation: { addListener: () => {} } },
         pages: { install: (args: { pageTree: unknown; messageTree: unknown; windowTree: unknown; typingTree: unknown }) => counted(async () => void (install_log.push("pages"), page_installs.push(args.pageTree), message_installs.push(args.messageTree), window_installs.push(args.windowTree), typing_installs.push(args.typingTree))), onInvocation: { addListener: () => {} } },
         runtime: {
-            onMessage: { addListener: () => {} },
+            onMessage: { addListener: (listener: (message: unknown, sender: unknown) => unknown) => void message_listeners.push(listener) },
+            getURL: (path: string) => `moz-extension://test/${path}`,
             connectNative: (application: string) => native.connectNative(application),
             // A collect that never answers, as a host that waits on an open editor. A resolved pending answer would loop for the rest of the run.
             sendNativeMessage: (application: string, message: object) => (native_messages.push({ application, message }), new Promise(() => {})),
@@ -110,7 +112,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             if (busy === 0) return;
         }
     };
-    return { when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { message_listeners, when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const WAIT_DEADLINE_MS = 5_000;
@@ -347,4 +349,27 @@ test("a failed send leaves the editor job alone, and a send that went out orphan
     await wait_for("the job to be orphaned", () => stored_job()?.orphaned === true);
     assert.equal(stored_job()?.orphaned, true);
     await when_idle();
+});
+
+test("the command line and hud messages answer the overlay pages only, never a content script or another page", async () => {
+    const { message_listeners, when_installed, when_idle } = stub_messenger();
+    await start_background();
+    await when_installed(1);
+    await when_idle();
+    assert.equal(message_listeners.length, 1);
+    const ask = (message: unknown, sender: unknown) => message_listeners[0]!(message, sender);
+    const hello = { type: "cmdline.hello", windowId: 3 };
+    const state = { type: "hud.state", windowId: 3 };
+    assert.deepEqual(await ask(hello, { url: "moz-extension://test/overlay/cmdline.html?window=3" }), { open: false });
+    assert.notEqual(ask(state, { url: "moz-extension://test/overlay/hud.html?window=3" }), undefined);
+    assert.deepEqual(await ask(hello, { url: "moz-extension://test/overlay/cmdline.html?window=3", tab: { id: 1, windowId: 3 } }), { open: false }, "the overlay page of a message window has a tab");
+    const refused = [
+        [hello, { tab: { id: 1, windowId: 3 }, url: "moz-extension://test/content/message.html" }],
+        [hello, { url: "moz-extension://other/overlay/cmdline.html" }],
+        [hello, {}],
+        [hello, { url: "moz-extension://test/overlay/hud.html?window=3" }],
+        [state, { url: "moz-extension://test/overlay/cmdline.html?window=3" }],
+        [state, { tab: { id: 1, windowId: 3 }, url: "mailbox:///tmp/Inbox?number=5" }],
+    ] as const;
+    for (const [message, sender] of refused) assert.equal(ask(message, sender), undefined, JSON.stringify([message, sender]));
 });

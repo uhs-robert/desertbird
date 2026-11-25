@@ -17,6 +17,8 @@ import { best_effort } from "../shared/swallow.ts";
 
 export interface BodyKeyEvent extends KeyEventLike {
     target: unknown;
+    /** False for an event that page script dispatched. */
+    isTrusted: boolean;
     defaultPrevented?: boolean;
     preventDefault(): void;
     stopPropagation(): void;
@@ -59,8 +61,9 @@ const scroll_by = (side: "top" | "left", pixels_of: (context: BodyContext) => nu
 const half_page = ({ window }: BodyContext) => window.innerHeight / 2;
 const whole_page = ({ window }: BodyContext) => window.innerHeight;
 
-// The fixed table of what a leaf of this document may run. An id that is not here does nothing.
+// The fixed table of what a leaf of this document may run. An id that is not here does nothing. The null prototype keeps an id such as `constructor` from finding an inherited property.
 const ACTIONS: Record<string, Action> = {
+    __proto__: null as never,
     "message.scroll_down": scroll_by("top", ({ step_px }) => step_px),
     "message.scroll_up": scroll_by("top", ({ step_px }) => -step_px),
     "message.half_page_down": scroll_by("top", half_page),
@@ -158,7 +161,9 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
     }
 
+    // A script in the document can dispatch keydown events. Only a real key press may run a command.
     function on_keydown(event: BodyKeyEvent): void {
+        if (!event.isTrusted) return;
         if (context.hints.active()) return on_hint_key(event);
         if (!matcher) return;
         const token = event_to_token(event);
