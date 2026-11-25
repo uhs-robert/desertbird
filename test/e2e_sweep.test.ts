@@ -33,6 +33,13 @@ async function gone(pid: number) {
   return true;
 }
 
+// Stands in for the session's `wtype -s <ms>` holder: a shell that shows wtype as its argv[0], with the runtime dir in its environment and no dir on its command line.
+function fake_holder(runtime_dir: string, ...args: string[]) {
+  const group = spawn("/bin/sh", ["-c", "sleep 600; :", ...args], { argv0: "wtype", detached: true, stdio: "ignore", env: { PATH: process.env.PATH, XDG_RUNTIME_DIR: runtime_dir } });
+  group.unref();
+  return group.pid as number;
+}
+
 test("sweep_dead_runs kills the apps of a dead or unlocked run and spares a live run, a reader and anything outside the prefix", { timeout: 30_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "e2e-sweep-test-"));
   const dead_dir = join(root, "desertbird-e2e-dead");
@@ -50,19 +57,27 @@ test("sweep_dead_runs kills the apps of a dead or unlocked run and spares a live
   const outside = fake_process("betterbird", "-profile", join(owner_dir, "profile"));
   // A reader of the kept evidence of the dead run: it names the dir without the flags a run's processes carry.
   const reader = fake_process("less", join(dead_dir, "betterbird", "zoom", "main", "app.log"));
-  const all = [orphan, orphan_labwc, unlocked, live, outside, reader];
+  const holder = fake_holder(join(dead_dir, "betterbird", "zoom", "main", "runtime"), "-s", "86400000");
+  const live_holder = fake_holder(join(live_dir, "betterbird", "zoom", "main", "runtime"), "-s", "86400000");
+  const outside_holder = fake_holder(join(owner_dir, "runtime"), "-s", "86400000");
+  // A one-shot wtype of the dead run (no -s) is no holder.
+  const one_shot = fake_holder(join(dead_dir, "betterbird", "zoom", "main", "runtime"), "-k", "Escape");
+  const all = [orphan, orphan_labwc, unlocked, live, outside, reader, holder, live_holder, outside_holder, one_shot];
   try {
     // Wait until each shell has started, so the sweep can see its command line.
     await new Promise((wake) => setTimeout(wake, 300));
     const swept: { run_dir: string; groups: number[] }[] = sweep_dead_runs(root);
     assert.deepEqual(swept.map(({ run_dir, groups }) => ({ run_dir, groups: groups.sort() })).sort((first, second) => first.run_dir.localeCompare(second.run_dir)), [
-      { run_dir: dead_dir, groups: [orphan, orphan_labwc].sort() },
+      { run_dir: dead_dir, groups: [orphan, orphan_labwc, holder].sort() },
       { run_dir: unlocked_dir, groups: [unlocked] },
     ]);
-    for (const pid of [orphan, orphan_labwc, unlocked]) assert.ok(await gone(pid), `${pid} is killed`);
+    for (const pid of [orphan, orphan_labwc, unlocked, holder]) assert.ok(await gone(pid), `${pid} is killed`);
     assert.ok(is_running(live), "the live run's app survives");
     assert.ok(is_running(outside), "a process outside the prefix survives");
     assert.ok(is_running(reader), "a reader of the dead run's logs survives");
+    assert.ok(is_running(live_holder), "the live run's holder survives");
+    assert.ok(is_running(outside_holder), "a holder outside the prefix survives");
+    assert.ok(is_running(one_shot), "a wtype with no -s survives");
     assert.equal(existsSync(join(unlocked_dir, "run.lock")), false, "the sweep releases the lock it took");
   } finally {
     for (const pid of all) try { process.kill(-pid, "SIGKILL"); } catch { /* gone */ }
