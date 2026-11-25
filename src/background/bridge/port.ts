@@ -181,7 +181,8 @@ export function create_bridge_port(deps: BridgePortDeps) {
             return;
         }
         // The setting can turn off, or another connect can win, while the permission is checked. The stored setting is read again because the queued change that turns it off waits behind this connect.
-        if (!bridge_on || port || !(await deps.read_bridge_setting())) return;
+        const still_on = await deps.read_bridge_setting();
+        if (!still_on || !bridge_on || port) return;
         let opened: NativePort;
         try {
             opened = deps.connect();

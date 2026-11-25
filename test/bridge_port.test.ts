@@ -8,14 +8,14 @@ import { fake_timers } from "./hud_fakes.ts";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function bridge_under_test(options: { setting?: boolean; run?: (text: string) => Promise<BridgeAnswer>; mode?: ModeSnapshot | undefined; granted?: boolean; grant_gate?: Promise<void> } = {}) {
+function bridge_under_test(options: { setting?: boolean; run?: (text: string) => Promise<BridgeAnswer>; mode?: ModeSnapshot | undefined; granted?: boolean; grant_gate?: Promise<void>; read_gate?: { current?: Promise<void> } } = {}) {
     const native = fake_native_messaging();
     const timers = fake_timers();
     let clock_ms = 0;
     const state = { setting: options.setting ?? true, granted: options.granted ?? true, said: 0, mode: "mode" in options ? options.mode : ({ mode: "normal", window_id: 3, tab_id: 7 } as ModeSnapshot | undefined), runs: [] as string[] };
     const bridge = create_bridge_port({
         connect: () => native.connectNative(BRIDGE_HOST_NAME),
-        read_bridge_setting: async () => state.setting,
+        read_bridge_setting: async () => (await options.read_gate?.current, state.setting),
         native_permission_granted: async () => (await options.grant_gate, state.granted),
         say_permission_missing: () => void (state.said += 1),
         timers,
@@ -345,4 +345,21 @@ test("a bridge turned off while the permission check is pending never connects",
     open_gate();
     await Promise.all([started, changed]);
     assert.equal(native.names.length, 0);
+});
+
+test("a retry timer that fires during a pending connect opens exactly one port", async () => {
+    const read_gate: { current?: Promise<void> } = {};
+    const { native, bridge, timers, advance } = bridge_under_test({ read_gate });
+    native.fail_next = true;
+    await bridge.start();
+    assert.equal(timers.pending(), 1);
+    let open_gate: () => void = () => {};
+    read_gate.current = new Promise<void>((resolve) => (open_gate = resolve));
+    // Both connects pass the first checks and wait on the stored setting.
+    const changed = bridge.settings_changed();
+    await advance(MAX_RETRY_MS);
+    open_gate();
+    await changed;
+    await settle();
+    assert.equal(native.ports.length, 1);
 });
