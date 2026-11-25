@@ -69,15 +69,15 @@ test("written settings and bindings read back, with the settings over the defaul
 });
 
 test("a read serves the memory copy until storage changes, then refills", async () => {
-    const { api, reads, change } = stub_storage({ [SETTINGS_KEY]: { toast_ms: 1 } });
+    const { api, reads, change } = stub_storage({ [SETTINGS_KEY]: { toast_ms: 1000 } });
     const store = create_config_store(api);
-    assert.equal((await store.read()).settings.toast_ms, 1);
+    assert.equal((await store.read()).settings.toast_ms, 1000);
     await store.read();
     const reads_before = reads.length;
     await store.read();
     assert.equal(reads.length, reads_before);
-    change({ [SETTINGS_KEY]: { toast_ms: 2 } });
-    assert.equal((await store.read()).settings.toast_ms, 2);
+    change({ [SETTINGS_KEY]: { toast_ms: 2000 } });
+    assert.equal((await store.read()).settings.toast_ms, 2000);
 });
 
 test("a change in another area or of another key leaves the copy alone", async () => {
@@ -87,14 +87,14 @@ test("a change in another area or of another key leaves the copy alone", async (
     await store.read();
     await store.read();
     const reads_before = reads.length;
-    change({ [SETTINGS_KEY]: { toast_ms: 2 } }, "sync");
+    change({ [SETTINGS_KEY]: { toast_ms: 2000 } }, "sync");
     change({ unrelated: 1 });
     await store.read();
     assert.equal(reads.length, reads_before);
 });
 
 test("a read that began before a change does not fill the copy with the old data", async () => {
-    const stored: Record<string, unknown> = { [SETTINGS_KEY]: { toast_ms: 1 }, [VERSION_KEY]: CONFIG_VERSION };
+    const stored: Record<string, unknown> = { [SETTINGS_KEY]: { toast_ms: 1000 }, [VERSION_KEY]: CONFIG_VERSION };
     const listeners: Listener[] = [];
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -117,11 +117,11 @@ test("a read that began before a change does not fill the copy with the old data
     };
     const store = create_config_store(api);
     const pending = store.read();
-    stored[SETTINGS_KEY] = { toast_ms: 2 };
+    stored[SETTINGS_KEY] = { toast_ms: 2000 };
     listeners.forEach((listener) => listener({ [SETTINGS_KEY]: {} }, "local"));
     release();
-    assert.equal((await pending).settings.toast_ms, 1);
-    assert.equal((await store.read()).settings.toast_ms, 2);
+    assert.equal((await pending).settings.toast_ms, 1000);
+    assert.equal((await store.read()).settings.toast_ms, 2000);
 });
 
 test("unknown and mistyped stored settings are ignored and reported", async () => {
@@ -145,18 +145,18 @@ test("migrate runs each step from the stored version up to the newest and no fur
 });
 
 test("data from a newer version is read as it is and its version is not lowered", async () => {
-    const { api, stored } = stub_storage({ [VERSION_KEY]: CONFIG_VERSION + 5, [SETTINGS_KEY]: { toast_ms: 7 } });
-    assert.equal((await create_config_store(api).read()).settings.toast_ms, 7);
+    const { api, stored } = stub_storage({ [VERSION_KEY]: CONFIG_VERSION + 5, [SETTINGS_KEY]: { toast_ms: 7000 } });
+    assert.equal((await create_config_store(api).read()).settings.toast_ms, 7000);
     assert.equal(stored[VERSION_KEY], CONFIG_VERSION + 5);
 });
 
 test("the store runs its migrations on read and writes the result with the new version", async () => {
-    const steps: Migration[] = [(stored) => ({ ...stored, [SETTINGS_KEY]: { toast_ms: 42 } })];
+    const steps: Migration[] = [(stored) => ({ ...stored, [SETTINGS_KEY]: { toast_ms: 4200 } })];
     const { api, stored } = stub_storage({ [VERSION_KEY]: 1 });
     const config = await create_config_store(api, { migrations: steps }).read();
-    assert.equal(config.settings.toast_ms, 42);
+    assert.equal(config.settings.toast_ms, 4200);
     assert.equal(stored[VERSION_KEY], 2);
-    assert.deepEqual(stored[SETTINGS_KEY], { toast_ms: 42 });
+    assert.deepEqual(stored[SETTINGS_KEY], { toast_ms: 4200 });
 });
 
 test("the scaffold ships no migration yet and the version matches", () => {
@@ -166,9 +166,9 @@ test("the scaffold ships no migration yet and the version matches", () => {
 
 test("a stored version of 0, below 0 or not a whole number reads as the first version", async () => {
     for (const bad of [0, -3, 1.5, "2", null]) {
-        const { api, stored } = stub_storage({ [VERSION_KEY]: bad, [SETTINGS_KEY]: { toast_ms: 5 } });
+        const { api, stored } = stub_storage({ [VERSION_KEY]: bad, [SETTINGS_KEY]: { toast_ms: 5000 } });
         const config = await create_config_store(api).read();
-        assert.equal(config.settings.toast_ms, 5);
+        assert.equal(config.settings.toast_ms, 5000);
         assert.equal(stored[VERSION_KEY], CONFIG_VERSION);
     }
 });
@@ -179,17 +179,17 @@ test("the write-back after a migration holds only the version and the keys the m
     const sets: Record<string, unknown>[] = [];
     const set = api.storage.local.set;
     api.storage.local.set = async (items) => (sets.push(items), set(items));
-    stored[SETTINGS_KEY] = { toast_ms: 1 };
+    stored[SETTINGS_KEY] = { toast_ms: 1000 };
     await create_config_store(api, { migrations: steps }).read();
     assert.deepEqual(Object.keys(sets[0]!).sort(), [USER_KEYMAP_KEY, VERSION_KEY].sort());
 });
 
 test("data from a newer version reports its version and refuses writes", async () => {
-    const newer = { [VERSION_KEY]: CONFIG_VERSION + 1, [SETTINGS_KEY]: { toast_ms: 7 } };
+    const newer = { [VERSION_KEY]: CONFIG_VERSION + 1, [SETTINGS_KEY]: { toast_ms: 7000 } };
     const { api, stored } = stub_storage({ ...newer });
     const store = create_config_store(api);
     assert.equal((await store.read()).stored_version, CONFIG_VERSION + 1);
-    await assert.rejects(store.write_settings({ toast_ms: 1 }), /newer DesertBird/);
+    await assert.rejects(store.write_settings({ toast_ms: 1000 }), /newer DesertBird/);
     await assert.rejects(store.write_user_keymap({ normal: {} }), /newer DesertBird/);
     assert.deepEqual(stored, newer);
 });

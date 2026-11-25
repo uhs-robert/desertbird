@@ -9,7 +9,7 @@ import type { UserKeymap } from "../background/config/keymap.ts";
 import { SETTING_KINDS, setting_problem } from "../background/config/settings.ts";
 import type { SettingName, Settings } from "../background/config/settings.ts";
 
-const is_list_kind = (kind: string) => kind === "list" || kind === "choice_list";
+const is_list_kind = (kind: string) => kind === "list" || kind === "key_list" || kind === "choice_list";
 
 /** The form text of a setting value: a list reads as comma-separated text. */
 export function setting_to_text(name: SettingName, value: unknown): string {

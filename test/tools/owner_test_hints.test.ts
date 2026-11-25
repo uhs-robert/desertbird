@@ -9,8 +9,8 @@ test("a valid hint passes for each kind of setting", () => {
 
 test("an unknown name, a missing value and a bad value fail at once with the reason", () => {
   assert.match(JSON.stringify(check_hint("bogus 1")), /no setting named bogus/);
-  assert.match(JSON.stringify(check_hint("toast_ms")), /expected a number/);
-  assert.match(JSON.stringify(check_hint("toast_ms soon")), /expected a number/);
+  assert.match(JSON.stringify(check_hint("toast_ms")), /expected a whole number/);
+  assert.match(JSON.stringify(check_hint("toast_ms soon")), /expected a whole number/);
   assert.match(JSON.stringify(check_hint("which_key_border triangle")), /expected one of square, round, chamfer/);
   assert.match(JSON.stringify(check_hint("layout_fallback maybe")), /true or false/);
   assert.equal(check_hint("").ok, false);

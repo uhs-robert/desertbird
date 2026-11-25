@@ -72,13 +72,13 @@ function draw(target_window: HintWindow, elements: HintElement[], labels: string
     return { container, nodes };
 }
 
-/** Labels the targets and takes the keys until a pick or an end. Returns how many it labelled. With none it starts nothing. A second call ends the first. A yank labels only the targets with text. `hint_keys` are the key sequences that start a pick, which pass the hold after a typo. */
-export function start_pick(host: PickHost, targets: readonly PickTarget[], scheme: HintLabelScheme, action: PickAction = "activate", hint_keys: readonly (readonly string[])[] = []): number {
+/** Labels the targets and takes the keys until a pick or an end. Returns how many it labelled. With none it starts nothing. A second call ends the first. A yank labels only the targets with text. `hint_keys` are the key sequences that start a pick, which pass the hold after a typo. `hint_letters` is the alphabet of the labels, `hint_labels` takes the default when it is absent. */
+export function start_pick(host: PickHost, targets: readonly PickTarget[], scheme: HintLabelScheme, action: PickAction = "activate", hint_keys: readonly (readonly string[])[] = [], hint_letters?: string): number {
     end_pick();
     const hold_ends_at = host.now() + HOLD_MS;
     const picks = action === "yank" ? targets.filter((target) => target.text !== "") : targets;
     if (picks.length === 0) return 0;
-    const labels = hint_labels(picks.length);
+    const labels = hint_labels(picks.length, hint_letters);
     const windows = [...new Set(picks.map((target) => target.window))];
     const drawn = windows.map((window) => {
         const indexes = picks.flatMap((target, index) => (target.window === window ? [index] : []));
@@ -115,7 +115,7 @@ export function start_pick(host: PickHost, targets: readonly PickTarget[], schem
         event.preventDefault();
         event.stopPropagation();
         if (MODIFIER_KEYS.has(event.key)) return;
-        const letter = /^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? event.key.toLowerCase() : "";
+        const letter = [...event.key].length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey ? event.key.toLowerCase() : "";
         if (letter === "" || labels_matching(labels, typed + letter).length === 0) {
             if (!is_typed_character(event)) return end();
             after_typo = [];

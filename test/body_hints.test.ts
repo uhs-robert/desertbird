@@ -215,3 +215,13 @@ test("a yank copies the address, else the trimmed text, and labels no element wi
     session.feed(typed("a"));
     assert.deepEqual(copied, ["Reply", "https://example.org/x"]);
 });
+
+test("the labels come from the letters function when one is given", () => {
+    const first = fake_element("first");
+    const second = fake_element("second", { box: { top: 40, left: 10, width: 50, height: 20 } });
+    const { window } = fake_window([first, second]);
+    const session = create_hint_session(window, () => opened.push(1), () => "", (text) => copied.push(text), () => "jk");
+    session.begin();
+    session.feed(typed("k"));
+    assert.deepEqual([first.acted, second.acted], [[], ["focus"]]);
+});

@@ -464,6 +464,8 @@ export interface HintsPickArgs {
     place?: "message";
     /** The key sequences bound to a pick, as tokens. After a typo ends the labels, they pass the hold that drops the other plain keys. */
     hintKeys?: string[][];
+    /** The `hint_letters` setting: the alphabet of the labels. Absent means the default alphabet. */
+    hintLetters?: string;
 }
 
 /** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */

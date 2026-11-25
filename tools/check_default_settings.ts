@@ -25,7 +25,7 @@ export const DEFAULT_OVERRIDES: Readonly<Record<string, unknown>> = {
 /** DesertFox settings with a default that DesertBird does not carry, by the reason it does not. */
 export const WEB_ONLY_REASONS: Readonly<Record<string, readonly string[]>> = {
     "act on a web page or a Firefox tab": [
-        "which_key_repeat", "hint_letters", "hint_key_line", "next_patterns", "prev_patterns", "strip_tracking_params", "default_site_rows_off",
+        "which_key_repeat", "hint_key_line", "next_patterns", "prev_patterns", "strip_tracking_params", "default_site_rows_off",
         "editor_ext", "item_hover", "completion_all_windows", "open_completion", "history_completion_max", "history_list_max", "host_auto_update",
     ],
     "page text appearance in Firefox": ["light_intensity", "font_family", "font_family_mono", "font_scale"],
