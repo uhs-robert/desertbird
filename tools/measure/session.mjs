@@ -6,6 +6,11 @@ import { join } from "node:path";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The session has no input device of its own, and every wlrctl click and wtype run adds and drops a virtual one. A seat that loses its keyboard makes the app bind a new wl_keyboard, and that one sometimes gets no enter event, so every key is lost until the next click (issues #139 and #178). One wtype that sleeps for the whole session keeps a keyboard on the seat. It outlasts any run (the longest deadline is 7200 s).
+const HOLDER_SLEEP_MS = 86_400_000;
+// Time for wtype to make its virtual keyboard before the session hands out, or the first key could still race the holder.
+const HOLDER_SETTLE_MS = 300;
+
 export async function start_session(work_dir) {
   const runtime_dir = join(work_dir, "runtime");
   mkdirSync(runtime_dir, { recursive: true, mode: 0o700 });
@@ -33,6 +38,11 @@ export async function start_session(work_dir) {
     await sleep(100);
   }
   const env = { ...base_env, WAYLAND_DISPLAY: socket(), MOZ_ENABLE_WAYLAND: "1" };
+
+  let holder_ended = false;
+  start_child(["wtype", "-s", String(HOLDER_SLEEP_MS)], env, "keyboard_holder.log").on("exit", () => { holder_ended = true; });
+  await sleep(HOLDER_SETTLE_MS);
+  if (holder_ended) stop_on_failure(new Error("the keyboard holder (wtype -s) ended at start, see keyboard_holder.log"));
 
   const run = (command, args) => new Promise((resolve, reject) => execFile(command, args, { env, timeout: 15000 }, (error, stdout, stderr) => (error ? reject(new Error(`${command} ${args.join(" ")}: ${stderr || error.message}`)) : resolve(stdout))));
 

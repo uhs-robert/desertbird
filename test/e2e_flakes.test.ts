@@ -13,7 +13,7 @@ const failing = (name = "dd on the last row") => ({ exit_code: 1, failures: [], 
 
 test("a batch of clean runs lists no cases and raises no alert", () => {
   const line = fold_batch(Array.from({ length: 3 }, clean), meta);
-  assert.deepEqual(line, { ...meta, runs: 3, clean_runs: 3, run_errors: 0, too_thin: false, cases: [], retries: [] });
+  assert.deepEqual(line, { ...meta, runs: 3, clean_runs: 3, run_errors: 0, too_thin: false, cases: [] });
   assert.deepEqual(alert_reasons(line), []);
 });
 
@@ -103,14 +103,4 @@ test("a child that ends alone reports its status and no signal", async () => {
   const signals = new EventEmitter();
   assert.deepEqual(await run_child(process.execPath, ["-e", "process.exit(3)"], { stdio: "ignore" }, signals), { status: 3, signal: null });
   assert.equal(signals.listenerCount("SIGINT"), 0);
-});
-
-test("a key retry note is counted per piece and tab and raises no alert", () => {
-  const name = "g ? drew no key list in the calendar tab";
-  const retried = { ...clean(), key_retries: [{ piece, name }] };
-  const line = fold_batch([retried, clean(), retried, retried], meta);
-  assert.deepEqual(line.retries, [{ piece, case: name, retried: 3 }]);
-  assert.equal(line.clean_runs, 4);
-  assert.deepEqual(alert_reasons(line), []);
-  assert.equal(summary_lines(line)[1], `${piece}  "${name}"  retried 3 times`);
 });

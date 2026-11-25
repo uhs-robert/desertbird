@@ -1,5 +1,6 @@
 // Ends the apps that dead e2e runs left behind, before a new run starts. A run that SIGKILL ended skips its own stop, and its labwc and apps keep running.
 // Stands in for DesertFox's sweep_dead_sessions and sweep_orphan_compositors. It reuses reap.mjs, which finds process groups by the run dir on their command line.
+// A session's keyboard holder names no dir on its command line, so it is found by its XDG_RUNTIME_DIR, which reap_piece_dir also reads.
 // Only dirs named `desertbird-e2e-*` in the temp dir are looked at, so the owner's Betterbird and ~/.thunderbird/<profile> never match.
 // A run dir named by E2E_DIR is not found here. Its owner chose the path, and no prefix says it belongs to a run.
 import { existsSync, readdirSync } from "node:fs";
