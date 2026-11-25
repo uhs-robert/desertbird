@@ -50,7 +50,7 @@ The thread list and the folder pane.
 | `<C-d>` | `view.half_page next` |
 | `<C-u>` | `view.half_page previous` |
 | `u` | `undo` |
-| `U` | `fetch` |
+| `e` | `fetch` |
 | `H` | `pane.left` |
 | `<A-h>` | `pane.left` |
 | `L` | `pane.right` |
@@ -312,7 +312,7 @@ A message in a tab or the message pane.
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
 | `u` | `undo` |
-| `U` | `fetch` |
+| `e` | `fetch` |
 | `H` | `pane.left` |
 | `<A-h>` | `pane.left` |
 | `L` | `pane.right` |
@@ -494,7 +494,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `u` | `undo` |
-| `U` | `fetch` |
+| `e` | `fetch` |
 | `i` | `mode.insert` |
 
 #### Go
@@ -706,7 +706,7 @@ The options page and the help page.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
-| `U` | `fetch` |
+| `e` | `fetch` |
 | `i` | `mode.insert` |
 
 #### Go
@@ -795,7 +795,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
-| `U` | `fetch` |
+| `e` | `fetch` |
 | `f` | `hint` |
 | `i` | `mode.insert` |
 | `j` | `page.scroll_down` |

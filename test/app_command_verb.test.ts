@@ -145,3 +145,21 @@ test("a fetch command the top window has disabled answers false and does not run
     assert.deepEqual(log, ["asked cmd_getNewMessages"]);
     platform.restore();
 });
+
+test("a fetch command in a tab with no page of its own runs on the window controller, and a missing controller answers false", async () => {
+    const log: string[] = [];
+    const top = { controllers: { getControllerForCommand: (name: string) => (log.push(`asked ${name}`), controller_for("top", log)) } };
+    let platform = with_windows({ "mail:3pane": [{ ...main_window("calendar", undefined), ...top }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_getNewMessages" }), true);
+    assert.deepEqual(log, ["asked cmd_getNewMessages", "top cmd_getNewMessages"]);
+    platform.restore();
+    platform = with_windows({ "mail:3pane": [{ ...main_window("calendar", undefined), controllers: { getControllerForCommand: () => null } }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_getNewMessages" }), false, "a null controller");
+    platform.restore();
+    platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: {} } }] });
+    assert.equal(await verbs().appCommand({ windowId: 1, name: "cmd_getNewMessages" }), false, "no browsing context");
+    platform.restore();
+    platform = with_windows({ "mail:messageWindow": [{ messageBrowser: { contentWindow: {} } }] });
+    await assert.rejects(verbs().appCommand({ windowId: 1, name: "cmd_nextMsg" }), /shows no message/, "a page command still needs its page controller");
+    platform.restore();
+});
