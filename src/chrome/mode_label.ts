@@ -1,4 +1,4 @@
-// The mode label at the start of a main window's status bar. It holds no Thunderbird global: the parent hands in `ModeLabelDeps`, so node tests drive every path with fakes.
+// The mode label at the start of the status bar of a main window or a message window. It holds no Thunderbird global: the parent hands in `ModeLabelDeps`, so node tests drive every path with fakes.
 
 import { MODE_INDICATORS, MODE_LABEL_STYLES, MODE_NAMES } from "../shared/protocol.ts";
 import type { ModeIndicator, ModeLabelScheme, ModeLabelStyle, ModeName, OverlaySetModeLabelArgs } from "../shared/protocol.ts";
@@ -36,7 +36,7 @@ export interface ModeLabelDeps<Window> {
 
 export interface ModeLabel {
     set(args: OverlaySetModeLabelArgs): void;
-    /** Removes the label from every main window, whether or not this instance put it there, and stops listening to focus. */
+    /** Removes the label from every window, whether or not this instance put it there, and stops listening to focus. */
     shutdown(): void;
 }
 
@@ -99,7 +99,7 @@ export function create_mode_label<Window>(deps: ModeLabelDeps<Window>): ModeLabe
         set(args) {
             checked(args);
             const window = deps.window_with_id(args.windowId);
-            if (window === null) throw new Error(`no main window has id ${args.windowId}`);
+            if (window === null) throw new Error(`no window has id ${args.windowId}`);
             // A closed window takes its listeners with it, so only the table entry is left to drop.
             const open = deps.open_windows();
             for (const each of [...shown.keys()]) if (!open.includes(each)) shown.delete(each);

@@ -197,7 +197,7 @@ test("a window that loads after the label was turned off gets none", () => {
 
 test("a window with no id is refused with a message", () => {
     const { label } = setup();
-    assert.throws(() => label.set({ windowId: 9, mode: "normal", indicator: "always", style: "classic", colors: COLORS }), /no main window has id 9/);
+    assert.throws(() => label.set({ windowId: 9, mode: "normal", indicator: "always", style: "classic", colors: COLORS }), /no window has id 9/);
 });
 
 test("insert mode: the label reads INSERT while a text field has focus and goes back after", () => {

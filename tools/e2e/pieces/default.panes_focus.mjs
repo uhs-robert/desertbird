@@ -8,6 +8,9 @@ import { insert_label } from "./_insert_label.mjs";
 
 export const areas = ["panes"];
 
+// A point in the body of the message pane, below the message header, in both apps.
+const READING_PANE_POINT = [800, 500];
+
 // Pane focus and folder row folds: native Down moves the selection of the pane that has focus, so it tells which pane a key focused. Then the chords, the hidden panes, the page keys and the leader.
 async function run_panes_focus(instance, ctx) {
   const { app, kind, shot, check, note, wait_for_state } = ctx;
@@ -273,6 +276,15 @@ async function run_panes_focus(instance, ctx) {
   state = await keys(["G"], at_bottom);
   check(app, kind, "G moves the row again after Escape", first_selected(state) !== list_top, `selected ${list_top} then ${first_selected(state)}`);
   await keys(["g", "g"], at_top);
+  // Focus moving into the reading pane with a click and no key ends insert and visual mode of the list at once, so the label is back to normal before any key. `g e` returns the focus to the list for the next run.
+  for (const [name, key] of [["insert", "i"], ["visual", "v"]]) {
+    normal = await label.normal();
+    const entered = await label.enter(normal, key);
+    await instance.click(...READING_PANE_POINT);
+    const after = await label.leave(normal, null);
+    check(app, kind, `${name} mode in the thread list ends when a click moves the focus into the reading pane, and the label returns with no key`, entered !== normal && after === normal, `normal ${normal.slice(0, 8)}, ${name} ${entered.slice(0, 8)}, after ${after.slice(0, 8)}`);
+    await keys(["g", "e"]);
+  }
   await keys(["g", "f"]);
   normal = await label.normal();
   insert = await label.enter(normal);
