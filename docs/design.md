@@ -281,7 +281,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/menukeys.js` | 5632 | 8192 |
 | `experiment/context.js` | 5691 | 9216 |
 | `experiment/context_actor_child.sys.mjs` | 1898 | 3072 |
-| `content/message_display.js` | 20210 | 24576 |
+| `content/message_display.js` | 20722 | 24576 |
 | `experiment/hints.js` | 19706 | 20480 |
 | `experiment/pages.js` | 29456 | 34816 |
 | `experiment/page_actor_child.sys.mjs` | 8704 | 11264 |
@@ -379,6 +379,7 @@ The zoom keys run in the mail tab, message documents, own pages, the page tabs a
 - Message mode (the `body.tree` question, so the body of a message window runs the window tree; clause: decides what happens to a key) made it 18894 (224 over main's 18670). The guard rose by one 512-byte step to 19186. The switch to the window tree on a late answer, asked again each second while the background starts, made it 19115, under the same guard.
 - Cancelling Escape while a key sequence is pending, so Thunderbird does not close the message window under the which-key panel (clause: decides what happens to a key), made it 19268 (82 over main's 19186). The guard rose by one 512-byte step to 19698. The same change took `experiment/pages.js` to 27914, under its guard.
 - Insert mode in a message document and an own page (`i`, the flag, the pass-through branch before the typing check, the bubble-phase Escape, the blur that ends it and the `body.mode` report to the mode label; clause: decides what happens to a key) made it 19975 (707 over main's 19268). The guard rose by one 512-byte step to 20210.
+- The `hint_letters` setting read in the message script (the stored letters, lowered, handed to the hint session, and a typed key of any single character as a hint letter; clause: decides what happens to a key) made it 20328 (118 over the guard of 20210). The guard rose by one 512-byte step to 20722. `npm run build` gave the sizes. The `tools/measure/` run (`header_ids` on Betterbird) completed before the raise.
 
 ### Hints bundle
 
