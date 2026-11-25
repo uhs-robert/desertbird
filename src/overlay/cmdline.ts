@@ -8,7 +8,7 @@ import { follow_theme } from "../shared/follow_theme.ts";
 import { ignore_refusal } from "../shared/swallow.ts";
 import { CMDLINE_STYLE } from "../../vendor/desertfox/cmdline_style.ts";
 import { show_confirm } from "./confirm.ts";
-import { LIST_ROWS, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, list_shown_after_answer, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, row_for_click, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "./line_edit.ts";
+import { LIST_ROWS, line_key_action, accepts_single_row, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, list_shown_after_answer, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, row_for_click, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "./line_edit.ts";
 
 declare const messenger: {
     runtime: { sendMessage(message: CmdlineRequest | ConfirmAnswerRequest): Promise<unknown> };
@@ -269,15 +269,15 @@ window.addEventListener(
             row_keys.add(() => cycle_rows(forward ? 1 : -1)).catch(report_failure);
         } else if (event.key === "Tab") {
             event.preventDefault();
-        } else if (event.ctrlKey && !event.altKey && !event.metaKey && event.key === "u") {
+        } else if (line_key_action(event, search_direction !== undefined) === "clear") {
             // The same path as typing: the input handler drops the message and the history position and ranks the empty line.
             event.preventDefault();
             input.value = "";
             input.dispatchEvent(new Event("input"));
-        } else if (event.ctrlKey && !event.altKey && !event.metaKey && event.key === "h") {
-            // Runs `help` and so opens the help page, which lists every command with its usage. A search line has no command to ask about.
+        } else if (line_key_action(event, search_direction !== undefined) === "help") {
+            // Runs `help` and so opens the help page, which lists every command with its usage.
             event.preventDefault();
-            if (!search_direction) send<CmdlineRunResult>({ type: "cmdline.run", windowId: window_id, text: "help" }).then((result) => (result.ok ? void (closing = true) : show_status(result.message, true)), report_failure);
+            send<CmdlineRunResult>({ type: "cmdline.run", windowId: window_id, text: "help" }).then((result) => (result.ok ? void (closing = true) : show_status(result.message, true)), report_failure);
         } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             const step = event.key === "ArrowDown" ? 1 : -1;

@@ -26,8 +26,8 @@ const CMDLINE_PROMPT_MAX_LENGTH = 8;
 export const STATUS_WIDGET_NAMES = ["folder", "position"] as const;
 
 /** The bounds of the toast time settings, as in DesertFox. */
-const TOAST_MIN_MS = 500;
-const TOAST_MAX_MS = 30000;
+export const TOAST_MIN_MS = 500;
+export const TOAST_MAX_MS = 30000;
 
 /** `whole` means an integer. `key_list` is a list of key sequences in keymap notation, as DesertFox checks `which_key_skip`. `letters` is the hint alphabet: two or more distinct characters, none of them `/`. */
 export type SettingKind = { kind: "number"; min?: number; max?: number; whole?: boolean } | { kind: "boolean" } | { kind: "list" } | { kind: "key_list" } | { kind: "letters" } | { kind: "choice"; choices: readonly string[] } | { kind: "choice_list"; choices: readonly string[] } | { kind: "line"; max_length: number };
