@@ -27,6 +27,8 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const install_log: string[] = [];
     const menu_installs: Record<string, string>[] = [];
     const new_mail_listeners: unknown[] = [];
+    // The tabs whose messages a `body.invoke` asked for. The background asks only after it let the command through.
+    const displayed_asks: number[] = [];
     const message_listeners: ((message: unknown, sender: unknown) => unknown)[] = [];
     const native = fake_native_messaging();
     // Calls in flight plus pending echo timers. A test that asserts "only once" waits for zero, so a second install an echo causes has landed.
@@ -92,8 +94,9 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) }, onClosed: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         messages: { onNewMailReceived: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         tabs: { get: async () => ({}), onActivated: { addListener: () => {} }, onRemoved: { addListener: () => {} } },
-        windows: { getAll: async () => [], onCreated: { addListener: () => {} }, onRemoved: { addListener: () => {} }, onFocusChanged: { addListener: () => {} } },
+        windows: { get: async () => ({ type: "messageDisplay" }), getAll: async () => [], onCreated: { addListener: () => {} }, onRemoved: { addListener: () => {} }, onFocusChanged: { addListener: () => {} } },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
+        messageDisplay: { getDisplayedMessages: async (tab_id: number) => (displayed_asks.push(tab_id), []) },
         mailTabs: { query: async () => [], onDisplayedFolderChanged: { addListener: () => {} } },
     };
     (globalThis as Record<string, unknown>)["messenger"] = messenger;
@@ -112,7 +115,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             if (busy === 0) return;
         }
     };
-    return { message_listeners, when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { displayed_asks, message_listeners, when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const WAIT_DEADLINE_MS = 5_000;
@@ -372,4 +375,27 @@ test("the command line and hud messages answer the overlay pages only, never a c
         [state, { tab: { id: 1, windowId: 3 }, url: "mailbox:///tmp/Inbox?number=5" }],
     ] as const;
     for (const [message, sender] of refused) assert.equal(ask(message, sender), undefined, JSON.stringify([message, sender]));
+});
+
+test("body.invoke runs a bound command and refuses a servable command that no key binds, until a user key binds it", async () => {
+    const { message_listeners, displayed_asks, external_write, when_installed, when_idle } = stub_messenger();
+    await start_background();
+    await when_installed(1);
+    await when_idle();
+    const sender = { tab: { id: 5, windowId: 9 } };
+    const invoke = async (command: string) => {
+        const before = displayed_asks.length;
+        await message_listeners[0]!({ type: "body.invoke", command, args: {}, count: 1 }, sender);
+        return displayed_asks.length > before;
+    };
+    assert.equal(await invoke("msg.archive"), true, "a default key binds it");
+    assert.equal(await invoke("notify.toggle"), false, "a message tab can serve it but no key binds it");
+    external_write({ desertbird_user_keymap: { normal: { X: { id: "notify.toggle" } } } });
+    await when_installed(2);
+    await when_idle();
+    assert.equal(await invoke("notify.toggle"), true, "the user key binds it");
+    external_write({ desertbird_user_keymap: { normal: {} } });
+    await when_installed(3);
+    await when_idle();
+    assert.equal(await invoke("notify.toggle"), false, "the key is gone");
 });
