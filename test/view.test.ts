@@ -117,7 +117,7 @@ test("toggle_starred sets the starred filter and clears it when it already shows
 
 test("b f and , , open the filter and sort pickers, b s toggles starred, b a is the attachment filter, b r resets it, and C-x C-c close the tab", () => {
     const normal = DEFAULT_KEYMAP.normal ?? {};
-    assert.deepEqual(normal["bf"], { id: "cmdline.open", args: { text: "filter " }, label: "By text" });
+    assert.deepEqual(normal["bf"], { id: "cmdline.open", args: { text: "filter " }, label: "Text" });
     assert.deepEqual(normal["ss"], { id: "cmdline.open", args: { text: "sort " }, label: "Sort by" });
     assert.deepEqual(normal["bs"], { id: "filter.set", args: { state: "toggle_starred" }, label: "Starred" });
     assert.deepEqual(normal["ba"], { id: "filter.set", args: { state: "attachment" }, label: "Attachments" });
