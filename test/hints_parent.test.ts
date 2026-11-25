@@ -55,7 +55,7 @@ test("hints.sendEnter presses Enter through the text input processor in the name
     const window = { KeyboardEvent: class { key: string; constructor(_type: string, init: { key: string }) { this.key = init.key; } }, document: { activeElement: { id: "messagepane", contentDocument: { activeElement: link } } } };
     const platform = stub_platform([window]);
     const globals = globalThis as Record<string, unknown>;
-    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransaction: () => true, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup: (event: { key: string }) => events.push(`up ${event.key}`) }) } };
+    globals["Cc"] = { "@mozilla.org/text-input-processor;1": { createInstance: () => ({ beginInputTransaction: (_window: unknown, callback: { onNotify?: () => boolean }) => typeof callback.onNotify === "function" && callback.onNotify() === true, keydown: (event: { key: string }) => events.push(`down ${event.key}`), keyup: (event: { key: string }) => events.push(`up ${event.key}`) }) } };
     globals["Ci"] = { nsITextInputProcessor: {} };
     try {
         const { get_hints_api } = await import("../src/chrome/parent_hints.ts");
