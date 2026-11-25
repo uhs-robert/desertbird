@@ -315,14 +315,17 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
-  // The mode label draws in the status bar of a message window: `i` in the body changes it, and Ctrl+[ ends the mode and brings it back. Escape would close the window.
+  // The mode label draws in the status bar of a message window: `i` in the body changes it, and Escape ends the mode and brings it back. Thunderbird closes a message window on an Escape nobody cancelled, so the window must stay open.
   {
     const label = insert_label(instance, ctx, MESSAGE_WINDOW_LABEL_STRIP);
     const normal = await label.normal();
     const insert = await label.enter(normal);
     await shot("message_window_insert", "message window after i: the status bar label reads INSERT");
     check(app, kind, "message window: i changes the status bar label", insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
-    check(app, kind, "message window: Ctrl+[ ends insert mode and the label returns", (await label.leave(normal, ["-M", "ctrl", "[", "-m", "ctrl"])) === normal);
+    check(app, kind, "message window: Escape ends insert mode and the label returns", (await label.leave(normal)) === normal);
+    await sleep(1000);
+    state = await instance.ask("state");
+    check(app, kind, "message window: Escape in insert mode leaves the window open", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   }
   // Find in a message window: `/` opens the line, the find reaches the window's tab through `tabs.query({windowId, active: true})`, and n and N step with wrap, which also proves the line gave the focus back to the body. The line itself is the piece `message/window_cmdline`.
   await find_checks("message window");
@@ -471,6 +474,9 @@ async function run_message_scripts(instance, ctx) {
   const early_top = body_state(state).scroll_y;
   state = await key_and_state(instance, ["j"], scroll_is("j in the new window", (body) => body.scroll_y > early_top));
   check(app, kind, "message window: a key right after the window opens breaks nothing, and j then scrolls", body_state(state).scroll_y > early_top && instance.exited() === null, `scrollY ${early_top} then ${body_state(state).scroll_y}`);
+  // Normal mode leaves Escape uncancelled, so Thunderbird still closes the window.
+  state = await key_and_state(instance, ["-k", "Escape"], window_of_type("messageDisplay", false));
+  check(app, kind, "message window: Escape in normal mode closes the window", !state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await instance.ask("close_message_windows");
   await wait_for_state(instance, window_of_type("messageDisplay", false));
   check(app, kind, "the app survived", instance.exited() === null);

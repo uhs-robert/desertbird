@@ -622,6 +622,19 @@ test("i starts insert mode: the label hears it, plain keys pass to the page, and
     assert.deepEqual(scrolls, [["page.scroll_down", undefined]]);
 });
 
+test("Escape that leaves insert mode is cancelled in a message window only", () => {
+    const { windows, runtime } = setup(2);
+    runtime.install(tree());
+    const [in_window, in_tab] = [windows[0]!, windows[1]!];
+    in_window.message_window = true;
+    for (const window of windows) window.situation = "message";
+    press(in_window, "i");
+    assert.equal(press(in_window, "Escape").cancelled, true, "window, insert");
+    assert.equal(press(in_window, "Escape").cancelled, false, "window, normal mode still closes it");
+    press(in_tab, "i");
+    assert.equal(press(in_tab, "Escape").cancelled, false, "tab, insert");
+});
+
 test("Escape in insert mode blurs only when the key was typed in a text field", () => {
     const { windows, runtime } = setup();
     runtime.install(tree());
