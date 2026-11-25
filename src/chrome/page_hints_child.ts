@@ -29,13 +29,15 @@ export interface HintsChild {
 export interface HintsRequest {
     scheme: HintLabelScheme;
     action: PickAction;
+    /** The `hint_letters` setting, or absent for the default alphabet. */
+    letters?: string;
 }
 
 // A scroll or a click moves the labels off their targets, and `pagehide` comes with a navigation and with a page going into the back-forward cache. The page window's own `blur` means the focus left the page for the window's chrome (a menu, the search box), so the keys no longer reach the labels. A tab change and a window blur happen in the parent, whose state push ends the labels.
 const DISTURBING_EVENTS = ["scroll", "pointerdown", "pagehide", "blur"];
 
 /** Labels the controls on screen and returns how many. With none it starts nothing. A second start ends the first, in any page of this process. */
-export function start(child: HintsChild, { scheme, action }: HintsRequest): number {
+export function start(child: HintsChild, { scheme, action, letters }: HintsRequest): number {
     const page = child.contentWindow as ListenerWindow;
     return start_pick(
         {
@@ -58,5 +60,7 @@ export function start(child: HintsChild, { scheme, action }: HintsRequest): numb
         collect_window_targets(page),
         scheme,
         action,
+        [],
+        letters,
     );
 }
