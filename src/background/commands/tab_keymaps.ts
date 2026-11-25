@@ -157,6 +157,18 @@ export function message_background_commands(): Set<string> {
     return new Set(registry.list().filter((command) => command.runs_in === "background" && tab_needs_of(command).every((need) => (TAB_KINDS.message as readonly TabNeed[]).includes(need))).map((command) => command.id));
 }
 
+/** The ids of the background commands that the stored message, window and own-page trees bind. Those are the trees a body script runs, so this is what a body request may name: a command a message tab can serve but no key binds stays out. */
+export function bound_message_commands(trees: { message_tree: KeymapTree; window_tree: KeymapTree; own_tree: KeymapTree }): Set<string> {
+    const servable = message_background_commands();
+    const bound = new Set<string>();
+    const walk = (node: TreeNode): void => {
+        for (const step of node.steps ?? []) if (step.runs_in === "background" && servable.has(step.invocation.id)) bound.add(step.invocation.id);
+        for (const child of Object.values(node.children ?? {})) walk(child);
+    };
+    for (const tree of [trees.message_tree, trees.window_tree, trees.own_tree]) walk(tree.root as TreeNode);
+    return bound;
+}
+
 type TreeStep = { invocation: { id: string; args?: Record<string, unknown> }; runs_in?: string };
 type TreeNode = { children?: Record<string, TreeNode>; steps?: TreeStep[] };
 

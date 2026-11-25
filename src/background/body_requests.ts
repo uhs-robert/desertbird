@@ -16,8 +16,8 @@ export interface BodyRequestApi extends NotificationsApi {
 export interface BodyRequestDeps {
     registry: Registry;
     api: BodyRequestApi;
-    /** The ids of the commands a message key binds. A request for any other command is dropped. */
-    allowed: ReadonlySet<string>;
+    /** The ids of the commands a message key binds now, by default or by a user key. A request for any other command is dropped. */
+    allowed: () => Promise<ReadonlySet<string>>;
     /** The Experiment that labels a message and sends the Enter of a hint pick. Absent when it failed to load: the body script then labels the body itself and leaves the Enter to the user. */
     hints?: Partial<ThemedHints> | undefined;
     /** Writes the text of a yank to the clipboard. Absent in a setup with no clipboard. */
@@ -73,7 +73,7 @@ export function create_body_requests(deps: BodyRequestDeps): (message: unknown, 
         // A compose window sends no `body.invoke` (its keys run in the chrome runtime), so it runs nothing here.
         const window_type = (await ignore_refusal(deps.api.windows.get(window_id)))?.type;
         // A window that is gone or cannot be read has no commands: the check never falls back to the larger set.
-        if (window_type === undefined || window_type === COMPOSE_WINDOW_TYPE || !deps.allowed.has(request.command)) return {};
+        if (window_type === undefined || window_type === COMPOSE_WINDOW_TYPE || !(await deps.allowed()).has(request.command)) return {};
         // A page of the add-on is a tab with no message. The call may refuse for a page, and the key then runs with no messages.
         const message_ids = (await deps.api.messageDisplay.getDisplayedMessages(tab_id).catch((error: unknown) => (console.error("desertbird body request:", error), []))).map((message) => message.id);
         await deps.run({ command: request.command, args: request.args, count: request.count, windowId: window_id, messageIds: message_ids });

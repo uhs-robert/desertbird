@@ -9,7 +9,7 @@ function setup(extra: Partial<Parameters<typeof create_body_requests>[0]> = {}) 
     const handle = create_body_requests({
         registry: {} as Registry,
         api: {} as BodyRequestApi,
-        allowed: new Set(),
+        allowed: async () => new Set(),
         which_key: { on_body_pending: async (window_id, keys, source) => void calls.push(`${window_id} ${keys.join("")} ${source}`) },
         run: async () => {},
         ...extra,

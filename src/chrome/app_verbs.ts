@@ -128,7 +128,7 @@ export function app_verbs(context: ExtensionContext) {
         }),
         appCommand: guard("app.appCommand", ({ windowId, name }: AppCommandArgs): boolean => {
             const motion = COMMAND_MOTIONS[name];
-            if (motion === undefined) throw new Error("bad name");
+            if (typeof motion != "number") throw new Error("bad name");
             const holder = controller_holder_of(context, windowId);
             // -1 marks the fetch names that run on the window controller. The `motion < 1` check below is a different test: it skips the view check for every command without a step motion.
             const on_window = motion < 0;
@@ -145,8 +145,7 @@ export function app_verbs(context: ExtensionContext) {
             // The window is found by id and not through the mail pane: the key may come from a page tab, which has no `about:3pane` in front.
             const window = open_main_windows().find((candidate) => context.extension.windowManager.getWrapper(candidate)?.id === windowId) as AppWindow | undefined;
             if (!window) throw new Error("no such window");
-            PAGES[page](window);
-            return true;
+            return Object.hasOwn(PAGES, page) && (PAGES[page](window), true);
         }),
     };
 }

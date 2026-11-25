@@ -24,7 +24,7 @@ async function page_started() {
     await start_body_script(window, { get: async () => stored, onChanged: { addListener() {} } }, { sendMessage: async (message) => void sent.push(message), onMessage: { addListener() {} } });
     const press = (key: string, local_name: string) => {
         let cancelled = false;
-        const event = { key, code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, target: { localName: local_name }, preventDefault: () => void (cancelled = true), stopPropagation() {} } as BodyKeyEvent;
+        const event = { key, code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, isTrusted: true, target: { localName: local_name }, preventDefault: () => void (cancelled = true), stopPropagation() {} } as BodyKeyEvent;
         listeners.forEach((listener) => listener(event));
         return cancelled;
     };

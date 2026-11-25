@@ -69,7 +69,7 @@ test("g r 1 pressed in a message tab replies to the displayed message and not to
     const handle = create_body_requests({
         registry,
         api: { messageDisplay: { getDisplayedMessages: async (tab_id: number) => (tab_id === 40 ? [{ id: 9 }] : [{ id: 5 }]) }, windows: { get: async () => ({ type: "normal" }) }, notifications: api.notifications } as unknown as BodyRequestApi,
-        allowed: message_background_commands(),
+        allowed: async () => message_background_commands(),
         run: (request) => router.run(request),
     });
     await handle({ type: "body.invoke", command: "msg.reply_with", args: { slot: 1 }, count: 1 }, { tab: { id: 40, windowId: 1 } });
