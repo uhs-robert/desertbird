@@ -509,10 +509,10 @@ test("a root report shows the named tree at once, whatever the delay", async () 
     assert.deepEqual((await state()).which_key?.rows.map((row) => row.key), ["g"]);
 });
 
-test("a tracked message window shows the panel and toasts and makes no label call, also on a mode event and a settings change", async () => {
+test("a tracked message window shows the panel, the toasts and the mode label, also on a mode event and a settings change", async () => {
     const { hud, log, labels, timers, state, body_pending } = setup({ mode_indicator: "always", which_key_delay_ms: 300 });
     await hud.track(7, "message");
-    assert.deepEqual(labels, []);
+    assert.deepEqual(labels, ["7 normal always classic"]);
     await body_pending(["g"], 7);
     timers.advance(300);
     await settle();
@@ -521,7 +521,7 @@ test("a tracked message window shows the panel and toasts and makes no label cal
     assert.equal(await hud.toast(7, "Archived", false), true);
     await hud.on_keys_event({ command: "mode", mode: "insert", windowId: 7 });
     await hud.settings_changed();
-    assert.deepEqual(labels, []);
+    assert.deepEqual(labels, ["7 normal always classic", "7 insert always classic", "7 insert always classic"]);
     hud.forget(7);
     assert.equal((await state(7)).which_key, null);
 });

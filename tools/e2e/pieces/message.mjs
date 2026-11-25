@@ -40,6 +40,8 @@ const body_focus_is = (focused, since, window_id) => ({ what: `the focus to ${fo
 const HELP_MENU_REGION = "505,60 250x140";
 // A point of plain text in the body of a message window, below its menus, read from the shots of both apps.
 const MESSAGE_WINDOW_BODY_POINT = [800, 600];
+// The start of a message window's status bar, where its mode label draws. The window opens at the same place in both apps.
+const MESSAGE_WINDOW_LABEL_STRIP = "214,696 96x22";
 
 const window_of_type = (type, present) => ({ what: `a ${type} window to ${present ? "open" : "close"}`, until: (state) => state.windows.some((window) => window.type === type) === present, show: (state) => JSON.stringify(state.windows.map((window) => window.type)), timeout_ms: 10000 });
 
@@ -313,6 +315,15 @@ async function run_message_scripts(instance, ctx) {
   check(app, kind, "a message window opened", state.windows.some((window) => window.type === "messageDisplay"), JSON.stringify(state.windows.map((window) => window.type)));
   await shot("message_window", "message in its own window");
   await scroll_keys("message window", { escape: false });
+  // The mode label draws in the status bar of a message window: `i` in the body changes it, and Ctrl+[ ends the mode and brings it back. Escape would close the window.
+  {
+    const label = insert_label(instance, ctx, MESSAGE_WINDOW_LABEL_STRIP);
+    const normal = await label.normal();
+    const insert = await label.enter(normal);
+    await shot("message_window_insert", "message window after i: the status bar label reads INSERT");
+    check(app, kind, "message window: i changes the status bar label", insert !== normal, `normal ${normal.slice(0, 8)}, insert ${insert.slice(0, 8)}`);
+    check(app, kind, "message window: Ctrl+[ ends insert mode and the label returns", (await label.leave(normal, ["-M", "ctrl", "[", "-m", "ctrl"])) === normal);
+  }
   // Find in a message window: `/` opens the line, the find reaches the window's tab through `tabs.query({windowId, active: true})`, and n and N step with wrap, which also proves the line gave the focus back to the body. The line itself is the piece `message/window_cmdline`.
   await find_checks("message window");
   state = await flag_keys(plain_id, true);

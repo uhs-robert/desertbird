@@ -39,7 +39,7 @@ export interface HudService {
     show_root(window_id: number, source?: WhichKeySource): Promise<void>;
     /** Closes the which-key panel of every window, or of every window but one. A tab change or a window losing focus calls this. */
     close_which_key(except_window_id?: number): void;
-    /** A main window, a message window or a compose window exists. A main window may need the mode label. The others make no label call: a message window has no status bar and the compose runtime draws its own label. A compose window shows the panel only: its toasts stay system notifications. */
+    /** A main window, a message window or a compose window exists. A main window and a message window may need the mode label. A compose window makes no label call, because the compose runtime draws its own. A compose window shows the panel only: its toasts stay system notifications. */
     track(window_id: number, kind?: "main" | "message" | "compose"): Promise<void>;
     /** The window is gone, or its hud left on its own. */
     forget(window_id: number): void;
@@ -52,7 +52,7 @@ export interface HudService {
 interface WindowHud {
     /** Set by `track`: a window whose entry stays when a toast fails to mount. */
     tracked: boolean;
-    /** False for a message window: it has no status bar to hold the mode label. */
+    /** False for a compose window: its runtime draws its own label. */
     has_label: boolean;
     /** False for a compose window, where a toast would draw over the body being typed. */
     shows_toasts: boolean;
@@ -238,7 +238,7 @@ export function create_hud_service(deps: HudDeps): HudService {
         async track(window_id, kind = "main") {
             const hud = hud_of(window_id);
             hud.tracked = true;
-            hud.has_label = kind === "main";
+            hud.has_label = kind !== "compose";
             hud.shows_toasts = kind !== "compose";
             await Promise.all([changed(window_id), sync_label(window_id)]);
         },

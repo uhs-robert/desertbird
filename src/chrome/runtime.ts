@@ -51,6 +51,8 @@ export interface RuntimeDeps<Window extends KeyTarget> {
     in_text_field(window: Window): boolean;
     /** Calls `listener` when the front tab of the window changes, whatever caused it: a click, Ctrl+Tab or a command. Returns the way to stop listening. */
     on_tab_select(window: Window, listener: () => void): () => void;
+    /** Calls `listener` when focus moves into the reading pane from outside it, with no key. Returns the way to stop listening. */
+    on_reading_pane_focus(window: Window, listener: () => void): () => void;
     /** Calls `listener` when the window itself loses focus, for example on an alt-tab. Focus moving between elements inside it does not count. Returns the way to stop listening. */
     on_window_blur(window: Window, listener: () => void): () => void;
     window_id_of(window: Window): number;
@@ -77,7 +79,7 @@ const swallow = (event: KeydownEvent): void => void (event.preventDefault(), eve
 const RESIZE_KEYS: Record<string, PaneResizeDirection> = { h: "left", l: "right", j: "down", k: "up", "=": "reset" };
 
 export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Window>): Runtime {
-    const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; settle: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void }>();
+    const hooked = new Map<Window, { handler: (event: KeydownEvent) => void; settle: (event: KeydownEvent) => void; stop_tab_listening: () => void; stop_blur_listening: () => void; stop_pane_listening: () => void }>();
     let matcher: ReturnType<typeof matcher_for_tree> | null = null;
     let listening = false;
     // The window that typed the half-typed sequence. A key from another window starts over, so `g` in one window and `g` in another never make `g g`.
@@ -268,7 +270,14 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         const stop_tab_listening = deps.on_tab_select(window, reset_typing);
         // The same hazard with focus: `d`, an alt-tab away and back, then `d`.
         const stop_blur_listening = deps.on_window_blur(window, reset_typing);
-        hooked.set(window, { handler, settle, stop_tab_listening, stop_blur_listening });
+        // A click or `<A-l>` into the reading pane sends no key either, and the pane's own runtime decides the next key, so the label must not keep the list's insert or visual mode. Resize mode survives the move.
+        const stop_pane_listening = deps.on_reading_pane_focus(window, () => {
+            insert_window = null;
+            visual_anchor = -1;
+            picking = false;
+            tell_mode(window);
+        });
+        hooked.set(window, { handler, settle, stop_tab_listening, stop_blur_listening, stop_pane_listening });
         window.addEventListener("keydown", handler, true);
         window.addEventListener("keydown", settle, false);
     }
@@ -280,6 +289,7 @@ export function create_runtime<Window extends KeyTarget>(deps: RuntimeDeps<Windo
         window.removeEventListener("keydown", entry.settle, false);
         entry.stop_tab_listening();
         entry.stop_blur_listening();
+        entry.stop_pane_listening();
         hooked.delete(window);
         if (sequence_window === window) sequence_window = null;
         if (insert_window === window || resize_window === window) ((insert_window = resize_window = null), tell_mode(window));

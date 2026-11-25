@@ -9,7 +9,7 @@ import { create_mode_label } from "./mode_label.ts";
 import type { LabelElement, ModeLabel, StatusBarDocument } from "./mode_label.ts";
 import { claim_id_when_page_ready, create_overlay_host, on_escape_key } from "./overlay.ts";
 import type { OverlayHost } from "./overlay.ts";
-import { guard, load_platform, open_main_windows, open_overlay_windows, tabmail_of } from "./platform.ts";
+import { guard, load_platform, open_label_windows, open_overlay_windows, tabmail_of } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import type { KeydownEvent } from "./runtime.ts";
 import { front_about_3pane } from "./view.ts";
@@ -160,7 +160,7 @@ function status_bar_of(window: MainWindow): StatusBarDocument {
 }
 
 const mode_label_window_deps = {
-    open_windows: open_main_windows,
+    open_windows: open_label_windows,
     status_bar_of,
     in_text_field: (window: MainWindow) => in_text_field(window.document),
     on_loaded(window: MainWindow, listener: () => void) {
@@ -182,7 +182,7 @@ const mode_label_window_deps = {
 
 function ensure_mode_label(context: ExtensionContext & { extension: OverlayExtension }): ModeLabel {
     mode_label ??= create_mode_label<MainWindow>({
-        window_with_id: (window_id) => open_main_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
+        window_with_id: (window_id) => open_label_windows().find((window) => context.extension.windowManager.getWrapper(window)?.id === window_id) ?? null,
         ...mode_label_window_deps,
     });
     return mode_label;

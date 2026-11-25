@@ -28,7 +28,7 @@ const PARENT_MAX_BYTES = 27212;
 const PARENT_CEILING_BYTES = 40960;
 
 // `experiment/keys.js`, the key runtime that loads at startup. A verb module may not enter it (test/build.test.ts), so it stays near its measured size.
-const KEYS_MAX_BYTES = 27452;
+const KEYS_MAX_BYTES = 27964;
 const KEYS_CEILING_BYTES = 40960;
 
 // `experiment/app.js`, loaded on the first thread list, pane focus or app call.
