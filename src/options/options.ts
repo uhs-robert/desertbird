@@ -8,12 +8,14 @@ import { create_config_store } from "../background/config/store.ts";
 import type { ConfigStorage } from "../background/config/store.ts";
 import type { RecordStorageApi } from "../background/record_store.ts";
 import { create_quick_reply_store } from "../background/quick_reply_store.ts";
+import { NATIVE_PERMISSION, request_native_permission } from "../background/native_permission.ts";
+import type { PermissionsApi } from "../background/native_permission.ts";
 import { follow_theme } from "../shared/follow_theme.ts";
 import { build_user_keymap, default_menu_rows, default_rows, edits_from_user_keymap, menu_edits_from_user_keymap, overrides_from_texts, setting_to_text } from "./model.ts";
 import type { BindingRow } from "./model.ts";
 
 // Both stores read `storage.local`. Their `get` types differ only in the argument shape, so the page holds the intersection.
-declare const messenger: ConfigStorage & RecordStorageApi;
+declare const messenger: ConfigStorage & RecordStorageApi & PermissionsApi;
 
 follow_theme();
 
@@ -107,6 +109,9 @@ async function save(): Promise<void> {
     const build = build_user_keymap({ removed: [...removed_defaults], rows: user_rows }, overrides, { removed: [...removed_menu_defaults], rows: user_menu_rows });
     if ("error" in build) return say(build.error, true);
     if (build.blocked) return say(build.messages.join(" | "), true);
+    // The request comes before any other await: it needs the user gesture of the Save click, and a stored write first can lose it.
+    const needs_native_host = (["external_editor", "bridge"] as const).filter((name) => (overrides[name] ?? SETTING_DEFAULTS[name]) === true);
+    if (needs_native_host.length > 0 && !(await request_native_permission(messenger))) return say(`Not saved. ${needs_native_host.join(" and ")} needs the ${NATIVE_PERMISSION} permission, and it was not granted. Press Save again and allow the prompt, or set ${needs_native_host.join(" and ")} to false.`, true);
     await store.write_settings(overrides);
     await store.write_user_keymap(build.user_keymap);
     say(build.messages.length > 0 ? `Saved. ${build.messages.join(" | ")}` : "Saved.");

@@ -27,6 +27,9 @@ async function run_tabs(instance, ctx) {
     return { reply, state: await wait_for_state(instance, tab_count_is(count)) };
   };
 
+  // The helper closes the help tab of the first install and keeps a flag, so the later checks start with one tab.
+  check(app, kind, "the first install opened the help tab", (await instance.ask("state")).first_run_help_seen === true);
+
   // q on the only mail tab: tabs.remove does nothing there, so q moves the focus to the thread list, shows no toast and the tab stays.
   const refused_q = await toast_cycle(instance, `${app}_q`, ["q"], [], { expect_toast: false });
   let state = refused_q.state;

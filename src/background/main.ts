@@ -59,6 +59,9 @@ import type { DraftsApi } from "./bridge/drafts.ts";
 import { create_compose_markdown } from "./compose_markdown.ts";
 import type { MarkdownGlobals } from "./compose_markdown.ts";
 import { EDITOR_HOST_NAME, create_compose_requests, create_editor_client, create_external_editor } from "./external_editor.ts";
+import { HELP_PAGE } from "./handlers/help.ts";
+import { require_native_permission, missing_permission_message } from "./native_permission.ts";
+import type { PermissionsApi } from "./native_permission.ts";
 import { best_effort, ignore_refusal, refused_as } from "../shared/swallow.ts";
 
 /** The wait for a server to confirm a new folder. A server that refuses the create never answers. */
@@ -104,8 +107,10 @@ interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdlin
             /** Fires with -1 when no window of the application has the focus. */
             onFocusChanged: { addListener(listener: (window_id: number) => void): void };
         };
+    permissions: PermissionsApi["permissions"];
     tabs: Pick<TabsApi["tabs"], "query"> & {
         get(tab_id: number): Promise<unknown>;
+        create(properties: { url: string }): Promise<unknown>;
         onActivated: { addListener(listener: (info: { windowId: number; previousTabId?: number }) => void): void };
         onRemoved: { addListener(listener: (tab_id: number) => void): void };
     };
@@ -116,6 +121,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdlin
     notifications: RouterApi["notifications"] & NewMailApi["notifications"] & { onClicked: { addListener(listener: (notification_id: string) => void): void } };
     messageDisplay: BodyRequestApi["messageDisplay"] & NewMailApi["messageDisplay"] & FollowupOpenApi["messageDisplay"];
     runtime: {
+        onInstalled: { addListener(listener: (details: { reason: string }) => void): void };
         onMessage: { addListener(listener: (message: unknown, sender: { tab?: { id?: number; windowId?: number }; url?: string }) => Promise<unknown> | undefined): void };
         getURL(path: string): string;
         sendMessage(message: HudChanged): Promise<unknown>;
@@ -316,7 +322,10 @@ const no_session = async (): Promise<never> => {
 };
 const external_editor = create_external_editor({
     session: messenger.storage.session ?? { get: no_session, set: no_session },
-    client: create_editor_client((message) => messenger.runtime.sendNativeMessage(EDITOR_HOST_NAME, message)),
+    client: create_editor_client(async (message) => {
+        await require_native_permission(messenger, "The external editor", "external_editor");
+        return messenger.runtime.sendNativeMessage(EDITOR_HOST_NAME, message);
+    }),
     compose: messenger.compose,
     // The manifest loads the vendored `turndown` and `marked` before this bundle, and they leave their globals here.
     markdown: create_compose_markdown(globalThis as unknown as MarkdownGlobals),
@@ -347,6 +356,12 @@ const bridge_drafts = create_bridge_drafts({ api: messenger as unknown as Drafts
 const bridge_acts = create_bridge_acts({ api: handler_api as unknown as ActsApi, read_settings: async () => (await config_store.read()).settings, request_confirm: (request) => confirm.request_confirm(request), target_window: () => last_focused_main_window() });
 const bridge = create_bridge_port({
     connect: () => messenger.runtime.connectNative(BRIDGE_HOST_NAME),
+    native_permission_granted: () => messenger.permissions.contains({ permissions: ["nativeMessaging"] }),
+    say_permission_missing() {
+        const text = missing_permission_message("The bridge", "bridge");
+        console.warn(`desertbird: ${text}`);
+        notify_refusal({ ...messenger, toasts: hud }, text).catch(console.error);
+    },
     read_bridge_setting: async () => (await config_store.read()).settings.bridge,
     timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) },
     now_ms: () => Date.now(),
@@ -384,6 +399,11 @@ messenger.overlay?.onClosed.addListener(({ windowId, surface, reason }) => {
 });
 
 start_jump_history(messenger);
+
+// Only a first install greets. An update, a browser update and a reload of the add-on never open the page.
+messenger.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === "install") messenger.tabs.create({ url: messenger.runtime.getURL(HELP_PAGE) }).catch(console.error);
+});
 
 // Registered at each start of this page, so compose windows opened from now on get Ctrl+E. The other keys of a compose window belong to the `composewin` Experiment.
 messenger.composeScripts.register({ js: [{ file: "content/compose_keys.js" }] }).catch(console.error);

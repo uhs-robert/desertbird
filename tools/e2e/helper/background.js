@@ -30,8 +30,21 @@ async function folder_contents(folders, into, flags) {
   }
 }
 
+// DesertBird opens its help page in a tab on the first install, and every e2e profile is a first install. That tab hides the mail tab from the startup wait, so the helper closes it once. localStorage keeps the flag over an app restart on the same profile, which is no install, so a help tab a piece opens later stays open. first_run_help_seen tells the default piece that the tab did open.
+let first_run_help_seen = localStorage.getItem("first_run_help_seen") === "1";
+async function close_first_run_help() {
+  if (first_run_help_seen) return;
+  for (const tab of await browser.tabs.query({})) {
+    if (!tab.url?.startsWith("moz-extension://") || !tab.url.endsWith("/help/help.html")) continue;
+    first_run_help_seen = true;
+    localStorage.setItem("first_run_help_seen", "1");
+    await browser.tabs.remove(tab.id);
+  }
+}
+
 async function collect() {
-  const state = { time: Date.now() };
+  await close_first_run_help();
+  const state = { time: Date.now(), first_run_help_seen };
   const [mail_tab] = await browser.mailTabs.query({ active: true, currentWindow: true }).catch(() => []);
   state.mail_tab = mail_tab ? { id: mail_tab.id, folder: mail_tab.displayedFolder?.path ?? null, message_pane_visible: mail_tab.messagePaneVisible, folder_pane_visible: mail_tab.folderPaneVisible, sort_type: mail_tab.sortType, sort_order: mail_tab.sortOrder } : null;
   state.selected = mail_tab ? (await all_messages(await browser.mailTabs.getSelectedMessages(mail_tab.id))).map(describe_message) : [];
