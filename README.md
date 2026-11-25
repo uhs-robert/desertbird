@@ -148,8 +148,8 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 <summary><b>🔍 Find and filter</b></summary>
 
 - Search with `/` (forward) or `?` (backward), and move between matches with `n` and `N`. The search runs as a live Quick Filter search.
-- Filter the thread list: `Fu` shows unread, `Fr` shows all, `Fs` toggles starred, `Fa` shows messages with attachments, `Ft` filters by tag and `Ff` opens a filter by text.
-- Filter by the message at the cursor, also on a selected thread: `Fmf` by sender, `Fms` by subject, `Fmr` by recipient, `Fml` by mailing list and `Fmd` by day. `Fmt` filters by the tags of every selected message.
+- Filter the thread list: `bu` shows unread, `br` shows all, `bs` toggles starred, `ba` shows messages with attachments, `bt` filters by tag and `bf` opens a filter by text.
+- Filter by the message at the cursor, also on a selected thread: `bmf` by sender, `bms` by subject, `bmr` by recipient, `bml` by mailing list and `bmd` by day. `bmt` filters by the tags of every selected message.
 - Sort with `s` and a letter: `sd` by date, `sj` by subject, `sf` by author, `sz` by size, `su` by unread and more. `so` flips the current sort.
 - Run any command by name with `:`. Open a folder with `o` and a tab list with `T`, both with completion.
 

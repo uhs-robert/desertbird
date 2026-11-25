@@ -147,23 +147,23 @@ The thread list and the folder pane.
 
 | Key | Command |
 | --- | --- |
-| `Fu` | `filter --unread` |
-| `Fr` | `filter --all` |
-| `Fs` | `filter --toggle-starred` |
-| `Fa` | `filter --attachment` |
-| `Ff` | `cmdline.open 'filter '` |
-| `Ft` | `cmdline.open filter --tag --tag=` |
+| `bu` | `filter --unread` |
+| `br` | `filter --all` |
+| `bs` | `filter --toggle-starred` |
+| `ba` | `filter --attachment` |
+| `bf` | `cmdline.open 'filter '` |
+| `bt` | `cmdline.open filter --tag --tag=` |
 
 #### By message
 
 | Key | Command |
 | --- | --- |
-| `Fmf` | `filter-by from` |
-| `Fms` | `filter-by subject` |
-| `Fmr` | `filter-by recipient` |
-| `Fmt` | `filter-by tag` |
-| `Fml` | `filter-by list` |
-| `Fmd` | `filter-by date` |
+| `bmf` | `filter-by from` |
+| `bms` | `filter-by subject` |
+| `bmr` | `filter-by recipient` |
+| `bmt` | `filter-by tag` |
+| `bml` | `filter-by list` |
+| `bmd` | `filter-by date` |
 
 #### DesertBird
 

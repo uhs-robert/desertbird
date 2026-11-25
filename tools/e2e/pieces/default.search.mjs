@@ -18,7 +18,7 @@ async function run_search(instance, ctx) {
   // Escape ends the line, so the change the wait sees is the line going. The quick filter then restores in the background, which the caller reads from the list.
   const escape_search = () => press_in_command_line(instance, ["-k", "Escape"]);
   const clear_filter = async () => {
-    await instance.press(["F"]);
+    await instance.press(["b"]);
     return key_and_state(instance, ["r"], listed_count(full));
   };
   await instance.press(["g"]);
@@ -37,13 +37,13 @@ async function run_search(instance, ctx) {
   check(app, kind, "after Escape a bound key runs again", selection_of(state) !== "" && selection_of(state) !== before_j, `selected ${before_j} then ${selection_of(state)}`);
 
   // The typed text sits on top of the filter that was set before.
-  await instance.press(["F"]);
-  state = await key_and_state(instance, ["u"], { what: "F u to narrow the list to the unread rows", until: (current) => current.listed.length < full, timeout_ms: 3000, soft: true });
+  await instance.press(["b"]);
+  state = await key_and_state(instance, ["u"], { what: "b u to narrow the list to the unread rows", until: (current) => current.listed.length < full, timeout_ms: 3000, soft: true });
   const unread = state.listed.length;
   await open_search("/", "Single");
   await escape_search();
   state = await wait_for_state(instance, listed_count(unread));
-  check(app, kind, "Escape after F u restores the unread list", state.listed.length === unread, `listed ${state.listed.length}, expected ${unread}`);
+  check(app, kind, "Escape after b u restores the unread list", state.listed.length === unread, `listed ${state.listed.length}, expected ${unread}`);
   await clear_filter();
 
   await open_search("/", "Single 1");

@@ -64,7 +64,7 @@ test("the page tree reads the same command table: the keys that gain a place are
 
 test("the page tree holds no command that needs a list, a message or a body, and no group left empty", () => {
     for (const id of ids_under(root_of())) assert.ok(["tab", "line", "page", "typing", "close", "main"].includes(registry.get(id)?.needs?.find((need) => (TAB_NEEDS as readonly string[]).includes(need)) ?? ""), id);
-    for (const token of ["m", "d", "s", "F", "y", "]", "[", "o", "a", "r", "R", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
+    for (const token of ["m", "d", "s", "b", "y", "]", "[", "o", "a", "r", "R", "u", "n", "N", "/", "?", "H", "L", "M", "'", "v", "."]) assert.equal(root_of().children[token], undefined, token);
     const tabs_group = root_of().children["t"] as TreeBranch;
     assert.equal(tabs_group.label, "Tabs");
     assert.deepEqual(Object.keys(tabs_group.children).sort(), ["$", "0", "M", "T", "l", "m", "n", "p"]);
@@ -92,7 +92,7 @@ test("the message tree has the mail keys that need a message, the reading keys a
     const root = message_root();
     assert.deepEqual(["a", "j", "/", "f", "H"].map((key) => leaf_at(root, key)?.id), ["msg.archive", "message.scroll_down", "cmdline.open", "hint.pick", "pane.left"]);
     assert.deepEqual(leaf_at(root, "/")?.args, { text: "find " });
-    for (const keys of [["m", "R"], ["F", "t"], ["F", "f"], ["s", "s"], [";", ";"], ["<C-x>"], ["<C-c>"], ["o"], ["s", "d"], ["]", "u"], ["z", "z"], ["."], ["?"], ["v"]]) assert.equal(leaf_at(root, ...keys)?.id, undefined, keys.join(" "));
+    for (const keys of [["m", "R"], ["b", "t"], ["b", "f"], ["s", "s"], [";", ";"], ["<C-x>"], ["<C-c>"], ["o"], ["s", "d"], ["]", "u"], ["z", "z"], ["."], ["?"], ["v"]]) assert.equal(leaf_at(root, ...keys)?.id, undefined, keys.join(" "));
     // `h` and `l` fold a thread in the mail tab and scroll sideways here, where no list exists.
     assert.deepEqual(["h", "l", "<C-f>", "<C-b>"].map((key) => leaf_at(root, key)?.id), ["message.scroll_left", "message.scroll_right", "message.page_down", "message.page_up"]);
 });
@@ -167,8 +167,8 @@ test("the message tree for a message tab sends every hint pick to the background
         for (const token of tokens) node = node?.kind === "branch" ? node.children[token] : undefined;
         return node?.kind === "leaf" ? node.steps : undefined;
     };
-    const kept = tree_with({ F: { id: "hint.pick", args: { action: "yank" } } });
-    assert.deepEqual([["f"], [";", "f"], [";", "c"], [";", "y"], ["F"]].map((tokens) => step_at(kept, ...tokens)?.map((step) => [step.invocation.id, step.invocation.args, step.runs_in])), [
+    const kept = tree_with({ b: { id: "hint.pick", args: { action: "yank" } } });
+    assert.deepEqual([["f"], [";", "f"], [";", "c"], [";", "y"], ["b"]].map((tokens) => step_at(kept, ...tokens)?.map((step) => [step.invocation.id, step.invocation.args, step.runs_in])), [
         [["hint.window", undefined, "background"]],
         [["hint.window", { action: "focus" }, "background"]],
         [["hint.window", { action: "activate" }, "background"]],
@@ -286,7 +286,7 @@ test("the message window tree holds the reading keys, the hint picks, the mail a
         [["step.message", { direction: "next", unread: false }], ["step.message", { direction: "previous", unread: false }], ["step.message", { direction: "next", unread: true }], ["step.message", { direction: "previous", unread: true }]],
     );
     assert.equal(leaf_at(root, "]", "U")?.id ?? "none", "none", "the all-folders step stays unbound");
-    for (const tokens of [["t", "m"], ["t", "T"], ["F", "f"], ["s", "s"], [";", ";"]]) assert.equal(leaf_at(root, ...tokens)?.id ?? "none", "none", tokens.join(""));
+    for (const tokens of [["t", "m"], ["t", "T"], ["b", "f"], ["s", "s"], [";", ";"]]) assert.equal(leaf_at(root, ...tokens)?.id ?? "none", "none", tokens.join(""));
     // A mail sequence the tree lacks ends in a leaf that runs nothing, so its tail never runs on its own.
     for (const tokens of [["t", "0"], ["g", "f"], ["z", "a"]]) assert.deepEqual(leaf_at(root, ...tokens), undefined, tokens.join(""));
     assert.deepEqual(((root.children["g"] as TreeBranch).children["f"] as { steps: unknown[] }).steps, []);

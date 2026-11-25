@@ -121,7 +121,7 @@ function remember_filter(tab_id: number, filter: AppliedFilter): void {
     save_filters();
 }
 
-// `setQuickFilter` clears every filter it does not know, so the message terms go back on after each call: after `F u`, `F s`, each step of `/` and its Escape. `F r` sets no terms and leaves them off.
+// `setQuickFilter` clears every filter it does not know, so the message terms go back on after each call: after `b u`, `b s`, each step of `/` and its Escape. `b r` sets no terms and leaves them off.
 async function apply_now(api: FilterApis, tab_id: number, filter: AppliedFilter): Promise<void> {
     const { by_message, ...quick } = filter;
     const terms_api = api.filter;

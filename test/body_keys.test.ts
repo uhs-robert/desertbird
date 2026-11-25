@@ -435,14 +435,14 @@ test("the mail keys send their command to the background, are cancelled and scro
 
 test("keys that need the thread list send nothing from a message", async () => {
     const { window, sent } = await started();
-    for (const keys of [["z", "z"], ["]", "u"], ["F", "t"], ["w", "m"]]) for (const key of keys) window.press(key);
+    for (const keys of [["z", "z"], ["]", "u"], ["b", "t"], ["w", "m"]]) for (const key of keys) window.press(key);
     assert.deepEqual(sent, []);
 });
 
 // The message tree lacks these prefixes, or has `z` only for the zoom keys, so their second key used to run on its own. Since `u` and `a` are bound in it, that key would undo or archive.
 test("a list prefix swallows its next key in a message, so u and a after it run nothing", async () => {
     const { window, sent } = await started();
-    for (const prefix of ["]", "[", "F", "s", "z", "w", "M", "'"]) for (const key of ["u", "a"]) {
+    for (const prefix of ["]", "[", "b", "s", "z", "w", "M", "'"]) for (const key of ["u", "a"]) {
         const before = sent.length;
         window.press(prefix);
         window.press(key);
@@ -461,7 +461,7 @@ test("a mail sequence typed in a message runs nothing, also under a prefix the m
     const { window, sent } = await started();
     window.elements = [Object.assign(new StubElement(), { href: "https://example.org/x" })];
     // `y ] a`: a stray `y` must not stop `] a` from being a list sequence.
-    for (const keys of [[";", ";", "y"], ["]", "a"], ["F", "a"], ["s", "a"], ["2", "w", "a"], ["y", "]", "a"]]) {
+    for (const keys of [[";", ";", "y"], ["]", "a"], ["b", "a"], ["s", "a"], ["2", "w", "a"], ["y", "]", "a"]]) {
         for (const key of keys) window.press(key);
         assert.deepEqual(sent.splice(0), [], keys.join(" "));
         assert.deepEqual(window.appended, [], `${keys.join(" ")} shows no labels`);
