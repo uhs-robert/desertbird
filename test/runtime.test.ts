@@ -852,6 +852,10 @@ test("a page that is never ready is never a typing target: plain keys stay dropp
     assert.equal(press(window, "a", in_loading_overlay).cancelled, true);
     advance(5000);
     assert.equal(press(window, "x", in_loading_overlay).cancelled, true);
+    // Two Spaces would start a pick and take the row out.
+    press(window, " ", in_loading_overlay);
+    press(window, " ", in_loading_overlay);
+    assert.deepEqual(window.chosen, [0]);
     assert.equal(window.selected, 0);
     // The host closes the overlay and the focus is back on the list: keys run again.
     press(window, "j");

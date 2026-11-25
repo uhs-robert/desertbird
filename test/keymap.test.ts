@@ -159,3 +159,10 @@ test("matcher_for_tree: Backspace drops the last key of a sequence, and counts a
     assert.equal(typed("d"), "match", "a count dropped by Backspace does not leak");
     assert.equal(typed("<Backspace>"), "no_match", "no sequence, so Backspace is an ordinary key");
 });
+
+test("hint_key_sequences lists the keys bound to a pick in the mail tab tree, and not `; ;`, which opens the command line", async () => {
+    const { compile_effective_keymap } = await import("../src/background/config/keymap.ts");
+    const { hint_key_sequences } = await import("../src/shared/hint_hold.ts");
+    const root = compile_effective_keymap({}).compiled.modes.normal as object;
+    assert.deepEqual(hint_key_sequences(root).map((sequence) => sequence.join(" ")).sort(), ["; c", "; f", "; y", "f"]);
+});

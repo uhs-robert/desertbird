@@ -48,7 +48,7 @@ const CONTENT_MAX_BYTES = 20210;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.
-const HINTS_MAX_BYTES = 18170;
+const HINTS_MAX_BYTES = 19706;
 const HINTS_CEILING_BYTES = 20480;
 
 // `content/compose_keys.js`, registered into every compose body.
@@ -64,7 +64,7 @@ const MENUKEYS_MAX_BYTES = 5632;
 const MENUKEYS_CEILING_BYTES = 8192;
 
 // `experiment/pages.js`, the key runtime of the tabs that are not the mail tab.
-const PAGES_MAX_BYTES = 28432;
+const PAGES_MAX_BYTES = 29456;
 const PAGES_CEILING_BYTES = 34816;
 
 // `content/page_keys.js`, the message key script that runs on the own pages (options, help).
@@ -80,7 +80,7 @@ const ACTOR_PARENT_MAX_BYTES = 5632;
 const ACTOR_PARENT_CEILING_BYTES = 9216;
 
 // `experiment/page_hints_child.sys.mjs`, the page actor's hint labels, which a child loads on the first hint pick in its process.
-const ACTOR_HINTS_MAX_BYTES = 7680;
+const ACTOR_HINTS_MAX_BYTES = 9216;
 const ACTOR_HINTS_CEILING_BYTES = 10240;
 
 // `experiment/context.js`, the context menu key (`, m`), loaded on the first call. It holds the row, header and compose field dispatch and the registration of the menu actor. See docs/design.md, "Context menu bundle".

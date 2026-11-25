@@ -39,12 +39,29 @@ async function run_header_hints(instance, ctx) {
     for (const letter of label) await instance.press([letter]);
   };
   const flagged = (state) => state.flags[HEADER_ID]?.flagged === true;
+  let state;
+  // The same gesture at human pace, which the burst does not reach: the labels are up, the first c ends them, and the second c comes later inside the hold. Then an f typed again inside the hold must label again.
+  const typed_slowly = async (where) => {
+    await show_labels();
+    await instance.press(["c"]);
+    await sleep(250);
+    await instance.press(["c"]);
+    await sleep(2500);
+    state = await instance.ask("state");
+    check(app, kind, `header hints: f, c, c at human pace ${where} opens no compose window`, !state.windows.some((window) => window.type === "messageCompose"), JSON.stringify(state.windows.map((window) => window.type)));
+    const { before } = await show_labels();
+    await instance.press(["c"]);
+    await instance.press(["f"]);
+    await window_pixels(`f typed again ${where} to label again`, drawn_since(before));
+    await instance.press(["-k", "Escape"]);
+    await sleep(500);
+  };
 
   const opened = await open_inbox(instance);
   check(app, kind, "open the Inbox with keys", opened === "/Inbox", `displayed folder ${opened}`);
   const since = Date.now();
   await instance.ask(`select:${HEADER_ID}`, 30000);
-  let state = await wait_for_state(instance, body_reports("the header message", since, in_pane));
+  state = await wait_for_state(instance, body_reports("the header message", since, in_pane));
   await instance.press(["-k", "F6"]);
   await sleep(500);
 
@@ -67,6 +84,7 @@ async function run_header_hints(instance, ctx) {
   // Both c can land before the labels draw, and the body drops them, so the labels may still show. Escape ends them.
   await instance.press(["-k", "Escape"]);
   await sleep(500);
+  await typed_slowly("from the body");
 
   // The star of the header flags the shown message.
   await pick(labels.star);
@@ -179,6 +197,7 @@ async function run_header_hints(instance, ctx) {
   check(app, kind, "header hints: f c c in one burst from the header opens no compose window", !state.windows.some((window) => window.type === "messageCompose"), JSON.stringify(state.windows.map((window) => window.type)));
   await instance.press(["-k", "Escape"]);
   await sleep(500);
+  await typed_slowly("from the header");
   await pick(labels.star);
   state = await wait_for_state(instance, flag_becomes(HEADER_ID, "flagged", true));
   check(app, kind, "header hints: from the header of a message tab the star label flags the message", flagged(state), `flagged ${flagged(state)}`);

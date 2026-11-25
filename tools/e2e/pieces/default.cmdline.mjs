@@ -17,7 +17,8 @@ async function run_cmdline(instance, ctx) {
   let selected_before = selection_of(state);
   let folders_before = JSON.stringify(state.folders);
   // j and a typed with no pause after the colon: the key runtime holds plain keys until the overlay has the focus, so neither reaches the list.
-  await open_command_line(instance, [":", "j", "a"]);
+  // One argument: wtype types a space between text arguments.
+  await open_command_line(instance, [":ja"]);
   await shot("cmdline_open", "the command line over the bottom of the window, with the completion list above its input");
   // Keys typed before the line was ready are dropped with no sign, so the margin is fixed.
   await sleep(QUIET_AFTER_ESCAPE_MS);
