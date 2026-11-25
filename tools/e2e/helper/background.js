@@ -30,16 +30,21 @@ async function folder_contents(folders, into, flags) {
   }
 }
 
-// DesertBird opens its help page in a tab on the first install, and every e2e profile is a first install. That tab hides the mail tab from the startup wait, so the helper closes it once. localStorage keeps the flag over an app restart on the same profile, which is no install, so a help tab a piece opens later stays open. first_run_help_seen tells the default piece that the tab did open.
+// DesertBird opens its help page in a tab on the first install, and every e2e profile is a first install. That tab hides the mail tab from the startup wait. On the first state request of a profile the helper therefore waits up to 15 s for that tab, closes it and keeps a flag in localStorage, so the tab is never raced and a help tab a piece opens later stays open. An app restart on the same profile is no install and skips the wait. first_run_help_seen tells the default piece that the tab opened. A profile that never opens it fails that check and waits only once.
 let first_run_help_seen = localStorage.getItem("first_run_help_seen") === "1";
+let first_run_wait_done = first_run_help_seen;
 async function close_first_run_help() {
-  if (first_run_help_seen) return;
-  for (const tab of await browser.tabs.query({})) {
-    if (!tab.url?.startsWith("moz-extension://") || !tab.url.endsWith("/help/help.html")) continue;
-    first_run_help_seen = true;
-    localStorage.setItem("first_run_help_seen", "1");
-    await browser.tabs.remove(tab.id);
+  if (first_run_wait_done) return;
+  for (let waited = 0; waited < 15000 && !first_run_help_seen; waited += 200) {
+    for (const tab of await browser.tabs.query({})) {
+      if (!tab.url?.startsWith("moz-extension://") || !tab.url.endsWith("/help/help.html")) continue;
+      first_run_help_seen = true;
+      localStorage.setItem("first_run_help_seen", "1");
+      await browser.tabs.remove(tab.id);
+    }
+    if (!first_run_help_seen) await new Promise((resolve) => setTimeout(resolve, 200));
   }
+  first_run_wait_done = true;
 }
 
 async function collect() {

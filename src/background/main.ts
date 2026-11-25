@@ -107,7 +107,7 @@ interface Messenger extends Omit<RouterApi, "keys" | "app" | "overlay" | "cmdlin
             /** Fires with -1 when no window of the application has the focus. */
             onFocusChanged: { addListener(listener: (window_id: number) => void): void };
         };
-    permissions: PermissionsApi["permissions"];
+    permissions: PermissionsApi["permissions"] & { onAdded: { addListener(listener: (granted: { permissions?: string[] }) => void): void } };
     tabs: Pick<TabsApi["tabs"], "query"> & {
         get(tab_id: number): Promise<unknown>;
         create(properties: { url: string }): Promise<unknown>;
@@ -399,6 +399,11 @@ messenger.overlay?.onClosed.addListener(({ windowId, surface, reason }) => {
 });
 
 start_jump_history(messenger);
+
+// A Save that grants nativeMessaging while the bridge setting is already true changes no stored value, so the bridge hears of it here.
+messenger.permissions.onAdded.addListener((granted) => {
+    if (granted.permissions?.includes("nativeMessaging")) void bridge.settings_changed();
+});
 
 // Only a first install greets. An update, a browser update and a reload of the add-on never open the page.
 messenger.runtime.onInstalled.addListener(({ reason }) => {

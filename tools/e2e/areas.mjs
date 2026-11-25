@@ -66,7 +66,7 @@ export const area_rules = [
   { globs: ["src/chrome/{page_actions,page_actor_child,page_actor_parent,page_focus,page_runtime,parent_pages}.ts", "src/background/commands/page.ts", "src/experiment/pages.schema.json"], areas: ["pages", "web"] },
   { globs: ["src/background/{commands,handlers}/followup.ts", "src/background/{followup_presets,followup_store}.ts"], areas: ["followup"] },
   { globs: ["src/background/{commands,handlers}/quick_reply.ts", "src/background/quick_reply_store.ts"], areas: ["quick_reply", "compose"] },
-  { globs: ["src/background/{commands,handlers}/compose.ts", "src/background/{compose_markdown,external_editor}.ts", "src/content/compose_{edit_key,keys}.ts", "src/background/commands/account_param.ts", "src/background/handlers/{account_choice,identity}.ts"], areas: ["compose"] },
+  { globs: ["src/background/{commands,handlers}/compose.ts", "src/background/{compose_markdown,external_editor,native_permission}.ts", "src/content/compose_{edit_key,keys}.ts", "src/background/commands/account_param.ts", "src/background/handlers/{account_choice,identity}.ts"], areas: ["compose"] },
   // The first display of a folder waits through loading.ts, for the folder and view handlers.
   { globs: ["src/background/handlers/loading.ts"], areas: ["mail_keys", "folders", "views"] },
   // The record store backs the snooze, follow-up and quick reply stores.

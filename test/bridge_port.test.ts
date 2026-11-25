@@ -8,7 +8,7 @@ import { fake_timers } from "./hud_fakes.ts";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function bridge_under_test(options: { setting?: boolean; run?: (text: string) => Promise<BridgeAnswer>; mode?: ModeSnapshot | undefined; granted?: boolean } = {}) {
+function bridge_under_test(options: { setting?: boolean; run?: (text: string) => Promise<BridgeAnswer>; mode?: ModeSnapshot | undefined; granted?: boolean; grant_gate?: Promise<void> } = {}) {
     const native = fake_native_messaging();
     const timers = fake_timers();
     let clock_ms = 0;
@@ -16,7 +16,7 @@ function bridge_under_test(options: { setting?: boolean; run?: (text: string) =>
     const bridge = create_bridge_port({
         connect: () => native.connectNative(BRIDGE_HOST_NAME),
         read_bridge_setting: async () => state.setting,
-        native_permission_granted: async () => state.granted,
+        native_permission_granted: async () => (await options.grant_gate, state.granted),
         say_permission_missing: () => void (state.said += 1),
         timers,
         now_ms: () => clock_ms,
@@ -322,4 +322,27 @@ test("with the permission missing it never calls connectNative, says so once and
     state.granted = true;
     await bridge.settings_changed();
     assert.deepEqual(native.names, ["desertbird_bridge"]);
+});
+
+test("a Save that leaves bridge true connects once the grant is there, and a second call adds no port", async () => {
+    const { native, bridge, state } = bridge_under_test({ granted: false });
+    await bridge.start();
+    assert.equal(native.ports.length, 0);
+    state.granted = true;
+    await bridge.settings_changed();
+    await bridge.settings_changed();
+    assert.equal(native.ports.length, 1);
+});
+
+test("a bridge turned off while the permission check is pending never connects", async () => {
+    let open_gate: () => void = () => {};
+    const grant_gate = new Promise<void>((resolve) => (open_gate = resolve));
+    const { native, bridge, state } = bridge_under_test({ grant_gate });
+    const started = bridge.start();
+    await settle();
+    state.setting = false;
+    const changed = bridge.settings_changed();
+    open_gate();
+    await Promise.all([started, changed]);
+    assert.equal(native.names.length, 0);
 });

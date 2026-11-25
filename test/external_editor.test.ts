@@ -6,6 +6,7 @@ import type { EditorCollectReply, EditorStartRequest, ExternalEditorDeps } from 
 import { registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
+import { NativePermissionMissing } from "../src/background/native_permission.ts";
 import { SETTING_DEFAULTS } from "../src/background/config/settings.ts";
 
 const COMPOSE_WINDOW = 7;
@@ -378,6 +379,16 @@ test("three failed collects in a row stop the loop with a toast and drop the job
     assert.equal(harness.collects.length, 3);
     assert.deepEqual(harness.jobs(), {});
     assert.match(harness.said[0]!.text, /failed to run.*scratch folder/);
+});
+
+test("a missing grant stops the loop at once with the permission message and no scratch folder hint", async () => {
+    const harness = await opened();
+    harness.collects[0]!.fail(new NativePermissionMissing("The external editor needs the nativeMessaging permission, which is not granted."));
+    await settle();
+    assert.equal(harness.collects.length, 1);
+    assert.deepEqual(harness.jobs(), {});
+    assert.match(harness.said[0]!.text, /nativeMessaging permission/);
+    assert.doesNotMatch(harness.said[0]!.text, /scratch folder/);
 });
 
 test("a collect that works again resets the failure count", async () => {
