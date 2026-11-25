@@ -130,6 +130,7 @@ export function app_verbs(context: ExtensionContext) {
             const motion = COMMAND_MOTIONS[name];
             if (motion === undefined) throw new Error("bad name");
             const holder = controller_holder_of(context, windowId);
+            // -1 marks the fetch names that run on the window controller. The `motion < 1` check below is a different test: it skips the view check for every command without a step motion.
             const on_window = motion < 0;
             const controller = holder && (on_window ? holder.browsingContext?.topChromeWindow.controllers.getControllerForCommand(name) : holder.commandController);
             if (!holder || (!controller && !on_window)) throw new Error("the window shows no message");
