@@ -902,6 +902,23 @@ test("Escape ends insert mode in a message document, does not cancel the key and
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`]);
 });
 
+test("Escape that leaves insert mode is cancelled in a message window, so Thunderbird does not close it", async () => {
+    const window_root = JSON.parse(JSON.stringify(compile_tab_keymap("window").compiled.modes.normal)) as unknown;
+    const window = new StubWindow();
+    const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { ...record(), window_tree: { version: COMPILED_KEYMAP_VERSION, root: window_root } } });
+    const { runtime } = stub_runtime();
+    await start_body_script(window, storage, runtime, undefined, "window_tree");
+    window.press("i");
+    assert.equal(window.press("Escape").cancelled, true, "insert in a window");
+    assert.equal(window.press("Escape").cancelled, false, "normal mode in a window still closes it");
+});
+
+test("Escape that leaves insert mode is not cancelled in a message tab document", async () => {
+    const { window } = await started();
+    window.press("i");
+    assert.equal(window.press("Escape").cancelled, false);
+});
+
 test("an Escape the page used keeps insert mode, and the next Escape ends it", async () => {
     const { window, sent } = await started();
     window.press("i");

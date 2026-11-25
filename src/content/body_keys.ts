@@ -203,7 +203,12 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     }
 
     window.addEventListener("keydown", on_keydown, true);
-    window.addEventListener("keydown", (event) => leaves_insert(escaped, event) && set_insert(false), false);
+    // In a message window Thunderbird closes the window on an Escape nobody cancelled, so the Escape that leaves insert is cancelled here, after leaves_insert has judged it. Cancelling at capture would make leaves_insert read it as used.
+    window.addEventListener("keydown", (event) => {
+        if (!leaves_insert(escaped, event)) return;
+        set_insert(false);
+        if (tree_field === "window_tree" && event.key === "Escape") event.preventDefault();
+    }, false);
     // The labels sit at fixed places. They end when the page moves under them, the window loses the focus or a click lands elsewhere.
     for (const type of ["scroll", "blur", "pointerdown"] as const) window.addEventListener(type, cancel, true);
     // A half-typed `d` must not wait across a tab switch, or `d`, `J`, `K`, `d` trashes a message.
