@@ -15,7 +15,7 @@ DesertBird keeps its settings, keymap, marks, quick replies, undo log, snoozes a
 ## Requests you cause
 
 - Opening a link from a message, or pressing `gu` to unsubscribe, opens the link in your default browser. That browser then loads the page, as for any link. DesertBird shows you the target first and never fetches or posts it itself.
-- `gu` with a mailto link opens a prefilled compose window. You send it yourself. DesertBird never sends mail.
+- `gu` with a mailto link opens a prefilled compose window. You send it yourself.
 - Saving attachments writes files to `Downloads/DesertBird/` on your disk. DesertBird never opens a saved file.
 - Yank commands write to your clipboard.
 - Notifications for reminders, snoozes and new mail show on your desktop. A subject and a sender can show on the lock screen and in the notification history of your desktop.
@@ -45,7 +45,7 @@ The host passes each answer to the program that asked and keeps none of it. Noth
 
 ## Permissions
 
-DesertBird asks Thunderbird for these permissions on install: read and change folders, messages, tags and drafts, run reminders (alarms), show notifications, store its own data, read the tab list, write the clipboard and save attachments to Downloads. It does not hold the permission to send mail. The `nativeMessaging` permission is optional and is asked for only as the section above says. Thunderbird also shows "Have full, unrestricted access to Thunderbird and your computer" for the Experiment, the privileged part of the add-on. The Experiment takes a fixed list of requests and sends nothing to a server.
+DesertBird asks Thunderbird for these permissions on install: read and change folders, messages, tags and drafts, run reminders (alarms), show notifications, store its own data, read the tab list, write the clipboard and save attachments to Downloads. It does not hold the permission to send mail. The key `gS` in a compose window sends the message only when you turn on the `compose_send` setting, and it uses Thunderbird's own send command with its checks. The bridge never sends mail. The `nativeMessaging` permission is optional and is asked for only as the section above says. Thunderbird also shows "Have full, unrestricted access to Thunderbird and your computer" for the Experiment, the privileged part of the add-on. The Experiment takes a fixed list of requests and sends nothing to a server.
 
 ## Changes and contact
 

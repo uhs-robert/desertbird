@@ -38,6 +38,7 @@ Read the design for an area before you change it. Read a folder's README before 
 | Phase 0 measurement probe and how to rerun it | [`tools/measure/README.md`](tools/measure/README.md) |
 | Store package: rebuilding the xpi from the source archive | [`BUILD.md`](BUILD.md) |
 | Privacy policy, also pasted into the store listing | [`docs/privacy.md`](docs/privacy.md) |
+| Store listing: metadata, reviewer notes, icon and submission order | [`atn/README.md`](atn/README.md) |
 
 Add a row for each new doc or source folder README in the same commit that creates it.
 
