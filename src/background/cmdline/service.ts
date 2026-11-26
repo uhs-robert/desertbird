@@ -8,9 +8,9 @@ import type { CmdlineCompletion, CmdlineHello, CmdlineRequest, CmdlineRunResult,
 import { offered_in } from "../commands/tab_keymaps.ts";
 import type { TabKind } from "../commands/tab_keymaps.ts";
 import type { SearchService } from "../search/service.ts";
-import { create_completer } from "./completion.ts";
+import { create_completer, session_lists } from "./completion.ts";
 import type { CmdlineHistory } from "./history.ts";
-import type { ValueSources } from "./completion.ts";
+import type { SessionLists, ValueSources } from "./completion.ts";
 
 /** What the line acts on. The messages are the ones selected when it opened: nothing can change the selection while the overlay has the keys. */
 export interface CmdlineSession {
@@ -83,6 +83,13 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
     const sessions = new Map<number, CmdlineSession>();
     const committing = new Set<CmdlineSession>();
     const complete = create_completer(deps.registry, deps.sources);
+    // Keyed by the session object, so a line that ends drops its lists with it and the next line reads them fresh.
+    const lists_of = new WeakMap<CmdlineSession, SessionLists>();
+    const lists_for = (session: CmdlineSession): SessionLists => {
+        const lists = lists_of.get(session) ?? session_lists(deps.sources);
+        lists_of.set(session, lists);
+        return lists;
+    };
 
     async function parse_and_check(text: string, kind: CmdlineSession["kind"]): Promise<CmdlineRunResult | { ok: true; id: string; args: Record<string, JsonValue> }> {
         const parsed = parse_command_line(deps.registry, text);
@@ -168,7 +175,7 @@ export function create_cmdline_service(deps: CmdlineDeps): CmdlineService {
                 case "cmdline.close":
                     return close(request.windowId).then(() => ({}));
                 case "cmdline.complete":
-                    return session ? complete(request.text, request.caret, { window_id: request.windowId, message_ids: session.message_ids, ...(session.kind && { kind: session.kind }) }) : Promise.reject(new RuntimeRefusal("The command line is not open."));
+                    return session ? complete(request.text, request.caret, { window_id: request.windowId, message_ids: session.message_ids, ...(session.kind && { kind: session.kind }) }, lists_for(session)) : Promise.reject(new RuntimeRefusal("The command line is not open."));
                 case "cmdline.search_type":
                     return session?.search ? deps.search.type(request.windowId, request.text) : Promise.reject(new RuntimeRefusal("The search line is not open."));
                 case "cmdline.search_commit":
