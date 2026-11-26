@@ -115,7 +115,7 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
   rmSync(out_dir, { recursive: true, force: true });
   mkdirSync(out_dir, { recursive: true });
   // The continuation after this await runs before the shutdown's own, since it awaited first, so the session is tracked when the shutdown looks.
-  const session = track_session(await track_start(begin_session(work_dir)));
+  const session = track_session(await track_start(begin_session(work_dir, { block_openers: kind === "shots" })));
   try {
     if (shutdown !== null) throw new Error("the run is stopping, no app starts");
     assert_app_isolated({ run_dir, profile_dir, env: session.env });
@@ -269,6 +269,8 @@ export async function start_app({ app, app_binary, work_dir, run_dir = work_dir,
     exited: () => app_exit,
     // Process id of the running app, so a check can prove a restart replaced the process.
     app_pid: () => app_child.pid,
+    // Puts a process group under the session's stop, so the stop signal and the kill timer reach it as they reach the app.
+    adopt_group: (pid) => { session.groups.push(pid); },
     // Quits the app and starts it again on the same profile, which is the only real restart of DesertBird: management.setEnabled is refused for an add-on in the profile folder.
     restart: async () => {
       try { process.kill(-app_child.pid, "SIGTERM"); } catch {}
