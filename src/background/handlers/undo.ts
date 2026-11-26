@@ -11,12 +11,15 @@ import type { FolderpaneApi } from "../../shared/protocol.ts";
 import type { MoveAction, MovedItem, StateField, StateItem, TagItem, UndoEntry, UndoLog, UndoOutcome } from "../undo_log.ts";
 import { ignore_refusal, refused_as } from "../../shared/swallow.ts";
 
+type FolderTree = MailFolder & { subFolders?: FolderTree[] };
+
 /** What recording a change and undoing it need. */
 export interface UndoApi extends NotificationsApi, Omit<SpecialFolderApi, "folders"> {
     folders: SpecialFolderApi["folders"] & {
         /** Throws while the folder has no summary file, which is how the undo tells an unindexed folder from a message that is gone. */
         getFolderInfo(folder_id: string): Promise<unknown>;
         get(folder_id: string): Promise<MailFolder>;
+        getSubFolders(folder_id: string, include_nested: boolean): Promise<FolderTree[]>;
     };
     /** `indexFolder` builds the summary of a local folder, so the lookup of a moved message can find it. */
     folderpane: Pick<FolderpaneApi, "indexFolder">;
@@ -194,11 +197,12 @@ function match_items(entry: UndoEntry, items: AnyItem[], copies: MessageHeader[]
     return match_state(items as StateItem[], copies, entry.field);
 }
 
-/** An item of the entry, the copy it names (undefined when that copy is not there) and the folders that were searched for it. */
+/** An item of the entry, the copy it names (undefined when that copy is not there) and the folders that were searched for it, with their subfolders when `subfolders` is set. */
 interface Found {
     item: AnyItem;
     copy: MessageHeader | undefined;
     folder_ids: string[];
+    subfolders: boolean;
 }
 
 async function find_copies(api: UndoApi, entry: UndoEntry): Promise<Found[]> {
@@ -206,7 +210,7 @@ async function find_copies(api: UndoApi, entry: UndoEntry): Promise<Found[]> {
     for (const group of groups_of(entry)) {
         const copies = await copies_in(api, group);
         const matched = match_items(entry, group.items, copies);
-        found.push(...group.items.map((item, index) => ({ item, copy: matched[index], folder_ids: group.folder_ids })));
+        found.push(...group.items.map((item, index) => ({ item, copy: matched[index], folder_ids: group.folder_ids, subfolders: group.subfolders })));
     }
     return found;
 }
@@ -214,36 +218,54 @@ async function find_copies(api: UndoApi, entry: UndoEntry): Promise<Found[]> {
 // Thunderbird lists no message of a local folder whose summary file (.msf) is missing or old, and `getFolderInfo` throws NS_MSG_ERROR_FOLDER_SUMMARY_OUT_OF_DATE for it. The browser hides that internal error behind this generic text. A folder that is gone throws "Folder not found", and is not meant here.
 const NO_SUMMARY = "An unexpected error occurred";
 
+const tree_ids = (tree: FolderTree[]): string[] => tree.flatMap((folder) => [folder.id, ...tree_ids(folder.subFolders ?? [])]);
+
+/** Every folder a missing copy was searched in: each destination, and all folders below it for a lookup that takes in subfolders (the year folders of Archives). */
+async function searched_folder_ids(api: UndoApi, found: Found[]): Promise<string[]> {
+    const ids = new Set<string>();
+    for (const { copy, folder_ids, subfolders } of found) {
+        if (copy !== undefined) continue;
+        for (const id of folder_ids) {
+            ids.add(id);
+            if (subfolders) tree_ids(await refused_as(api.folders.getSubFolders(id, true), [])).forEach((below) => ids.add(below));
+        }
+    }
+    return [...ids];
+}
+
 /** The folders that a missing copy was searched in and that have no usable summary, so the copy may be there and unlisted. */
 async function unindexed_folder_ids(api: UndoApi, found: Found[]): Promise<string[]> {
-    const ids = [...new Set(found.filter(({ copy }) => copy === undefined).flatMap(({ folder_ids }) => folder_ids))];
+    const ids = await searched_folder_ids(api, found);
     const checked = await Promise.all(ids.map(async (id) => ({ id, unindexed: (await api.folders.getFolderInfo(id).then(() => "", reason_of)).includes(NO_SUMMARY) })));
     return checked.filter(({ unindexed }) => unindexed).map(({ id }) => id);
 }
 
-/** Has Thunderbird build the summary of each unindexed folder a missing copy was searched in, one after the other: a parse that fails or times out leaves that folder unlisted and the lookup will say so. Answers whether any folder was tried. */
-async function index_folders(api: UndoApi, found: Found[]): Promise<boolean> {
+/**
+ * Has Thunderbird build the summary of each unindexed folder a missing copy was searched in, one after the other: a parse that fails or times out leaves that folder unlisted and the lookup will say so. Answers whether any folder was tried.
+ * `indexed` collects the folders whose parse finished, so the undo that follows does not take them for unindexed again.
+ */
+async function index_folders(api: UndoApi, found: Found[], indexed: Set<string>): Promise<boolean> {
     const unindexed = await unindexed_folder_ids(api, found);
-    for (const folder_id of unindexed) await ignore_refusal(api.folderpane.indexFolder({ folderId: folder_id }));
+    for (const folder_id of unindexed) if ((await ignore_refusal(api.folderpane.indexFolder({ folderId: folder_id }))) === true) indexed.add(folder_id);
     return unindexed.length > 0;
 }
 
 const all_found = (found: Found[]) => found.every(({ copy }) => copy !== undefined);
 
 /**
- * Waits, without the log, until every copy of the entry shows up or the retries run out: an IMAP server shows a moved copy only after a sync. A step that refused once is not waited for again.
- * Before the first retry, a local folder with no summary is parsed. The move of a message into such a folder leaves it unindexed, so the lookup would find nothing however long it waited.
+ * Waits, without the log, until every copy of the entry shows up or the retries run out: an IMAP server shows a moved copy only after a sync. A step that refused once gets one lookup and no retry.
+ * Before the first retry, a local folder with no summary is parsed. The move of a message into such a folder leaves it unindexed, so the lookup would find nothing however long it waited. A refused step is parsed too, because an older version refused a step for a folder with no summary.
  */
-async function wait_for_copies(api: UndoApi, entry: UndoEntry): Promise<void> {
-    if (entry.refused === true) return;
+async function wait_for_copies(api: UndoApi, entry: UndoEntry, indexed: Set<string>): Promise<void> {
+    const delays_ms = entry.refused === true ? [0] : [0, ...api.undo.retry_delays_ms];
     let indexing_tried = false;
-    for (const delay_ms of [0, ...api.undo.retry_delays_ms]) {
+    for (const delay_ms of delays_ms) {
         if (delay_ms > 0) await sleep(delay_ms);
         const found = await find_copies(api, entry);
         if (all_found(found)) return;
         if (indexing_tried) continue;
         indexing_tried = true;
-        if (await index_folders(api, found) && all_found(await find_copies(api, entry))) return;
+        if (await index_folders(api, found, indexed) && all_found(await find_copies(api, entry))) return;
     }
 }
 
@@ -261,11 +283,12 @@ async function unindexed_refusal(api: UndoApi, folder_ids: string[]): Promise<st
  * Undoes the entry with the log held, after one last lookup, so each message is checked in its destination right before it moves. Undo only ever moves a message back or writes an old value back.
  * A message still missing stops the whole first try: nothing moves and the entry is marked refused. The next `u` on a refused entry moves back what it finds and drops the rest, so a message gone for good never blocks the older entries.
  */
-async function undo_entry(api: UndoApi, entry: UndoEntry): Promise<UndoOutcome> {
+async function undo_entry(api: UndoApi, entry: UndoEntry, indexed: Set<string>): Promise<UndoOutcome> {
     const found = await find_copies(api, entry);
     const missing = found.filter(({ copy }) => copy === undefined).length;
+    // A refused step, and a folder whose parse just finished, take the mark-then-drop path below: another internal error behind the same generic text must not keep a step, and the older steps behind it, forever.
+    const unindexed = missing > 0 && entry.refused !== true ? (await unindexed_folder_ids(api, found)).filter((id) => !indexed.has(id)) : [];
     // Not marked refused: the message is not known to be gone, so the next `u` waits and indexes again instead of dropping the step.
-    const unindexed = missing > 0 ? await unindexed_folder_ids(api, found) : [];
     if (unindexed.length > 0) return { left: entry.items, refusal: await unindexed_refusal(api, unindexed) };
     if (missing > 0 && entry.refused !== true) {
         const which = missing === found.length ? (found.length === 1 ? "The message is" : "The messages are") : `${missing} of ${plural(found.length)} are`;
@@ -338,9 +361,10 @@ async function write_back_tags(api: UndoApi, present: { item: TagItem; copy: Mes
 const UNDONE: Record<MoveAction | StateField | "tag", string> = { delete: "delete", archive: "archive", move: "move", read: "read change", flagged: "star change", junk: "junk change", tag: "tag change" };
 
 export async function undo(scope: UndoScope): Promise<void> {
+    const indexed = new Set<string>();
     const done = await scope.api.undo.log.undo_newest(
-        (entry) => wait_for_copies(scope.api, entry),
-        (entry) => undo_entry(scope.api, entry),
+        (entry) => wait_for_copies(scope.api, entry, indexed),
+        (entry) => undo_entry(scope.api, entry, indexed),
     );
     if (done === undefined) throw new RuntimeRefusal("Nothing to undo.");
     const { entry, outcome } = done;
