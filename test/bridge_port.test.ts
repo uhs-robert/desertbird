@@ -8,14 +8,20 @@ import { fake_timers } from "./hud_fakes.ts";
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function bridge_under_test(options: { setting?: boolean; run?: (text: string) => Promise<BridgeAnswer>; mode?: ModeSnapshot | undefined } = {}) {
+function bridge_under_test(options: { setting?: boolean; run?: (text: string) => Promise<BridgeAnswer>; mode?: ModeSnapshot | undefined; granted?: boolean; grant_gate?: Promise<void>; hold_reads_from?: { call: number; gate: Promise<void> } } = {}) {
     const native = fake_native_messaging();
     const timers = fake_timers();
     let clock_ms = 0;
-    const state = { setting: options.setting ?? true, mode: "mode" in options ? options.mode : ({ mode: "normal", window_id: 3, tab_id: 7 } as ModeSnapshot | undefined), runs: [] as string[] };
+    const state = { setting: options.setting ?? true, granted: options.granted ?? true, said: 0, reads: 0, mode: "mode" in options ? options.mode : ({ mode: "normal", window_id: 3, tab_id: 7 } as ModeSnapshot | undefined), runs: [] as string[] };
     const bridge = create_bridge_port({
         connect: () => native.connectNative(BRIDGE_HOST_NAME),
-        read_bridge_setting: async () => state.setting,
+        read_bridge_setting: async () => {
+            state.reads += 1;
+            if (options.hold_reads_from && state.reads >= options.hold_reads_from.call) await options.hold_reads_from.gate;
+            return state.setting;
+        },
+        native_permission_granted: async () => (await options.grant_gate, state.granted),
+        say_permission_missing: () => void (state.said += 1),
         timers,
         now_ms: () => clock_ms,
         run_command: (text) => {
@@ -34,9 +40,11 @@ function bridge_under_test(options: { setting?: boolean; run?: (text: string) =>
             return { ok: true, count: (request["ids"] as number[]).length };
         },
     });
-    const advance = (ms: number) => {
+    // A fired retry checks the permission before it connects, so the connect lands a few microtasks later.
+    const advance = async (ms: number) => {
         clock_ms += ms;
         timers.advance(ms);
+        await settle();
     };
     const last = () => native.ports.at(-1)!;
     const ready = async () => {
@@ -138,7 +146,7 @@ test("turning the setting off while a retry waits stops the retry", async () => 
     state.setting = false;
     await bridge.settings_changed();
     assert.equal(timers.pending(), 0);
-    advance(10 * MAX_RETRY_MS);
+    await advance(10 * MAX_RETRY_MS);
     assert.equal(native.ports.length, 1);
 });
 
@@ -152,7 +160,7 @@ test("the backoff doubles from 1 s to 60 s and never holds more than one timer",
         assert.equal(timers.pending(), 1);
         let waited = 0;
         while (native.ports.length === ports_before) {
-            advance(FIRST_RETRY_MS / 2);
+            await advance(FIRST_RETRY_MS / 2);
             waited += FIRST_RETRY_MS / 2;
             assert.ok(timers.pending() <= 1);
         }
@@ -169,7 +177,7 @@ test("repeated drop events from one port schedule one retry, and a stale port's 
     first.host_drops();
     first.host_drops();
     assert.equal(timers.pending(), 1);
-    advance(FIRST_RETRY_MS);
+    await advance(FIRST_RETRY_MS);
     assert.equal(native.ports.length, 2);
     first.host_drops();
     assert.equal(timers.pending(), 0);
@@ -181,7 +189,7 @@ test("reconnects leak no listeners: each dead port has none and the live one has
     await bridge.start();
     for (let attempt = 0; attempt < 5; attempt++) {
         last().host_drops();
-        advance(MAX_RETRY_MS);
+        await advance(MAX_RETRY_MS);
     }
     assert.equal(native.ports.length, 6);
     assert.deepEqual(native.ports.map((port) => port.listener_count()), [0, 0, 0, 0, 0, 2]);
@@ -192,13 +200,13 @@ test("a port that stayed up past the stable time starts the backoff over", async
     await bridge.start();
     for (let attempt = 0; attempt < 4; attempt++) {
         last().host_drops();
-        advance(MAX_RETRY_MS);
+        await advance(MAX_RETRY_MS);
     }
     await ready();
-    advance(STABLE_MS);
+    await advance(STABLE_MS);
     const ports_before = native.ports.length;
     last().host_drops();
-    advance(FIRST_RETRY_MS);
+    await advance(FIRST_RETRY_MS);
     assert.equal(native.ports.length, ports_before + 1);
 });
 
@@ -208,7 +216,7 @@ test("a connect that throws retries on the backoff", async () => {
     await bridge.start();
     assert.equal(native.ports.length, 0);
     assert.equal(timers.pending(), 1);
-    advance(FIRST_RETRY_MS);
+    await advance(FIRST_RETRY_MS);
     assert.equal(native.ports.length, 1);
 });
 
@@ -221,7 +229,7 @@ test("an answer that finishes after a reconnect never reaches the new host", asy
     first.host_says({ verb: "run", request_id: 1, command: "motion.left" });
     await settle();
     first.host_drops();
-    advance(FIRST_RETRY_MS);
+    await advance(FIRST_RETRY_MS);
     await ready();
     const second = native.ports[1]!;
     const posted_before = second.posted.length;
@@ -303,4 +311,59 @@ test("an act frame goes to the acts with its fields, and a throw answers fixed t
         { ok: true, count: 2, verb: "reply", request_id: 7 },
         { ok: false, message: "the command failed", verb: "reply", request_id: 8 },
     ]);
+});
+
+test("with the permission missing it never calls connectNative, says so once and connects after the setting turns on again with the grant", async () => {
+    const { native, bridge, state } = bridge_under_test({ granted: false });
+    await bridge.start();
+    await bridge.settings_changed();
+    assert.equal(native.ports.length, 0);
+    assert.equal(native.names.length, 0);
+    assert.equal(state.said, 1);
+    state.setting = false;
+    await bridge.settings_changed();
+    state.setting = true;
+    state.granted = true;
+    await bridge.settings_changed();
+    assert.deepEqual(native.names, ["desertbird_bridge"]);
+});
+
+test("a Save that leaves bridge true connects once the grant is there, and a second call adds no port", async () => {
+    const { native, bridge, state } = bridge_under_test({ granted: false });
+    await bridge.start();
+    assert.equal(native.ports.length, 0);
+    state.granted = true;
+    await bridge.settings_changed();
+    await bridge.settings_changed();
+    assert.equal(native.ports.length, 1);
+});
+
+test("a bridge turned off while the permission check is pending never connects", async () => {
+    let open_gate: () => void = () => {};
+    const grant_gate = new Promise<void>((resolve) => (open_gate = resolve));
+    const { native, bridge, state } = bridge_under_test({ grant_gate });
+    const started = bridge.start();
+    await settle();
+    state.setting = false;
+    const changed = bridge.settings_changed();
+    open_gate();
+    await Promise.all([started, changed]);
+    assert.equal(native.names.length, 0);
+});
+
+test("a retry timer that fires while a connect waits on the stored setting opens exactly one port", async () => {
+    let open_gate: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (open_gate = resolve));
+    // Reads 1 and 2 are the start and its failed connect. Read 3 is the outer read of the settings change, which must pass. Reads 4 and 5 are the reads inside connect() for the settings change and for the timer, and both are held.
+    const { native, bridge, timers, advance } = bridge_under_test({ hold_reads_from: { call: 4, gate } });
+    native.fail_next = true;
+    await bridge.start();
+    assert.equal(timers.pending(), 1);
+    const changed = bridge.settings_changed();
+    await settle();
+    await advance(MAX_RETRY_MS);
+    open_gate();
+    await changed;
+    await settle();
+    assert.equal(native.ports.length, 1);
 });

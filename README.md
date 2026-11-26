@@ -176,7 +176,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - `Tab` and `Shift+Tab` are held back in normal mode. Chords such as `Ctrl+V` and `Ctrl+Z`, `Shift+Insert`, the Paste and Cut keys and a middle-click paste still work. A mouse paste, a drag, the context menu and an input method can still change the draft in normal mode.
 - A user binding on `i`, on `Escape` or on a chord has no effect there. The other keys are rebindable.
 - A small `-- INSERT --` or `-- NORMAL --` label shows the mode at the bottom right. The To and Subject fields have no normal mode.
-- External editor: it is off by default. Turn on the `external_editor` setting on the options page, then press `Ctrl+E` in the body. With the setting on, `e` in normal mode does the same.
+- External editor: it is off by default. Turn on the `external_editor` setting on the options page and press Save. Thunderbird asks once for the `nativeMessaging` permission, which the editor needs to reach the native host. Then press `Ctrl+E` in the body. With the setting on, `e` in normal mode does the same.
 - The DesertFox native host opens your editor on the message text, and DesertBird writes the result back when you save and quit. The host runs the command in its `editor.toml` and has no default, so the host and that file must be set up first. The add-on reaches the host through its `desertbird_host` manifest.
 - DesertBird writes back only when the text changed and the body in the window did not change meanwhile, and says why otherwise. Closing or sending the compose window while the editor is open discards the edited text. DesertBird keeps waiting for the editor, so the host can delete its scratch file when the editor closes.
 - In an HTML message only your own text goes to the editor, as Markdown in a `.md` file. The quote, a forwarded message and the signature stay as Thunderbird wrote them. A reply with your text on both sides of the quote is refused.
@@ -201,7 +201,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Change settings and rebind keys on the options page. A binding the compiler skips blocks the save, so a typo never reaches storage.
 - Pick one of the 16 Oasis themes with the `theme` setting. The options page, the which-key popup, the command line and the mode label follow it.
 - Choose when the mode label shows with `mode_indicator`.
-- Bridge: it is off by default. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. Thunderbird shows it on install as "Exchange messages with programs other than Thunderbird". An add-on with an Experiment cannot ask for an optional permission, so the permission is always granted. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. Commands that send, delete or move mail, and commands that open a link, never run through the bridge.
+- Bridge: it is off by default. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. It is an optional permission: Thunderbird shows "Exchange messages with programs other than Thunderbird" as a prompt when you turn `bridge` on and press Save on the options page. If you deny it, the setting is not saved. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. Commands that send, delete or move mail, and commands that open a link, never run through the bridge.
 
 Four more settings, each off by default and each inert while `bridge` is off, let a script read mail:
 
@@ -230,7 +230,8 @@ Saving a draft needs the `compose.save` permission, which Thunderbird shows on i
 - Thunderbird 153 does not support action buttons on notifications, so DesertBird notifications have none.
 - Some keys stay Thunderbird's, such as `Ctrl+Enter` and `Ctrl+S` in the compose window. A single key that is missing from a table reaches Thunderbird. See [docs/thunderbird-behavior.md](docs/thunderbird-behavior.md).
 - The privileged part is an Experiment, and it can break when Thunderbird internals change between ESR releases. A fixed table of calls keeps the breakage in one small file. See [Risks](docs/design.md#risks).
-- The `nativeMessaging` and `downloads` permissions are always granted, because an add-on with an Experiment cannot use optional permissions. A command that needs the native host refuses with a message when it is missing.
+- The `nativeMessaging` permission is optional. The options page asks for it when you save `external_editor` or `bridge` as true. A key or a bridge start with no grant refuses with a message that says how to grant it. The native host itself is optional too.
+- A first install opens the help page once. An update does not.
 
 ## 💛 Support
 

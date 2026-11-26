@@ -7,6 +7,7 @@ import { ignore_refusal, keep_chain } from "../shared/swallow.ts";
 import { RuntimeRefusal } from "../../vendor/desertfox/command.ts";
 import type { ComposeEditRequest } from "../shared/protocol.ts";
 import type { ComposeMarkdown } from "./compose_markdown.ts";
+import { NativePermissionMissing } from "./native_permission.ts";
 
 export const EDITOR_HOST_NAME = "desertbird_host";
 export const EDITOR_JOBS_STORAGE_KEY = "desertbird_editor_jobs";
@@ -30,6 +31,7 @@ export function create_editor_client(send: (message: object) => Promise<unknown>
         try {
             reply = await send(request);
         } catch (error) {
+            if (error instanceof NativePermissionMissing) throw error;
             const text = error instanceof Error ? error.message : String(error);
             // Thunderbird words this failure differently across versions, so only the stable part is matched.
             if (/no such native application/i.test(text)) throw new Error(`The native host desertbird_host is not installed (Thunderbird: ${text}). ${INSTALL_HINT}`);
@@ -199,6 +201,8 @@ export function create_external_editor(deps: ExternalEditorDeps) {
                     reply = await deps.client.editor_collect(held.job);
                     failures = 0;
                 } catch (error) {
+                    // A missing grant does not heal by waiting, and the scratch folder hint would blame the host.
+                    if (error instanceof NativePermissionMissing) return await drop(held, failure_text(error));
                     const unknown_job = UNKNOWN_JOB.test(failure_text(error));
                     if (!unknown_job && ++failures < MAX_COLLECT_FAILURES) {
                         await deps.pause(MIN_POLL_MS);

@@ -13,7 +13,7 @@ interface StorageChange {
 const real_digest = crypto.subtle.digest.bind(crypto.subtle);
 
 /** A stand-in for the `messenger` global the background entry reads: storage that fires `onChanged` on each write, and a recording `keys.install` and `pages.install`. */
-function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}, options: { menukeys_fails?: boolean; no_menukeys?: boolean } = {}) {
+function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: number[] = [], session: Record<string, unknown> = {}, options: { menukeys_fails?: boolean; no_menukeys?: boolean; permission_granted?: boolean } = {}) {
     const native_messages: { application: string; message: object }[] = [];
     const compose_scripts: unknown[] = [];
     const after_send_listeners: ((tab: { id?: number }, send_info: { error?: string }) => void)[] = [];
@@ -31,6 +31,10 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
     const displayed_asks: number[] = [];
     const message_listeners: ((message: unknown, sender: unknown) => unknown)[] = [];
     const native = fake_native_messaging();
+    const granted = { now: options.permission_granted ?? true };
+    const added_listeners: ((details: { permissions?: string[] }) => void)[] = [];
+    const installed_listeners: ((details: { reason: string }) => void)[] = [];
+    const created_tabs: { url: string }[] = [];
     // Calls in flight plus pending echo timers. A test that asserts "only once" waits for zero, so a second install an echo causes has landed.
     let busy = 0;
     const counted = async <T>(work: () => Promise<T>) => {
@@ -84,7 +88,9 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             }) },
         keys: { install: (args: { tree: unknown }) => counted(async () => void (install_log.push("keys"), installs.push(args.tree))), onInvocation: { addListener: () => {} } },
         pages: { install: (args: { pageTree: unknown; messageTree: unknown; windowTree: unknown; typingTree: unknown }) => counted(async () => void (install_log.push("pages"), page_installs.push(args.pageTree), message_installs.push(args.messageTree), window_installs.push(args.windowTree), typing_installs.push(args.typingTree))), onInvocation: { addListener: () => {} } },
+        permissions: { contains: async () => granted.now, request: async () => granted.now, onAdded: { addListener: (listener: (details: { permissions?: string[] }) => void) => void added_listeners.push(listener) } },
         runtime: {
+            onInstalled: { addListener: (listener: (details: { reason: string }) => void) => void installed_listeners.push(listener) },
             onMessage: { addListener: (listener: (message: unknown, sender: unknown) => unknown) => void message_listeners.push(listener) },
             getURL: (path: string) => `moz-extension://test/${path}`,
             connectNative: (application: string) => native.connectNative(application),
@@ -93,7 +99,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
         },
         notifications: { create: async () => "n", clear: async () => true, onClicked: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) }, onClosed: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
         messages: { onNewMailReceived: { addListener: (listener: unknown) => void new_mail_listeners.push(listener) } },
-        tabs: { get: async () => ({}), onActivated: { addListener: () => {} }, onRemoved: { addListener: () => {} } },
+        tabs: { get: async () => ({}), create: async (properties: { url: string }) => void created_tabs.push(properties), onActivated: { addListener: () => {} }, onRemoved: { addListener: () => {} } },
         windows: { get: async () => ({ type: "messageDisplay" }), getAll: async () => [], onCreated: { addListener: () => {} }, onRemoved: { addListener: () => {} }, onFocusChanged: { addListener: () => {} } },
         alarms: { create: () => {}, onAlarm: { addListener: () => {} } },
         messageDisplay: { getDisplayedMessages: async (tab_id: number) => (displayed_asks.push(tab_id), []) },
@@ -115,7 +121,7 @@ function stub_messenger(stored: Record<string, unknown> = {}, read_delays_ms: nu
             if (busy === 0) return;
         }
     };
-    return { displayed_asks, message_listeners, when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
+    return { displayed_asks, message_listeners, when_installed, when_idle, reads_done: () => reads_done, stored, installs, install_log, menu_installs, page_installs, message_installs, window_installs, typing_installs, external_write, first_read, new_mail_listeners, native, native_messages, granted, added_listeners, installed_listeners, created_tabs, compose_scripts, session, after_send_listeners, storage_listener_count: () => change_listeners.length };
 }
 
 const WAIT_DEADLINE_MS = 5_000;
@@ -335,6 +341,54 @@ test("with external_editor on, a stored job of a live tab collects again from de
     assert.deepEqual(native_messages[0], { application: "desertbird_host", message: { cmd: "editor_collect", job: "j1" } });
     await when_installed(1);
     await when_idle();
+});
+
+test("with external_editor on and no nativeMessaging grant, no native message goes out", async () => {
+    const job = { job: "j1", tab_id: 70, window_id: 7, original: "Hello\n" };
+    const { native_messages, when_installed, when_idle } = stub_messenger({ desertbird_settings: { external_editor: true } }, [], { desertbird_editor_jobs: { 70: job } }, { permission_granted: false });
+    await start_background();
+    await when_installed(1);
+    await when_idle();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(native_messages, []);
+});
+
+test("with bridge on and no nativeMessaging grant, connectNative is never called", async () => {
+    const { native, when_installed, when_idle } = stub_messenger({ desertbird_settings: { bridge: true } }, [], {}, { permission_granted: false });
+    await start_background();
+    await when_installed(1);
+    await when_idle();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(native.names, []);
+});
+
+test("after an update drops the grant, granting it with bridge already true connects the bridge once", async () => {
+    const { native, granted, added_listeners, when_installed, when_idle } = stub_messenger({ desertbird_settings: { bridge: true } }, [], {}, { permission_granted: false });
+    await start_background();
+    await when_installed(1);
+    await when_idle();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(native.names, []);
+    granted.now = true;
+    for (const listener of added_listeners) listener({ permissions: ["nativeMessaging"] });
+    await wait_for("the bridge to connect", () => native.names.length === 1);
+    for (const listener of added_listeners) listener({ permissions: ["nativeMessaging"] });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(native.names, ["desertbird_bridge"]);
+});
+
+test("a first install opens the help page once, and an update or a browser update opens nothing", async () => {
+    const { installed_listeners, created_tabs, when_installed, when_idle } = stub_messenger();
+    await start_background();
+    await when_installed(1);
+    await when_idle();
+    assert.equal(installed_listeners.length, 1);
+    installed_listeners[0]!({ reason: "update" });
+    installed_listeners[0]!({ reason: "browser_update" });
+    assert.deepEqual(created_tabs, []);
+    installed_listeners[0]!({ reason: "install" });
+    await wait_for("the help tab", () => created_tabs.length === 1);
+    assert.deepEqual(created_tabs, [{ url: "moz-extension://test/help/help.html" }]);
 });
 
 test("a failed send leaves the editor job alone, and a send that went out orphans it", async () => {
