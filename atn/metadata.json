@@ -14,6 +14,12 @@
   "support_url": {
     "en-US": "https://github.com/uhs-robert/desertbird/issues"
   },
+  "categories": {
+    "thunderbird": [
+      "message-and-news-reading",
+      "folders-and-filters"
+    ]
+  },
   "default_locale": "en-US",
   "is_experimental": false,
   "requires_payment": false,

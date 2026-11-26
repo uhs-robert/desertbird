@@ -24,7 +24,7 @@ Every command is defined once in a registry. Keys, the command line, completion 
 
 **The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `Alt+?` or `,?` to open it with the top-level keys. Press `g?` or `,h` to open the help page, which lists every key.
 
-<p align="center"><img src="./docs/images/which-key.png" width="800" alt="The thread list in Thunderbird with the which-key popup open after g, listing the go keys"/></p>
+<p align="center"><img src="./docs/images/which-key.png" width="800" alt="The Inbox in Thunderbird with the which-key popup open after g, listing the go keys"/></p>
 
 You can edit a message in your own editor, such as Neovim: press `Ctrl+E` in the body of a compose window. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor.
 
@@ -45,9 +45,7 @@ DesertBird runs in Thunderbird 153 ESR or later and in Betterbird. It is tested 
 
 ### From addons.thunderbird.net
 
-In Thunderbird, open the menu, then Add-ons and Themes, search for DesertBird and select Add to Thunderbird. Thunderbird updates the add-on itself. The first install opens the help page once. An update does not.
-
-Betterbird installs the same file from the same listing. Open its Add-ons and Themes page and search for DesertBird there, or download the file from the listing and install it from the file.
+The listing on addons.thunderbird.net is not live yet. It is waiting for review. Until it is, install from source (below). This section gets the listing link once the review passes.
 
 ### What Thunderbird asks on install
 
@@ -128,8 +126,11 @@ The first day needs a few keys. Press `g` and wait: a short pause after a key th
 | `,h` | The help page |
 | `Alt+?` | The which-key popup with the top-level keys |
 
-<p align="center"><img src="./docs/images/hints.png" width="800" alt="The thread list in Betterbird with a two-letter hint label next to every row and control"/></p>
+<p align="center"><img src="./docs/images/hints.png" width="800" alt="The Inbox with a two-letter hint label next to every row and control"/></p>
+<p align="center"><img src="./docs/images/body-hints.png" width="800" alt="A newsletter open in a message tab with a hint label on each link and the Reply and Forward buttons"/></p>
 <p align="center"><img src="./docs/images/command-line.png" width="800" alt="The command line open at the bottom of the window with fil typed and the matching commands listed above it"/></p>
+<p align="center"><img src="./docs/images/filter.png" width="800" alt="The Inbox after b m l, showing only the four messages of one mailing list"/></p>
+<p align="center"><img src="./docs/images/followup.png" width="800" alt="The which-key popup after m f, listing the follow-up reminder presets"/></p>
 
 The toolbar button opens a small popup with two entries, Options and Help. Options holds the settings, the key editor and the 16 Oasis themes. [docs/keymap.md](docs/keymap.md) lists every default key of each tab kind.
 
@@ -152,7 +153,7 @@ DesertBird and tbkeys both put custom keys into Thunderbird. They differ in what
 | Keys set in a form on the options page | ✅ | ❌ JSON text |
 | Runs code from a string | never | ✅ eval (not in tbkeys-lite) |
 | Uses an Experiment | ✅ | ✅ |
-| Published on addons.thunderbird.net | ✅ | tbkeys-lite only |
+| Published on addons.thunderbird.net | ❌ not yet, pending review | tbkeys-lite only |
 
 ✅ yes · ❌ no · ➖ not documented in its README
 
