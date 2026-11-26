@@ -1056,3 +1056,68 @@ test("a keydown that page script dispatched runs nothing, in normal mode and whi
     assert.equal(window.press("j", { isTrusted: false }).cancelled, false, "an untrusted key is left alone");
     assert.equal(window.press("j").cancelled, true, "a trusted key still runs");
 });
+
+async function started_own_page() {
+    const window = new StubWindow();
+    const root = JSON.parse(JSON.stringify(compile_tab_keymap("own").compiled.modes.normal)) as unknown;
+    const { storage } = stub_storage({ [KEYMAP_STORAGE_KEY]: { own_tree: { version: COMPILED_KEYMAP_VERSION, root } } });
+    await start_body_script(window, storage, stub_runtime().runtime, undefined, "own_tree");
+    return window;
+}
+
+/** A select of the stub document: the options page has these, and a key in one reaches the page script. */
+function stub_select(selected_index: number, option_count = 3) {
+    const events: string[] = [];
+    return {
+        localName: "select",
+        selectedIndex: selected_index,
+        options: { length: option_count },
+        blurs: 0,
+        events,
+        blur() {
+            this.blurs++;
+        },
+        dispatchEvent(event: Event) {
+            events.push(event.type);
+            return true;
+        },
+    };
+}
+
+test("Escape in a select on an own page blurs it", async () => {
+    const window = await started_own_page();
+    const select = stub_select(0);
+    window.press("Escape", { target: select });
+    assert.equal(select.blurs, 1);
+});
+
+test("j in a select on an own page steps to the next option, sends input and change and cancels the key", async () => {
+    const window = await started_own_page();
+    const select = stub_select(0);
+    assert.equal(window.press("j", { target: select }).cancelled, true);
+    assert.equal(select.selectedIndex, 1);
+    assert.deepEqual(select.events, ["input", "change"]);
+});
+
+test("k at the first option and j at the last option of a select stay put", async () => {
+    const window = await started_own_page();
+    const first = stub_select(0);
+    window.press("k", { target: first });
+    assert.equal(first.selectedIndex, 0);
+    assert.deepEqual(first.events, []);
+    const last = stub_select(2);
+    window.press("j", { target: last });
+    assert.equal(last.selectedIndex, 2);
+    assert.deepEqual(last.events, []);
+});
+
+test("j in an input is not cancelled, and a select in a message document keeps its native keys", async () => {
+    const own = await started_own_page();
+    assert.equal(own.press("j", { target: { localName: "input" } }).cancelled, false);
+    const message = await started();
+    const select = stub_select(0);
+    assert.equal(message.window.press("j", { target: select }).cancelled, false);
+    message.window.press("Escape", { target: select });
+    assert.equal(select.selectedIndex, 0);
+    assert.equal(select.blurs, 0);
+});
