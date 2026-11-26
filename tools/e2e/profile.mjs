@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { write_fixtures } from "../measure/fixtures.mjs";
 import { write_reading_folder } from "./reading_fixture.mjs";
-import { SHOTS_USER, shots_inbox_text } from "./shots_fixture.mjs";
+import { SHOTS_USER, shots_inbox_text, shots_receipts_text } from "./shots_fixture.mjs";
 
 const IDENTITY_PREFS = {
   "mail.account.account1.identities": "id1",
@@ -196,6 +196,8 @@ const SHOTS_PREFS = {
   "mailnews.default_sort_order": 2,
   // The table view, which has the room for the sender and the date, in place of the cards.
   "mail.threadpane.listview": 1,
+  // The classic layout puts the message pane below the list, so the list keeps the width of its subjects when the pane shows.
+  "mail.pane_config.dynamic": 0,
   "mail.identity.id1.fullName": SHOTS_USER.name,
   "mail.identity.id1.useremail": SHOTS_USER.address,
 };
@@ -223,6 +225,9 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
     for (const name of ["Views", "Reading", "Html"]) rmSync(join(folder_dir, name), { force: true });
     writeFileSync(join(folder_dir, "Inbox"), shots_inbox_text());
     for (const name of SHOTS_FOLDERS) writeFileSync(join(folder_dir, name), "");
+    writeFileSync(join(folder_dir, "Receipts"), shots_receipts_text());
+    // The message pane under the list gets 300 px of the 720 px window. The first-run default leaves the list two rows.
+    writeFileSync(join(profile_dir, "xulstore.json"), JSON.stringify({ "chrome://messenger/content/messenger.xhtml": { messagepaneboxwrapper: { height: "300" } } }));
   }
   const mail_dir = join(profile_dir, "Mail", "pop.invalid");
   if (kind === "mail_account") {

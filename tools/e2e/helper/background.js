@@ -328,6 +328,11 @@ async function poll_forever() {
         await post({ seq: command.seq, events: folder_events, now: Math.round(performance.now()) });
       } else if (command.name === "show_folder") {
         await post({ seq: command.seq, ...(await show_folder(command.args.path)) });
+      } else if (command.name === "import_mail") {
+        // New mail arriving in a folder, for the demo film: each text is one message file, imported unread.
+        const folder = flat_folders((await browser.accounts.list(true)).flatMap((account) => account.folders ?? [])).find((candidate) => candidate.path === command.args.path);
+        for (const text of command.args.messages) await browser.messages.import(new File([text], "arrival.eml"), folder, { read: false });
+        await post({ seq: command.seq, imported: command.args.messages.length });
       } else if (command.name === "query_folder") {
         await post({ seq: command.seq, ...(await query_folder(command.args)) });
       }
