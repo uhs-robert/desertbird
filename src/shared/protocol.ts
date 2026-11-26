@@ -338,7 +338,7 @@ export interface FolderpaneViewRowCountArgs {
 /** The flag a step command looks for. `unread` is the absence of the read bit. */
 export type RowFlag = "unread" | "flagged" | "attachment";
 
-/** Whether a header's flags word has the flag. The chrome scan and the background check after it both use this test. The bits are those of `nsMsgMessageFlags`: unread is the read bit (0x1) unset, starred is 0x4 and attachment 0x10000000. No table object, because the scan runs this once per row and its bundle is at its guard. */
+/** Whether a header's flags word has the flag. The chrome scan and the background check after it both use this test. The bits are those of `nsMsgMessageFlags`: unread is the read bit (0x1) unset, starred is 0x4 and attachment 0x10000000. The bits sit in the expression and not in a table object, because the scan's bundle has no bytes to spare under its guard. */
 export const flags_have = (flags: number, flag: RowFlag): boolean => ((flags & (flag === "unread" ? 0x1 : flag === "flagged" ? 0x4 : 0x10000000)) === 0) === (flag === "unread");
 
 /** Walks the list from row `from` (clamped to the last row going back) and answers the `wanted`th row with the flag, else the last one found, else index -1. */
