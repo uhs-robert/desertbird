@@ -33,6 +33,7 @@ export const app: CommandGroup = {
             name: "undo",
             label: "Undo",
             intent: "Undo DesertBird's last delete, archive, move or mark. The marks are read, star and junk, and a tag toggle. Snooze, mark folder read and changes made in Thunderbird itself are not undone.",
+            needs: ["folderpane.indexFolder"],
             run: scoped<UndoApi>(undo),
         },
         "thread.open_conversation": {

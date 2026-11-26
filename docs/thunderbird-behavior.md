@@ -221,7 +221,7 @@ All numbers are medians (p95 and max beside them) of 30 timed runs after a first
 - The all-folder query takes about 1.1 s warm and 1.2 s on the first run, so cold and warm agree. It is not fast enough per key press.
 - The `messagesPerPage: 1` call returns the first match in folder order. It does not return "the next unread after the current message", so it cannot serve `] u` alone.
 - To find the next unread across folders, a command can read the counts with `getFolderInfo` (21 ms median for all 50) and then query one folder. The sum was not run as one call.
-- A folder with no summary file (`.msf`) lists no messages and `getFolderInfo` throws `NS_MSG_ERROR_FOLDER_SUMMARY_OUT_OF_DATE`. Opening the folder in the thread list builds the summary. A normal profile has the summaries already.
+- A folder with no summary file (`.msf`) lists no messages and `getFolderInfo` throws `NS_MSG_ERROR_FOLDER_SUMMARY_OUT_OF_DATE`. The background receives only "An unexpected error occurred", and the name shows in the browser console (measured in Betterbird 153). Opening the folder in the thread list builds the summary. A normal profile has the summaries already.
 
 ### Thread view and `setSelectedMessages`
 

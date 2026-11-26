@@ -70,8 +70,8 @@ test("app.open_page from a message window opens the page in the main window and 
     assert.deepEqual(fake.calls, ["focus 3", "appOpenPage config"]);
 });
 
-test("msg.undo needs no chrome verb: it reads DesertBird's own log, not Thunderbird's undo", () => {
-    assert.deepEqual(registry.get("msg.undo")?.needs, ["message"]);
+test("msg.undo reads DesertBird's own log, not Thunderbird's undo, and needs one chrome verb: the parse of an unindexed destination", () => {
+    assert.deepEqual(registry.get("msg.undo")?.needs, ["message", "folderpane.indexFolder"]);
 });
 
 test("a command Thunderbird has disabled is refused with a message", async () => {
