@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { write_fixtures } from "../measure/fixtures.mjs";
 import { write_reading_folder } from "./reading_fixture.mjs";
+import { SHOTS_USER, shots_inbox_text } from "./shots_fixture.mjs";
 
 const IDENTITY_PREFS = {
   "mail.account.account1.identities": "id1",
@@ -190,6 +191,16 @@ const mail_account_inbox = () =>
     .map(([id, subject, to], index) => [`From sender@fixture.invalid ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString()}`, "X-Mozilla-Status: 0000", "X-Mozilla-Status2: 00000000", `Message-ID: <${id}@fixture.invalid>`, `Date: ${new Date(Date.UTC(2026, 1, 1, 0, index)).toUTCString().replace("GMT", "+0000")}`, "From: Fixture Sender <sender@fixture.invalid>", `To: Someone <${to}>`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", `Body of ${id}.`, ""].join("\n") + "\n")
     .join("");
 
+// Kind "shots" is for the screenshots of the README and the listing: its own Inbox of realistic mail (shots_fixture.mjs), the newest message first, an identity with a real-looking name, and none of the checks' fixture folders.
+const SHOTS_PREFS = {
+  "mailnews.default_sort_order": 2,
+  // The table view, which has the room for the sender and the date, in place of the cards.
+  "mail.threadpane.listview": 1,
+  "mail.identity.id1.fullName": SHOTS_USER.name,
+  "mail.identity.id1.useremail": SHOTS_USER.address,
+};
+const SHOTS_FOLDERS = ["Archives", "Sent", "Drafts"];
+
 // kind "owner" is the default plus the prefs a window a person looks at needs: no first-run policy tab. owner-test uses it.
 // kind "lists" adds the Lists folder (List-Id headers and three days). kind "owner" adds it too.
 // kind "message_header" adds the Header folder (a message with Cc, a tag and an attachment) and the dark scheme.
@@ -208,6 +219,11 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   write_reading_folder(folder_dir);
   // The bulk folders only slow startup here. The Inbox keeps its collapsed threads.
   if (!scale) for (const entry of readdirSync(folder_dir)) if (/^Bulk\d+$/.test(entry)) rmSync(join(folder_dir, entry));
+  if (kind === "shots") {
+    for (const name of ["Views", "Reading", "Html"]) rmSync(join(folder_dir, name), { force: true });
+    writeFileSync(join(folder_dir, "Inbox"), shots_inbox_text());
+    for (const name of SHOTS_FOLDERS) writeFileSync(join(folder_dir, name), "");
+  }
   const mail_dir = join(profile_dir, "Mail", "pop.invalid");
   if (kind === "mail_account") {
     mkdirSync(mail_dir, { recursive: true });
@@ -221,7 +237,8 @@ export function build_profile(profile_dir, { kind = "default" } = {}) {
   const owner_prefs = kind === "owner" ? OWNER_PREFS : {};
   // Kind "message_header" shows the dark scheme, the only one where the message header shows its day/night switch.
   const header_prefs = kind === "message_header" ? THEME_PREFS.default_os_dark : {};
-  const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...header_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
+  const shots_prefs = kind === "shots" ? SHOTS_PREFS : {};
+  const prefs = { ...BASE_PREFS, ...(kind === "owner" ? {} : E2E_ONLY_PREFS), ...identity_prefs, ...owner_prefs, ...mail_prefs, ...remote_prefs, ...header_prefs, ...shots_prefs, ...THEME_PREFS[process.env.E2E_THEME ?? ""], ...(process.env.E2E_CONSOLE ? CONSOLE_PREFS : {}), "mail.server.server1.directory": folder_dir };
   writeFileSync(join(profile_dir, "user.js"), Object.entries(prefs).map(([name, value]) => `user_pref(${JSON.stringify(name)}, ${JSON.stringify(value)});`).join("\n") + "\n");
   // nativeMessaging is an optional permission that the options page asks for with a prompt, and a headless run has no one to allow it. The app keeps granted optional permissions in the profile's extension-preferences.json. The editor kinds need the grant for the native host.
   if (kind.startsWith("compose_editor")) writeFileSync(join(profile_dir, "extension-preferences.json"), JSON.stringify({ "desertbird@uhs-robert": { permissions: ["nativeMessaging"], origins: [] } }));
