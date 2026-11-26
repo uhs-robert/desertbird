@@ -36,7 +36,7 @@ const APP_MAX_BYTES = 12645;
 const APP_CEILING_BYTES = 12800;
 
 // `experiment/folderpane.js`, loaded on the first folder pane call.
-const FOLDERPANE_MAX_BYTES = 5900;
+const FOLDERPANE_MAX_BYTES = 6412;
 const FOLDERPANE_CEILING_BYTES = 10240;
 
 // `experiment/zoom.js`, loaded on the first zoom call.
