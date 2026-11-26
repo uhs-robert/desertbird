@@ -1,7 +1,7 @@
 // An invisible Wayland session for the probe: headless labwc, with wtype as the keyboard. Nothing shows on the user's screen.
 // Every process starts in its own process group and stops by that group, never by name, because the user may run the same programs.
 import { spawn, execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -14,14 +14,31 @@ export const holder_argv = () => ["wtype", ...Array.from({ length: HOLDER_SLEEPS
 // Time for wtype to make its virtual keyboard before the session hands out, or the first key could still race the holder.
 const HOLDER_SETTLE_MS = 300;
 
-export async function start_session(work_dir) {
+// Every program a link could start a browser through. With `block_openers` each one is a stub first on PATH that logs its call and does nothing, so a pick in a message cannot open the owner's browser. A program called by an absolute path is not caught, and the log shows only the calls that went through PATH.
+export const OPENER_NAMES = ["xdg-open", "gio", "gvfs-open", "gnome-open", "kde-open", "kde-open5", "kde-open6", "exo-open", "sensible-browser", "x-www-browser", "www-browser", "firefox", "chromium", "google-chrome", "google-chrome-stable", "brave", "librewolf"];
+export const BLOCKED_OPENERS_LOG = "blocked_openers.log";
+
+function write_opener_stubs(work_dir) {
+  const stub_dir = join(work_dir, "blocked_openers");
+  mkdirSync(stub_dir, { recursive: true });
+  const log = join(work_dir, BLOCKED_OPENERS_LOG);
+  for (const name of OPENER_NAMES) {
+    const path = join(stub_dir, name);
+    writeFileSync(path, `#!/bin/sh\necho "${name} $*" >> "${log}"\nexit 0\n`);
+    chmodSync(path, 0o755);
+  }
+  return stub_dir;
+}
+
+export async function start_session(work_dir, { block_openers = false } = {}) {
   const runtime_dir = join(work_dir, "runtime");
   mkdirSync(runtime_dir, { recursive: true, mode: 0o700 });
   const labwc_config = join(work_dir, "labwc");
   mkdirSync(labwc_config, { recursive: true });
   writeFileSync(join(labwc_config, "rc.xml"), "<labwc_config/>\n");
   const groups = [];
-  const base_env = { PATH: process.env.PATH, XDG_RUNTIME_DIR: runtime_dir, HOME: join(work_dir, "home"), DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent", LANG: "C.UTF-8" };
+  const path = block_openers ? `${write_opener_stubs(work_dir)}:${process.env.PATH}` : process.env.PATH;
+  const base_env = { PATH: path, XDG_RUNTIME_DIR: runtime_dir, HOME: join(work_dir, "home"), DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent", LANG: "C.UTF-8" };
   mkdirSync(base_env.HOME, { recursive: true });
 
   function start_child(argv, env, log_name) {
