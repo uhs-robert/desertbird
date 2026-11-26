@@ -24,6 +24,14 @@ export interface BodyKeyEvent extends KeyEventLike {
     stopPropagation(): void;
 }
 
+/** The part of a select element the own page keys use. */
+interface SelectNode {
+    selectedIndex: number;
+    options: { length: number };
+    blur(): void;
+    dispatchEvent(event: Event): boolean;
+}
+
 export interface BodyWindow extends FindWindow, HintWindow {
     addEventListener(type: "keydown", listener: (event: BodyKeyEvent) => void, capture: boolean): void;
     addEventListener(type: "scroll" | "blur" | "pointerdown", listener: () => void, capture: boolean): void;
@@ -162,6 +170,20 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         context.hints.feed([...event.key].length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
     }
 
+    // A focused select swallows every key on an own page: Escape does not leave it and j/k only type-ahead. A select in a mail keeps its native keys, so only an own page gets this.
+    function on_select_key(event: BodyKeyEvent, select: SelectNode): boolean {
+        if (event.ctrlKey || event.altKey || event.metaKey) return false;
+        if (event.key === "Escape") return (select.blur(), true);
+        const step = event.key === "j" ? 1 : event.key === "k" ? -1 : 0;
+        if (!step) return false;
+        event.preventDefault();
+        const index = select.selectedIndex;
+        select.selectedIndex = Math.min(Math.max(index + step, 0), select.options.length - 1);
+        // The page reads the choice from these events, as it does for a native arrow key.
+        if (select.selectedIndex !== index) for (const type of ["input", "change"]) select.dispatchEvent(new Event(type, { bubbles: true }));
+        return true;
+    }
+
     // A script in the document can dispatch keydown events. Only a real key press may run a command.
     function on_keydown(event: BodyKeyEvent): void {
         if (!event.isTrusted) return;
@@ -170,7 +192,9 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         const token = event_to_token(event);
         if (token === null) return;
         if (insert) return void (token === "<Escape>" || token === "<C-[>" ? escaped = event : undefined);
-        if (is_typing_element(event.target as FocusNode | null)) return reset_sequence();
+        const target = event.target as FocusNode | null;
+        if (tree_field === "own_tree" && target?.localName === "select" && on_select_key(event, target as unknown as SelectNode)) return reset_sequence();
+        if (is_typing_element(target)) return reset_sequence();
         if (hold_until > Date.now() && is_plain_printable(token)) return void (event.preventDefault(), event.stopPropagation());
         // Escape ends a half-typed sequence or count. With a sequence pending it is cancelled too, or Thunderbird closes a message window under the open panel. With none pending it goes on to Thunderbird, which may use it.
         if (token === "<Escape>") {
