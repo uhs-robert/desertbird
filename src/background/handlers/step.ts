@@ -1,6 +1,7 @@
 import { refused_as } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
+import { flags_have } from "../../shared/protocol.ts";
 import type { FolderpaneApi, RowFlag, ViewRow } from "../../shared/protocol.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { active_mail_tab, show_folder_and_focus_threads } from "./folder_open.ts";
@@ -31,17 +32,13 @@ type StepScope = ThreadScope & { api: StepApi };
 const SKIPPED_FOLDERS = ["trash", "junk"];
 
 // The rows are in the order the user sees, with the sort and the open threads, which a query does not give. A row holds the flags of its own message only: an unread reply inside a closed thread is found once the thread opens.
-// The bits of `nsMsgMessageFlags` in a row's `flags`. Unread is the absence of the read bit.
-const FLAG_BIT = { unread: 0x1, flagged: 0x4, attachment: 0x10000000 } as const;
-const has_flag = (row: ViewRow, flag: RowFlag): boolean => (flag === "unread" ? row.unread : (row.flags & FLAG_BIT[flag]) !== 0);
-
 // The chrome side walks the list and answers the `wanted`th match, or the last one it found when the list runs out. One more read gives that row's message id.
 async function find_row(scope: StepScope, flag: RowFlag, from: number, forward: boolean, wanted: number): Promise<ViewRow | undefined> {
-    const index = await scope.api.folderpane.viewFindRow({ windowId: scope.window_id, from, forward, flag, wanted });
-    if (index < 0) return undefined;
-    const [row] = (await scope.api.app.viewRows({ windowId: scope.window_id, first: index, last: index })).rows;
-    // A quick filter or a new message between the two calls moves the rows, so the index can name another message. Selecting it would land on a row without the flag.
-    if (row === undefined || !has_flag(row, flag)) throw new RuntimeRefusal("The list changed during the step. Press the key again.");
+    const found = await scope.api.folderpane.viewFindRow({ windowId: scope.window_id, from, forward, flag, wanted });
+    if (found.index < 0) return undefined;
+    const [row] = (await scope.api.app.viewRows({ windowId: scope.window_id, first: found.index, last: found.index })).rows;
+    // A quick filter or a new message between the two calls moves the rows, so the index can hold another message, even one with the same flag.
+    if (row === undefined || row.id !== found.id || !flags_have(row.flags, flag)) throw new RuntimeRefusal("The list changed during the step. Press the key again.");
     return row;
 }
 

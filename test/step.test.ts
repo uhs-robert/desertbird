@@ -4,7 +4,8 @@ import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
-import type { ViewRow } from "../src/shared/protocol.ts";
+import { find_flagged_row } from "../src/chrome/flag_scan.ts";
+import type { FolderpaneViewFindRowArgs, ViewRow } from "../src/shared/protocol.ts";
 
 // `flagged` and `attachment` stand for the bits of the flags word, so a test reads like the list.
 interface Flags {
@@ -27,7 +28,7 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
     const calls: string[] = [];
     const rows = Array.from({ length: options.rows }, (_, index): ViewRow => {
         const marked = options.flags?.[index];
-        return { index, id: index + 100, depth: 0, collapsed: false, unread: marked?.unread === true, flags: (marked?.flagged ? 0x4 : 0) | (marked?.attachment ? 0x10000000 : 0) };
+        return { index, id: index + 100, depth: 0, collapsed: false, unread: marked?.unread === true, flags: (marked?.unread ? 0 : 0x1) | (marked?.flagged ? 0x4 : 0) | (marked?.attachment ? 0x10000000 : 0) };
     });
     const folders = options.folders ?? [{ id: "f1", unread: 0 }];
     // A test sets `after_scan` to change the list right after the chrome scan answers.
@@ -46,13 +47,11 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
         folderpane: {
             viewRowCount: async () => (calls.push("viewRowCount"), rows.length),
             // The chrome scan, over the same rows and flags as viewRows.
-            viewFindRow: async ({ from, forward, flag, wanted }: { from: number; forward: boolean; flag: "unread" | "flagged" | "attachment"; wanted: number }) => {
-                calls.push(`viewFindRow ${from} ${forward} ${flag} ${wanted}`);
-                const bit = { unread: 0, flagged: 0x4, attachment: 0x10000000 }[flag];
-                let found = -1;
-                for (let at = forward ? from : Math.min(from, rows.length - 1); at >= 0 && at < rows.length && wanted > 0; at += forward ? 1 : -1) {
-                    if (flag === "unread" ? rows[at]!.unread : (rows[at]!.flags & bit) !== 0) (found = at), wanted--;
-                }
+            // The chrome scan itself, over the same rows as viewRows. The id is the one the parent converts from the found header.
+            viewFindRow: async (search: Omit<FolderpaneViewFindRowArgs, "windowId">) => {
+                calls.push(`viewFindRow ${search.from} ${search.forward} ${search.flag} ${search.wanted}`);
+                const { index } = find_flagged_row({ rowCount: rows.length, getMsgHdrAt: (at) => rows[at] ?? null }, search);
+                const found = { index, id: rows[index]?.id ?? null };
                 hooks.after_scan();
                 return found;
             },
@@ -224,10 +223,26 @@ test("] u finds an unread row far ahead with one scan and one row read, and with
 });
 
 // A quick filter that lands between the scan and the row read moves the rows, so the found index names another message. The step refuses and selects nothing.
-test("a quick filter that changes the list during the scan makes the step refuse and select nothing", async () => {
+test("a quick filter that empties the found row during the scan makes the step refuse and select nothing", async () => {
     const fake = step_fake({ rows: 2000, current: 0, flags: { 1500: { unread: true } } });
     const narrowed = fake.rows.filter((row) => row.index % 2 === 0).map((row, index) => ({ ...row, index, unread: false }));
     fake.after_scan = () => void fake.rows.splice(0, fake.rows.length, ...narrowed);
     await fake.run("step.unread", { direction: "next", scope: "folder" });
     assert.deepEqual(fake.calls(), ["notify The list changed during the step. Press the key again."]);
+});
+
+// New mail inserted above the found row shifts every row down one, so the index now holds another starred message.
+test("a shift that puts another flagged row at the found index refuses, and an unchanged view selects the found message", async () => {
+    const flags = { 1: { flagged: true }, 2: { flagged: true } };
+    // From row 1 the scan finds row 2. After the shift row 2 holds the starred message of row 1.
+    const shifted = step_fake({ rows: 10, current: 1, flags });
+    shifted.after_scan = () => {
+        const moved = shifted.rows.map((row) => ({ ...row, index: row.index + 1 }));
+        shifted.rows.splice(0, shifted.rows.length, { index: 0, id: 999, depth: 0, collapsed: false, unread: false, flags: 0x1 }, ...moved);
+    };
+    await shifted.run("step.starred", { direction: "next" });
+    assert.deepEqual(shifted.calls(), ["notify The list changed during the step. Press the key again."]);
+    const unchanged = step_fake({ rows: 10, current: 1, flags });
+    await unchanged.run("step.starred", { direction: "next" });
+    assert.deepEqual(unchanged.calls(), ["select 9 102"]);
 });
