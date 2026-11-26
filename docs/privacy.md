@@ -28,7 +28,7 @@ The external editor sends the text of the message you are composing to the progr
 
 ## The optional bridge
 
-The setting `bridge` is off by default. Nothing connects to the host while it is off. When it is on, programs on your own computer that connect to the bridge socket of the host (readable by your user only) can read the state of Thunderbird and run a short list of safe commands. Commands that send, delete or move mail and commands that open a link never run through the bridge.
+The setting `bridge` is off by default. Nothing connects to the host while it is off. When it is on, programs on your own computer that connect to the bridge socket of the host (readable by your user only) can read the state of Thunderbird and run a short list of safe commands. Commands that send mail, delete it for good or open a link never run through the bridge. Archive, trash and move run only when `bridge_allow_actions` is on and you press `y` on a prompt in Thunderbird.
 
 With `bridge` on and nothing else, a program sees the mode of the focused window, the ids of that window and its active tab and the list of allowed commands. Four more settings, each off by default, let a program read mail. Two more let a program write. The table lists what each one passes.
 

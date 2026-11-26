@@ -1,4 +1,4 @@
-// The screenshots of the README and the store listing, on the realistic mail of the `shots` profile kind. Opt-in: it checks nothing and writes a still for each feature. Run it with E2E_KINDS=shots E2E_KEEP=1 E2E_DIR=<empty dir>, then copy the shots from the run dir to docs/images/.
+// The screenshots of the README and the store listing, on the realistic mail of the `shots` profile kind. Opt-in: it checks nothing and writes a still for each feature. Run it with E2E_SHARDS=1 E2E_KINDS=shots E2E_ONLY=main E2E_KEEP=1 E2E_DIR=<empty dir> just e2e thunderbird, then copy the shots from the run dir to docs/images/.
 
 import { sleep, drawn_since, holds_twice } from "../predicates.mjs";
 import { OPEN_OWN_PAGES_SCRIPT } from "../seed.mjs";

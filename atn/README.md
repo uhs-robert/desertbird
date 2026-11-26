@@ -49,8 +49,8 @@ Captions for the previews, in the order to upload them. The first is the 1280x80
 
 Retake them with the `shots/main` piece of the e2e tool (see `tools/e2e/README.md`). Its fixture mail is `tools/e2e/shots_fixture.mjs`. The hero image is `which-key.png` scaled to 880 px on a sand background with the logo and the tagline, rendered with `rsvg-convert` and `magick`.
 
-## Open items for the owner
+## Before submitting
 
-- Support email: none is set on purpose. The support URL (GitHub issues) is the support channel.
+- Support email: none is set. The support URL (GitHub issues) is the support channel.
 - `data_collection_permissions`: the manifest says `required: ["none"]`, as DesertFox does. `addons-linter` 10.16.0 checks the field against its schema and accepts it, and rejects a bad value. The linter runs in Firefox mode, so it also flags the Experiment and the Thunderbird permissions, which Firefox does not know. Only the live upload shows the store's own verdict.
-- `TODO-CHROME-VERBS` in the reviewer notes: the list of chrome verbs is not filled in yet. Search for it in `metadata.json` before the submit.
+- `TODO-CHROME-VERBS` in the reviewer notes: the list of chrome verbs is not filled in yet. Search for it in `metadata.json` and fill it first.
