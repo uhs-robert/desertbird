@@ -156,6 +156,47 @@ test("the count is of the list as one read sees it, while a quick filter change 
     assert.equal(note.note, "1 of 700");
 });
 
+// Thunderbird fills the filtered list after `setQuickFilter` returns. While `filter.searching` answers true the view holds part of the list, so a count then is short.
+function filling_list(fixture: ReturnType<typeof setup>, polls: number) {
+    const asked: string[] = [];
+    const full_count = fixture.api.folderpane.viewRowCount;
+    fixture.api.folderpane.viewRowCount = async () => (asked.push(polls > 0 ? "count while searching" : "count"), polls > 0 ? 1 : full_count());
+    (fixture.api as { filter?: unknown }).filter = { set: async () => true, searching: async () => (asked.push("searching"), polls-- > 0) };
+    return asked;
+}
+
+const drain_timers = async (timers: ReturnType<typeof fake_timers>, done: Promise<unknown>) => {
+    let finished = false;
+    void done.finally(() => (finished = true)).catch(() => undefined);
+    for (let turn = 0; turn < 50 && !finished; turn++) {
+        await new Promise((resolve) => setImmediate(resolve));
+        timers.advance(100);
+    }
+};
+
+test("a keystroke, Enter and n count only once Thunderbird has filled the list", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    let asked = filling_list(fixture, 2);
+    const typed = fixture.service.type(3, "invoice");
+    await drain_timers(fixture.timers, typed);
+    assert.deepEqual(await typed, { note: "1 of 3", is_error: false });
+    assert.deepEqual(asked, ["searching", "searching", "searching", "count"]);
+    asked = filling_list(fixture, 1);
+    const committed = fixture.service.commit(3, "invoice");
+    await drain_timers(fixture.timers, committed);
+    await committed;
+    assert.ok(!asked.includes("count while searching"), asked.join(", "));
+    // After Escape the list is whole again, so n applies the filter once more and waits for it.
+    await fixture.service.start(3, "forward");
+    await fixture.service.cancel(3);
+    asked = filling_list(fixture, 2);
+    const stepped = fixture.service.step(3, "same");
+    await drain_timers(fixture.timers, stepped);
+    await stepped;
+    assert.deepEqual(asked.filter((entry) => entry.startsWith("count")), ["count"]);
+});
+
 test("a search with the backward direction counts from the last row", async () => {
     const { service, type } = setup();
     await service.start(3, "backward");
