@@ -59,6 +59,12 @@
                 "optional": true,
                 "description": "The key sequences bound to a pick, as tokens. After a typo ends the labels, the parent drops plain keys until 1.5 s after the pick began, apart from these."
               },
+              "hintLetters": {
+                "type": "string",
+                "pattern": "^[^/]{2,}$",
+                "optional": true,
+                "description": "The alphabet of the labels, lower case: the hint_letters setting. Absent means the default alphabet."
+              },
               "colors": {
                 "type": "object",
                 "description": "The label box and letter colors as #rrggbb for each color scheme. The parent uses the scheme Thunderbird itself shows.",
