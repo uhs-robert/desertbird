@@ -3,7 +3,7 @@
 What the addons.thunderbird.net listing needs from this repository. DesertBird has no release script yet, so the first submit is by hand on the developer hub.
 
 - `metadata.json`: the listing fields in the shape of the add-on API that DesertFox's listing file uses: name, summary (at most 250 characters), description, support URL, the version license (`MPL-2.0`), the release notes line and the notes for the store's reviewers. Its `categories` are Message and News Reading and Folders and Filters, slugs from the live Thunderbird category list (the add-on API at `/api/v4/addons/categories/`). The reviewer notes carry the permission reasons, the answers about remote code and the native host, and the justification of the Experiment and the page actor. Keep them true when a permission, a verb or the host changes.
-- `icon.png`: the 128 px listing icon. It was rendered from `src/icons/desertbird.svg` with `rsvg-convert -w 128 -h 128` (librsvg 2.63). The manifest icon stays the SVG.
+- The 128 px listing icon is `src/icons/desertbird-128.png`, which is also the manifest's 128 entry. It was rendered from `src/icons/desertbird.svg` with `rsvg-convert -w 128 -h 128` (librsvg 2.63).
 
 Three things stay outside the file and are set on the listing page:
 
@@ -27,7 +27,7 @@ It holds every tracked file, including `BUILD.md`, `package-lock.json`, `vendor/
 2. Make the source archive from the same commit.
 3. Open the developer hub, add a new add-on and upload `dist/desertbird.xpi`. Pick Thunderbird. The store signs the file, and the number 1.0.0 is used once.
 4. Fill the listing from `metadata.json`: name, summary, description, support URL, homepage and license. Paste the reviewer notes into the notes for reviewers, and upload the source archive.
-5. Set the privacy policy from `docs/privacy.md`, upload `icon.png` and add the previews. Set the categories (Message and News Reading, Folders and Filters), the Thunderbird version range (minimum 153.0, no maximum) and no Android.
+5. Set the privacy policy from `docs/privacy.md`, upload `src/icons/desertbird-128.png` and add the previews. Set the categories (Message and News Reading, Folders and Filters), the Thunderbird version range (minimum 153.0, no maximum) and no Android.
 6. The store reviews the version, which takes days or weeks. Betterbird users install the same file from the same listing, and the listing text says so without claiming store support for Betterbird.
 7. After approval, point the README at the listing (the install section and the comparison row) and add the signed file to a GitHub release.
 
@@ -53,4 +53,4 @@ Retake them with the `shots/main` piece of the e2e tool (see `tools/e2e/README.m
 
 - Support email: none is set. The support URL (GitHub issues) is the support channel.
 - `data_collection_permissions`: the manifest says `required: ["none"]`, as DesertFox does. `addons-linter` 10.16.0 checks the field against its schema and accepts it, and rejects a bad value. The linter runs in Firefox mode, so it also flags the Experiment and the Thunderbird permissions, which Firefox does not know. Only the live upload shows the store's own verdict.
-- `TODO-CHROME-VERBS` in the reviewer notes: the list of chrome verbs is not filled in yet. Search for it in `metadata.json` and fill it first.
+- The chrome verb list in the reviewer notes copies the "Chrome verbs" section of `docs/design.md`. Check it against that section when a verb changes.
