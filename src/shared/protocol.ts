@@ -194,7 +194,7 @@ export const EXPERIMENT_VERBS = {
     hints: { functions: ["sendEnter", "pick"], events: [] },
     pages: { functions: ["install"], events: ["onInvocation"] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
-    folderpane: { functions: ["fold", "focused", "viewRowCount", "viewFindRow"], events: [] },
+    folderpane: { functions: ["fold", "focused", "viewRowCount", "viewFindRow", "indexFolder"], events: [] },
     // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
     app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"], events: [] },
     // Loaded on first use, like `folderpane`. Opens the native context menu of what the focus is on.
@@ -331,6 +331,10 @@ export interface FolderpaneFocusedArgs {
     windowId: number;
 }
 
+export interface FolderpaneIndexFolderArgs {
+    folderId: string;
+}
+
 export interface FolderpaneViewRowCountArgs {
     windowId: number;
 }
@@ -350,12 +354,13 @@ export interface FolderpaneViewFindRowArgs {
     wanted: number;
 }
 
-/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. `viewFindRow` finds a row by its flags in chrome, so a step over a long list is one call. */
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. `viewFindRow` finds a row by its flags in chrome, so a step over a long list is one call. `indexFolder` builds the summary of a local folder that has none or an old one, so a message query finds its mail, and answers true once the parse finished and false for a folder that is not local or a parse that outlasts the timeout. */
 export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
     focused(args: FolderpaneFocusedArgs): Promise<boolean>;
     viewRowCount(args: FolderpaneViewRowCountArgs): Promise<number>;
     viewFindRow(args: FolderpaneViewFindRowArgs): Promise<FoundRow>;
+    indexFolder(args: FolderpaneIndexFolderArgs): Promise<boolean>;
 }
 
 /** A row the flag scan found: its index and its message id, so a reread can tell whether the list moved. Index -1 and id null when none. */

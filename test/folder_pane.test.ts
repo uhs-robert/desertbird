@@ -224,3 +224,95 @@ test("viewFindRow counts matches, stops at the last one found, skips group rows 
     assert.equal(await index_of({ from: 0, forward: true, flag: "unread", wanted: 1 }, 2), -1);
     restore();
 });
+
+// A local folder and the services indexFolder reaches through ChromeUtils. `reparse` is what getDatabaseWithReparse does: return at once (a valid summary) or throw (a parse started or runs).
+function index_env(options: { local: boolean; reparse: "valid" | "starts" }) {
+    const platform = stub_platform();
+    const globals = globalThis as Record<string, any>;
+    class LocalFolder {
+        URI = "mailbox://nobody@Local%20Folders/Receipts";
+        reparses = 0;
+        getDatabaseWithReparse() {
+            this.reparses++;
+            if (options.reparse === "starts") throw new Error("NS_ERROR_NOT_INITIALIZED");
+            return {};
+        }
+    }
+    // An IMAP folder is no nsIMsgLocalMailFolder, so it has no `getDatabaseWithReparse`.
+    class ImapFolder {
+        URI = "imap://nobody@host/Receipts";
+    }
+    const folder = options.local ? new LocalFolder() : new ImapFolder();
+    const listeners = new Set<{ onFolderEvent(folder: unknown, event: string): void }>();
+    const timers = new Map<number, () => void>();
+    let next_timer = 1;
+    const modules: Record<string, unknown> = {
+        "resource:///modules/ExtensionAccounts.sys.mjs": { getFolder: (id: string) => (id === "f1" ? { folder } : assert.fail(`unknown folder ${id}`)) },
+        "resource:///modules/MailServices.sys.mjs": { MailServices: { mailSession: { AddFolderListener: (listener: never) => void listeners.add(listener), RemoveFolderListener: (listener: never) => void listeners.delete(listener) } } },
+        "resource://gre/modules/Timer.sys.mjs": { setTimeout: (run: () => void) => (timers.set(next_timer, run), next_timer++) },
+    };
+    const base = globals["ChromeUtils"].importESModule;
+    globals["ChromeUtils"].importESModule = (url: string) => modules[url] ?? base(url);
+    globals["Ci"].nsIMsgLocalMailFolder = LocalFolder;
+    globals["Ci"].nsIFolderListener = { event: 1 };
+    const api = get_folderpane_api({ extension: {} } as never);
+    return {
+        index: api.folderpane.indexFolder,
+        folder,
+        listeners,
+        timers,
+        says: (event: string, from = folder) => listeners.forEach((listener) => listener.onFolderEvent(from, event)),
+        restore: platform.restore,
+    };
+}
+
+test("indexFolder answers true at once for a folder whose summary is valid, leaves no listener, and its late timer does nothing", async () => {
+    const env = index_env({ local: true, reparse: "valid" });
+    assert.equal(await env.index({ folderId: "f1" }), true);
+    assert.equal(env.listeners.size, 0);
+    [...env.timers.values()].forEach((run) => run());
+    assert.equal(env.listeners.size, 0);
+    env.restore();
+});
+
+test("indexFolder waits for FolderLoaded of its own folder after a parse starts, then answers true", async () => {
+    const env = index_env({ local: true, reparse: "starts" });
+    let answer: boolean | undefined;
+    const pending = env.index({ folderId: "f1" }).then((loaded) => void (answer = loaded));
+    assert.equal(env.listeners.size, 1, "the listener is on before the reparse call");
+    env.says("FolderLoaded", {} as never);
+    env.says("DeleteOrMoveMsgCompleted");
+    await Promise.resolve();
+    assert.equal(answer, undefined, "another folder, or another event, does not end the wait");
+    env.says("FolderLoaded");
+    await pending;
+    assert.equal(answer, true);
+    assert.equal((env.folder as { reparses: number }).reparses, 1);
+    assert.equal(env.listeners.size, 0);
+    env.restore();
+});
+
+test("indexFolder answers false at the timeout when FolderLoaded never fires, and removes its listener", async () => {
+    const env = index_env({ local: true, reparse: "starts" });
+    const pending = env.index({ folderId: "f1" });
+    assert.equal(env.timers.size, 1);
+    [...env.timers.values()][0]!();
+    assert.equal(await pending, false);
+    assert.equal(env.listeners.size, 0);
+    env.says("FolderLoaded");
+    env.restore();
+});
+
+test("indexFolder answers false for a folder that is not local, without a reparse or a listener", async () => {
+    const env = index_env({ local: false, reparse: "valid" });
+    assert.equal(await env.index({ folderId: "f1" }), false);
+    assert.equal(env.listeners.size, 0);
+    assert.equal(env.timers.size, 0);
+    env.restore();
+});
+
+test("indexFolder carries the reason when the folder id is unknown", async () => {
+    const env = index_env({ local: true, reparse: "valid" });
+    await assert.rejects(env.index({ folderId: "nope" }), /^Error: folderpane.indexFolder: unknown folder nope/);
+    env.restore();
+});

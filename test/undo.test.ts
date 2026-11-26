@@ -17,6 +17,8 @@ const FOLDERS: MailFolder[] = [
     { id: "archives", accountId: "a1", path: "/Archives", specialUse: ["archives"] },
     { id: "imap-inbox", accountId: "a2", path: "/INBOX", specialUse: ["inbox"] },
     { id: "imap-trash", accountId: "a2", path: "/Trash", specialUse: ["trash"] },
+    { id: "receipts", accountId: "a1", path: "/Receipts" },
+    { id: "imap-receipts", accountId: "a2", path: "/Receipts" },
 ];
 
 interface Stored {
@@ -35,8 +37,9 @@ interface Stored {
 /**
  * A mail store that behaves as the API does where undo depends on it: a move gives the message a new id, a delete moves to the Trash of the account (or removes the message for good from Trash), and an archive files into a year folder it makes on first use.
  * `hide_lookups` makes that many next queries find nothing, as an IMAP server that has not synced the moved copy yet.
+ * `unindexed` names folders with no summary file: a query there finds nothing and `getFolderInfo` throws, until the verb `indexFolder` parses the folder. Only the folders of account a1 are local, and the verb refuses the others without parsing. `index` says what the verb does: `parses` (the default) builds the summary, `never_loads` waits out its timeout and answers false, and `holds` keeps the parse running, with the folder locked, until `finish_parse` is called.
  */
-function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: number; retry_delays_ms?: number[]; storage?: ReturnType<typeof fake_storage>; failing_folder_query?: boolean } = {}) {
+function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: number; retry_delays_ms?: number[]; storage?: ReturnType<typeof fake_storage>; failing_folder_query?: boolean; unindexed?: string[]; index?: "parses" | "never_loads" | "holds"; experiment?: false } = {}) {
     const folders = structuredClone(FOLDERS);
     const box = new Map(messages.map((message) => [message.id, { ...message }]));
     let next_id = Math.max(0, ...box.keys()) + 1;
@@ -44,6 +47,11 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
     const notices: string[] = [];
     let hide_lookups = 0;
     const failing_accounts = new Set<string>();
+    const unindexed = new Set(options.unindexed ?? []);
+    const parsing = new Set<string>();
+    let finish_parse = () => {};
+    let parse_started = () => {};
+    const parse_start = new Promise<void>((resolve) => (parse_started = resolve));
     let tag_keys = ["work", "home"];
     const folder = (id: string) => folders.find((entry) => entry.id === id)!;
     const header_of = (message: Stored): MessageHeader => ({ id: message.id, date: new Date(message.date ?? 0), ...(message.size !== undefined && { size: message.size }), ...(message.header !== undefined && { headerMessageId: message.header }), read: message.read === true, flagged: message.flagged === true, junk: message.junk === true, ...(message.tags !== undefined && { tags: [...message.tags] }), folder: { ...folder(message.folder) } });
@@ -60,6 +68,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
             box.set(moved.id, moved);
         }
     };
+    const parsed: string[] = [];
     const storage = options.storage ?? fake_storage();
     const log = create_undo_log({ storage: storage.api });
     const api = {
@@ -82,6 +91,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
             move: async (ids: number[], folder_id: string) => {
                 calls.push(`move ${ids.join(",")} ${folder_id}`);
                 if (!folders.some((entry) => entry.id === folder_id)) throw new Error(`Folder not found: ${folder_id}.`);
+                if (parsing.has(folder_id)) throw new Error("The folder is busy: NS_MSG_FOLDER_BUSY.");
                 relocate(ids, folder_id);
             },
             update: async (id: number, properties: Partial<Stored>) => {
@@ -91,6 +101,7 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
             query: async (query: MessageQuery) => {
                 calls.push(`query ${query.headerMessageId} ${query.folderId}${query.includeSubFolders ? " +sub" : ""}`);
                 if (hide_lookups > 0) return (hide_lookups--, { messages: [] });
+                if (query.folderId !== undefined && unindexed.has(query.folderId)) return { messages: [] };
                 const base = query.folderId === undefined ? undefined : folder(query.folderId);
                 const inside = (message: Stored) => base === undefined || message.folder === base.id || (query.includeSubFolders === true && folder(message.folder).accountId === base.accountId && folder(message.folder).path.startsWith(`${base.path}/`));
                 return { messages: [...box.values()].filter((message) => message.header === query.headerMessageId && inside(message)).map(header_of) };
@@ -99,6 +110,12 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
             tags: { list: async () => tag_keys.map((key) => ({ key, tag: key })) },
         },
         folders: {
+            getFolderInfo: async (folder_id: string) => {
+                folder(folder_id);
+                if (unindexed.has(folder_id)) throw new Error("An unexpected error occurred");
+                return { totalMessageCount: 0 };
+            },
+            get: async (folder_id: string) => folder(folder_id),
             query: async (query: { accountId?: string; specialUse?: string[]; path?: string }) => {
                 if ((options.failing_folder_query === true && query.specialUse !== undefined) || failing_accounts.has(query.accountId ?? "")) throw new Error("folder lookup failed");
                 return folders.filter((entry) => (query.accountId === undefined || entry.accountId === query.accountId) && (query.path === undefined || entry.path === query.path) && (query.specialUse === undefined || query.specialUse.some((use) => entry.specialUse?.includes(use))));
@@ -107,6 +124,25 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
         accounts: { list: async () => [{ id: "a1", name: "Work" }, { id: "a2", name: "Home" }] },
         notifications: { create: async (_id: string | undefined, notification: { message: string }) => (notices.push(notification.message), "n1") },
         app: { viewRows: async ({ first, last }: { first: number; last: number }) => ({ current: options.current ?? -1, rows: (options.rows ?? []).filter((row) => row.index >= first && row.index <= last) }) },
+        folderpane:
+            options.experiment === false
+                ? undefined
+                : {
+                      indexFolder: async ({ folderId }: { folderId: string }) => {
+                          calls.push(`index ${folderId}`);
+                          if (folder(folderId).accountId !== "a1") return false;
+                          if (options.index === "never_loads") return false;
+                          parsed.push(folderId);
+                          if (options.index === "holds") {
+                              parsing.add(folderId);
+                              parse_started();
+                              await new Promise<void>((resolve) => (finish_parse = resolve));
+                              parsing.delete(folderId);
+                          }
+                          unindexed.delete(folderId);
+                          return true;
+                      },
+                  },
         undo: { log, retry_delays_ms: options.retry_delays_ms ?? [1, 1] },
     };
     const router = create_router(registry, api as unknown as RouterApi);
@@ -117,6 +153,13 @@ function mail_store(messages: Stored[], options: { rows?: ViewRow[]; current?: n
         notices,
         storage,
         delete_tag: (key: string) => void (tag_keys = tag_keys.filter((other) => other !== key)),
+        /** The folders the verb really parsed. A refused folder (not local) is not in it. */
+        parsed,
+        /** Resolves once the verb has started a parse that `holds`. */
+        parse_start,
+        finish_parse: () => finish_parse(),
+        /** The user shows the folder: Thunderbird builds its summary. */
+        open_folder: (id: string) => void unindexed.delete(id),
         hide_next_lookups: (count: number) => void (hide_lookups = count),
         /** Where each Message-ID sits now, as `header@folder`, sorted. */
         places: () => [...box.values()].map((message) => `${message.header ?? "-"}@${message.folder}`).sort(),
@@ -597,4 +640,94 @@ test("a tag undo picks the copy that still carries the change among two copies o
     await mail.run("msg.tag", [2], { tag: "work" });
     await mail.run("msg.undo");
     assert.deepEqual([mail.message_by_id(1)!.tags, mail.message_by_id(2)!.tags], [["home"], []]);
+});
+
+test("u after a move into a folder with no summary parses the folder once, queries again and moves the message back", async () => {
+    const mail = mail_store([inbox("a@x", 1)], { unindexed: ["receipts"] });
+    await mail.run("msg.move", [1], { folder: "/Receipts" });
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@inbox"]);
+    assert.deepEqual(mail.parsed, ["receipts"]);
+    assert.equal(mail.calls.filter((call) => call.startsWith("index")).length, 1, "one parse, not one per retry");
+    assert.deepEqual(mail.notices, ["Undid the move of 1 message."]);
+    assert.equal(mail.entries(), 0);
+});
+
+test("a folder that is indexed is never parsed, however many messages are missing from it", async () => {
+    const mail = mail_store([inbox("a@x", 1)]);
+    await mail.run("msg.delete", [1]);
+    mail.drop("a@x");
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.calls.filter((call) => call.startsWith("index")), []);
+    assert.match(mail.notices.at(-1) ?? "", /no longer in Trash/);
+});
+
+test("a move into the folder while it parses fails as busy, and the undo still finishes", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)], { unindexed: ["receipts"], index: "holds" });
+    await mail.run("msg.move", [1], { folder: "/Receipts" });
+    const undoing = mail.run("msg.undo");
+    await mail.parse_start;
+    await mail.run("msg.move", [2], { folder: "/Receipts" });
+    assert.match(mail.notices.at(-1) ?? "", /busy/);
+    assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@inbox"], "the busy move changed nothing");
+    assert.equal(mail.entries(), 1, "and left no undo step of its own");
+    mail.finish_parse();
+    await undoing;
+    assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@inbox"]);
+    assert.equal(mail.entries(), 0);
+});
+
+test("when FolderLoaded never fires, u refuses with the folder name, keeps the step unmarked, and a second u parses again", async () => {
+    const mail = mail_store([inbox("a@x", 1)], { unindexed: ["receipts"], index: "never_loads" });
+    await mail.run("msg.move", [1], { folder: "/Receipts" });
+    await mail.run("msg.undo");
+    assert.equal(mail.notices.at(-1), "Thunderbird has not indexed /Receipts yet, so u cannot find the message. Open the folder once, then press u. The step stays.");
+    assert.equal(mail.entries(), 1);
+    assert.deepEqual(mail.places(), ["a@x@receipts"]);
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 1, "the second u does not drop the step");
+    assert.equal(mail.calls.filter((call) => call.startsWith("index")).length, 2, "it tried the folder again");
+    mail.open_folder("receipts");
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@inbox"]);
+    assert.equal(mail.entries(), 0);
+});
+
+test("an IMAP folder with no summary is refused without a parse, and the step stays for the next u", async () => {
+    const mail = mail_store([{ id: 1, header: "a@x", folder: "imap-inbox" }], { unindexed: ["imap-receipts"] });
+    await mail.run("msg.move", [1], { folder: "/Receipts", account: "Home" });
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.parsed, [], "no reparse of a folder that is not local");
+    assert.equal(mail.notices.at(-1), "Thunderbird has not indexed /Receipts yet, so u cannot find the message. Open the folder once, then press u. The step stays.");
+    assert.equal(mail.entries(), 1);
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 1);
+    mail.open_folder("imap-receipts");
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@imap-inbox"]);
+});
+
+test("a message truly gone from an indexed folder still takes two u, after an unindexed step was refused", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)], { unindexed: ["receipts"], index: "never_loads" });
+    await mail.run("msg.delete", [2]);
+    await mail.run("msg.move", [1], { folder: "/Receipts" });
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 2);
+    mail.open_folder("receipts");
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@trash"]);
+    mail.drop("b@x");
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 1, "the first u on the vanished delete only refuses");
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 0);
+});
+
+test("u refuses with a message and keeps the step when the Experiment failed to load", async () => {
+    const mail = mail_store([inbox("a@x", 1)], { experiment: false });
+    await mail.run("msg.move", [1], { folder: "/Work" });
+    await mail.run("msg.undo");
+    assert.match(mail.notices.at(-1) ?? "", /^Undo needs the DesertBird Experiment, which is not loaded\.$/);
+    assert.equal(mail.entries(), 1);
+    assert.deepEqual(mail.places(), ["a@x@work"]);
 });

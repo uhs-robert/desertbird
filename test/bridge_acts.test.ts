@@ -90,7 +90,9 @@ function acts_under_test(stored: Stored[], options: { settings?: Partial<ActSett
             },
             continueList: async () => ({ messages: [] }),
         },
+        folderpane: { indexFolder: async () => true },
         folders: {
+            getFolderInfo: async () => ({}),
             get: async (folder_id: string) => {
                 const found = folders.find((entry) => entry.id === folder_id);
                 if (found === undefined) throw new Error(`Folder not found: ${folder_id}`);

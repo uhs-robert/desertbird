@@ -68,6 +68,21 @@
             }
           }
         ]
+      },
+      {
+        "name": "indexFolder",
+        "type": "function",
+        "async": true,
+        "description": "Builds the summary file of a local folder that has none or an old one, without showing the folder, and answers true when the parse finished. Answers false, with nothing parsed, for a folder that is not local, and false when the parse takes longer than 30 seconds.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "folderId": { "type": "string", "pattern": "^[^:/]+:/" }
+            }
+          }
+        ]
       }
     ]
   }
