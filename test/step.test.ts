@@ -41,6 +41,7 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
     };
     const api = {
         app,
+        folderpane: { viewRowCount: async () => (calls.push("viewRowCount"), rows.length) },
         mailTabs,
         folders: {
             query: async () => folders.map((folder) => ({ id: folder.id, accountId: "a", path: `/${folder.id}`, specialUse: folder.special, isVirtual: folder.virtual, isRoot: folder.root })),
@@ -58,7 +59,7 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
         notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") },
     } as unknown as RouterApi;
     const run = (command: string, args: Record<string, unknown>) => create_router(registry, api).run({ command, args: args as never, count: options.count ?? 1, windowId: 3, messageIds: [] });
-    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows")), all: calls };
+    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRow")), all: calls };
 }
 
 test("the step commands check their typed args", () => {
@@ -179,4 +180,11 @@ test("[ with no row selected in a list of exactly one block finds the last row",
     const fake = step_fake({ rows: 500, current: -1, flags: { 499: { unread: true } } });
     await fake.run("step.unread", { direction: "previous", scope: "folder" });
     assert.deepEqual(fake.calls(), ["select 9 599"]);
+});
+
+test("[ with no row selected asks the row count once and reads only the last block, not the whole list", async () => {
+    const fake = step_fake({ rows: 5000, current: -1, flags: { 4990: { unread: true } } });
+    await fake.run("step.unread", { direction: "previous", scope: "folder" });
+    assert.deepEqual(fake.calls(), ["select 9 5090"]);
+    assert.deepEqual(fake.all.filter((call) => call.startsWith("viewRow")), ["viewRows 0 0", "viewRowCount", "viewRows 4500 4999"]);
 });

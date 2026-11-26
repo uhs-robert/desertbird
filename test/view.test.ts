@@ -461,7 +461,7 @@ function terms_fake(options: { ids?: number[]; cursor_row?: number; filter?: "mi
         },
         app: { viewRows: async ({ first }: { first: number }) => ({ current: options.cursor_row ?? 0, rows: first === options.cursor_row ? [{ index: first, id: 2, depth: 0, collapsed: false, unread: false, flags: 0 }] : [{ index: first, id: 9, depth: 0, collapsed: false, unread: false, flags: 0 }] }) },
         filter: options.filter === "missing" ? undefined : { set: filter_set, searching: async () => false },
-        folderpane: undefined,
+        folderpane: { focused: async () => false, viewRowCount: async () => 1 },
         notifications: { create: async (_id: string, notification: { message: string }) => (notices.push(notification.message), "n1") },
         keys: undefined,
     };
@@ -693,6 +693,7 @@ function long_list_search(fake: ReturnType<typeof terms_fake>, polls: number) {
         const rows = polls >= 0 ? [row(0)] : [row(0), row(1)];
         return { current: -1, rows: rows.filter((each) => each.index >= first && each.index <= last) };
     }) as never;
+    fake.api.folderpane.viewRowCount = async () => (reads.push("count"), polls >= 0 ? 1 : 2);
     return reads;
 }
 
@@ -716,7 +717,7 @@ test("a ? commit after the list search passed the cap waits for it to end with n
     await drain(fake, commit);
     await commit;
     assert.equal(fake.steps.length, applies, "no apply restarts the running search");
-    assert.deepEqual(reads.slice(0, 4), ["searching", "searching", "searching", "rows"]);
+    assert.deepEqual(reads.slice(0, 4), ["searching", "searching", "searching", "count"]);
     assert.equal(fake.said.at(-1), "2 of 2");
 });
 
@@ -733,7 +734,7 @@ test("a folder change while a commit waits for the list search ends the search a
     fake.view.folder = { ...INBOX, id: "f-other", path: "/Other" };
     await drain(fake, commit);
     await assert.rejects(commit, /folder changed/);
-    assert.ok(!reads.includes("rows"), "no rows read in the new folder");
+    assert.ok(!reads.includes("rows") && !reads.includes("count"), "no rows read in the new folder");
     assert.deepEqual(fake.said, []);
 });
 
