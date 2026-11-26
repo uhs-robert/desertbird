@@ -231,7 +231,8 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     const stored = await storage.get([KEYMAP_STORAGE_KEY, SETTINGS_STORAGE_KEY, HINT_STYLE_STORAGE_KEY]);
     hint_colors = (stored[HINT_STYLE_STORAGE_KEY] as string | undefined) ?? hint_colors;
     context.step_px = scroll_step_of(stored[SETTINGS_STORAGE_KEY]);
-    hint_letters = (stored[SETTINGS_STORAGE_KEY] as { hint_letters?: string } | undefined)?.hint_letters?.toLowerCase();
+    const letters = (stored[SETTINGS_STORAGE_KEY] as { hint_letters?: unknown } | undefined)?.hint_letters;
+    hint_letters = typeof letters === "string" && letters.length >= 2 ? letters.toLowerCase() : undefined;
     install(stored[KEYMAP_STORAGE_KEY]);
     // Switches the document to another tree of the same record, for a message window whose background answered late.
     return (tree) => ((tree_field = tree), install(last_record));
