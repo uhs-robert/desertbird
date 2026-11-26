@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create_completer } from "../src/background/cmdline/completion.ts";
+import { create_folder_source } from "../src/background/cmdline/folder_rows.ts";
 import { create_cmdline_service } from "../src/background/cmdline/service.ts";
 import { DEFAULT_KEYMAP, registry } from "../src/background/commands/index.ts";
 import { compile_tab_keymap } from "../src/background/commands/tab_keymaps.ts";
@@ -309,6 +310,74 @@ test("complete answers from the registry while a session exists and refuses with
     service.begin(3, { message_ids: [], text: "" });
     const answer = await ask<CmdlineCompletion>(service, { type: "cmdline.complete", windowId: 3, text: "move ", caret: 5 });
     assert.deepEqual(answer.rows.map((row) => row.name), ["/Archive", "/Archive/2026", "/Inbox"]);
+});
+
+// The folder source reads the fake's folder array on each call, so a test renames or deletes a folder by changing it.
+function listing_setup() {
+    const folders = [{ id: "f1", accountId: "a1", path: "/Archive" }, { id: "f2", accountId: "a1", path: "/Inbox" }];
+    const { api, calls } = fake_api({ messages: [{ id: 5, folder: { accountId: "a1" } }], tags: [{ key: "$label1", tag: "Important" }], folders });
+    const service = create_cmdline_service({
+        registry,
+        read_prompt: async () => "caret",
+        read_widgets: async () => [],
+        sources: { ...sources, folders: create_folder_source(api as never), tags: async () => (await api.messages.tags.list()).map((entry) => entry.tag) },
+        overlay: api.overlay,
+        history: { record: async () => {} },
+        search_history: { record: async () => {} },
+        search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} },
+        run: async () => {},
+    });
+    const names = async (text: string) => (await ask<CmdlineCompletion>(service, { type: "cmdline.complete", windowId: 3, text, caret: text.length })).rows.map((row) => row.name);
+    const reads = (name: string) => calls.filter((call) => call.startsWith(name)).length;
+    return { folders, service, names, reads };
+}
+
+test("a line reads the folders, accounts and tags once, however many keys are typed", async () => {
+    const { service, names, reads } = listing_setup();
+    service.begin(3, { message_ids: [5], text: "" });
+    for (const text of ["move ", "move A", "move Ar", "move Arc"]) await names(text);
+    for (const text of ["tag ", "tag I"]) await names(text);
+    assert.deepEqual([reads("folders.query"), reads("accounts.list"), reads("messages.tags.list")], [1, 1, 1]);
+    // `open` lists every account and `move` only the selection's, so each keeps its own list.
+    await names("open ");
+    await names("open I");
+    assert.equal(reads("folders.query"), 2);
+});
+
+// The lists live with the session that read them. Each way a line ends drops them, so the next line never shows a folder that is gone.
+test("a folder renamed or deleted while a line was open is gone from the next line, whichever way the line ended", async () => {
+    const ends: Record<string, (service: ReturnType<typeof listing_setup>["service"]) => Promise<unknown>> = {
+        close: (service) => ask(service, { type: "cmdline.close", windowId: 3 }),
+        end: async (service) => service.end(3),
+        run: (service) => ask(service, { type: "cmdline.run", windowId: 3, text: "msg.archive" }),
+    };
+    for (const [way, end_line] of Object.entries(ends)) {
+        const { folders, service, names } = listing_setup();
+        service.begin(3, { message_ids: [5], text: "" });
+        assert.deepEqual(await names("move "), ["/Archive", "/Inbox"], way);
+        folders[0]!.path = "/Old";
+        folders.splice(1, 1);
+        // The line that read the list keeps it until it ends.
+        assert.deepEqual(await names("move "), ["/Archive", "/Inbox"], way);
+        await end_line(service);
+        await settle();
+        service.begin(3, { message_ids: [5], text: "" });
+        assert.deepEqual(await names("move "), ["/Old"], way);
+    }
+});
+
+test("a failed folder read is not kept, so the next key reads again", async () => {
+    let fail = true;
+    const read_folders = async () => {
+        if (fail) throw new Error("folders busy");
+        return [choice("/Inbox")];
+    };
+    const service = create_cmdline_service({ registry, read_prompt: async () => "caret", read_widgets: async () => [], sources: { ...sources, folders: read_folders }, overlay: undefined, history: { record: async () => {} }, search_history: { record: async () => {} }, search: { type: async () => ({ stale: true }), commit: async () => {}, cancel: async () => {} }, run: async () => {} });
+    service.begin(3, { message_ids: [], text: "" });
+    await assert.rejects(ask(service, { type: "cmdline.complete", windowId: 3, text: "move ", caret: 5 }), /folders busy/);
+    fail = false;
+    const answer = await ask<CmdlineCompletion>(service, { type: "cmdline.complete", windowId: 3, text: "move ", caret: 5 });
+    assert.deepEqual(answer.rows.map((row) => row.name), ["/Inbox"]);
 });
 
 test("run keeps the line open and returns the reason for text that is not a command", async () => {

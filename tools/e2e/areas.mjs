@@ -60,7 +60,7 @@ export const area_rules = [
   { globs: ["src/chrome/{context_menu,context_actor_child,parent_context}.ts", "src/background/{commands,handlers}/context.ts", "src/experiment/context.schema.json"], areas: ["context_menu"] },
   { globs: ["src/chrome/{pane_resize,readable_focus}.ts"], areas: ["panes"] },
   { globs: ["src/background/commands/motion.ts"], areas: ["motions", "visual"] },
-  { globs: ["src/background/{commands,handlers}/step.ts"], areas: ["motions", "views", "panes"] },
+  { globs: ["src/background/{commands,handlers}/step.ts", "src/chrome/flag_scan.ts"], areas: ["motions", "views", "panes"] },
   { globs: ["src/background/{commands,handlers}/tabs.ts"], areas: ["tabs", "popup"] },
   { globs: ["src/background/{commands,handlers}/zoom.ts", "src/chrome/parent_zoom.ts", "src/experiment/zoom.schema.json"], areas: ["zoom"] },
   { globs: ["src/chrome/{page_actions,page_actor_child,page_actor_parent,page_focus,page_runtime,parent_pages}.ts", "src/background/commands/page.ts", "src/experiment/pages.schema.json"], areas: ["pages", "web"] },

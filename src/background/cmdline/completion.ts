@@ -41,6 +41,30 @@ export interface ValueSources {
     key_trees(): Promise<KeyTrees>;
 }
 
+/** The value lists of one command line session. */
+export type SessionLists = Pick<ValueSources, "folders" | "tags">;
+
+/**
+ * Reads the folders (with their accounts and the jump history) and the tags once per session, so a keystroke ranks the list it has and does not query every folder again. The tabs are read each time: a line about tabs is short and lists one window.
+ * Nothing changes the selection or the shown folder while the overlay has the keys. A folder renamed or deleted during the session shows until the line closes, and the next session reads it fresh. A failed read is not kept, so the next keystroke tries again.
+ */
+export function session_lists(sources: SessionLists): SessionLists {
+    const folders = new Map<boolean, Promise<FolderChoice[]>>();
+    let tags: Promise<string[]> | undefined;
+    const dropped_on_failure = <T>(read: Promise<T>, drop: () => void): Promise<T> => (read.catch(drop), read);
+    return {
+        folders(query) {
+            const read = folders.get(query.all_accounts) ?? dropped_on_failure(sources.folders(query), () => folders.delete(query.all_accounts));
+            folders.set(query.all_accounts, read);
+            return read;
+        },
+        tags() {
+            tags ??= dropped_on_failure(sources.tags(), () => (tags = undefined));
+            return tags;
+        },
+    };
+}
+
 export interface KeyTrees {
     mail: TreeBranch;
     message: TreeBranch;
@@ -127,7 +151,8 @@ function args_of(command: Command): string {
 // The vendored key labels read one keymap, and take the line's mode plus `browser`. Both trees go in as those two modes, so one pass reads the mail keys and the message keys, and a key in both counts once.
 const both_trees = (trees: KeyTrees) => ({ modes: { normal: trees.mail, browser: trees.message } }) as unknown as CompiledKeymap;
 
-export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number, session: { window_id: number; message_ids: number[]; kind?: TabKind }) => Promise<Completion> {
+/** `lists` replaces the folder and tag sources for one call, so a session can pass the lists it keeps. */
+export function create_completer(registry: Registry, sources: ValueSources): (text: string, caret: number, session: { window_id: number; message_ids: number[]; kind?: TabKind }, lists?: SessionLists) => Promise<Completion> {
     let labeled: { trees: KeyTrees; labels: Map<string, string> } | undefined;
     async function command_keys(): Promise<Map<string, string>> {
         const trees = await sources.key_trees();
@@ -163,7 +188,7 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         };
     }
 
-    return async (text, caret, session) => {
+    return async (text, caret, session, lists = sources) => {
         // A command the kind does not offer is no command here, so its flags and values never list.
         const context = cursor_context(text, caret, (word) => {
             const found = registry.find(word);
@@ -177,7 +202,7 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
         // `open` offers every account. Move and copy offer the selection's account, the only one they can reach without `--account`.
         const folder_query = { window_id: session.window_id, message_ids: session.message_ids, all_accounts: context.kind === "subject" && context.command.id === "folder.open" };
         const from = is_dynamic_values(param?.values) ? param.values.from : undefined;
-        const [folders, tags, tabs] = lists_values ? await Promise.all([from === "tabs" ? [] : sources.folders(folder_query), sources.tags(), from === "tabs" ? sources.tabs(session.window_id) : []]) : [[], [], []];
+        const [folders, tags, tabs] = lists_values ? await Promise.all([from === "tabs" ? [] : lists.folders(folder_query), lists.tags(), from === "tabs" ? sources.tabs(session.window_id) : []]) : [[], [], []];
         const named = context.kind === "subject" && typeof context.typed["account"] === "string" ? context.typed["account"] : undefined;
         const offered = named === undefined ? folders : folders.filter((choice) => choice.account_name.toLowerCase() === named.toLowerCase() || choice.account_id === named);
         return finish(context, param ? value_rows(param, offered, tags, tabs, named !== undefined) : [], context.command, is_dynamic_values(param?.values), from === "tabs");

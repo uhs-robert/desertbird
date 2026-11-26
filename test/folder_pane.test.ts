@@ -57,7 +57,7 @@ function folder_tree(shape: [string, unknown[]][]) {
     return { tree, wrapper, row: (name: string) => all.find((candidate) => candidate.name === name)!, select: (name: string) => void (selected = all.find((candidate) => candidate.name === name)!), selected: () => selected.name, open_state: () => real().map((row) => `${row.name}${row.collapsed ? "+" : ""}`).join(" ") };
 }
 
-function window_with(tree: unknown, folder_focused: boolean, view?: { rowCount: number }) {
+function window_with(tree: unknown, folder_focused: boolean, view?: { rowCount: number; getMsgHdrAt?: (index: number) => { flags: number } | null }) {
     const about_3pane = { folderTree: tree, gDBView: view, browsingContext: { topChromeWindow: {} as unknown } };
     const document = {
         activeElement: { localName: "browser", contentDocument: { activeElement: folder_focused ? { id: "folderTree" } : { localName: "tbody" } } },
@@ -71,8 +71,8 @@ function window_with(tree: unknown, folder_focused: boolean, view?: { rowCount: 
 function api_for(windows: Map<number, unknown>) {
     const platform = stub_platform([...windows.values()]);
     const ids = new Map([...windows].map(([id, window]) => [window, id]));
-    const api = get_folderpane_api({ extension: { windowManager: { getWrapper: (window: unknown) => ({ id: ids.get(window)! }) }, messageManager: { convert: () => null } } } as never);
-    return { fold: api.folderpane.fold, focused: api.folderpane.focused, viewRowCount: api.folderpane.viewRowCount, restore: platform.restore };
+    const api = get_folderpane_api({ extension: { windowManager: { getWrapper: (window: unknown) => ({ id: ids.get(window)! }) }, messageManager: { convert: (header: { id?: number }) => (header.id === undefined ? null : { id: header.id }) } } } as never);
+    return { fold: api.folderpane.fold, focused: api.folderpane.focused, viewRowCount: api.folderpane.viewRowCount, viewFindRow: api.folderpane.viewFindRow, restore: platform.restore };
 }
 
 const SHAPE: [string, unknown[]][] = [["Account", [["Inbox", [["Work", []], ["Home", []]]], ["Sent", []]]], ["Local", [["Trash", []]]]];
@@ -183,5 +183,44 @@ test("viewRowCount answers the rows the message list shows, and 0 while it has n
     view.rowCount = 3;
     assert.equal(await viewRowCount({ windowId: 1 }), 3);
     assert.equal(await viewRowCount({ windowId: 2 }), 0);
+    restore();
+});
+
+// Row flags as Thunderbird keeps them: 0x1 read, 0x4 starred, 0x10000000 attachment. `null` stands for a row with no header. The message id of a header is its index, so the answer shows which header was converted.
+function flag_view(flags: (number | null)[]) {
+    const view = { rows: flags, get rowCount() { return view.rows.length; }, getMsgHdrAt: (index: number) => { const word = view.rows[index]; return word === null || word === undefined ? null : { flags: word, id: index }; } };
+    return view;
+}
+
+test("viewFindRow finds a flagged row far ahead in one call, and answers -1 when none is ahead", async () => {
+    const fake = folder_tree(SHAPE);
+    const flags: (number | null)[] = Array.from({ length: 10000 }, () => 0x1);
+    flags[9000] = 0x1 | 0x4;
+    flags[9500] = 0;
+    const view = flag_view(flags);
+    const { viewFindRow, restore } = api_for(new Map([[1, window_with(fake.tree, false, view)]]));
+    assert.deepEqual(await viewFindRow({ windowId: 1, from: 5, forward: true, flag: "flagged", wanted: 1 }), { index: 9000, id: 9000 });
+    assert.deepEqual(await viewFindRow({ windowId: 1, from: 5, forward: true, flag: "unread", wanted: 1 }), { index: 9500, id: 9500 });
+    assert.deepEqual(await viewFindRow({ windowId: 1, from: 9501, forward: true, flag: "unread", wanted: 1 }), { index: -1, id: null });
+    assert.deepEqual(await viewFindRow({ windowId: 1, from: 8999, forward: false, flag: "flagged", wanted: 1 }), { index: -1, id: null });
+    assert.deepEqual(await viewFindRow({ windowId: 1, from: 5, forward: true, flag: "attachment", wanted: 1 }), { index: -1, id: null });
+    restore();
+});
+
+test("viewFindRow counts matches, stops at the last one found, skips group rows and starts back from the last row", async () => {
+    const fake = folder_tree(SHAPE);
+    const view = flag_view([0, null, 0x1, 0, 0x10000000 | 0x1, 0]);
+    const { viewFindRow, restore } = api_for(new Map([[1, window_with(fake.tree, false, view)], [2, window_with(fake.tree, false)]]));
+    const index_of = async (search: { from: number; forward: boolean; flag: "unread" | "flagged" | "attachment"; wanted: number }, window_id = 1) => (await viewFindRow({ windowId: window_id, ...search })).index;
+    assert.equal(await index_of({ from: 0, forward: true, flag: "unread", wanted: 2 }), 3);
+    assert.equal(await index_of({ from: 0, forward: true, flag: "unread", wanted: 9 }), 5);
+    assert.equal(await index_of({ from: 0, forward: true, flag: "attachment", wanted: 1 }), 4);
+    // The list shrank after the caller counted it: a `from` past the end starts at the last row.
+    assert.equal(await index_of({ from: 40, forward: false, flag: "unread", wanted: 1 }), 5);
+    // Back with a count passes the group row and stops at the last match before row 0.
+    assert.equal(await index_of({ from: 5, forward: false, flag: "unread", wanted: 2 }), 3);
+    assert.equal(await index_of({ from: 4, forward: false, flag: "unread", wanted: 5 }), 0);
+    assert.equal(await index_of({ from: -1, forward: true, flag: "unread", wanted: 1 }), -1);
+    assert.equal(await index_of({ from: 0, forward: true, flag: "unread", wanted: 1 }, 2), -1);
     restore();
 });

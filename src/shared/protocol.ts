@@ -194,7 +194,7 @@ export const EXPERIMENT_VERBS = {
     hints: { functions: ["sendEnter", "pick"], events: [] },
     pages: { functions: ["install"], events: ["onInvocation"] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
-    folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
+    folderpane: { functions: ["fold", "focused", "viewRowCount", "viewFindRow"], events: [] },
     // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
     app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"], events: [] },
     // Loaded on first use, like `folderpane`. Opens the native context menu of what the focus is on.
@@ -335,11 +335,33 @@ export interface FolderpaneViewRowCountArgs {
     windowId: number;
 }
 
-/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. */
+/** The flag a step command looks for. `unread` is the absence of the read bit. */
+export type RowFlag = "unread" | "flagged" | "attachment";
+
+/** Whether a header's flags word has the flag. The chrome scan and the background check after it both use this test. The bits are those of `nsMsgMessageFlags`: unread is the read bit (0x1) unset, starred is 0x4 and attachment 0x10000000. The bits sit in the expression and not in a table object, because the scan's bundle has no bytes to spare under its guard. */
+export const flags_have = (flags: number, flag: RowFlag): boolean => ((flags & (flag === "unread" ? 0x1 : flag === "flagged" ? 0x4 : 0x10000000)) === 0) === (flag === "unread");
+
+/** Walks the list from row `from` (clamped to the last row going back) and answers the `wanted`th row with the flag, else the last one found, else index -1. */
+export interface FolderpaneViewFindRowArgs {
+    windowId: number;
+    from: number;
+    forward: boolean;
+    flag: RowFlag;
+    wanted: number;
+}
+
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. `viewFindRow` finds a row by its flags in chrome, so a step over a long list is one call. */
 export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
     focused(args: FolderpaneFocusedArgs): Promise<boolean>;
     viewRowCount(args: FolderpaneViewRowCountArgs): Promise<number>;
+    viewFindRow(args: FolderpaneViewFindRowArgs): Promise<FoundRow>;
+}
+
+/** A row the flag scan found: its index and its message id, so a reread can tell whether the list moved. Index -1 and id null when none. */
+export interface FoundRow {
+    index: number;
+    id: number | null;
 }
 
 export interface ZoomGetArgs {

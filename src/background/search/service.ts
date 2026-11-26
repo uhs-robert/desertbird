@@ -4,8 +4,7 @@
 import { ignore_refusal, keep_chain } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
-import type { AppApi, CmdlineSearchNote, FilterApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
-import { select_row } from "../handlers/thread_view.ts";
+import type { AppApi, CmdlineSearchNote, FilterApi, FolderpaneApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
 import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
 import type { AppliedFilter } from "../handlers/view.ts";
@@ -17,11 +16,10 @@ import type { SearchRegisterStore } from "./register.ts";
 /** How long the filter waits after a keystroke. A burst of typing filters once, and a slow folder is not asked for each letter. */
 export const SEARCH_DEBOUNCE_MS = 150;
 
-// How often a commit asks whether the search of the list and date terms still runs.
-const TERMS_SEARCH_POLL_MS = 100;
-
-// The most rows one `app.viewRows` call returns.
-const BLOCK = 500;
+// How often a count asks whether Thunderbird still fills the filtered list, and how long a keystroke or `n` asks. A search that runs on past the limit (a saved search over remote folders, a search that never ends) stops that count with a message. Enter waits with no limit.
+const LIST_FILLED_POLL_MS = 100;
+export const LIST_FILLED_LIMIT_MS = 5000;
+const STILL_SEARCHING = "Thunderbird's search still runs after 5 s, so there is no count yet. Try again when it ends.";
 
 export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApi | undefined } & Partial<Pick<FolderSearchApi, "folders">>;
 
@@ -81,28 +79,38 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     const scope_of = (window_id: number) => ({ api: deps.api as unknown as ThreadViewApi, window_id, message_ids: [], count: 1 });
 
-    function viewer(): Pick<AppApi, "viewRows"> {
-        if (deps.api.app === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
-        return deps.api.app;
+    function viewer(): { app: Pick<AppApi, "viewRows">; folderpane: Pick<FolderpaneApi, "viewRowCount"> } {
+        const { app, folderpane } = deps.api;
+        if (app === undefined || folderpane === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
+        return { app, folderpane };
     }
 
-    // The view gives no row count, so a full block means more rows follow.
-    async function count_rows(window_id: number): Promise<number> {
-        for (let first = 0; ; first += BLOCK) {
-            const { rows } = await viewer().viewRows({ windowId: window_id, first, last: first + BLOCK - 1 });
-            if (rows.length < BLOCK) return first + rows.length;
+    // One read of the view in chrome, so the count is of one list and not of blocks read while a filter changed it. The caller waits for `list_filled` first: the list is complete only then.
+    const count_rows = (window_id: number): Promise<number> => viewer().folderpane.viewRowCount({ windowId: window_id });
+
+    // `setQuickFilter` returns once the search starts, and Thunderbird adds rows until `filter.searching` turns false. A count before then is of part of the list. `still_wanted` runs before every poll and after the last one, so a newer keystroke, Escape or a change of tab or folder stops the wait and the caller counts nothing. Without the filter script there is nothing to ask, so the count reads what it finds.
+    async function list_filled(tab_id: number, still_wanted: () => Promise<boolean>, limit_ms = LIST_FILLED_LIMIT_MS): Promise<"filled" | "stopped" | "timed_out"> {
+        const filter = deps.api.filter;
+        for (let waited = 0; ; waited += LIST_FILLED_POLL_MS) {
+            if (!(await still_wanted())) return "stopped";
+            if (filter === undefined || !(await filter.searching({ tabId: tab_id }))) return (await still_wanted()) ? "filled" : "stopped";
+            if (waited >= limit_ms) return "timed_out";
+            await wait(LIST_FILLED_POLL_MS);
         }
     }
 
+    // The tab a search or an `n` began in is still the one in front with the same folder.
+    async function shows(window_id: number, tab_id: number, folder_id: string): Promise<boolean> {
+        const tab = await active_mail_tab(scope_of(window_id));
+        return tab.id === tab_id && tab.displayedFolder?.id === folder_id;
+    }
+
     async function row_at(window_id: number, index: number): Promise<ViewRow | undefined> {
-        return (await viewer().viewRows({ windowId: window_id, first: index, last: index })).rows[0];
+        return (await viewer().app.viewRows({ windowId: window_id, first: index, last: index })).rows[0];
     }
 
     // The search belongs to the tab and folder it began in. Another tab or folder holds a filter that is not the search's, so nothing of it is touched.
-    async function still_here(window_id: number, search: LiveSearch): Promise<boolean> {
-        const tab = await active_mail_tab(scope_of(window_id));
-        return tab.id === search.tab_id && tab.displayedFolder?.id === search.folder_id;
-    }
+    const still_here = (window_id: number, search: LiveSearch): Promise<boolean> => shows(window_id, search.tab_id, search.folder_id);
 
     // The restore goes to the tab the search began in, even when another tab is in front now. That tab still shows the filter the search left.
     async function owns_tab(search: LiveSearch): Promise<boolean> {
@@ -128,22 +136,24 @@ export function create_search_service(deps: SearchDeps): SearchService {
         throw new RuntimeRefusal("The folder changed, so the search ended.");
     }
 
-    // `filter.set` stops waiting after 5 s, and the search of the list and date terms can run on. A commit counts and selects the final rows, so it waits for the end with no limit. Escape and a folder change end the wait.
-    async function terms_search_ended(window_id: number, search: LiveSearch): Promise<void> {
-        const filter = deps.api.filter;
-        if (filter === undefined) return;
-        while (await filter.searching({ tabId: search.tab_id })) {
-            await wait(TERMS_SEARCH_POLL_MS);
-            if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
-            await refuse_unless_here(window_id, search);
-        }
-        await refuse_unless_here(window_id, search);
+    // A commit counts and selects the final rows, so it waits for the search of its filter with no limit: the user pressed Enter to get that answer. `filter.set` stops waiting after 5 s and a plain text filter never waits, so the search can still run here. Only Escape and a change of tab or folder end the wait.
+    async function search_ended(window_id: number, search: LiveSearch): Promise<void> {
+        await list_filled(
+            search.tab_id,
+            async () => {
+                if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
+                await refuse_unless_here(window_id, search);
+                return true;
+            },
+            Infinity,
+        );
     }
 
-    async function show_match(window_id: number, text: string, index: number, count: number, wrapped: boolean): Promise<void> {
+    // The selection goes to the tab the search or the `n` began in, which the caller has just checked is still in front.
+    async function show_match(window_id: number, tab_id: number, text: string, index: number, count: number, wrapped: boolean): Promise<void> {
         const row = await row_at(window_id, index);
-        if (row === undefined) throw new RuntimeRefusal("The list changed under the search.");
-        await select_row(scope_of(window_id), row);
+        if (row === undefined || row.id === null) throw new RuntimeRefusal("The list changed under the search.");
+        await deps.api.mailTabs.setSelectedMessages(tab_id, [row.id]);
         await deps.say(window_id, describe_match(text, count, index, undefined, wrapped), false);
     }
 
@@ -172,6 +182,14 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 }
                 if (!(await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text), owns_search(window_id, search)))) return { stale: true };
                 if (text === "") return { note: "", is_error: false };
+                const filled = await list_filled(search.tab_id, async () => mine === search.sequence && (await still_here(window_id, search)));
+                if (mine !== search.sequence) return { stale: true };
+                if (filled === "stopped") {
+                    forget_filter(search.tab_id);
+                    leave_search(window_id, search);
+                    return { note: "The folder changed, so the search ended.", is_error: true };
+                }
+                if (filled === "timed_out") return { note: STILL_SEARCHING, is_error: true };
                 const count = await count_rows(window_id);
                 if (mine !== search.sequence) return { stale: true };
                 return { note: describe_match(text, count, search.direction === "forward" ? 0 : count - 1, undefined), is_error: count === 0 };
@@ -197,14 +215,14 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 const wanted = with_text(search.prior, query);
                 // Enter right after the last keystroke finds its filter applied, and the search of that filter may still run. A second apply would restart it.
                 if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted) && !(await apply_filter(deps.api, search.tab_id, wanted, owns_search(window_id, search)))) throw new RuntimeRefusal("The search was cancelled.");
-                if (wanted.by_message !== undefined) await terms_search_ended(window_id, search);
+                await search_ended(window_id, search);
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
                 if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
                 // No match keeps the search open, so the user can edit the text. Escape still restores the earlier filter.
                 if (count === 0) throw new RuntimeRefusal(describe_match(query, 0, 0, undefined));
                 await deps.register.write({ text: query, direction: search.direction, kind: "threads" });
-                await show_match(window_id, query, search.direction === "forward" ? 0 : count - 1, count, false);
+                await show_match(window_id, search.tab_id, query, search.direction === "forward" ? 0 : count - 1, count, false);
                 // The search ends only now, so a failed write or selection leaves it open for another Enter.
                 leave_search(window_id, search);
             });
@@ -227,12 +245,16 @@ export function create_search_service(deps: SearchDeps): SearchService {
             const tab = await list_mail_tab(scope_of(window_id));
             // After Escape the list is no longer narrowed to the search, so `n` narrows it again.
             if (remembered_filter(tab.id).text?.text !== register.text) await apply_filter(deps.api, tab.id, with_text(remembered_filter(tab.id), register.text));
+            const folder_id = tab.displayedFolder!.id;
+            const filled = await list_filled(tab.id, () => shows(window_id, tab.id, folder_id));
+            if (filled === "stopped") throw new RuntimeRefusal("The tab or folder changed, so n stopped.");
+            if (filled === "timed_out") throw new RuntimeRefusal(STILL_SEARCHING);
             const count = await count_rows(window_id);
             if (count === 0) throw new RuntimeRefusal(describe_match(register.text, 0, 0, undefined));
             const direction = relation === "same" ? register.direction : opposite(register.direction);
-            const { current } = await viewer().viewRows({ windowId: window_id, first: 0, last: 0 });
+            const { current } = await viewer().app.viewRows({ windowId: window_id, first: 0, last: 0 });
             const stepped = current < 0 ? { index: direction === "forward" ? 0 : count - 1, wrapped: false } : step_match(current, count, direction);
-            await show_match(window_id, register.text, stepped.index, count, stepped.wrapped);
+            await show_match(window_id, tab.id, register.text, stepped.index, count, stepped.wrapped);
         },
     };
 }

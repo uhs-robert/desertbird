@@ -1,7 +1,8 @@
 import { refused_as } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
-import type { ViewRow } from "../../shared/protocol.ts";
+import { flags_have } from "../../shared/protocol.ts";
+import type { FolderpaneApi, RowFlag, ViewRow } from "../../shared/protocol.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { active_mail_tab, show_folder_and_focus_threads } from "./folder_open.ts";
 import type { FolderApi } from "./folder_open.ts";
@@ -17,6 +18,7 @@ interface UnreadPage {
 // An intersection, as in the router: the parts share `mailTabs` with different members.
 export type StepApi = ThreadViewApi &
     FolderApi & {
+        folderpane: FolderpaneApi;
         folders: { getFolderInfo(folder_id: string): Promise<{ unreadMessageCount?: number }> };
         messages: {
             query(query: { folderId: string; unread: true; messagesPerPage: number; autoPaginationTimeout: number }): Promise<UnreadPage>;
@@ -26,35 +28,18 @@ export type StepApi = ThreadViewApi &
 
 type StepScope = ThreadScope & { api: StepApi };
 
-// The bits of `nsMsgMessageFlags` in a row's `flags`.
-const FLAG_BIT = { unread: 0x1, flagged: 0x4, attachment: 0x10000000 } as const;
-type RowFlag = keyof typeof FLAG_BIT;
-
-// Unread is the absence of the read bit.
-const has_flag = (row: ViewRow, flag: RowFlag): boolean => (flag === "unread" ? row.unread : (row.flags & FLAG_BIT[flag]) !== 0);
-
-// The most rows one `app.viewRows` call returns.
-const BLOCK = 500;
-
 // Trash and Junk hold unread mail nobody wants to visit, so `] U` skips them.
 const SKIPPED_FOLDERS = ["trash", "junk"];
 
 // The rows are in the order the user sees, with the sort and the open threads, which a query does not give. A row holds the flags of its own message only: an unread reply inside a closed thread is found once the thread opens.
-// One pass collects up to `wanted` matches and returns the last, so a large count reads each block once. A pass that runs out of rows returns the last match it found.
+// The chrome side walks the list and answers the `wanted`th match, or the last one it found when the list runs out. The scan also gives the found message's id. The reread gives the full row, which the check compares and the select uses.
 async function find_row(scope: StepScope, flag: RowFlag, from: number, forward: boolean, wanted: number): Promise<ViewRow | undefined> {
-    let found: ViewRow | undefined;
-    for (let block = 0; ; block++) {
-        const last = forward ? from + (block + 1) * BLOCK - 1 : from - block * BLOCK;
-        const first = forward ? from + block * BLOCK : last - BLOCK + 1;
-        if (last < 0) return found;
-        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first: Math.max(first, 0), last });
-        const hits = rows.filter((row) => has_flag(row, flag));
-        if (!forward) hits.reverse();
-        if (hits.length >= wanted) return hits[wanted - 1];
-        wanted -= hits.length;
-        found = hits.at(-1) ?? found;
-        if (forward ? rows.length < BLOCK : first <= 0) return found;
-    }
+    const found = await scope.api.folderpane.viewFindRow({ windowId: scope.window_id, from, forward, flag, wanted });
+    if (found.index < 0) return undefined;
+    const [row] = (await scope.api.app.viewRows({ windowId: scope.window_id, first: found.index, last: found.index })).rows;
+    // A quick filter or a new message between the two calls moves the rows, so the index can hold another message, even one with the same flag.
+    if (row === undefined || row.id !== found.id || !flags_have(row.flags, flag)) throw new RuntimeRefusal("The list changed during the step. Press the key again.");
+    return row;
 }
 
 // Folders come in the order of `folders.query`. The search starts after the shown folder and wraps once, so `] U` in the last folder with unread mail goes round to the first.
@@ -80,12 +65,9 @@ async function show_first_unread(scope: StepScope, folder: MailFolder): Promise<
     await select_row(scope, { id: page.messages[0].id });
 }
 
-// With no row selected, `[` starts after the last row. The view gives no row count, so a full block means more rows follow.
+// With no row selected, `[` starts after the last row.
 async function last_row_index(scope: StepScope): Promise<number> {
-    for (let first = 0; ; first += BLOCK) {
-        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
-        if (rows.length < BLOCK) return first + rows.length - 1;
-    }
+    return (await scope.api.folderpane.viewRowCount({ windowId: scope.window_id })) - 1;
 }
 
 async function step(scope: StepScope, flag: RowFlag, args: CheckedArgs): Promise<void> {

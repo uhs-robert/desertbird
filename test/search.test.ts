@@ -4,7 +4,7 @@ import { compile_query, describe_match, nearest_match, opposite, step_match } fr
 import type { QuickFilter } from "../src/background/handlers/view.ts";
 import { apply_filter } from "../src/background/handlers/view.ts";
 import { create_search_register } from "../src/background/search/register.ts";
-import { SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
+import { LIST_FILLED_LIMIT_MS, SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
 import { APPLIED_FILTERS_STORAGE_KEY, SEARCH_REGISTER_STORAGE_KEY } from "../src/shared/protocol.ts";
 import { fake_storage } from "./fake_api.ts";
 import { fake_timers } from "./hud_fakes.ts";
@@ -52,16 +52,18 @@ const MAILS: Mail[] = [
 let next_tab = 100;
 
 /** One window with one mail tab. `filters` records every filter set, in order. The visible rows follow the last text filter, the way Thunderbird narrows them. */
-function setup(options: { folder?: string; root?: boolean } = {}) {
+function setup(options: { folder?: string; root?: boolean; mails?: Mail[] } = {}) {
     const tab_id = next_tab++;
     const timers = fake_timers();
     const storage = fake_storage();
     const filters: QuickFilter[] = [];
     const said: string[] = [];
+    const mails = options.mails ?? MAILS;
+    const reads = { row_counts: 0, row_blocks: 0 };
     const state = { tab_folders: { [tab_id]: options.folder ?? "f1" } as Record<number, string>, tab: tab_id, selected: -1, filter: {} as QuickFilter, root: options.root ?? false };
     const visible = () => {
         const text = state.filter.text?.text.toLowerCase();
-        return text === undefined ? MAILS : MAILS.filter((mail) => `${mail.subject} ${mail.author}`.toLowerCase().includes(text));
+        return text === undefined ? mails : mails.filter((mail) => `${mail.subject} ${mail.author}`.toLowerCase().includes(text));
     };
     const api = {
         mailTabs: {
@@ -76,11 +78,11 @@ function setup(options: { folder?: string; root?: boolean } = {}) {
         },
         app: {
             viewRows: async ({ first, last }: { first: number; last: number }) => ({
-                current: state.selected,
+                current: (reads.row_blocks++, state.selected),
                 rows: visible().flatMap((mail, index) => (index >= first && index <= last ? [{ index, id: mail.id, depth: 0, collapsed: false, unread: false, flags: 0 }] : [])),
             }),
         },
-        folderpane: undefined,
+        folderpane: { focused: async () => false, viewRowCount: async () => (reads.row_counts++, visible().length) },
     };
     const register = create_search_register(storage.api.local);
     const service = create_search_service({ api: api as never, register, timers, say: async (_window, text, is_error) => void said.push(`${is_error ? "error" : "ok"} ${text}`) });
@@ -91,7 +93,7 @@ function setup(options: { folder?: string; root?: boolean } = {}) {
         timers.advance(SEARCH_DEBOUNCE_MS);
         return pending;
     };
-    return { service, type, filters, said, state, tab_id, timers, storage, register, api, visible };
+    return { service, type, filters, said, state, tab_id, timers, storage, register, api, visible, reads };
 }
 
 test("start refuses when no message list is shown", async () => {
@@ -119,6 +121,184 @@ test("a keystroke typed during the wait replaces the one before: the first answe
     assert.deepEqual(await first, { stale: true });
     assert.equal((await second as { note: string }).note, "1 of 3");
     assert.deepEqual(filters.map((filter) => filter.text?.text), ["invo"]);
+});
+
+test("a keystroke and n each count a large list with one row count call and read no blocks of rows", async () => {
+    const mails = Array.from({ length: 3000 }, (_, index): Mail => ({ id: index + 1, subject: `Invoice ${index}`, author: "Ann" }));
+    const { service, type, reads } = setup({ mails });
+    await service.start(3, "forward");
+    assert.deepEqual(await type("invoice"), { note: "1 of 3000", is_error: false });
+    assert.deepEqual(reads, { row_counts: 1, row_blocks: 0 });
+    await service.commit(3, "invoice");
+    await service.step(3, "same");
+    assert.equal(reads.row_counts, 3);
+    // Enter and n each read the current row and the row they select, and no block of the list.
+    assert.ok(reads.row_blocks <= 3, `read ${reads.row_blocks} blocks`);
+});
+
+// The Quick Filter bar can change the list while the search counts it. A count taken in one read is of one list, never part of one and part of the next.
+test("the count is of the list as one read sees it, while a quick filter change lands during the count", async () => {
+    const mails = Array.from({ length: 1200 }, (_, index): Mail => ({ id: index + 1, subject: index < 700 ? `Invoice ${index}` : `Lunch ${index}`, author: "Ann" }));
+    const { service, type, state, api } = setup({ mails });
+    await service.start(3, "forward");
+    // The bar narrows the list to a single row right after the first read of the list.
+    const read_rows = api.app.viewRows;
+    const count_rows = api.folderpane.viewRowCount;
+    let changed = false;
+    const change_after = <T>(read: () => Promise<T>) => async () => {
+        const answer = await read();
+        if (!changed) (changed = true), (state.filter = { text: { text: "lunch 1199", subject: true, author: true } });
+        return answer;
+    };
+    api.app.viewRows = (args) => change_after(() => read_rows(args))();
+    api.folderpane.viewRowCount = () => change_after(count_rows)();
+    const note = (await type("invoice")) as { note: string };
+    assert.equal(note.note, "1 of 700");
+});
+
+// Thunderbird fills the filtered list after `setQuickFilter` returns. While `filter.searching` answers true the view holds part of the list, so a count then is short.
+function filling_list(fixture: ReturnType<typeof setup>, polls: number) {
+    const asked: string[] = [];
+    const full_count = fixture.api.folderpane.viewRowCount;
+    fixture.api.folderpane.viewRowCount = async () => (asked.push(polls > 0 ? "count while searching" : "count"), polls > 0 ? 1 : full_count());
+    (fixture.api as { filter?: unknown }).filter = { set: async () => true, searching: async () => (asked.push("searching"), polls-- > 0) };
+    return asked;
+}
+
+const drain_timers = async (timers: ReturnType<typeof fake_timers>, done: Promise<unknown>) => {
+    let finished = false;
+    void done.finally(() => (finished = true)).catch(() => undefined);
+    for (let turn = 0; turn < 50 && !finished; turn++) {
+        await new Promise((resolve) => setImmediate(resolve));
+        timers.advance(100);
+    }
+};
+
+test("a keystroke, Enter and n count only once Thunderbird has filled the list", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    let asked = filling_list(fixture, 2);
+    const typed = fixture.service.type(3, "invoice");
+    await drain_timers(fixture.timers, typed);
+    assert.deepEqual(await typed, { note: "1 of 3", is_error: false });
+    assert.deepEqual(asked, ["searching", "searching", "searching", "count"]);
+    asked = filling_list(fixture, 1);
+    const committed = fixture.service.commit(3, "invoice");
+    await drain_timers(fixture.timers, committed);
+    await committed;
+    assert.ok(!asked.includes("count while searching"), asked.join(", "));
+    // After Escape the list is whole again, so n applies the filter once more and waits for it.
+    await fixture.service.start(3, "forward");
+    await fixture.service.cancel(3);
+    asked = filling_list(fixture, 2);
+    const stepped = fixture.service.step(3, "same");
+    await drain_timers(fixture.timers, stepped);
+    await stepped;
+    assert.deepEqual(asked.filter((entry) => entry.startsWith("count")), ["count"]);
+});
+
+// A search that has not ended yet: `searching` answers true until the test lets it end, and every count is recorded.
+function stuck_search(fixture: ReturnType<typeof setup>) {
+    const control = { running: true, counts: 0 };
+    const full_count = fixture.api.folderpane.viewRowCount;
+    fixture.api.folderpane.viewRowCount = async () => (control.counts++, full_count());
+    (fixture.api as { filter?: unknown }).filter = { set: async () => true, searching: async () => control.running };
+    return control;
+}
+
+const turns = async (timers: ReturnType<typeof fake_timers>, count: number) => {
+    for (let turn = 0; turn < count; turn++) {
+        await new Promise((resolve) => setImmediate(resolve));
+        timers.advance(100);
+    }
+};
+
+test("a newer keystroke ends the wait of the one before, and only the newer one counts", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const first = fixture.service.type(3, "inv");
+    await turns(fixture.timers, 5);
+    const second = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, 3);
+    assert.deepEqual(await first, { stale: true });
+    control.running = false;
+    await turns(fixture.timers, 5);
+    assert.deepEqual(await second, { note: "1 of 3", is_error: false });
+    assert.equal(control.counts, 1);
+});
+
+test("Escape during a keystroke's wait ends it with no count", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const typed = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, 5);
+    const cancelled = fixture.service.cancel(3);
+    await turns(fixture.timers, 5);
+    assert.deepEqual(await typed, { stale: true });
+    await cancelled;
+    assert.equal(control.counts, 0);
+});
+
+test("a folder or tab change during a wait ends the search and counts nothing of the new list", async () => {
+    const typing = setup();
+    await typing.service.start(3, "forward");
+    const typed_control = stuck_search(typing);
+    const typed = typing.service.type(3, "invoice");
+    await turns(typing.timers, 5);
+    typing.state.tab_folders[typing.tab_id] = "f2";
+    await turns(typing.timers, 3);
+    assert.deepEqual(await typed, { note: "The folder changed, so the search ended.", is_error: true });
+    assert.equal(typed_control.counts, 0);
+    // `n` after Escape waits for its own filter. A tab change in that wait stops it before it counts or selects.
+    const stepping = setup();
+    await stepping.register.write({ text: "invoice", direction: "forward", kind: "threads" });
+    const step_control = stuck_search(stepping);
+    const stepped = stepping.service.step(3, "same");
+    void stepped.catch(() => undefined);
+    await turns(stepping.timers, 5);
+    stepping.state.tab = 1;
+    await turns(stepping.timers, 3);
+    await assert.rejects(stepped, /tab or folder changed/);
+    assert.deepEqual([step_control.counts, stepping.state.selected], [0, -1]);
+});
+
+test("a search that runs past the limit stops the keystroke and n with a message, and Enter waits on until it ends or Escape", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const limit_turns = LIST_FILLED_LIMIT_MS / 100 + 5;
+    const typed = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, limit_turns);
+    assert.deepEqual(await typed, { note: "Thunderbird's search still runs after 5 s, so there is no count yet. Try again when it ends.", is_error: true });
+    // Enter keeps waiting past the limit, then counts the full list once the search ends.
+    let committed_done = false;
+    const committed = fixture.service.commit(3, "invoice").finally(() => (committed_done = true));
+    await turns(fixture.timers, limit_turns * 2);
+    assert.deepEqual([committed_done, control.counts], [false, 0]);
+    control.running = false;
+    await turns(fixture.timers, 5);
+    await committed;
+    assert.equal(control.counts, 1);
+    assert.equal(fixture.said.at(-1), "ok 1 of 3");
+    // Escape ends a wait of Enter that runs past the limit.
+    await fixture.service.start(3, "forward");
+    control.running = true;
+    const held = fixture.service.commit(3, "invoice");
+    void held.catch(() => undefined);
+    await turns(fixture.timers, limit_turns);
+    const cancelled = fixture.service.cancel(3);
+    await turns(fixture.timers, 5);
+    await assert.rejects(held, /cancelled/);
+    await cancelled;
+    assert.equal(control.counts, 1);
+    await fixture.service.cancel(3);
+    const stepped = fixture.service.step(3, "same");
+    void stepped.catch(() => undefined);
+    await turns(fixture.timers, limit_turns);
+    await assert.rejects(stepped, /still runs after 5 s/);
+    assert.equal(control.counts, 1);
 });
 
 test("a search with the backward direction counts from the last row", async () => {
@@ -430,10 +610,10 @@ test("? is backward search and g? is help, / and n and N are bound in the mail t
 test("Escape while an Enter is still counting cancels the search and the late commit does not keep its text", async () => {
     const { service, filters, api, state } = setup();
     await service.start(3, "forward");
-    const rows = api.app.viewRows;
+    const count_rows = api.folderpane.viewRowCount;
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
-    api.app.viewRows = async (range) => (await held, rows(range));
+    api.folderpane.viewRowCount = async () => (await held, count_rows());
     const committed = service.commit(3, "invoice");
     await new Promise((resolve) => setImmediate(resolve));
     const cancelled = service.cancel(3);

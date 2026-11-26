@@ -4,7 +4,8 @@ import { check_args } from "../vendor/desertfox/registry/check_args.ts";
 import { DEFAULT_KEYMAP, compile_default_keymap, registry } from "../src/background/commands/index.ts";
 import { create_router } from "../src/background/router.ts";
 import type { RouterApi } from "../src/background/router.ts";
-import type { ViewRow } from "../src/shared/protocol.ts";
+import { find_flagged_row } from "../src/chrome/flag_scan.ts";
+import type { FolderpaneViewFindRowArgs, ViewRow } from "../src/shared/protocol.ts";
 
 // `flagged` and `attachment` stand for the bits of the flags word, so a test reads like the list.
 interface Flags {
@@ -27,9 +28,11 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
     const calls: string[] = [];
     const rows = Array.from({ length: options.rows }, (_, index): ViewRow => {
         const marked = options.flags?.[index];
-        return { index, id: index + 100, depth: 0, collapsed: false, unread: marked?.unread === true, flags: (marked?.flagged ? 0x4 : 0) | (marked?.attachment ? 0x10000000 : 0) };
+        return { index, id: index + 100, depth: 0, collapsed: false, unread: marked?.unread === true, flags: (marked?.unread ? 0 : 0x1) | (marked?.flagged ? 0x4 : 0) | (marked?.attachment ? 0x10000000 : 0) };
     });
     const folders = options.folders ?? [{ id: "f1", unread: 0 }];
+    // A test sets `after_scan` to change the list right after the chrome scan answers.
+    const hooks = { after_scan: () => {} };
     const app = {
         viewRows: async ({ first, last }: { first: number; last: number }) => (calls.push(`viewRows ${first} ${last}`), { current: options.current, rows: rows.slice(first, last + 1) }),
         paneFocus: async ({ pane }: { pane: string }) => (calls.push(`focus ${pane}`), true),
@@ -41,6 +44,18 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
     };
     const api = {
         app,
+        folderpane: {
+            viewRowCount: async () => (calls.push("viewRowCount"), rows.length),
+            // The chrome scan, over the same rows and flags as viewRows.
+            // The chrome scan itself, over the same rows as viewRows. The id is the one the parent converts from the found header.
+            viewFindRow: async (search: Omit<FolderpaneViewFindRowArgs, "windowId">) => {
+                calls.push(`viewFindRow ${search.from} ${search.forward} ${search.flag} ${search.wanted}`);
+                const { index } = find_flagged_row({ rowCount: rows.length, getMsgHdrAt: (at) => rows[at] ?? null }, search);
+                const found = { index, id: rows[index]?.id ?? null };
+                hooks.after_scan();
+                return found;
+            },
+        },
         mailTabs,
         folders: {
             query: async () => folders.map((folder) => ({ id: folder.id, accountId: "a", path: `/${folder.id}`, specialUse: folder.special, isVirtual: folder.virtual, isRoot: folder.root })),
@@ -58,7 +73,15 @@ function step_fake(options: { rows: number; current: number; flags?: Record<numb
         notifications: { create: async (_id: string, notification: { message: string }) => (calls.push(`notify ${notification.message}`), "n1") },
     } as unknown as RouterApi;
     const run = (command: string, args: Record<string, unknown>) => create_router(registry, api).run({ command, args: args as never, count: options.count ?? 1, windowId: 3, messageIds: [] });
-    return { run, calls: () => calls.filter((call) => !call.startsWith("viewRows")), all: calls };
+    return {
+        run,
+        calls: () => calls.filter((call) => !call.startsWith("viewRow") && !call.startsWith("viewFindRow")),
+        all: calls,
+        rows,
+        set after_scan(change: () => void) {
+            hooks.after_scan = change;
+        },
+    };
 }
 
 test("the step commands check their typed args", () => {
@@ -179,4 +202,55 @@ test("[ with no row selected in a list of exactly one block finds the last row",
     const fake = step_fake({ rows: 500, current: -1, flags: { 499: { unread: true } } });
     await fake.run("step.unread", { direction: "previous", scope: "folder" });
     assert.deepEqual(fake.calls(), ["select 9 599"]);
+});
+
+test("[ with no row selected asks the row count once and reads only the last block, not the whole list", async () => {
+    const fake = step_fake({ rows: 5000, current: -1, flags: { 4990: { unread: true } } });
+    await fake.run("step.unread", { direction: "previous", scope: "folder" });
+    assert.deepEqual(fake.calls(), ["select 9 5090"]);
+    assert.deepEqual(fake.all.filter((call) => call.startsWith("view")), ["viewRows 0 0", "viewRowCount", "viewFindRow 4999 false unread 1", "viewRows 4990 4990"]);
+});
+
+test("] u finds an unread row far ahead with one scan and one row read, and with none ahead it reads no blocks", async () => {
+    const far = step_fake({ rows: 10000, current: 0, flags: { 9000: { unread: true } } });
+    await far.run("step.unread", { direction: "next", scope: "folder" });
+    assert.deepEqual(far.calls(), ["select 9 9100"]);
+    assert.deepEqual(far.all.filter((call) => call.startsWith("view")), ["viewRows 0 0", "viewFindRow 1 true unread 1", "viewRows 9000 9000"]);
+    const none = step_fake({ rows: 10000, current: 0 });
+    await none.run("step.unread", { direction: "next", scope: "folder" });
+    assert.deepEqual(none.calls(), ["notify No later unread message."]);
+    assert.deepEqual(none.all.filter((call) => call.startsWith("view")), ["viewRows 0 0", "viewFindRow 1 true unread 1"]);
+});
+
+// A quick filter that lands between the scan and the row read moves the rows, so the found index names another message. The step refuses and selects nothing.
+test("a quick filter that empties the found row during the scan makes the step refuse and select nothing", async () => {
+    const fake = step_fake({ rows: 2000, current: 0, flags: { 1500: { unread: true } } });
+    const narrowed = fake.rows.filter((row) => row.index % 2 === 0).map((row, index) => ({ ...row, index, unread: false }));
+    fake.after_scan = () => void fake.rows.splice(0, fake.rows.length, ...narrowed);
+    await fake.run("step.unread", { direction: "next", scope: "folder" });
+    assert.deepEqual(fake.calls(), ["notify The list changed during the step. Press the key again."]);
+});
+
+// New mail inserted above the found row shifts every row down one, so the index now holds another starred message.
+test("a shift that puts another flagged row at the found index refuses, and an unchanged view selects the found message", async () => {
+    const flags = { 1: { flagged: true }, 2: { flagged: true } };
+    // From row 1 the scan finds row 2. After the shift row 2 holds the starred message of row 1.
+    const shifted = step_fake({ rows: 10, current: 1, flags });
+    shifted.after_scan = () => {
+        const moved = shifted.rows.map((row) => ({ ...row, index: row.index + 1 }));
+        shifted.rows.splice(0, shifted.rows.length, { index: 0, id: 999, depth: 0, collapsed: false, unread: false, flags: 0x1 }, ...moved);
+    };
+    await shifted.run("step.starred", { direction: "next" });
+    assert.deepEqual(shifted.calls(), ["notify The list changed during the step. Press the key again."]);
+    const unchanged = step_fake({ rows: 10, current: 1, flags });
+    await unchanged.run("step.starred", { direction: "next" });
+    assert.deepEqual(unchanged.calls(), ["select 9 102"]);
+});
+
+// A news folder reads `isRead` from its read set, which can disagree with the flags word. The scan and the check both read the flags word, so the step takes the row the scan found.
+test("a row whose read state and flags word disagree is found and selected by its flags", async () => {
+    const fake = step_fake({ rows: 10, current: 0, flags: { 5: { unread: true } } });
+    fake.rows[5]!.unread = false;
+    await fake.run("step.unread", { direction: "next", scope: "folder" });
+    assert.deepEqual(fake.calls(), ["select 9 105"]);
 });
