@@ -16,7 +16,7 @@ import type { SearchRegisterStore } from "./register.ts";
 /** How long the filter waits after a keystroke. A burst of typing filters once, and a slow folder is not asked for each letter. */
 export const SEARCH_DEBOUNCE_MS = 150;
 
-// How often a count asks whether Thunderbird still fills the filtered list, and how long it asks. A search that runs on past the limit (a saved search over remote folders, a search that never ends) stops the count with a message, so no poll outlives it.
+// How often a count asks whether Thunderbird still fills the filtered list, and how long a keystroke or `n` asks. A search that runs on past the limit (a saved search over remote folders, a search that never ends) stops that count with a message. Enter waits with no limit.
 const LIST_FILLED_POLL_MS = 100;
 export const LIST_FILLED_LIMIT_MS = 5000;
 const STILL_SEARCHING = "Thunderbird's search still runs after 5 s, so there is no count yet. Try again when it ends.";
@@ -89,12 +89,12 @@ export function create_search_service(deps: SearchDeps): SearchService {
     const count_rows = (window_id: number): Promise<number> => viewer().folderpane.viewRowCount({ windowId: window_id });
 
     // `setQuickFilter` returns once the search starts, and Thunderbird adds rows until `filter.searching` turns false. A count before then is of part of the list. `still_wanted` runs before every poll and after the last one, so a newer keystroke, Escape or a change of tab or folder stops the wait and the caller counts nothing. Without the filter script there is nothing to ask, so the count reads what it finds.
-    async function list_filled(tab_id: number, still_wanted: () => Promise<boolean>): Promise<"filled" | "stopped" | "timed_out"> {
+    async function list_filled(tab_id: number, still_wanted: () => Promise<boolean>, limit_ms = LIST_FILLED_LIMIT_MS): Promise<"filled" | "stopped" | "timed_out"> {
         const filter = deps.api.filter;
         for (let waited = 0; ; waited += LIST_FILLED_POLL_MS) {
             if (!(await still_wanted())) return "stopped";
             if (filter === undefined || !(await filter.searching({ tabId: tab_id }))) return (await still_wanted()) ? "filled" : "stopped";
-            if (waited >= LIST_FILLED_LIMIT_MS) return "timed_out";
+            if (waited >= limit_ms) return "timed_out";
             await wait(LIST_FILLED_POLL_MS);
         }
     }
@@ -136,14 +136,17 @@ export function create_search_service(deps: SearchDeps): SearchService {
         throw new RuntimeRefusal("The folder changed, so the search ended.");
     }
 
-    // A commit counts and selects the final rows, so it waits for the search of its filter. `filter.set` stops waiting after 5 s and a plain text filter never waits, so the search can still run here. Escape and a folder change end the wait. A search past the limit keeps the line open for another Enter.
+    // A commit counts and selects the final rows, so it waits for the search of its filter with no limit: the user pressed Enter to get that answer. `filter.set` stops waiting after 5 s and a plain text filter never waits, so the search can still run here. Only Escape and a change of tab or folder end the wait.
     async function search_ended(window_id: number, search: LiveSearch): Promise<void> {
-        const ended = await list_filled(search.tab_id, async () => {
-            if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
-            await refuse_unless_here(window_id, search);
-            return true;
-        });
-        if (ended === "timed_out") throw new RuntimeRefusal(STILL_SEARCHING);
+        await list_filled(
+            search.tab_id,
+            async () => {
+                if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
+                await refuse_unless_here(window_id, search);
+                return true;
+            },
+            Infinity,
+        );
     }
 
     // The selection goes to the tab the search or the `n` began in, which the caller has just checked is still in front.
