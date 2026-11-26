@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,17 @@ import { start_recording } from "../tools/e2e/recorder.mjs";
 
 // @ts-expect-error plain .mjs tool module
 import { start_app } from "../tools/e2e/harness.mjs";
+
+// The last test starts a real labwc session, so it skips on a host without the tools (CI).
+const missing_tool = ["labwc", "wtype"].find((tool) => {
+  try {
+    execFileSync("which", [tool], { stdio: "ignore" });
+    return false;
+  } catch {
+    return true;
+  }
+});
+const skip = missing_tool === undefined ? false : `${missing_tool} is not installed`;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -90,7 +101,7 @@ test("a clean stop leaves no timer behind", async () => {
 });
 
 // The real harness and the real session: the recorder group goes in through adopt_group and dies with the session stop.
-test("an interrupted run reaches the recorder through adopt_group and the session stop", { timeout: 40_000 }, async () => {
+test("an interrupted run reaches the recorder through adopt_group and the session stop", { skip, timeout: 40_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "rec-"));
   const instance = await start_app({ app: "betterbird", app_binary: "sleep", work_dir: join(root, "work"), run_dir: root, startup_ms: 10 });
   try {
