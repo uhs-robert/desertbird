@@ -264,7 +264,7 @@ test("a folder or tab change during a wait ends the search and counts nothing of
     assert.deepEqual([step_control.counts, stepping.state.selected], [0, -1]);
 });
 
-test("a search that runs past the limit stops the keystroke, Enter and n with a message", async () => {
+test("a search that runs past the limit stops the keystroke and n with a message, and Enter waits on until it ends or Escape", async () => {
     const fixture = setup();
     await fixture.service.start(3, "forward");
     const control = stuck_search(fixture);
@@ -272,17 +272,33 @@ test("a search that runs past the limit stops the keystroke, Enter and n with a 
     const typed = fixture.service.type(3, "invoice");
     await turns(fixture.timers, limit_turns);
     assert.deepEqual(await typed, { note: "Thunderbird's search still runs after 5 s, so there is no count yet. Try again when it ends.", is_error: true });
-    const committed = fixture.service.commit(3, "invoice");
-    void committed.catch(() => undefined);
+    // Enter keeps waiting past the limit, then counts the full list once the search ends.
+    let committed_done = false;
+    const committed = fixture.service.commit(3, "invoice").finally(() => (committed_done = true));
+    await turns(fixture.timers, limit_turns * 2);
+    assert.deepEqual([committed_done, control.counts], [false, 0]);
+    control.running = false;
+    await turns(fixture.timers, 5);
+    await committed;
+    assert.equal(control.counts, 1);
+    assert.equal(fixture.said.at(-1), "ok 1 of 3");
+    // Escape ends a wait of Enter that runs past the limit.
+    await fixture.service.start(3, "forward");
+    control.running = true;
+    const held = fixture.service.commit(3, "invoice");
+    void held.catch(() => undefined);
     await turns(fixture.timers, limit_turns);
-    await assert.rejects(committed, /still runs after 5 s/);
-    await fixture.register.write({ text: "invoice", direction: "forward", kind: "threads" });
+    const cancelled = fixture.service.cancel(3);
+    await turns(fixture.timers, 5);
+    await assert.rejects(held, /cancelled/);
+    await cancelled;
+    assert.equal(control.counts, 1);
     await fixture.service.cancel(3);
     const stepped = fixture.service.step(3, "same");
     void stepped.catch(() => undefined);
     await turns(fixture.timers, limit_turns);
     await assert.rejects(stepped, /still runs after 5 s/);
-    assert.equal(control.counts, 0);
+    assert.equal(control.counts, 1);
 });
 
 test("a search with the backward direction counts from the last row", async () => {
