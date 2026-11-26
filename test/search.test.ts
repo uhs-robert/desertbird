@@ -4,7 +4,7 @@ import { compile_query, describe_match, nearest_match, opposite, step_match } fr
 import type { QuickFilter } from "../src/background/handlers/view.ts";
 import { apply_filter } from "../src/background/handlers/view.ts";
 import { create_search_register } from "../src/background/search/register.ts";
-import { SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
+import { LIST_FILLED_LIMIT_MS, SEARCH_DEBOUNCE_MS, create_search_service } from "../src/background/search/service.ts";
 import { APPLIED_FILTERS_STORAGE_KEY, SEARCH_REGISTER_STORAGE_KEY } from "../src/shared/protocol.ts";
 import { fake_storage } from "./fake_api.ts";
 import { fake_timers } from "./hud_fakes.ts";
@@ -195,6 +195,94 @@ test("a keystroke, Enter and n count only once Thunderbird has filled the list",
     await drain_timers(fixture.timers, stepped);
     await stepped;
     assert.deepEqual(asked.filter((entry) => entry.startsWith("count")), ["count"]);
+});
+
+// A search that has not ended yet: `searching` answers true until the test lets it end, and every count is recorded.
+function stuck_search(fixture: ReturnType<typeof setup>) {
+    const control = { running: true, counts: 0 };
+    const full_count = fixture.api.folderpane.viewRowCount;
+    fixture.api.folderpane.viewRowCount = async () => (control.counts++, full_count());
+    (fixture.api as { filter?: unknown }).filter = { set: async () => true, searching: async () => control.running };
+    return control;
+}
+
+const turns = async (timers: ReturnType<typeof fake_timers>, count: number) => {
+    for (let turn = 0; turn < count; turn++) {
+        await new Promise((resolve) => setImmediate(resolve));
+        timers.advance(100);
+    }
+};
+
+test("a newer keystroke ends the wait of the one before, and only the newer one counts", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const first = fixture.service.type(3, "inv");
+    await turns(fixture.timers, 5);
+    const second = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, 3);
+    assert.deepEqual(await first, { stale: true });
+    control.running = false;
+    await turns(fixture.timers, 5);
+    assert.deepEqual(await second, { note: "1 of 3", is_error: false });
+    assert.equal(control.counts, 1);
+});
+
+test("Escape during a keystroke's wait ends it with no count", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const typed = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, 5);
+    const cancelled = fixture.service.cancel(3);
+    await turns(fixture.timers, 5);
+    assert.deepEqual(await typed, { stale: true });
+    await cancelled;
+    assert.equal(control.counts, 0);
+});
+
+test("a folder or tab change during a wait ends the search and counts nothing of the new list", async () => {
+    const typing = setup();
+    await typing.service.start(3, "forward");
+    const typed_control = stuck_search(typing);
+    const typed = typing.service.type(3, "invoice");
+    await turns(typing.timers, 5);
+    typing.state.tab_folders[typing.tab_id] = "f2";
+    await turns(typing.timers, 3);
+    assert.deepEqual(await typed, { note: "The folder changed, so the search ended.", is_error: true });
+    assert.equal(typed_control.counts, 0);
+    // `n` after Escape waits for its own filter. A tab change in that wait stops it before it counts or selects.
+    const stepping = setup();
+    await stepping.register.write({ text: "invoice", direction: "forward", kind: "threads" });
+    const step_control = stuck_search(stepping);
+    const stepped = stepping.service.step(3, "same");
+    void stepped.catch(() => undefined);
+    await turns(stepping.timers, 5);
+    stepping.state.tab = 1;
+    await turns(stepping.timers, 3);
+    await assert.rejects(stepped, /tab or folder changed/);
+    assert.deepEqual([step_control.counts, stepping.state.selected], [0, -1]);
+});
+
+test("a search that runs past the limit stops the keystroke, Enter and n with a message", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const limit_turns = LIST_FILLED_LIMIT_MS / 100 + 5;
+    const typed = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, limit_turns);
+    assert.deepEqual(await typed, { note: "Thunderbird's search still runs after 5 s, so there is no count yet. Try again when it ends.", is_error: true });
+    const committed = fixture.service.commit(3, "invoice");
+    void committed.catch(() => undefined);
+    await turns(fixture.timers, limit_turns);
+    await assert.rejects(committed, /still runs after 5 s/);
+    await fixture.register.write({ text: "invoice", direction: "forward", kind: "threads" });
+    await fixture.service.cancel(3);
+    const stepped = fixture.service.step(3, "same");
+    void stepped.catch(() => undefined);
+    await turns(fixture.timers, limit_turns);
+    await assert.rejects(stepped, /still runs after 5 s/);
+    assert.equal(control.counts, 0);
 });
 
 test("a search with the backward direction counts from the last row", async () => {
