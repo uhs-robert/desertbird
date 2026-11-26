@@ -14,6 +14,13 @@ export function apply_pick(text: string, pick: Pick): { text: string; caret: num
     return { text: text.slice(0, pick.start) + pick.insert + text.slice(pick.end), caret: pick.start + pick.insert.length };
 }
 
+/** The command line editing key a keydown is: Ctrl+U clears the line, Ctrl+H opens help. A search line has no command to ask about, so it ignores Ctrl+H. */
+export function line_key_action(event: { key: string; ctrlKey: boolean; altKey: boolean; metaKey: boolean }, is_search: boolean): "clear" | "help" | undefined {
+    if (!event.ctrlKey || event.altKey || event.metaKey) return undefined;
+    if (event.key === "u") return "clear";
+    return event.key === "h" && !is_search ? "help" : undefined;
+}
+
 /** The next highlighted row, or -1 when there are no rows. The highlight stops at the ends, as in DesertFox. From no highlight (-1), down goes to the first row and up to the last. */
 export function move_highlight(current: number, step: 1 | -1, row_count: number): number {
     if (row_count === 0) return -1;

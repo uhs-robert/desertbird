@@ -211,3 +211,13 @@ test("a target that left its document (another message loaded) is not acted on",
     press("a");
     assert.deepEqual(acted, []);
 });
+
+test("the labels come from the hint letters, and a digit in them can be typed", () => {
+    const { host, press } = fake_host();
+    const { window, spans } = fake_window("only");
+    const acted: string[] = [];
+    start_pick(host, targets_in(window, 2, acted), SCHEME, "activate", [], "j1");
+    assert.deepEqual(spans.map((span) => span.textContent), ["J", "1"]);
+    press("1");
+    assert.deepEqual(acted, ["t1"]);
+});

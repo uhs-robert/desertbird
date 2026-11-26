@@ -105,10 +105,11 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     const root_element = window.document.documentElement;
     // Read once per document: each message loads the script anew, so a theme change shows on the next message.
     let hint_colors = "background: #ffd33d !important;";
+    let hint_letters: string | undefined;
     let hold_until = 0;
     // The pick whose answer is still out. A cancel, Escape or a keymap change clears it and leaves the hold: a late answer then draws nothing, and keys typed before the parent's labels still run nothing. Only the answer of this pick ends the hold early, else the 1.5 s do.
     let asked = 0;
-    const hints = create_hint_session(window, open_pick, () => hint_colors, (text) => void runtime.sendMessage({ type: "body.yank", text }).catch(log_error));
+    const hints = create_hint_session(window, open_pick, () => hint_colors, (text) => void runtime.sendMessage({ type: "body.yank", text }).catch(log_error), () => hint_letters);
     const cancel = () => ((asked = 0), hints.cancel());
 
     // `parent_pick` labels the header and the body as one set, and the parent then takes the keys. Plain keys typed before its labels show would run as commands here, so they are dropped until the answer, at most 1.5 s. The parent answers once its labels show, and they own the keys from then. An answer below 0 or a failure means the parent cannot read this body, and the body labels itself.
@@ -158,7 +159,7 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
         event.preventDefault();
         event.stopPropagation();
         if (MODIFIER_KEYS.has(event.key)) return;
-        context.hints.feed(/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
+        context.hints.feed([...event.key].length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey ? { kind: "typed", letter: event.key.toLowerCase() } : { kind: "cancel" });
     }
 
     // A script in the document can dispatch keydown events. Only a real key press may run a command.
@@ -230,6 +231,8 @@ export async function start_body_script(window: BodyWindow, storage: BodyStorage
     const stored = await storage.get([KEYMAP_STORAGE_KEY, SETTINGS_STORAGE_KEY, HINT_STYLE_STORAGE_KEY]);
     hint_colors = (stored[HINT_STYLE_STORAGE_KEY] as string | undefined) ?? hint_colors;
     context.step_px = scroll_step_of(stored[SETTINGS_STORAGE_KEY]);
+    const letters = (stored[SETTINGS_STORAGE_KEY] as { hint_letters?: unknown } | undefined)?.hint_letters;
+    hint_letters = typeof letters === "string" && letters.length >= 2 ? letters.toLowerCase() : undefined;
     install(stored[KEYMAP_STORAGE_KEY]);
     // Switches the document to another tree of the same record, for a message window whose background answered late.
     return (tree) => ((tree_field = tree), install(last_record));

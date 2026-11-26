@@ -22,7 +22,7 @@ DesertBird puts Vim keys in Thunderbird (or Betterbird). It works in the mail ta
 
 Every command is defined once in a registry. Keys, the command line, completion and help all read that definition. DesertBird follows the design of [DesertFox](https://github.com/uhs-robert/desertfox), its Firefox sibling. Use DesertFox for the browser and DesertBird for mail.
 
-**The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `g?` or `,?` to open it with the top-level keys. Press `,h` to open the help page, which lists every key.
+**The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `Alt+?` or `,?` to open it with the top-level keys. Press `g?` or `,h` to open the help page, which lists every key.
 
 <!-- TODO image: docs/images/which-key.png, 800 px wide. Screenshot the mail tab with the which-key popup open after the m key, listing the message keys such as r for read, u for unread and s for star. -->
 

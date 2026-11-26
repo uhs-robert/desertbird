@@ -113,7 +113,7 @@ export interface KeysPending {
     windowId: number;
     /** The tree the panel lists: a page tab names its own (`page`, `message` in a message tab, `window` in a message window). A report without one is the mail tab's. */
     source?: "page" | "message" | "window" | "compose";
-    /** With no keys: show the root of the tree at once (`g ?`) and not end the panel. */
+    /** With no keys: show the root of the tree at once (`<A-?>`) and not end the panel. */
     root?: true;
 }
 
@@ -477,6 +477,8 @@ export interface HintsPickArgs {
     place?: "message";
     /** The key sequences bound to a pick, as tokens. After a typo ends the labels, they pass the hold that drops the other plain keys. */
     hintKeys?: string[][];
+    /** The `hint_letters` setting: the alphabet of the labels. Absent means the default alphabet. */
+    hintLetters?: string;
 }
 
 /** `focus` focuses the target (a row is selected), `activate` clicks it, `yank` copies its address or text. */

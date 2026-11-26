@@ -35,6 +35,9 @@ test("the themed hints fill in the colors of the setting at each pick, and pass 
     const keyed: HintsPickArgs[] = [];
     await themed_hints({ sendEnter: async () => {}, pick: async (args) => (keyed.push(args), 1) }, async () => name, async () => [["f"], [";", "f"]])!.pick({ windowId: 4 });
     assert.deepEqual(keyed[0]?.hintKeys, [["f"], [";", "f"]], "each pick carries the keys that start one");
+    const lettered: HintsPickArgs[] = [];
+    await themed_hints({ sendEnter: async () => {}, pick: async (args) => (lettered.push(args), 1) }, async () => name, async () => [], async () => "JFkd")!.pick({ windowId: 4 });
+    assert.equal(lettered[0]?.hintLetters, "jfkd", "each pick carries the hint alphabet setting, lowered");
     assert.equal(themed_hints(undefined, async () => name), undefined, "no Experiment, no hints");
 });
 
@@ -59,4 +62,16 @@ test("the hint command holds plain keys after it, is not replayed by `.`, and is
     assert.ok(hold_command_ids().includes("cmdline.open"));
     assert.ok(UNREPEATABLE_IDS.has("hint.window"));
     assert.equal(registry.get("hint.window")?.name, "hint");
+});
+
+test("every argument the background passes to hints.pick is declared in the Experiment schema", async () => {
+    const { readFileSync } = await import("node:fs");
+    const schema = JSON.parse(readFileSync(new URL("../src/experiment/hints.schema.json", import.meta.url), "utf8")) as { namespace: string; functions: { name: string; parameters: { properties: Record<string, unknown> }[] }[] }[];
+    const pick = schema.flatMap((entry) => entry.functions).find((fn) => fn.name === "pick");
+    const declared = Object.keys(pick!.parameters[0]!.properties);
+    const passed: string[] = [];
+    const hints = themed_hints({ sendEnter: async () => {}, pick: async (args) => (passed.push(...Object.keys(args)), 1) }, async () => "oasis_sol", async () => [["f"]], async () => "jfkd")!;
+    await hints.pick({ windowId: 4, tabId: 7, action: "yank", place: "message" });
+    assert.ok(passed.includes("hintLetters") && passed.includes("hintKeys"));
+    for (const name of passed) assert.ok(declared.includes(name), `${name} is passed to hints.pick but not declared in hints.schema.json`);
 });

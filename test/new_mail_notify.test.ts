@@ -126,7 +126,7 @@ test("a settings change that leaves it on clears nothing", async () => {
     const { deliver, api, calls } = harness({ ...on });
     await deliver([mail(1)]);
     calls.length = 0;
-    await api.storage.local.set({ [SETTINGS_KEY]: { notify_new_mail: true, toast_ms: 5 } });
+    await api.storage.local.set({ [SETTINGS_KEY]: { notify_new_mail: true, toast_ms: 5000 } });
     await settle();
     assert.deepEqual(calls, []);
 });
@@ -154,9 +154,9 @@ test("notify.toggle says which way as a result toast in the command's window", a
 });
 
 test("notify.toggle keeps the other settings", async () => {
-    const { api, data } = harness({ [SETTINGS_KEY]: { toast_ms: 7 } });
+    const { api, data } = harness({ [SETTINGS_KEY]: { toast_ms: 7000 } });
     await registry.get("notify.toggle")!.run!({ api, window_id: 1, message_ids: [], count: 1 } as never, {} as never);
-    assert.deepEqual(data[SETTINGS_KEY], { toast_ms: 7, notify_new_mail: true });
+    assert.deepEqual(data[SETTINGS_KEY], { toast_ms: 7000, notify_new_mail: true });
 });
 
 test("a click on a deleted message clears the notification, and a second click does nothing", async () => {

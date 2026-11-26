@@ -23,6 +23,15 @@ test("options.open parses by its short name and by its id", () => {
     assert.deepEqual(parse("options.open"), opens);
 });
 
+test("help, repeat and mark parse by their short names and by their ids", () => {
+    for (const [word, id] of [["help", "help.open"], ["repeat", "repeat.last"], ["mark a", "mark.set"]] as const) {
+        const parsed = parse(word);
+        assert.equal(parsed.kind, "invocation", word);
+        assert.equal((parsed as { invocation: { id: string } }).invocation.id, id, word);
+        assert.equal(parse(id.includes("mark") ? "mark.set a" : id).kind, "invocation", id);
+    }
+});
+
 test("the text of tm and tM parses once the offset is typed", () => {
     assert.deepEqual(parse("tab.move --offset=-1"), { kind: "invocation", invocation: { id: "tab.move", args: { offset: "-1" } } });
     assert.deepEqual(parse("tab.move 2"), { kind: "invocation", invocation: { id: "tab.move", args: { tab: "2" } } });

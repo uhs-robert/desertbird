@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LIST_ROWS, accepts_single_row, list_shown_after_answer, row_for_click, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "../src/overlay/line_edit.ts";
+import { LIST_ROWS, line_key_action, accepts_single_row, list_shown_after_answer, row_for_click, apply_pick, arrow_target, create_key_queue, cycle_index, enter_text, move_highlight, name_parts, name_width, note_text, prompt_look, read_history, rows_fit_after_wait, settle_latest, shown_highlight, wheel_rows, window_top } from "../src/overlay/line_edit.ts";
 
 test("a pick replaces its span and puts the caret after the insert", () => {
     assert.deepEqual(apply_pick("ta", { start: 0, end: 2, insert: "tag " }), { text: "tag ", caret: 4 });
@@ -179,4 +179,16 @@ test("a click picks the row it showed, and is dropped when the rows changed", ()
     assert.equal(row_for_click(drawn, drawn, 0, 1), 0);
     assert.equal(row_for_click(drawn, { rows: [2] }, 0, 1), -1);
     assert.equal(row_for_click(drawn, drawn, 3, 1), -1);
+});
+
+test("Ctrl+U clears the line and Ctrl+H runs help, and a search line, other modifiers and other keys leave them", () => {
+    const key = (name: string, mods: { ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean } = { ctrlKey: true }) => ({ key: name, ctrlKey: false, altKey: false, metaKey: false, ...mods });
+    assert.equal(line_key_action(key("u"), false), "clear");
+    assert.equal(line_key_action(key("u"), true), "clear", "a search line clears too");
+    assert.equal(line_key_action(key("h"), false), "help");
+    assert.equal(line_key_action(key("h"), true), undefined, "a search line has no command to ask about");
+    assert.equal(line_key_action(key("u", {}), false), undefined, "a plain u is text");
+    assert.equal(line_key_action(key("h", { ctrlKey: true, altKey: true }), false), undefined);
+    assert.equal(line_key_action(key("u", { ctrlKey: true, metaKey: true }), false), undefined);
+    assert.equal(line_key_action(key("k"), false), undefined);
 });

@@ -199,18 +199,17 @@ test("a remote page runs only the close chord and passes every other key, J, K a
 
 const reports = (events: KeysEvent[]) => events.filter((event) => "keys" in event).map((event) => (event as KeysPending).keys.join("") + ((event as KeysPending).root ? "!" : ""));
 
-test("g ? asks for the root of the page tree, with no end before it, and the next key reports its end once", () => {
+test("Alt+? asks for the root of the page tree, with no end before it, and the next key reports its end once", () => {
     const { windows, runtime, invocations, events, pending } = setup();
     runtime.install(tree());
     const window = windows[0]!;
-    press(window, "g");
-    press(window, "?");
+    press(window, "?", { altKey: true, shiftKey: true });
     assert.deepEqual(invocations(), []);
-    assert.deepEqual(reports(events), ["g", "!"]);
+    assert.deepEqual(reports(events), ["!"]);
     assert.deepEqual([pending().at(-1)?.source, pending().at(-1)?.root], ["page", true]);
     press(window, "j");
     press(window, "j");
-    assert.deepEqual(reports(events), ["g", "!", ""]);
+    assert.deepEqual(reports(events), ["!", ""]);
     assert.equal(pending().at(-1)?.windowId, 7);
 });
 

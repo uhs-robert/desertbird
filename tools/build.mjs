@@ -44,7 +44,7 @@ const ZOOM_MAX_BYTES = 3544;
 const ZOOM_CEILING_BYTES = 6144;
 
 // `content/message_display.js`, the body script that runs in every message document.
-const CONTENT_MAX_BYTES = 20210;
+const CONTENT_MAX_BYTES = 20722;
 const CONTENT_CEILING_BYTES = 24576;
 
 // `experiment/hints.js`, its own bundle and not chrome runtime code.

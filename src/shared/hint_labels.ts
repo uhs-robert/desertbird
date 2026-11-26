@@ -1,6 +1,6 @@
 // The labels of the hint keys. The body script uses them now. A hint mode in the mail window can use the same alphabet and generator, so the two never differ.
 
-/** Home row first, so the most typed labels sit under the fingers. Every letter is lower case, and a typed letter is lowered before it is compared. */
+/** Home row first, so the most typed labels sit under the fingers. Every letter is lower case, and a typed letter is lowered before it is compared. A custom alphabet must be lower case too: the `hint_letters` setting is lowered where it is read. */
 export const HINT_ALPHABET = "asdfghjkl";
 
 /** One label per target, all of the same length, so no label starts another and a typed prefix with one match is final. */

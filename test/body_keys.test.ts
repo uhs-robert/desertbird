@@ -509,6 +509,17 @@ test("f labels the links on screen and the typed label focuses the link and asks
     assert.deepEqual(window.scrolls, [`by ${MESSAGE_SCROLL_STEP_PX}`], "the keys work again after the pick");
 });
 
+test("the hint_letters setting gives the labels of the body pick, lowered, and a digit of it picks", async () => {
+    const { window } = await started({ [KEYMAP_STORAGE_KEY]: record(), [SETTINGS_STORAGE_KEY]: { hint_letters: "J1" } });
+    const links = [new StubElement({ top: 0, left: 0, width: 50, height: 12 }), new StubElement({ top: 20, left: 0, width: 50, height: 12 })];
+    window.elements = links;
+    window.press("f");
+    await settle();
+    assert.deepEqual(window.appended[0]!.children.map((node) => node.textContent), ["J", "1"]);
+    window.press("1");
+    assert.deepEqual(links.map((link) => link.focuses), [0, 1]);
+});
+
 test("a label of two letters needs both, a wrong letter or a key that is not a letter cancels, and Shift alone does nothing", async () => {
     const { window } = await started();
     const links = Array.from({ length: 12 }, (_, index) => new StubElement({ top: index * 20, left: 0, width: 50, height: 12 }));
@@ -726,7 +737,7 @@ test("the scroll step setting rejects 0 and anything below 1, and the body scrip
     assert.equal(setting_problem("message_scroll_step_px", 0) !== undefined, true);
     assert.equal(setting_problem("message_scroll_step_px", 0.5) !== undefined, true);
     assert.equal(setting_problem("message_scroll_step_px", 1), undefined);
-    assert.equal(setting_problem("toast_ms", 0), undefined, "other number settings still take 0");
+    assert.equal(setting_problem("which_key_delay_ms", 0), undefined, "other number settings still take 0");
     const { window, change } = await started({ [KEYMAP_STORAGE_KEY]: record() });
     change({ message_scroll_step_px: 0 }, "local", SETTINGS_STORAGE_KEY);
     window.press("j");

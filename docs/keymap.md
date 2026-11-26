@@ -8,7 +8,7 @@ A command shows in the long form the command line takes. A note "(prompts)" mean
 
 <!-- BEGIN generated -->
 
-bound: 527 (Mail tab 168, Message 111, Message window 93, Compose window 23, Own pages 63, Other tabs 61, Text fields 4, Open menus 4)
+bound: 533 (Mail tab 169, Message 112, Message window 94, Compose window 24, Own pages 64, Other tabs 62, Text fields 4, Open menus 4)
 
 ### Mail tab
 
@@ -21,7 +21,7 @@ The thread list and the folder pane.
 | `j` | `motion.down` |
 | `k` | `motion.up` |
 | `G` | `motion.bottom` |
-| `.` | `repeat.last` |
+| `.` | `repeat` |
 | `v` | `visual.toggle` |
 | `<Space>` | `select.toggle` |
 | `a` | `msg.archive` |
@@ -43,12 +43,13 @@ The thread list and the folder pane.
 | `T` | `cmdline.open 'tab '` |
 | `<C-o>` | `jump.back` |
 | `<C-i>` | `jump.forward` |
-| `M` | `mark.set` |
+| `M` | `mark` |
 | `'` | `mark.jump` |
 | `h` | `motion.left` |
 | `l` | `motion.right` |
 | `<C-d>` | `view.half_page next` |
 | `<C-u>` | `view.half_page previous` |
+| `<A-?>` | `help.whichkey` |
 | `u` | `undo` |
 | `e` | `fetch` |
 | `H` | `pane.left` |
@@ -74,7 +75,7 @@ The thread list and the folder pane.
 | `gs` | `open --sent` |
 | `gu` | `msg.unsubscribe` |
 | `ga` | `msg.save_attachments` |
-| `g?` | `help.whichkey` |
+| `g?` | `help` |
 | `gC` | `thread.open_conversation` |
 | `gf` | `pane.focus folders` |
 | `ge` | `pane.focus threads` |
@@ -169,7 +170,7 @@ The thread list and the folder pane.
 
 | Key | Command |
 | --- | --- |
-| `,h` | `help.open` |
+| `,h` | `help` |
 | `,s` | `options` |
 | `,?` | `help.whichkey` |
 | `,m` | `context.menu` |
@@ -298,6 +299,7 @@ A message in a tab or the message pane.
 | `n` | `message.find_next` |
 | `N` | `message.find_prev` |
 | `f` | `hint.pick` |
+| `<A-?>` | `help` |
 | `a` | `msg.archive` |
 | `r` | `msg.reply` |
 | `R` | `msg.reply --all` |
@@ -324,10 +326,10 @@ A message in a tab or the message pane.
 | Key | Command |
 | --- | --- |
 | `gg` | `message.top` |
-| `g?` | `help.open` |
 | `gF` | `msg.forward` |
 | `gu` | `msg.unsubscribe` |
 | `ga` | `msg.save_attachments` |
+| `g?` | `help` |
 | `gC` | `thread.open_conversation` |
 | `gf` | `pane.focus folders` |
 | `ge` | `pane.focus threads` |
@@ -399,9 +401,9 @@ A message in a tab or the message pane.
 
 | Key | Command |
 | --- | --- |
-| `,h` | `help.open` |
+| `,h` | `help` |
 | `,s` | `options` |
-| `,?` | `help.open` |
+| `,?` | `help` |
 | `,m` | `context.menu` |
 
 #### Tabs
@@ -485,6 +487,7 @@ A message in a window of its own (message mode), in the body and in the header. 
 | `n` | `message.find_next` |
 | `N` | `message.find_prev` |
 | `f` | `hint.pick` |
+| `<A-?>` | `help` |
 | `a` | `msg.archive` |
 | `r` | `msg.reply` |
 | `R` | `msg.reply --all` |
@@ -502,10 +505,10 @@ A message in a window of its own (message mode), in the body and in the header. 
 | Key | Command |
 | --- | --- |
 | `gg` | `message.top` |
-| `g?` | `help.open` |
 | `gF` | `msg.forward` |
 | `gu` | `msg.unsubscribe` |
 | `ga` | `msg.save_attachments` |
+| `g?` | `help` |
 | `gC` | `thread.open_conversation` |
 
 #### Quick reply
@@ -574,9 +577,9 @@ A message in a window of its own (message mode), in the body and in the header. 
 
 | Key | Command |
 | --- | --- |
-| `,h` | `help.open` |
+| `,h` | `help` |
 | `,s` | `options` |
-| `,?` | `help.open` |
+| `,?` | `help` |
 | `,m` | `context.menu` |
 
 #### Zoom and scroll
@@ -639,14 +642,15 @@ A message being written, in normal mode: the body and the To, Cc, Bcc and Subjec
 | --- | --- |
 | `e` | `edit` |
 | `s` | `save` |
-| `?` | `help.open` |
+| `?` | `help` |
+| `<A-?>` | `help.whichkey` |
 | `q` | `compose.close` |
 
 #### Go
 
 | Key | Command |
 | --- | --- |
-| `g?` | `help.whichkey` |
+| `g?` | `help` |
 | `gt` | `compose.focus to` |
 | `gc` | `compose.focus cc` |
 | `gb` | `compose.focus bcc` |
@@ -658,7 +662,7 @@ A message being written, in normal mode: the body and the To, Cc, Bcc and Subjec
 
 | Key | Command |
 | --- | --- |
-| `,h` | `help.open` |
+| `,h` | `help` |
 | `,?` | `help.whichkey` |
 | `,m` | `context.menu` |
 
@@ -697,6 +701,7 @@ The options page and the help page.
 | `n` | `message.find_next` |
 | `N` | `message.find_prev` |
 | `f` | `hint.pick` |
+| `<A-?>` | `help` |
 | `c` | `msg.new` |
 | `J` | `tab.next` |
 | `K` | `tab.prev` |
@@ -714,7 +719,7 @@ The options page and the help page.
 | Key | Command |
 | --- | --- |
 | `gg` | `message.top` |
-| `g?` | `help.open` |
+| `g?` | `help` |
 
 #### Pages
 
@@ -738,9 +743,9 @@ The options page and the help page.
 
 | Key | Command |
 | --- | --- |
-| `,h` | `help.open` |
+| `,h` | `help` |
 | `,s` | `options` |
-| `,?` | `help.open` |
+| `,?` | `help` |
 | `,m` | `context.menu` |
 
 #### Tabs
@@ -795,6 +800,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 | `<A-q>` | `tab.close` |
 | `:` | `cmdline.open` |
 | `T` | `cmdline.open 'tab '` |
+| `<A-?>` | `help.whichkey` |
 | `e` | `fetch` |
 | `f` | `hint` |
 | `i` | `mode.insert` |
@@ -812,7 +818,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 
 | Key | Command |
 | --- | --- |
-| `g?` | `help.whichkey` |
+| `g?` | `help` |
 | `gg` | `page.top` |
 
 #### Pages
@@ -837,7 +843,7 @@ Calendar, tasks, chat, the address book, settings and `about:` pages.
 
 | Key | Command |
 | --- | --- |
-| `,h` | `help.open` |
+| `,h` | `help` |
 | `,s` | `options` |
 | `,?` | `help.whichkey` |
 | `,m` | `context.menu` |

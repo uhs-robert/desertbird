@@ -142,12 +142,12 @@ function message_document_of(main: PickMainWindow, tab: FrontTab | null | undefi
 }
 
 /** Labels the header of `message` and its body, or the header alone when the body is remote (a feed shown as a web page) or not loaded. */
-function pick_in_message(main: PickMainWindow, message: MessageDocument, scheme: HintLabelScheme, action: HintAction | undefined, hint_keys: string[][]): number {
+function pick_in_message(main: PickMainWindow, message: MessageDocument, scheme: HintLabelScheme, action: HintAction | undefined, hint_keys: string[][], hint_letters?: string): number {
     const pane = message.document.getElementById("messagepane") as MessagePane | null;
     const body = pane && !pane.isRemoteBrowser && pane.contentDocument ? pane.contentWindow : null;
     // The Enter waits for the end of the key that picked, and goes only to the picked element while it holds the focus.
     const open = (picked: unknown) => void main.setTimeout(() => focus_chain(main.document as unknown as FocusDocument).at(-1) === picked && focus_is_picked_target(main as unknown as EnterWindow) && press_enter(main as unknown as EnterWindow), 0);
-    return start_pick(pick_host(main, [main, message, ...(body ? [body] : [])], message), collect_message_targets(message, body, open), scheme, action, hint_keys);
+    return start_pick(pick_host(main, [main, message, ...(body ? [body] : [])], message), collect_message_targets(message, body, open), scheme, action, hint_keys, hint_letters);
 }
 
 /** The tab manager maps a tab of `tabmail` to its MailExtension tab id. */
@@ -162,7 +162,7 @@ export function get_hints_api(context: HintsContext) {
                 if (!focus_is_picked_target(window)) throw new Error("the focus is not on a link or button of the message");
                 press_enter(window);
             }),
-            pick: guard("hints.pick", async ({ windowId, tabId, colors, action, place, hintKeys = [] }: HintsPickArgs): Promise<number> => {
+            pick: guard("hints.pick", async ({ windowId, tabId, colors, action, place, hintKeys = [], hintLetters }: HintsPickArgs): Promise<number> => {
                 const main = window_with_id(context, windowId) as unknown as PickMainWindow | null;
                 const tabmail = (main?.document.getElementById("tabmail") ?? null) as TabmailLike | null;
                 const tab = tabmail?.currentTabInfo as FrontTab | null | undefined;
@@ -173,15 +173,15 @@ export function get_hints_api(context: HintsContext) {
                     // The focus left the body during the trip from the body script, or the body that asked lost the front to another tab on the way (a message window has one message and no tabs), so the key is stale.
                     if (!pane || (tabmail && context.extension.tabManager.getWrapper(tab)?.id !== tabId)) return 0;
                     // The body script labels a body the parent cannot read itself.
-                    return pane.isRemoteBrowser || !pane.contentDocument ? -1 : pick_in_message(main, pane.ownerDocument.defaultView, scheme, action, hintKeys);
+                    return pane.isRemoteBrowser || !pane.contentDocument ? -1 : pick_in_message(main, pane.ownerDocument.defaultView, scheme, action, hintKeys, hintLetters);
                 }
                 const message = message_document_of(main, tab);
-                if (message) return pick_in_message(main, message, scheme, action, hintKeys);
+                if (message) return pick_in_message(main, message, scheme, action, hintKeys, hintLetters);
                 if (!tab) throw new Error(`no tab in window ${windowId}`);
                 const pane = front_about_3pane(tabmail) as (HintMailPane & ListenerTarget) | null;
                 if (pane) {
                     const reading = pane.messageBrowser.contentWindow as ListenerTarget | null | undefined;
-                    return start_pick(pick_host(main, [main, pane, ...(reading ? [reading] : [])]), collect_targets(main, pane), scheme, action, hintKeys);
+                    return start_pick(pick_host(main, [main, pane, ...(reading ? [reading] : [])]), collect_targets(main, pane), scheme, action, hintKeys, hintLetters);
                 }
                 const browser = tab.browser ?? tab.chromeBrowser;
                 const actor = browser?.isRemoteBrowser ? browser.browsingContext?.currentWindowGlobal?.getExistingActor("DesertBirdPage") : undefined;
@@ -191,14 +191,14 @@ export function get_hints_api(context: HintsContext) {
                     // The child reads the keys of its page only while the page has the focus. After the command line, say, the focus is in the window.
                     browser!.focus();
                     try {
-                        return (await actor.sendQuery("DesertBird:Hints", { scheme, action })) as number;
+                        return (await actor.sendQuery("DesertBird:Hints", { scheme, action, letters: hintLetters })) as number;
                     } catch {
                         // The tab closed or its page went before the child answered.
                         return 0;
                     }
                 }
                 const page = (browser?.contentDocument ? browser.contentWindow : null) ?? null;
-                return start_pick(pick_host(main, [main, ...(page ? [page] : [])]), collect_page_targets(main, page), scheme, action, hintKeys);
+                return start_pick(pick_host(main, [main, ...(page ? [page] : [])]), collect_page_targets(main, page), scheme, action, hintKeys, hintLetters);
             }),
         },
     };

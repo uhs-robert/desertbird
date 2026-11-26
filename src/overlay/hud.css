@@ -3,19 +3,17 @@
     color-scheme: light dark;
     --surface: var(--desertfox-bg-core, Canvas);
     --text: var(--desertfox-fg-core, CanvasText);
-    --accent: color-mix(in srgb, var(--desertfox-primary, CanvasText) 85%, var(--text));
-    --edge: var(--desertfox-border, GrayText);
-    --error_surface: color-mix(in srgb, var(--error_edge) 22%, var(--surface));
-    --error_text: var(--text);
+    --info_edge: var(--desertfox-info, #81c0ff);
     --error_edge: var(--desertfox-error, #b3261e);
 }
-html, body { margin: 0; height: 100%; background: transparent; font: 14px sans-serif; color: var(--text); overflow: hidden; }
-#toasts > div { background: var(--surface); color: var(--text); border: 1px solid var(--edge); box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; font: 14px system-ui, sans-serif; color: var(--text); overflow: hidden; }
+#toasts > div { background: var(--surface); color: var(--text); box-sizing: border-box; }
 /* The panel's own rules are DesertFox's sheet, which hud.ts adds. It sits at the bottom right like the toasts, and draws over a toast. */
 #which_key { z-index: 2; }
 #toasts { position: absolute; right: 16px; bottom: 48px; z-index: 1; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; max-width: 40ch; }
-#toasts > div { padding: 6px 10px; border-left: 4px solid var(--accent); overflow-wrap: anywhere; }
-#toasts > div.error { background: var(--error_surface); color: var(--error_text); border-color: var(--error_edge); border-left-color: var(--error_edge); }
+/* As DesertFox draws a toast: the surface and text are the same for every kind, the frame takes the color of the kind, the left bar is thicker, and the corners use the theme radius. */
+#toasts > div { padding: 8px 12px; border: 1px solid var(--info_edge); border-left-width: 4px; border-radius: var(--desertfox-radius, 6px); overflow-wrap: anywhere; }
+#toasts > div.error { border-color: var(--error_edge); }
 /* A confirm prompt fills the 280 px box over the bottom of the window, so toasts go above it. The command line lifts nothing. */
 body.lifted #toasts { bottom: 292px; }
 [hidden] { display: none !important; }
