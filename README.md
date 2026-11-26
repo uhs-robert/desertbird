@@ -82,7 +82,7 @@ The native host is the [DesertFox](https://github.com/uhs-robert/desertfox) host
 
 The host adds two things: editing a message in your own editor, and the bridge that lets a desktop bar or a script talk to Thunderbird. To set up the editor:
 
-1. Install the host. It needs `python3` 3.9 or newer, `curl` and `flock`. Take the version from the [latest DesertFox release](https://github.com/uhs-robert/desertfox/releases/latest). The installer wants the hash of each script, which the release publishes as `<script>.sha256` files:
+1. Install the host. Run the download and install in a new empty directory, because the download leaves `install.sh` in the current directory. The host needs `python3` 3.9 or newer, `curl` and `flock`. Take the version from the [latest DesertFox release](https://github.com/uhs-robert/desertfox/releases/latest). The installer wants the hash of each script, which the release publishes as `<script>.sha256` files:
 
    ```bash
    version=1.0.2
@@ -92,7 +92,9 @@ The host adds two things: editing a message in your own editor, and the bridge t
    sh install.sh "$version" --sha256 "desertfox-host=$(hash_of desertfox-host)" --sha256 "desertfox-bridge=$(hash_of desertfox-bridge)" --sha256 "desertfox=$(hash_of desertfox)"
    ```
 
-   The hashes come from the same release as the scripts, so they catch a damaged download and not a changed release. The installer writes the host files under `~/.local/share/desertfox/` and the host manifests under `~/.mozilla/native-messaging-hosts/`, including the `desertbird_host` and `desertbird_bridge` manifests for DesertBird.
+   The hashes come from the same release as the scripts, so they catch a damaged download and not a changed release. The installer writes the host files under `~/.local/share/desertfox/` and the host manifests under `~/.mozilla/native-messaging-hosts/`, including the `desertbird_host` and `desertbird_bridge` manifests for DesertBird and the `desertfox_host.json` and `desertfox_bridge.json` manifests for DesertFox Firefox. It also links `~/.local/bin/desertfox`. If a regular file already sits there, the installer keeps it and prints the path of the installed command line to run instead. Put `~/.local/bin` on your `PATH` to use the `desertfox` command line.
+
+   The installer ends with "Return to Firefox or Thunderbird and press the permission button on the extension's page". For DesertBird this means step 3 below: turn on `external_editor` or `bridge` in the DesertBird options, press Save and allow the `nativeMessaging` prompt.
 
 2. Create `~/.config/desertfox/editor.toml` and name your editor. The host has no default. This example opens Neovim in a floating `foot` terminal and quits after one save:
 
