@@ -60,7 +60,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
   - `experiment/page_actor_parent.sys.mjs`: guard 5632, ceiling 9216 (`ACTOR_PARENT_MAX_BYTES`).
   - `experiment/page_hints_child.sys.mjs`: guard 9216, ceiling 10240 (`ACTOR_HINTS_MAX_BYTES`).
   - `content/page_keys.js`: guard 21400, ceiling 32768 (`PAGE_KEYS_MAX_BYTES`).
-  - `experiment/folderpane.js`: guard 5900, ceiling 10240 (`FOLDERPANE_MAX_BYTES`).
+  - `experiment/folderpane.js`: guard 6412, ceiling 10240 (`FOLDERPANE_MAX_BYTES`).
   - `experiment/zoom.js`: guard 3544, ceiling 6144 (`ZOOM_MAX_BYTES`).
   - `content/compose_keys.js`: guard 4012, ceiling 8192 (`COMPOSE_MAX_BYTES`).
   - `experiment/composewin.js`: guard 11776, ceiling 15360 (`COMPOSEWIN_MAX_BYTES`).

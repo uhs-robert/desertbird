@@ -49,6 +49,25 @@
             }
           }
         ]
+      },
+      {
+        "name": "viewFindRow",
+        "type": "function",
+        "async": true,
+        "description": "Walks the message list from row from, forward or back, and answers the index of the wanted-th row with the flag (unread, flagged or attachment), else of the last such row found, else -1.",
+        "parameters": [
+          {
+            "name": "args",
+            "type": "object",
+            "properties": {
+              "windowId": { "type": "integer" },
+              "from": { "type": "integer" },
+              "forward": { "type": "boolean" },
+              "flag": { "type": "string", "enum": ["unread", "flagged", "attachment"] },
+              "wanted": { "type": "integer", "minimum": 1 }
+            }
+          }
+        ]
       }
     ]
   }

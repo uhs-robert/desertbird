@@ -194,7 +194,7 @@ export const EXPERIMENT_VERBS = {
     hints: { functions: ["sendEnter", "pick"], events: [] },
     pages: { functions: ["install"], events: ["onInvocation"] },
     // Loaded on first use, so the folder pane verbs stay out of the key script, which loads at startup.
-    folderpane: { functions: ["fold", "focused", "viewRowCount"], events: [] },
+    folderpane: { functions: ["fold", "focused", "viewRowCount", "viewFindRow"], events: [] },
     // Loaded on first use, so the thread list, pane focus and app verbs stay out of the key script.
     app: { functions: ["viewRows", "viewThread", "viewAllThreads", "viewScroll", "paneFocus", "paneResize", "appCommand", "appOpenPage"], events: [] },
     // Loaded on first use, like `folderpane`. Opens the native context menu of what the focus is on.
@@ -335,11 +335,24 @@ export interface FolderpaneViewRowCountArgs {
     windowId: number;
 }
 
-/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. */
+/** The flag a step command looks for. `unread` is the absence of the read bit. */
+export type RowFlag = "unread" | "flagged" | "attachment";
+
+/** Walks the list from row `from` (clamped to the last row going back) and answers the index of the `wanted`th row with the flag, else of the last one found, else -1. */
+export interface FolderpaneViewFindRowArgs {
+    windowId: number;
+    from: number;
+    forward: boolean;
+    flag: RowFlag;
+    wanted: number;
+}
+
+/** The `browser.folderpane` API, the folder pane verbs. Its script loads when the first call is made. `focused` says whether the folder pane has the focus. `viewRowCount` answers how many rows the message list shows now (a closed thread counts its root only), which `app.viewRows` does not tell. `viewFindRow` finds a row by its flags in chrome, so a step over a long list is one call. */
 export interface FolderpaneApi {
     fold(args: FolderpaneFoldArgs): Promise<boolean>;
     focused(args: FolderpaneFocusedArgs): Promise<boolean>;
     viewRowCount(args: FolderpaneViewRowCountArgs): Promise<number>;
+    viewFindRow(args: FolderpaneViewFindRowArgs): Promise<number>;
 }
 
 export interface ZoomGetArgs {
