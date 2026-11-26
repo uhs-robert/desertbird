@@ -1,6 +1,6 @@
 {
   "name": "desertbird",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Keyboard-first Thunderbird add-on.",
   "license": "MPL-2.0",

@@ -1,19 +1,22 @@
 {
     "manifest_version": 2,
     "name": "DesertBird",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "Keyboard-first mail commands for Thunderbird.",
+    "homepage_url": "https://github.com/uhs-robert/desertbird",
+    "author": "uhs-robert",
     "browser_specific_settings": {
         "gecko": {
             "id": "desertbird@uhs-robert",
-            "strict_min_version": "153.0"
+            "strict_min_version": "153.0",
+            "data_collection_permissions": { "required": ["none"] }
         }
     },
     "background": {
         "scripts": ["vendor/turndown/turndown.js", "vendor/marked/marked.umd.js", "background.js"],
         "persistent": true
     },
-    "icons": { "48": "icons/desertbird.svg", "96": "icons/desertbird.svg" },
+    "icons": { "48": "icons/desertbird.svg", "96": "icons/desertbird.svg", "128": "icons/desertbird-128.png" },
     "browser_action": {
         "default_title": "DesertBird",
         "default_icon": "icons/desertbird.svg",

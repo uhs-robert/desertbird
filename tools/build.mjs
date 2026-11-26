@@ -212,6 +212,7 @@ await build({ ...shared_options, entryPoints: ["src/popup/popup.ts"], outfile: j
 for (const file of ["popup.html", "popup.css"]) copyFileSync(join(root, "src", "popup", file), join(out_dir, "popup", file));
 mkdirSync(join(out_dir, "icons"), { recursive: true });
 copyFileSync(join(root, "src", "icons", "desertbird.svg"), join(out_dir, "icons", "desertbird.svg"));
+copyFileSync(join(root, "src", "icons", "desertbird-128.png"), join(out_dir, "icons", "desertbird-128.png"));
 
 // The help page is generated at run time from the command registry, so it bundles the registry as the options page does.
 mkdirSync(join(out_dir, "help"), { recursive: true });

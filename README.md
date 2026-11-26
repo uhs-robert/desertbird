@@ -14,7 +14,7 @@
 <p align="center"><i>Desert the mouse. Run your mail with your keyboard. The keys teach themselves.</i></p>
 <p align="center">Vim keys for Thunderbird: a command line, a which-key popup and one registry that every key reads.</p>
 
-<!-- TODO image: docs/images/demo.gif, 800 px wide. Record a short demo in the mail tab: j and k down the thread list, a to archive, r to reply, the which-key popup after g, the command line with completion, and a theme switch. -->
+<!-- TODO image: docs/images/demo.gif, 800 px wide. A short demo in the mail tab: j and k down the thread list, a to archive, r to reply, the which-key popup after g, the command line with completion, and a theme switch. -->
 
 ## 🐦 What it is
 
@@ -24,7 +24,7 @@ Every command is defined once in a registry. Keys, the command line, completion 
 
 **The keys teach themselves.** Press a key that starts a longer sequence, such as `g`, and wait. A which-key popup (a popup that lists the keys that can follow and what each does) opens after a short pause. Press `Alt+?` or `,?` to open it with the top-level keys. Press `g?` or `,h` to open the help page, which lists every key.
 
-<!-- TODO image: docs/images/which-key.png, 800 px wide. Screenshot the mail tab with the which-key popup open after the m key, listing the message keys such as r for read, u for unread and s for star. -->
+<p align="center"><img src="./docs/images/which-key.png" width="800" alt="The Inbox in Thunderbird with the which-key popup open after g, listing the go keys"/></p>
 
 You can edit a message in your own editor, such as Neovim: press `Ctrl+E` in the body of a compose window. This needs the native host (see [Install](#-install)) and an `editor.toml` that names your editor.
 
@@ -41,27 +41,100 @@ You can edit a message in your own editor, such as Neovim: press `Ctrl+E` in the
 
 ## 📦 Install
 
-DesertBird runs in Thunderbird 153 ESR or later and in Betterbird. The native host is optional.
+DesertBird runs in Thunderbird 153 ESR or later and in Betterbird. It is tested in Thunderbird 153 ESR and Betterbird 153. The native host is optional and Linux only.
 
 ### From addons.thunderbird.net
 
-Not yet. DesertBird is in daily use by its author and is not yet published on addons.thunderbird.net.
+The listing on addons.thunderbird.net is not live yet. It is waiting for review. Until it is, install from source (below). This section gets the listing link once the review passes.
+
+### What Thunderbird asks on install
+
+Thunderbird shows a warning that DesertBird can "Have full, unrestricted access to Thunderbird, and your computer". Thunderbird words every add-on with an Experiment this way. An Experiment is the privileged part of a Thunderbird add-on. DesertBird needs one because the standard add-on API gives no keys in the mail window, no thread list cursor, no folder pane control and no keys in the compose window. [docs/thunderbird-behavior.md](docs/thunderbird-behavior.md) holds the measurements.
+
+The Experiment takes a fixed table of requests, each with typed arguments. It has no way to run a script, a shell command or an address you type. [`docs/design.md`](docs/design.md#chrome-verbs) lists every request, and its source is open and not minified. Experiments are outside Thunderbird's API stability promise, so a new ESR can break one. See Known limits below.
+
+The other permissions are the ones the commands need:
+
+| Permission | What for |
+| --- | --- |
+| `accountsFolders`, `accountsRead` | Folder keys, completion over folders, move and copy, the Snoozed folder |
+| `messagesRead`, `messagesUpdate`, `messagesTags`, `messagesTagsList` | Read a message, mark read, star, mark junk, tag |
+| `messagesMove`, `messagesDelete` | Archive, move, copy and delete. `dd` moves a message to Trash, and in Trash it deletes for good |
+| `messagesModify` | The script that gives keys and hints to a message you read |
+| `compose`, `compose.save` | Reply, forward, new message, drafts, and the compose window keys. No `compose.send`: `gS` sends through Thunderbird's own command, and only with the `compose_send` setting on |
+| `alarms` | Snooze and reminders |
+| `notifications` | Result toasts, reminders and the optional new-mail notice |
+| `storage` | Settings, keymap, marks, undo log, snoozes and reminders |
+| `tabs` | Tab keys |
+| `clipboardWrite` | The yank keys |
+| `downloads` | `ga` saves attachments to `Downloads/DesertBird/` |
+| `nativeMessaging` (optional) | The native host. Thunderbird asks for it when you save `external_editor` or `bridge` as true on the options page |
+
+DesertBird makes no network request of its own. See [docs/privacy.md](docs/privacy.md).
 
 ### From source
 
-Run `just build` (or `npm run build`). It writes an unsigned `dist/desertbird.xpi`. Install that file in Thunderbird or Betterbird. The file is unsigned and uses an Experiment, so set `xpinstall.signatures.required` to false and `extensions.experiments.enabled` to true, as the [measurement setup](docs/thunderbird-behavior.md#setup) does. See [AGENTS.md](AGENTS.md) for the build and check commands.
+Run `just build` (or `npm run build`). It writes an unsigned `dist/desertbird.xpi`. Install that file in Thunderbird or Betterbird. The file is unsigned and uses an Experiment, so set `xpinstall.signatures.required` to false and `extensions.experiments.enabled` to true, as the [measurement setup](docs/thunderbird-behavior.md#setup) does. See [AGENTS.md](AGENTS.md) for the build and check commands and [BUILD.md](BUILD.md) for the steps a store reviewer follows.
 
 ### Native host (optional)
 
-The native host is the [DesertFox](https://github.com/uhs-robert/desertfox) host. You do not need it. Every key, the command line, the options page and the key editor work without it.
+The native host is the [DesertFox](https://github.com/uhs-robert/desertfox) host. It is a separate download and is not part of the add-on. You do not need it. Every key, the command line, the options page and the key editor work without it.
 
-The host adds two things: editing a message in your own editor, which goes through the host verbs `editor_start` and `editor_collect` (see [Principles](docs/design.md#principles)), and the bridge that lets a desktop bar or a script talk to Thunderbird. The setup is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
+The host adds two things: editing a message in your own editor, and the bridge that lets a desktop bar or a script talk to Thunderbird. To set up the editor:
+
+1. Install the host. It needs `python3` 3.9 or newer, `curl` and `flock`. Take the version from the [latest DesertFox release](https://github.com/uhs-robert/desertfox/releases/latest). The installer wants the hash of each script, which the release publishes as `<script>.sha256` files:
+
+   ```bash
+   version=1.0.2
+   base=https://github.com/uhs-robert/desertfox/releases/download/v$version
+   hash_of() { curl -fsSL "$base/$1.sha256" | cut -d' ' -f1; }
+   curl -fsSL -o install.sh "$base/install.sh"
+   sh install.sh "$version" --sha256 "desertfox-host=$(hash_of desertfox-host)" --sha256 "desertfox-bridge=$(hash_of desertfox-bridge)" --sha256 "desertfox=$(hash_of desertfox)"
+   ```
+
+   The hashes come from the same release as the scripts, so they catch a damaged download and not a changed release. The installer writes the host files under `~/.local/share/desertfox/` and the host manifests under `~/.mozilla/native-messaging-hosts/`, including the `desertbird_host` and `desertbird_bridge` manifests for DesertBird.
+
+2. Create `~/.config/desertfox/editor.toml` and name your editor. The host has no default. This example opens Neovim in a floating `foot` terminal and quits after one save:
+
+   ```toml
+   argv = ["foot", "--app-id", "desertfox-editor", "nvim", "-n", "+set noundofile nobackup", "+autocmd BufWritePost <buffer> quit", "{file}"]
+   insert_argv = ["+normal! G", "+startinsert!"]
+   ```
+
+   The terminal must stay in the foreground until the editor quits. The [host README](https://github.com/uhs-robert/desertfox/blob/main/host/README.md) explains each field.
+
+3. On the DesertBird options page, set `external_editor` to true and press Save. Thunderbird asks once for the `nativeMessaging` permission. Allow it.
+
+4. Open a compose window, click in the body and press `Ctrl+E`. Save and quit the editor, and the text goes back into the draft. Without the host or the file, `Ctrl+E` shows a message that names what is missing.
+
+The bridge needs the same host and the `bridge` setting, see [`src/background/bridge/README.md`](src/background/bridge/README.md#setup). It is off by default.
 
 ## 🚀 Try it
 
-The first day needs a few keys: `j` and `k` to move, `a` to archive, `r` to reply, `:` for the command line and `,h` for help. Press `g` and wait: a short pause after a key that starts a sequence shows the keys that can follow.
+The first day needs a few keys. Press `g` and wait: a short pause after a key that starts a sequence shows the keys that can follow.
+
+| Key | What it does |
+| --- | --- |
+| `j` and `k` | Move down and up the thread list |
+| `a` | Archive |
+| `r` | Reply |
+| `dd` | Delete (to Trash, and for good when the message is already in Trash) |
+| `u` | Undo |
+| `f` | Label every control, then type a label to use it |
+| `/` | Search the folder in view |
+| `:` | The command line, with completion |
+| `,h` | The help page |
+| `Alt+?` | The which-key popup with the top-level keys |
+
+<p align="center"><img src="./docs/images/hints.png" width="800" alt="The Inbox with a two-letter hint label next to every row and control"/></p>
+<p align="center"><img src="./docs/images/body-hints.png" width="800" alt="A newsletter open in a message tab with a hint label on each link and the Reply and Forward buttons"/></p>
+<p align="center"><img src="./docs/images/command-line.png" width="800" alt="The command line open at the bottom of the window with fil typed and the matching commands listed above it"/></p>
+<p align="center"><img src="./docs/images/filter.png" width="800" alt="The Inbox after b m l, showing only the four messages of one mailing list"/></p>
+<p align="center"><img src="./docs/images/followup.png" width="800" alt="The which-key popup after m f, listing the follow-up reminder presets"/></p>
 
 The toolbar button opens a small popup with two entries, Options and Help. Options holds the settings, the key editor and the 16 Oasis themes. [docs/keymap.md](docs/keymap.md) lists every default key of each tab kind.
+
+<p align="center"><img src="./docs/images/options-page.png" width="800" alt="The options page with the settings form"/></p>
 
 ## 🔍 How it compares
 
@@ -80,7 +153,7 @@ DesertBird and tbkeys both put custom keys into Thunderbird. They differ in what
 | Keys set in a form on the options page | ✅ | ❌ JSON text |
 | Runs code from a string | never | ✅ eval (not in tbkeys-lite) |
 | Uses an Experiment | ✅ | ✅ |
-| Published on addons.thunderbird.net | not yet | tbkeys-lite only |
+| Published on addons.thunderbird.net | ❌ not yet, pending review | tbkeys-lite only |
 
 ✅ yes · ❌ no · ➖ not documented in its README
 
@@ -122,7 +195,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 <details>
 <summary><b>🖱️ Move and read</b></summary>
 
-- Move with `j` and `k`, jump with `gg` and `G`, and step half a page with `Ctrl+d` and `Ctrl+u`.
+- Move with `j` and `k`, jump with `gg` and `G`, and step ten rows with `Ctrl+d` and `Ctrl+u`.
 - Put a label on the controls of the front tab with `f`, then type the label. The `;` keys do other things with a label, such as `;y` to copy.
 - Switch panes with `H` and `L`, focus one with `gf`, `ge` and `gm`, and show or hide one with `wm` and `wf`. `wr` resizes a pane with the keys.
 - Open the Inbox, Drafts, Sent and Trash with `gi`, `gd`, `gs` and `gt`.
@@ -135,6 +208,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 <summary><b>📬 Handle mail</b></summary>
 
 - Archive with `a`, delete with `dd`, reply with `r`, reply to all with `R`, forward with `gF` and write a new message with `c`. `u` undoes.
+- Folder tasks such as a new folder, rename or Empty Trash: focus the folder pane with `gf` and press `,m` for the context menu of the folder.
 - Mark read or unread with `mr` and `mu`, star with `ms`, mark junk with `mj`, and tag, move or copy with `mt`, `mm` and `mc`.
 - Reply with a stored text: `gr` and a digit from 1 to 9 pick one of nine quick replies. You write them on the options page.
 - Snooze with `mz`, and ask for a reminder with `mf`. `mzl`, `mzt`, `mzw` and `mzm` snooze to later today, tomorrow, the weekend and Monday. `mfd`, `mft` and `mfw` remind in one day, three days and one week, and `mfc` cancels.
@@ -147,7 +221,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 <details>
 <summary><b>🔍 Find and filter</b></summary>
 
-- Search with `/` (forward) or `?` (backward), and move between matches with `n` and `N`. The search runs as a live Quick Filter search.
+- Search with `/` (forward) or `?` (backward), and move between matches with `n` and `N`. The search runs as a live Quick Filter search on the folder in view, and it matches the subject and the sender. Thunderbird's own `Ctrl+K` search, which covers all folders and message bodies, stays Thunderbird's.
 - Filter the thread list: `bu` shows unread, `br` shows all, `bs` toggles starred, `ba` shows messages with attachments, `bt` filters by tag and `bf` opens a filter by text.
 - Filter by the message at the cursor, also on a selected thread: `bmf` by sender, `bms` by subject, `bmr` by recipient, `bml` by mailing list and `bmd` by day. `bmt` filters by the tags of every selected message.
 - Sort with `s` and a letter: `sd` by date, `sj` by subject, `sf` by author, `sz` by size, `su` by unread and more. `so` flips the current sort.
@@ -162,7 +236,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Open the selected message in a tab with `Ctrl+l`. `gC` opens its conversation.
 - A message window has its own keys. Go to the next or previous message with the keys under Next and Previous in [docs/keymap.md](docs/keymap.md).
 - Zoom with `zi` and `zo`, reset with `z=`, and fold threads with `zM` and `zR`.
-- The keys also work in the options and help pages and in other tabs, such as the calendar and the address book, where the keys of that tab kind apply.
+- The keys also work in the options and help pages and in other tabs. The calendar and the address book get navigation, tab keys and hints, not commands of their own: `c` there still opens a new mail message, and there is no key for a new event or contact.
 
 </details>
 
@@ -175,7 +249,8 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - The mode stays when the focus leaves the body and returns, and across a draft save.
 - `Tab` and `Shift+Tab` are held back in normal mode. Chords such as `Ctrl+V` and `Ctrl+Z`, `Shift+Insert`, the Paste and Cut keys and a middle-click paste still work. A mouse paste, a drag, the context menu and an input method can still change the draft in normal mode.
 - A user binding on `i`, on `Escape` or on a chord has no effect there. The other keys are rebindable.
-- A small `-- INSERT --` or `-- NORMAL --` label shows the mode at the bottom right. The To and Subject fields have no normal mode.
+- A small `-- INSERT --` or `-- NORMAL --` label shows the mode at the bottom right. The body and the To, Cc, Bcc and Subject fields share one mode: `Escape` in any of them enters normal mode and `i` returns to typing.
+- In normal mode, `gt`, `gc`, `gb`, `gs` and `gm` jump to To, Cc, Bcc, Subject and the body. `gS` sends the message through Thunderbird's own send command, with its checks, but only while the `compose_send` setting is on. The setting is off by default. With it off, `gS` does nothing and the which-key popup leaves it out.
 - External editor: it is off by default. Turn on the `external_editor` setting on the options page and press Save. Thunderbird asks once for the `nativeMessaging` permission, which the editor needs to reach the native host. Then press `Ctrl+E` in the body. With the setting on, `e` in normal mode does the same.
 - The DesertFox native host opens your editor on the message text, and DesertBird writes the result back when you save and quit. The host runs the command in its `editor.toml` and has no default, so the host and that file must be set up first. The add-on reaches the host through its `desertbird_host` manifest.
 - DesertBird writes back only when the text changed and the body in the window did not change meanwhile, and says why otherwise. Closing or sending the compose window while the editor is open discards the edited text. DesertBird keeps waiting for the editor, so the host can delete its scratch file when the editor closes.
@@ -201,7 +276,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Change settings and rebind keys on the options page. A binding the compiler skips blocks the save, so a typo never reaches storage.
 - Pick one of the 16 Oasis themes with the `theme` setting. The options page, the which-key popup, the command line and the mode label follow it.
 - Choose when the mode label shows with `mode_indicator`.
-- Bridge: it is off by default. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. It is an optional permission: Thunderbird shows "Exchange messages with programs other than Thunderbird" as a prompt when you turn `bridge` on and press Save on the options page. If you deny it, the setting is not saved. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. Commands that send, delete or move mail, and commands that open a link, never run through the bridge.
+- Bridge: it is off by default and nothing connects until you turn it on. See [docs/privacy.md](docs/privacy.md) for what it can pass to programs on your own computer. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. It is an optional permission: Thunderbird shows "Exchange messages with programs other than Thunderbird" as a prompt when you turn `bridge` on and press Save on the options page. If you deny it, the setting is not saved. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. Commands that send mail, delete it for good or open a link never run through the bridge. Archive, trash and move run only when `bridge_allow_actions` is on and you press `y` on a prompt in Thunderbird.
 
 Four more settings, each off by default and each inert while `bridge` is off, let a script read mail:
 
@@ -221,7 +296,7 @@ Two settings let a script write, each off by default and inert while `bridge` is
 | `bridge_allow_drafts` | Save a plain-text draft in the Drafts folder: up to 10 To and 10 Cc addresses, a subject and a body of at most 64 KiB, from one of your identities. No Bcc and no attachments. The answer is only ok or a refusal, never mail data |
 | `bridge_allow_actions` | Archive, move to Trash or move to a folder (with `bridge_share_folders` on) up to 50 messages, only after you press `y` on a prompt in Thunderbird. The prompt lists the subjects and senders and says the request came from outside. `n`, Escape or 30 s refuses. Nothing is deleted for good, and `u` moves the messages back. The answer is only a count or a refusal |
 
-Saving a draft needs the `compose.save` permission, which Thunderbird shows on install. The add-on never sends mail: it does not hold the `compose.send` permission. Thunderbird saves a draft only from a compose window, so the window opens for a moment, and the add-on closes it once the draft is saved. You review the draft and press Send yourself. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
+Saving a draft needs the `compose.save` permission, which Thunderbird shows on install. The bridge never sends mail, and the add-on does not hold the `compose.send` permission. Thunderbird saves a draft only from a compose window, so the window opens for a moment, and the add-on closes it once the draft is saved. You review the draft and press Send yourself. Setup of the host and the CLI is in [`src/background/bridge/README.md`](src/background/bridge/README.md#setup).
 
 </details>
 
@@ -233,7 +308,13 @@ Saving a draft needs the `compose.save` permission, which Thunderbird shows on i
 - The `nativeMessaging` permission is optional. The options page asks for it when you save `external_editor` or `bridge` as true. A key or a bridge start with no grant refuses with a message that says how to grant it. The native host itself is optional too.
 - A first install opens the help page once. An update does not.
 
+## 🔒 Privacy
+
+DesertBird has no account, no telemetry and makes no network requests of its own. Settings stay in Thunderbird storage on your device. The optional bridge talks only to programs on your own computer. See [docs/privacy.md](docs/privacy.md).
+
 ## 💛 Support
+
+Report a problem or ask a question on the [issue tracker](https://github.com/uhs-robert/desertbird/issues). Releases are on the [releases page](https://github.com/uhs-robert/desertbird/releases).
 
 DesertBird is free. If it saves you time, you can sponsor its development on [GitHub Sponsors](https://github.com/sponsors/uhs-robert). Nothing in the add-on asks for it.
 
@@ -241,6 +322,8 @@ DesertBird is free. If it saves you time, you can sponsor its development on [Gi
 
 - [docs/design.md](docs/design.md): architecture, scope and risks.
 - [docs/keymap.md](docs/keymap.md): every default key.
+- [docs/privacy.md](docs/privacy.md): what the add-on stores and what the optional parts can pass to programs on your computer.
+- [BUILD.md](BUILD.md): how to rebuild the package from the source.
 - [docs/thunderbird-behavior.md](docs/thunderbird-behavior.md): what Thunderbird allows, measured.
 - [AGENTS.md](AGENTS.md): a code map and docs index for contributors.
 
