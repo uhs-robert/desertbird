@@ -32,7 +32,7 @@ type StepScope = ThreadScope & { api: StepApi };
 const SKIPPED_FOLDERS = ["trash", "junk"];
 
 // The rows are in the order the user sees, with the sort and the open threads, which a query does not give. A row holds the flags of its own message only: an unread reply inside a closed thread is found once the thread opens.
-// The chrome side walks the list and answers the `wanted`th match, or the last one it found when the list runs out. One more read gives that row's message id.
+// The chrome side walks the list and answers the `wanted`th match, or the last one it found when the list runs out. The scan also gives the found message's id. The reread gives the full row, which the check compares and the select uses.
 async function find_row(scope: StepScope, flag: RowFlag, from: number, forward: boolean, wanted: number): Promise<ViewRow | undefined> {
     const found = await scope.api.folderpane.viewFindRow({ windowId: scope.window_id, from, forward, flag, wanted });
     if (found.index < 0) return undefined;

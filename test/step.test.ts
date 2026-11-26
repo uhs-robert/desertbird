@@ -246,3 +246,11 @@ test("a shift that puts another flagged row at the found index refuses, and an u
     await unchanged.run("step.starred", { direction: "next" });
     assert.deepEqual(unchanged.calls(), ["select 9 102"]);
 });
+
+// A news folder reads `isRead` from its read set, which can disagree with the flags word. The scan and the check both read the flags word, so the step takes the row the scan found.
+test("a row whose read state and flags word disagree is found and selected by its flags", async () => {
+    const fake = step_fake({ rows: 10, current: 0, flags: { 5: { unread: true } } });
+    fake.rows[5]!.unread = false;
+    await fake.run("step.unread", { direction: "next", scope: "folder" });
+    assert.deepEqual(fake.calls(), ["select 9 105"]);
+});
