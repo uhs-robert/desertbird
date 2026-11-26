@@ -4,7 +4,9 @@ import { focused_pane } from "./focus.ts";
 import { guard } from "./platform.ts";
 import type { ExtensionContext, MainWindow } from "./platform.ts";
 import { mail_pane_of } from "./view.ts";
-import type { FolderpaneFoldArgs, FolderpaneFocusedArgs, FolderpaneViewFindRowArgs, FolderpaneViewRowCountArgs } from "../shared/protocol.ts";
+import { find_flagged_row } from "./flag_scan.ts";
+import type { MessageView } from "./flag_scan.ts";
+import type { FolderpaneFoldArgs, FolderpaneFocusedArgs, FolderpaneViewFindRowArgs, FolderpaneViewRowCountArgs, FoundRow } from "../shared/protocol.ts";
 
 interface FolderRowLike {
     classList: { contains(name: string): boolean };
@@ -19,11 +21,6 @@ interface FolderTreeLike {
     querySelectorAll(selector: string): ArrayLike<FolderRowLike>;
     expandRow(row: unknown): void;
     collapseRow(row: unknown): void;
-}
-
-interface MessageView {
-    rowCount: number;
-    getMsgHdrAt(index: number): { flags: number } | null;
 }
 
 interface FolderPane {
@@ -55,9 +52,6 @@ function fold_folders(tree: FolderTreeLike, { open, extent }: Pick<FolderpaneFol
     }
 }
 
-// `viewFindRow` serves the step commands, which would otherwise read the list through `app.viewRows`: that converts every row to a message id and crosses to the background in blocks of 500. A row with no header (a group row) matches nothing. Going back, `from` past the end starts at the last row, since the list can shrink after the caller counted it.
-const FLAG_BITS = { unread: 0x1, flagged: 0x4, attachment: 0x10000000 } as const;
-
 export function get_folderpane_api(context: ExtensionContext) {
     const pane_of = (window_id: number) => mail_pane_of(context, window_id) as unknown as FolderPane;
     const has_focus = (pane: FolderPane) => focused_pane(pane.browsingContext.topChromeWindow.document) === 0;
@@ -71,16 +65,9 @@ export function get_folderpane_api(context: ExtensionContext) {
             }),
             focused: guard("folderpane.focused", ({ windowId }: FolderpaneFocusedArgs): boolean => has_focus(pane_of(windowId))),
             viewRowCount: guard("folderpane.viewRowCount", ({ windowId }: FolderpaneViewRowCountArgs): number => pane_of(windowId).gDBView?.rowCount ?? 0),
-            viewFindRow: guard("folderpane.viewFindRow", ({ windowId, from, forward, flag, wanted }: FolderpaneViewFindRowArgs): number => {
-                const view = pane_of(windowId).gDBView;
-                const rows = view?.rowCount ?? 0;
-                let found = -1;
-                for (let at = forward ? from : Math.min(from, rows - 1); at >= 0 && at < rows && wanted > 0; at += forward ? 1 : -1) {
-                    const flags = view!.getMsgHdrAt(at)?.flags;
-                    // Unread is the read bit unset.
-                    if (flags !== undefined && !(flags & FLAG_BITS[flag]) === (flag === "unread")) (found = at), wanted--;
-                }
-                return found;
+            viewFindRow: guard("folderpane.viewFindRow", ({ windowId, ...search }: FolderpaneViewFindRowArgs): FoundRow => {
+                const { index, header } = find_flagged_row(pane_of(windowId).gDBView, search);
+                return { index, id: (header && context.extension.messageManager.convert(header, { skipFolder: true })?.id) ?? null };
             }),
         },
     };
