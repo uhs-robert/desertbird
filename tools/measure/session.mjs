@@ -22,6 +22,8 @@ function write_opener_stubs(work_dir) {
   const stub_dir = join(work_dir, "blocked_openers");
   mkdirSync(stub_dir, { recursive: true });
   const log = join(work_dir, BLOCKED_OPENERS_LOG);
+  // A reused work dir must not carry the calls of an earlier run.
+  writeFileSync(log, "");
   for (const name of OPENER_NAMES) {
     const path = join(stub_dir, name);
     writeFileSync(path, `#!/bin/sh\necho "${name} $*" >> "${log}"\nexit 0\n`);

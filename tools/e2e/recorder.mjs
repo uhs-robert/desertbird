@@ -34,10 +34,14 @@ export async function start_recording({ command = "wf-recorder", args, env, log_
     assert_alive: () => { if (ended && !stop_requested) throw new Error(`the recording ended during the run: ${describe()}`); },
     // SIGINT makes wf-recorder finish the file. A clean end is code 0, or the SIGINT it was sent.
     stop: async () => {
+      // An exit before the stop, even a clean one, left the film short.
+      if (ended) { stop_requested = true; throw new Error(`the recording ended before the stop: ${describe()}`); }
       stop_requested = true;
-      if (!ended) try { process.kill(-child.pid, "SIGINT"); } catch {}
-      const killer = sleep(stop_grace_ms).then(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} return "killed"; });
+      try { process.kill(-child.pid, "SIGINT"); } catch {}
+      let kill_timer;
+      const killer = new Promise((resolve) => { kill_timer = setTimeout(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} resolve("killed"); }, stop_grace_ms); });
       const result = await Promise.race([exited, killer]);
+      clearTimeout(kill_timer);
       if (result === "killed" || (result.code !== 0 && result.signal !== "SIGINT")) throw new Error(`the recording did not end cleanly: ${describe()}`);
     },
   };

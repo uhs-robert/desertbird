@@ -24,8 +24,9 @@ function find_font() {
   process.exit(2);
 }
 const FONT = find_font();
-// A value of a drawtext option, single-quoted for the filtergraph, so a colon, a comma or a space in a path stays part of it.
-const quoted = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+// A drawtext option value goes through two escapes. The first is the option level: a backslash, a colon and a single quote get a backslash, because the filter splits its options at colons. The second is the filtergraph level: the same three, plus the comma and the brackets and semicolon that split filters and chains.
+const escape_level = (value, specials) => value.replace(new RegExp(`[${specials}]`, "g"), "\\$&");
+const escaped_option = (value) => escape_level(escape_level(value, "\\\\:'"), "\\\\:',;\\[\\]");
 // wf-recorder starts a moment after the piece takes its clock, so DEMO_CAPTION_OFFSET_S (seconds, may be negative) shifts every caption.
 const OFFSET_S = Number(process.env.DEMO_CAPTION_OFFSET_S ?? 0);
 // A caption stays until the next one, but never longer than this.
@@ -41,7 +42,7 @@ captions.forEach((caption, index) => {
   const until_s = Math.min(next_s, from_s + MAX_SHOW_S);
   const text_file = join(text_dir, `${index}.txt`);
   writeFileSync(text_file, caption.text);
-  filters.push(`drawtext=fontfile=${quoted(FONT)}:textfile=${quoted(text_file)}:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=14:x=w-tw-40:y=h-th-70:enable='between(t,${from_s.toFixed(2)},${until_s.toFixed(2)})'`);
+  filters.push(`drawtext=fontfile=${escaped_option(FONT)}:textfile=${escaped_option(text_file)}:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=14:x=w-tw-40:y=h-th-70:enable='between(t,${from_s.toFixed(2)},${until_s.toFixed(2)})'`);
 });
 const video = join(output_dir, "desertbird-demo.mp4");
 execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", raw, "-vf", filters.join(",") || "null", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "medium", "-movflags", "+faststart", video], { stdio: "inherit" });
