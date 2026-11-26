@@ -23,7 +23,7 @@ if (relative(out_dir, root).split(sep)[0] !== "..") {
 }
 
 // Size guards, in bytes of the bundle as written (the build does not minify). The build fails above a guard. A guard never rises past its ceiling, and every guard needs a ceiling. The raise history and the rules are in docs/design.md, "Bundle size guards", and AGENTS.md. test/build.test.ts reads each `NAME_MAX_BYTES = number;` line.
-// `experiment/overlay.js`, the parent bundle that has no guard of its own.
+// `experiment/overlay.js`, the parent bundle. It keeps this default guard, and the `??` fallback below still covers any parent without its own.
 const PARENT_MAX_BYTES = 27212;
 const PARENT_CEILING_BYTES = 40960;
 
@@ -116,7 +116,7 @@ const VENDORED_LIBRARY_FILES = ["vendor/turndown/turndown.js", "vendor/turndown/
 // Each API needs its own script and schema: two entries that shared one script left the second API unloaded.
 const PARENTS = [
     { name: "keys", entry: "src/chrome/parent_keys.ts", max_bytes: KEYS_MAX_BYTES },
-    { name: "overlay", entry: "src/chrome/parent_overlay.ts" },
+    { name: "overlay", entry: "src/chrome/parent_overlay.ts", max_bytes: PARENT_MAX_BYTES },
     { name: "hints", entry: "src/chrome/parent_hints.ts", max_bytes: HINTS_MAX_BYTES },
     { name: "pages", entry: "src/chrome/parent_pages.ts", max_bytes: PAGES_MAX_BYTES },
     { name: "app", entry: "src/chrome/parent_app.ts", max_bytes: APP_MAX_BYTES },
