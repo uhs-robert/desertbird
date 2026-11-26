@@ -17,7 +17,7 @@ import type { SearchRegisterStore } from "./register.ts";
 /** How long the filter waits after a keystroke. A burst of typing filters once, and a slow folder is not asked for each letter. */
 export const SEARCH_DEBOUNCE_MS = 150;
 
-// How often a commit asks whether the search of the list and date terms still runs.
+// How often a count asks whether Thunderbird still fills the filtered list.
 const TERMS_SEARCH_POLL_MS = 100;
 
 export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApi | undefined } & Partial<Pick<FolderSearchApi, "folders">>;
@@ -84,8 +84,15 @@ export function create_search_service(deps: SearchDeps): SearchService {
         return { app, folderpane };
     }
 
-    // One read of the view in chrome, so the count is of the list as it stands at that moment and not of blocks read while a filter changed it.
+    // One read of the view in chrome, so the count is of one list and not of blocks read while a filter changed it. The caller waits for `list_filled` first: the list is complete only then.
     const count_rows = (window_id: number): Promise<number> => viewer().folderpane.viewRowCount({ windowId: window_id });
+
+    // `setQuickFilter` returns once the search starts, and Thunderbird adds rows until `filter.searching` turns false. A count before then is of part of the list. The wait stops early when `still_wanted` turns false. Without the filter script there is nothing to ask, so the count reads what it finds.
+    async function list_filled(tab_id: number, still_wanted: () => boolean = () => true): Promise<void> {
+        const filter = deps.api.filter;
+        if (filter === undefined) return;
+        while (still_wanted() && (await filter.searching({ tabId: tab_id }))) await wait(TERMS_SEARCH_POLL_MS);
+    }
 
     async function row_at(window_id: number, index: number): Promise<ViewRow | undefined> {
         return (await viewer().app.viewRows({ windowId: window_id, first: index, last: index })).rows[0];
@@ -121,7 +128,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
         throw new RuntimeRefusal("The folder changed, so the search ended.");
     }
 
-    // `filter.set` stops waiting after 5 s, and the search of the list and date terms can run on. A commit counts and selects the final rows, so it waits for the end with no limit. Escape and a folder change end the wait.
+    // `filter.set` stops waiting after 5 s, the search of the list and date terms can run on, and a plain text filter never waits. A commit counts and selects the final rows, so it waits for the end with no limit. Escape and a folder change end the wait.
     async function terms_search_ended(window_id: number, search: LiveSearch): Promise<void> {
         const filter = deps.api.filter;
         if (filter === undefined) return;
@@ -165,6 +172,8 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 }
                 if (!(await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text), owns_search(window_id, search)))) return { stale: true };
                 if (text === "") return { note: "", is_error: false };
+                await list_filled(search.tab_id, () => mine === search.sequence);
+                if (mine !== search.sequence) return { stale: true };
                 const count = await count_rows(window_id);
                 if (mine !== search.sequence) return { stale: true };
                 return { note: describe_match(text, count, search.direction === "forward" ? 0 : count - 1, undefined), is_error: count === 0 };
@@ -190,7 +199,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
                 const wanted = with_text(search.prior, query);
                 // Enter right after the last keystroke finds its filter applied, and the search of that filter may still run. A second apply would restart it.
                 if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted) && !(await apply_filter(deps.api, search.tab_id, wanted, owns_search(window_id, search)))) throw new RuntimeRefusal("The search was cancelled.");
-                if (wanted.by_message !== undefined) await terms_search_ended(window_id, search);
+                await terms_search_ended(window_id, search);
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.
                 if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
@@ -220,6 +229,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             const tab = await list_mail_tab(scope_of(window_id));
             // After Escape the list is no longer narrowed to the search, so `n` narrows it again.
             if (remembered_filter(tab.id).text?.text !== register.text) await apply_filter(deps.api, tab.id, with_text(remembered_filter(tab.id), register.text));
+            await list_filled(tab.id);
             const count = await count_rows(window_id);
             if (count === 0) throw new RuntimeRefusal(describe_match(register.text, 0, 0, undefined));
             const direction = relation === "same" ? register.direction : opposite(register.direction);
