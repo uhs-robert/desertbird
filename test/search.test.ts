@@ -52,16 +52,18 @@ const MAILS: Mail[] = [
 let next_tab = 100;
 
 /** One window with one mail tab. `filters` records every filter set, in order. The visible rows follow the last text filter, the way Thunderbird narrows them. */
-function setup(options: { folder?: string; root?: boolean } = {}) {
+function setup(options: { folder?: string; root?: boolean; mails?: Mail[] } = {}) {
     const tab_id = next_tab++;
     const timers = fake_timers();
     const storage = fake_storage();
     const filters: QuickFilter[] = [];
     const said: string[] = [];
+    const mails = options.mails ?? MAILS;
+    const reads = { row_counts: 0, row_blocks: 0 };
     const state = { tab_folders: { [tab_id]: options.folder ?? "f1" } as Record<number, string>, tab: tab_id, selected: -1, filter: {} as QuickFilter, root: options.root ?? false };
     const visible = () => {
         const text = state.filter.text?.text.toLowerCase();
-        return text === undefined ? MAILS : MAILS.filter((mail) => `${mail.subject} ${mail.author}`.toLowerCase().includes(text));
+        return text === undefined ? mails : mails.filter((mail) => `${mail.subject} ${mail.author}`.toLowerCase().includes(text));
     };
     const api = {
         mailTabs: {
@@ -76,11 +78,11 @@ function setup(options: { folder?: string; root?: boolean } = {}) {
         },
         app: {
             viewRows: async ({ first, last }: { first: number; last: number }) => ({
-                current: state.selected,
+                current: (reads.row_blocks++, state.selected),
                 rows: visible().flatMap((mail, index) => (index >= first && index <= last ? [{ index, id: mail.id, depth: 0, collapsed: false, unread: false, flags: 0 }] : [])),
             }),
         },
-        folderpane: undefined,
+        folderpane: { focused: async () => false, viewRowCount: async () => (reads.row_counts++, visible().length) },
     };
     const register = create_search_register(storage.api.local);
     const service = create_search_service({ api: api as never, register, timers, say: async (_window, text, is_error) => void said.push(`${is_error ? "error" : "ok"} ${text}`) });
@@ -91,7 +93,7 @@ function setup(options: { folder?: string; root?: boolean } = {}) {
         timers.advance(SEARCH_DEBOUNCE_MS);
         return pending;
     };
-    return { service, type, filters, said, state, tab_id, timers, storage, register, api, visible };
+    return { service, type, filters, said, state, tab_id, timers, storage, register, api, visible, reads };
 }
 
 test("start refuses when no message list is shown", async () => {
@@ -119,6 +121,39 @@ test("a keystroke typed during the wait replaces the one before: the first answe
     assert.deepEqual(await first, { stale: true });
     assert.equal((await second as { note: string }).note, "1 of 3");
     assert.deepEqual(filters.map((filter) => filter.text?.text), ["invo"]);
+});
+
+test("a keystroke and n each count a large list with one row count call and read no blocks of rows", async () => {
+    const mails = Array.from({ length: 3000 }, (_, index): Mail => ({ id: index + 1, subject: `Invoice ${index}`, author: "Ann" }));
+    const { service, type, reads } = setup({ mails });
+    await service.start(3, "forward");
+    assert.deepEqual(await type("invoice"), { note: "1 of 3000", is_error: false });
+    assert.deepEqual(reads, { row_counts: 1, row_blocks: 0 });
+    await service.commit(3, "invoice");
+    await service.step(3, "same");
+    assert.equal(reads.row_counts, 3);
+    // Enter and n each read the current row and the row they select, and no block of the list.
+    assert.ok(reads.row_blocks <= 3, `read ${reads.row_blocks} blocks`);
+});
+
+// The Quick Filter bar can change the list while the search counts it. A count taken in one read is of one list, never part of one and part of the next.
+test("the count is of the list as one read sees it, while a quick filter change lands during the count", async () => {
+    const mails = Array.from({ length: 1200 }, (_, index): Mail => ({ id: index + 1, subject: index < 700 ? `Invoice ${index}` : `Lunch ${index}`, author: "Ann" }));
+    const { service, type, state, api } = setup({ mails });
+    await service.start(3, "forward");
+    // The bar narrows the list to a single row right after the first read of the list.
+    const read_rows = api.app.viewRows;
+    const count_rows = api.folderpane.viewRowCount;
+    let changed = false;
+    const change_after = <T>(read: () => Promise<T>) => async () => {
+        const answer = await read();
+        if (!changed) (changed = true), (state.filter = { text: { text: "lunch 1199", subject: true, author: true } });
+        return answer;
+    };
+    api.app.viewRows = (args) => change_after(() => read_rows(args))();
+    api.folderpane.viewRowCount = () => change_after(count_rows)();
+    const note = (await type("invoice")) as { note: string };
+    assert.equal(note.note, "1 of 700");
 });
 
 test("a search with the backward direction counts from the last row", async () => {
@@ -430,10 +465,10 @@ test("? is backward search and g? is the key list, / and n and N are bound in th
 test("Escape while an Enter is still counting cancels the search and the late commit does not keep its text", async () => {
     const { service, filters, api, state } = setup();
     await service.start(3, "forward");
-    const rows = api.app.viewRows;
+    const count_rows = api.folderpane.viewRowCount;
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
-    api.app.viewRows = async (range) => (await held, rows(range));
+    api.folderpane.viewRowCount = async () => (await held, count_rows());
     const committed = service.commit(3, "invoice");
     await new Promise((resolve) => setImmediate(resolve));
     const cancelled = service.cancel(3);

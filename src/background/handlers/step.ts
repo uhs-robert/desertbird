@@ -1,7 +1,7 @@
 import { refused_as } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import type { CheckedArgs } from "../../../vendor/desertfox/command.ts";
-import type { ViewRow } from "../../shared/protocol.ts";
+import type { FolderpaneApi, ViewRow } from "../../shared/protocol.ts";
 import type { MailFolder } from "./displayed_folder.ts";
 import { active_mail_tab, show_folder_and_focus_threads } from "./folder_open.ts";
 import type { FolderApi } from "./folder_open.ts";
@@ -17,6 +17,7 @@ interface UnreadPage {
 // An intersection, as in the router: the parts share `mailTabs` with different members.
 export type StepApi = ThreadViewApi &
     FolderApi & {
+        folderpane: FolderpaneApi;
         folders: { getFolderInfo(folder_id: string): Promise<{ unreadMessageCount?: number }> };
         messages: {
             query(query: { folderId: string; unread: true; messagesPerPage: number; autoPaginationTimeout: number }): Promise<UnreadPage>;
@@ -80,12 +81,9 @@ async function show_first_unread(scope: StepScope, folder: MailFolder): Promise<
     await select_row(scope, { id: page.messages[0].id });
 }
 
-// With no row selected, `[` starts after the last row. The view gives no row count, so a full block means more rows follow.
+// With no row selected, `[` starts after the last row.
 async function last_row_index(scope: StepScope): Promise<number> {
-    for (let first = 0; ; first += BLOCK) {
-        const { rows } = await scope.api.app.viewRows({ windowId: scope.window_id, first, last: first + BLOCK - 1 });
-        if (rows.length < BLOCK) return first + rows.length - 1;
-    }
+    return (await scope.api.folderpane.viewRowCount({ windowId: scope.window_id })) - 1;
 }
 
 async function step(scope: StepScope, flag: RowFlag, args: CheckedArgs): Promise<void> {

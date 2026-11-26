@@ -4,7 +4,7 @@
 import { ignore_refusal, keep_chain } from "../../shared/swallow.ts";
 import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
-import type { AppApi, CmdlineSearchNote, FilterApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
+import type { AppApi, CmdlineSearchNote, FilterApi, FolderpaneApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
 import { select_row } from "../handlers/thread_view.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
 import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
@@ -19,9 +19,6 @@ export const SEARCH_DEBOUNCE_MS = 150;
 
 // How often a commit asks whether the search of the list and date terms still runs.
 const TERMS_SEARCH_POLL_MS = 100;
-
-// The most rows one `app.viewRows` call returns.
-const BLOCK = 500;
 
 export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApi | undefined } & Partial<Pick<FolderSearchApi, "folders">>;
 
@@ -81,21 +78,17 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     const scope_of = (window_id: number) => ({ api: deps.api as unknown as ThreadViewApi, window_id, message_ids: [], count: 1 });
 
-    function viewer(): Pick<AppApi, "viewRows"> {
-        if (deps.api.app === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
-        return deps.api.app;
+    function viewer(): { app: Pick<AppApi, "viewRows">; folderpane: Pick<FolderpaneApi, "viewRowCount"> } {
+        const { app, folderpane } = deps.api;
+        if (app === undefined || folderpane === undefined) throw new RuntimeRefusal("Search needs the DesertBird Experiment, which is not loaded.");
+        return { app, folderpane };
     }
 
-    // The view gives no row count, so a full block means more rows follow.
-    async function count_rows(window_id: number): Promise<number> {
-        for (let first = 0; ; first += BLOCK) {
-            const { rows } = await viewer().viewRows({ windowId: window_id, first, last: first + BLOCK - 1 });
-            if (rows.length < BLOCK) return first + rows.length;
-        }
-    }
+    // One read of the view in chrome, so the count is of the list as it stands at that moment and not of blocks read while a filter changed it.
+    const count_rows = (window_id: number): Promise<number> => viewer().folderpane.viewRowCount({ windowId: window_id });
 
     async function row_at(window_id: number, index: number): Promise<ViewRow | undefined> {
-        return (await viewer().viewRows({ windowId: window_id, first: index, last: index })).rows[0];
+        return (await viewer().app.viewRows({ windowId: window_id, first: index, last: index })).rows[0];
     }
 
     // The search belongs to the tab and folder it began in. Another tab or folder holds a filter that is not the search's, so nothing of it is touched.
@@ -230,7 +223,7 @@ export function create_search_service(deps: SearchDeps): SearchService {
             const count = await count_rows(window_id);
             if (count === 0) throw new RuntimeRefusal(describe_match(register.text, 0, 0, undefined));
             const direction = relation === "same" ? register.direction : opposite(register.direction);
-            const { current } = await viewer().viewRows({ windowId: window_id, first: 0, last: 0 });
+            const { current } = await viewer().app.viewRows({ windowId: window_id, first: 0, last: 0 });
             const stepped = current < 0 ? { index: direction === "forward" ? 0 : count - 1, wrapped: false } : step_match(current, count, direction);
             await show_match(window_id, register.text, stepped.index, count, stepped.wrapped);
         },

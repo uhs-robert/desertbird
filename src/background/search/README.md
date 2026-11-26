@@ -4,7 +4,7 @@
 
 | File | Role |
 | --- | --- |
-| `service.ts` | One live search per window: the tab and folder it began in, the filter to restore, a keystroke counter. `type` waits out a burst (150 ms), applies the filter, counts the rows and answers `stale` when a newer keystroke came. `commit`, `cancel` and `step` (`n`, `N`) |
+| `service.ts` | One live search per window: the tab and folder it began in, the filter to restore, a keystroke counter. `type` waits out a burst (150 ms), applies the filter, counts the rows (one `folderpane.viewRowCount` call) and answers `stale` when a newer keystroke came. `commit`, `cancel` and `step` (`n`, `N`) |
 | `folder_search.ts` | The folder kind of `/`: opens when `folderpane.focused` says the folder pane has the focus (forward only). Matches folder names, shows the folder with `mailTabs.update` (which opens the parents and selects the row) and focuses the folder pane with `app.paneFocus`. `service.ts` hands a window to it while it is open and for `n` and `N` when the register kind is `folders` |
 | `register.ts` | The `/` register (`{ text, direction, kind }`) in `storage.local`, one for every window. `kind` is `threads` or `folders`, and a register stored without one is `threads` |
 
