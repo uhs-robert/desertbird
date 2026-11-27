@@ -283,7 +283,7 @@ The build fails when a bundle passes its guard (`tools/build.mjs`). Each guard h
 | `experiment/menukeys.js` | 5632 | 8192 |
 | `experiment/context.js` | 5691 | 9216 |
 | `experiment/context_actor_child.sys.mjs` | 1898 | 3072 |
-| `content/message_display.js` | 21234 | 24576 |
+| `content/message_display.js` | 21746 | 24576 |
 | `experiment/hints.js` | 19706 | 20480 |
 | `experiment/pages.js` | 29456 | 34816 |
 | `experiment/page_actor_child.sys.mjs` | 8704 | 11264 |
@@ -383,6 +383,7 @@ The zoom keys run in the mail tab, message documents, own pages, the page tabs a
 - Insert mode in a message document and an own page (`i`, the flag, the pass-through branch before the typing check, the bubble-phase Escape, the blur that ends it and the `body.mode` report to the mode label; clause: decides what happens to a key) made it 19975 (707 over main's 19268). The guard rose by one 512-byte step to 20210.
 - The `hint_letters` setting read in the message script (the stored letters, lowered, handed to the hint session, and a typed key of any single character as a hint letter; clause: decides what happens to a key) made it 20328 (118 over the guard of 20210). The guard rose by one 512-byte step to 20722. `npm run build` gave the sizes. The `tools/measure/` run (`header_ids` on Betterbird) completed before the raise.
 - Escape leaves a focused select on an own page, and plain j and k step its options (clause: decides what happens to a key). The select rule runs only on own pages, so selects in mail keep their native keys. The rule made it 21185 (463 over the guard of 20722). The guard rose by one 512-byte step to 21234.
+- The DesertFox re-vendor to 61427fac grew `keys/matcher.ts` by 68 bytes, from 21185 to 21253 (19 over the guard of 21234): `COUNT_MODES` gains the item modes and the register-key test names them. DesertBird has no item mode and cannot drop the lines from a copied file. Clause: decides what happens to a key. The guard rose by one 512-byte step to 21746.
 
 ### Hints bundle
 

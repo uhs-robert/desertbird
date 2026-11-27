@@ -56,7 +56,7 @@ If code and the design disagree, stop and ask the maintainer. Do not change the 
   - `experiment/keys.js`: guard 27964, ceiling 40960 (`KEYS_MAX_BYTES`).
   - `experiment/overlay.js`: guard 27212, ceiling 40960 (`PARENT_MAX_BYTES`).
   - `experiment/app.js`: guard 12645, ceiling 12800 (`APP_MAX_BYTES`).
-  - `content/message_display.js`: guard 21234, ceiling 24576 (`CONTENT_MAX_BYTES`).
+  - `content/message_display.js`: guard 21746, ceiling 24576 (`CONTENT_MAX_BYTES`).
   - `experiment/hints.js`: guard 19706, ceiling 20480 (`HINTS_MAX_BYTES`).
   - `experiment/pages.js`: guard 29456, ceiling 34816 (`PAGES_MAX_BYTES`).
   - `experiment/page_actor_child.sys.mjs`: guard 8704, ceiling 11264 (`ACTOR_CHILD_MAX_BYTES`).
