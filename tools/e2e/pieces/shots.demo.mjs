@@ -12,14 +12,17 @@ import { BLOCKED_OPENERS_LOG } from "../../measure/session.mjs";
 
 export const areas = ["hud", "hints", "cmdline", "message_body", "own_pages"];
 
+const pause = (ms) => sleep(Math.round(ms * PACE));
 const id_of = (name) => `${name}@example.com`;
 // The pause after a key whose result shows at once, and the hold on a result the viewer must read.
 const BEAT_MS = 650;
 const HOLD_MS = 1000;
-const TITLE_MS = 1000;
+const TITLE_MS = 1800;
+// Every pause of the film is stretched by this factor, so a viewer reads the caption and sees the result.
+const PACE = 1.8;
 const END_CARD_MS = 6000;
 // The pace of letters typed in the command line.
-const TYPE_MS = 200;
+const TYPE_MS = 320;
 // The hint targets the piece picks, each by the label of an environment variable.
 const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL", theme: "DEMO_THEME_LABEL", border: "DEMO_BORDER_LABEL", save: "DEMO_SAVE_LABEL" };
 // Steps down the theme list from the default oasis_moonlight to the light oasis_canyon, and down the border list from square to chamfer.
@@ -49,7 +52,7 @@ async function run_demo(instance, ctx) {
     if (Array.isArray(keys[0])) for (const args of keys) await instance.press(args);
     else await press_each(keys);
     if (wait) await wait_for_state(instance, { timeout_ms: 15000, ...wait });
-    await sleep(beat_ms);
+    await pause(beat_ms);
   };
   const to = (name) => ({ what: `${name} to be selected`, until: selected_is(name) });
   const gone = (name) => ({ what: `${name} to leave the list`, until: unlisted(name) });
@@ -63,7 +66,7 @@ async function run_demo(instance, ctx) {
     if (label_caption !== null) caption(label_caption);
     await instance.press(["f"]);
     await wait_pixels(instance, `the ${name} hint labels`, `${app}_demo_${name}_hints`, strip_region, drawn_since(before), { timeout_ms: 5000 });
-    await sleep(hold_ms);
+    await pause(hold_ms);
     const still = await instance.shot(`${app}_demo_labels_${name}`);
     report.notes.push(`hint labels for ${name}: ${still}`);
     const label = process.env[HINT_TARGETS[name]]?.toLowerCase();
@@ -115,10 +118,10 @@ async function run_demo(instance, ctx) {
     caption("g  Go to...");
     await instance.press(["g"]);
     await wait_pixels(instance, "the which-key panel", `${app}_demo_panel`, strip_region, drawn_since(before_panel), { timeout_ms: 5000 });
-    await sleep(1100);
+    await pause(1100);
     await key("g t  Go to Trash", ["t"], { what: "the Trash to show the deleted mail", until: (state) => state.mail_tab?.folder === "/Trash" && state.listed.includes(id_of("prize-1")) }, 200);
     await instance.ask("import_mail", 30000, { path: "/Inbox", messages: shots_arrival_files() });
-    await sleep(HOLD_MS);
+    await pause(HOLD_MS);
     await key("H  Folder pane", ["H"]);
     await key("g g  Top", ["g", "g"]);
     await key("j  Down to Inbox", ["j"], { what: "the Inbox to show", until: (state) => state.mail_tab?.folder === "/Inbox" }, HOLD_MS);
@@ -139,15 +142,15 @@ async function run_demo(instance, ctx) {
     await key("Enter  Open", [["-k", "Return"]], { what: "a message tab to open", until: has_tab((tab) => tab.type === "messageDisplay") }, 1200);
     await hint_pick("body", "f  Click any link", 1800);
     await wait_for_state(instance, { what: "a compose window to the unsubscribe address", until: (state) => state.windows.some((window) => window.type === "messageCompose" && window.tabs.some((tab) => JSON.stringify(tab.to ?? "").includes("unsubscribe@"))), timeout_ms: 15000 });
-    await sleep(HOLD_MS + 300);
+    await pause(HOLD_MS + 300);
     caption("Esc q  Close");
     await instance.press(["-k", "Escape"]);
     await instance.press(["q"]);
-    await sleep(700);
+    await pause(700);
     if (compose_open(await instance.ask("state"))) await close_compose(instance);
     await key("q  Close the tab", ["q"], { what: "the message tab to close", until: (state) => !has_tab((tab) => tab.type === "messageDisplay")(state) }, 300);
     await hint_pick("toolbar", "f  Click any button", 1000);
-    await sleep(800);
+    await pause(800);
     await key("o  Options", ["o"], { what: "the options tab to open", until: has_tab((tab) => /options|desertbird/i.test(`${tab.title} ${tab.raw?.url ?? ""}`) && tab.type !== "mail") }, 1200);
     // f focuses a select, j and k step it, Escape leaves it.
     await hint_pick("theme", "f  Click any setting", 800);
@@ -157,10 +160,10 @@ async function run_demo(instance, ctx) {
     for (let step = 0; step < BORDER_STEPS_DOWN; step++) await key(step === 0 ? "j  Pick a border" : null, ["j"], null, 450);
     await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
     caption("Ctrl+d  Scroll down");
-    for (let step = 0; step < 7; step++) { recording.assert_alive(); await instance.press(["-M", "ctrl", "d", "-m", "ctrl"]); await sleep(700); }
+    for (let step = 0; step < 7; step++) { recording.assert_alive(); await instance.press(["-M", "ctrl", "d", "-m", "ctrl"]); await pause(700); }
     await key("G  Bottom", ["G"], null, 700);
     await hint_pick("save", "f  Click any button", 800);
-    await sleep(HOLD_MS);
+    await pause(HOLD_MS);
     await key("q  Close the tab", ["q"], null, 500);
 
     // 5. Do anything by name: a tag and a move typed by name, then undo.
@@ -169,36 +172,36 @@ async function run_demo(instance, ctx) {
     recording.assert_alive();
     caption(":  Command line");
     await open_command_line(instance, [":"], { attempts: 3 });
-    await sleep(1000);
+    await pause(1000);
     caption(": tg  Tab");
     await type_letters("tg");
-    await sleep(400);
+    await pause(400);
     await instance.press(["-k", "Tab"]);
-    await sleep(400);
+    await pause(400);
     caption(": tag imp  Tab");
     await type_letters(" imp");
-    await sleep(500);
+    await pause(500);
     await instance.press(["-k", "Tab"]);
-    await sleep(400);
+    await pause(400);
     await key("Enter  Tag Important", [["-k", "Return"]], { what: "the receipt to carry the Important tag", until: (state) => (state.flags[id_of("coffee-1")]?.tags ?? []).includes("$label1") }, HOLD_MS);
     recording.assert_alive();
     caption("m m  Move");
     // The two letters as two presses, or the second can reach the app first.
     await instance.press(["m"]);
     await open_command_line(instance, ["m"], { attempts: 1 });
-    await sleep(800);
+    await pause(800);
     caption("m m rec  Tab");
     await type_letters("rec");
-    await sleep(500);
+    await pause(500);
     await instance.press(["-k", "Tab"]);
-    await sleep(400);
+    await pause(400);
     await key("Enter  Move to Receipts", [["-k", "Return"]], gone("coffee-1"), HOLD_MS);
     await key("u  Undo", ["u"], { what: "the receipt to come back", until: (state) => state.listed.includes(id_of("coffee-1")) }, HOLD_MS + 300);
 
     // 6. The end card.
     caption("");
     captions.push({ at_ms: clock(), end: true });
-    await sleep(END_CARD_MS);
+    await pause(END_CARD_MS);
     completed = true;
   } finally {
     // A stop failure is the piece's error only when the run itself went well.
@@ -218,6 +221,6 @@ export const piece = {
   opt_in: true,
   seeds: {},
   extra_script: OPEN_OWN_PAGES_SCRIPT,
-  deadline_s: 400,
+  deadline_s: 700,
   run: (instance, ctx) => run_demo(instance, ctx),
 };
