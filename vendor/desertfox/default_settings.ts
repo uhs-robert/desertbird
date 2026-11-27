@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hint_remove: [],
   media_quality: "auto",
   strip_tracking: true,
+  item_select: "off",
   which_key_delay_ms: 300,
   toast_ms: 3000,
   toast_error_ms: 6000,
@@ -29,5 +30,5 @@ export const DEFAULT_SETTINGS: Settings = {
   site_rules: [],
   bridge: false,
   bridge_share_tabs: false,
-  item_navigator: false,
+  item_navigator: "shipped",
 };

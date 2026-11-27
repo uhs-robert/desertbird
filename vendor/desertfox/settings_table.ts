@@ -22,6 +22,7 @@ export type PerSiteSettings = {
   hint_remove: string[];
   media_quality: string | number;
   strip_tracking: boolean;
+  item_select: string;
 };
 export type PerSiteName = keyof PerSiteSettings;
 
@@ -40,5 +41,5 @@ export type Settings = PerSiteSettings & {
   site_rules: SiteRuleRow[];
   bridge: boolean;
   bridge_share_tabs: boolean;
-  item_navigator: boolean;
+  item_navigator: boolean | "shipped";
 };

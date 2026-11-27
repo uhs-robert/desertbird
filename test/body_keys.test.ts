@@ -1006,7 +1006,7 @@ function bound_commands(user: Parameters<typeof compile_tab_keymap>[1] = {}): Se
     const tree_of = (kind: "message" | "window" | "own") => {
         const root = JSON.parse(JSON.stringify(compile_tab_keymap(kind, user).compiled.modes.normal));
         mark_steps(root);
-        return { version: COMPILED_KEYMAP_VERSION as 13, root };
+        return { version: COMPILED_KEYMAP_VERSION as typeof COMPILED_KEYMAP_VERSION, root };
     };
     return bound_message_commands({ message_tree: tree_of("message"), window_tree: tree_of("window"), own_tree: tree_of("own") });
 }
