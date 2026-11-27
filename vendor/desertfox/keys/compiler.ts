@@ -5,7 +5,7 @@ import { MODES as RUNTIME_MODES } from "../command.ts";
 import type { CountBehavior, ParamDef, RunsIn } from "../command.ts";
 import { hosts_disjoint, match_regex_source, site_row_columns } from "../match_pattern.ts";
 import { COMPILED_KEYMAP_VERSION, FRAME_SITE_SETTINGS } from "../prefix_tree.ts";
-import type { CompiledKeymap, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
+import type { CompiledKeymap, CompiledModeParent, FrameSiteName, LeafStep, SiteBind, SiteRule, SiteRuleSource, TreeBranch, TreeLeaf, TreeNode } from "../prefix_tree.ts";
 import { DEFAULT_SETTINGS } from "../config.ts";
 import type { Settings } from "../config.ts";
 import type { BindingTable } from "../settings_table.ts";
@@ -15,7 +15,7 @@ import type { KeymapConfig, KeymapMode, Modifier } from "../keymap.ts";
 import { default_of, is_dynamic_values } from "../registry/params.ts";
 import { parse_sequence } from "./notation.ts";
 
-// `accepts_args` is the registry validator, passed in because the content bundle includes the keys index: importing the validator here grew content.js from 15.7 KB to 21 KB, over its 17 KB limit. Without it a modifier variant is never judged and always inserted.
+// `accepts_args` is the registry validator, passed in because the content bundle includes the keys index: importing the validator here grew content.js over its size guard. Without it a modifier variant is never judged and always inserted.
 export type CommandInfo = { runs_in: RunsIn; bundle?: BundleName; label: string; count: CountBehavior; params?: readonly ParamDef[]; accepts_args?: (args: Record<string, unknown>, prompt?: Prompt) => boolean };
 
 // Search engine name to the label the user gave it. A key that searches with an engine reads as that label.
@@ -147,7 +147,10 @@ function entries_for_mode(
       }
       const normalized = parsed.tokens.join("");
       // A keymap binding replaces no other binding, so it has nothing to run when its guard fails. The skip comes before the default keys it extends are dropped.
-      const guard = binding === null ? undefined : (["when_focus", "when_present"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined);
+      // The default layer alone may guard a key, with `fallback` as the step a failed guard runs. It never writes `otherwise = "page"`: a key that hands itself to the page has no step to fall back to.
+      const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
+      const refused = (name: string) => layer === "user" || name === "otherwise";
+      const guard = binding === null ? undefined : (["when_focus", "when_present", "otherwise", "fallback"] as const).find((name) => [binding].flat()[0]?.[name] !== undefined && refused(name));
       if (guard !== undefined) {
         warnings.push(`${mode}: skipped "${sequence}": ${guard} works only in a site row bind`);
         continue;
@@ -160,16 +163,15 @@ function entries_for_mode(
         if (earlier && earlier.source_index === source_index) {
           warnings.push(`${mode}: "${sequence}" and "${earlier.sequence}" are the same keys, kept "${sequence}"`);
         }
-        const layer: Layer = sequence in default_sequences[source_index]! ? "defaults" : "user";
         by_normalized_sequence.set(normalized, { sequence, tokens: parsed.tokens, binding, source_index, layer });
       }
     }
   }
   const drops: Drop[] = [];
   drop_default_leaves_under_user_keys(by_normalized_sequence, removed, resolve, drops);
-  if (mode === "normal" || mode === "media") {
-    // Normal mode already warned about a modifier that matches no key, so the media mode, which holds only the hint group, stays quiet.
-    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, mode === "media" ? [] : warnings)) {
+  // Item and media mode take the variants with the rest of the hint group from normal mode (`mode_parents`).
+  if (mode === "normal") {
+    for (const variant of modifier_variants(keymap.modifiers ?? {}, by_normalized_sequence, removed, resolve, warnings)) {
       by_normalized_sequence.set(variant.tokens.join(""), variant);
     }
     // A generated variant is a default key too: a user key may extend it.
@@ -231,6 +233,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
   let intent: string | undefined;
   let when_focus: string | undefined;
   let when_present: string | undefined;
+  let otherwise_page = false;
   for (const invocation of invocations) {
     const info = resolve(invocation.id);
     if (!info) {
@@ -251,6 +254,7 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       intent = invocation.intent;
       when_focus = invocation.when_focus;
       when_present = invocation.when_present;
+      otherwise_page = invocation.otherwise === "page";
       label = invocation.label ?? derived_label(invocation, info, settings, sources, ancestor_names);
       // A derived label can carry a bad engine label or value phrase. The key still works, so it falls back to the command label.
       const derived_problem = invocation.label === undefined ? label_problem(label) : null;
@@ -260,19 +264,28 @@ function to_steps(mode: KeymapMode, entry: Entry, resolve: ResolveCommand, setti
       }
     }
     // The label is for the leaf. The steps stay the plain invocations the router runs.
-    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, when_present: _when_present, ...plain } = invocation;
+    const { label: _label, intent: _intent, variant_label: _variant_label, when_focus: _when_focus, when_present: _when_present, otherwise: _otherwise, fallback: _fallback, ...plain } = invocation;
     steps.push({ invocation: plain, runs_in: info.runs_in, count_rule: info.count, ...(info.bundle && { bundle: info.bundle }) });
   }
   if (steps.length === 0) {
     warnings.push(`${mode}: skipped "${entry.sequence}": empty binding`);
     return undefined;
   }
-  return { steps, label, intent, when_focus, when_present };
+  return { steps, label, intent, when_focus, when_present, otherwise_page, fallback: invocations[0]!.fallback };
 }
 
 function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve: ResolveCommand, settings: Partial<Settings>, sources: LabelSources, group_names: GroupName[], warnings: string[]) {
-  const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_group_names(entry.tokens, group_names), warnings);
+  const ancestor_names = ancestor_group_names(entry.tokens, group_names);
+  const resolved = to_steps(mode, entry, resolve, settings, sources, ancestor_names, warnings);
   if (!resolved) return;
+  // A guarded default key keeps the step its guard falls through to as the next leaf of its chain.
+  const fallback = resolved.fallback && to_steps(mode, { ...entry, binding: resolved.fallback }, resolve, settings, sources, ancestor_names, warnings);
+  const fallback_leaf = fallback && { kind: "leaf" as const, ...(fallback.label !== undefined && { label: fallback.label }), steps: fallback.steps };
+  const guards = {
+    ...(resolved.when_focus !== undefined && { when_focus: resolved.when_focus }),
+    ...(resolved.when_present !== undefined && { when_present: resolved.when_present }),
+    ...(fallback_leaf && { otherwise: fallback_leaf }),
+  };
 
   let branch = root;
   for (const [depth, token] of entry.tokens.entries()) {
@@ -287,7 +300,7 @@ function insert_entry(root: TreeBranch, mode: KeymapMode, entry: Entry, resolve:
     } else if (existing) {
       warnings.push(`${mode}: skipped "${entry.sequence}": ${existing.kind === "leaf" ? "same keys as another binding" : "another binding already continues past it"}`);
     } else {
-      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps };
+      branch.children[token] = { kind: "leaf", ...(resolved.label === undefined ? {} : { label: resolved.label }), ...(resolved.intent === undefined ? {} : { intent: resolved.intent }), steps: resolved.steps, ...guards };
     }
   }
 }
@@ -367,8 +380,8 @@ function choice_leaf(written: unknown, keys: Pick<Entry, "sequence" | "tokens">,
     warnings.push(...step_warnings.map((warning) => `site_rules: ${scope}bind ${warning.replace(`${mode}: `, "")}`));
     return undefined;
   }
-  const { label, intent, when_focus, when_present } = resolved;
-  return { kind: "leaf", ...(label === undefined ? {} : { label }), ...(intent === undefined ? {} : { intent }), ...(when_focus === undefined ? {} : { when_focus }), ...(when_present === undefined ? {} : { when_present }), steps: resolved.steps };
+  const { label, intent, when_focus, when_present, otherwise_page } = resolved;
+  return { kind: "leaf", ...(label === undefined ? {} : { label }), ...(intent === undefined ? {} : { intent }), ...(when_focus === undefined ? {} : { when_focus }), ...(when_present === undefined ? {} : { when_present }), ...(otherwise_page ? { otherwise_page: true as const } : {}), steps: resolved.steps };
 }
 
 // Rows that bind a key and a longer key under it. The shorter bind wins and the longer is dropped when the binds are grafted, as in a keymap, where a complete binding hides the keys under it.
@@ -430,6 +443,29 @@ function compile_rows(rules: Settings["site_rules"], resolve: ResolveCommand, se
   });
 }
 
+// The default keymap's parent links, with the keys each child section unbinds. A leave link without a `mode.set` to run drops with a warning, since the child would run the parent's keys in its own mode.
+function compiled_mode_parents(keymap: KeymapConfig, resolve: ResolveCommand, warnings: string[]): CompiledKeymap["mode_parents"] {
+  const links = Object.entries(keymap.mode_parents ?? {}) as [KeymapMode, NonNullable<KeymapConfig["mode_parents"]>[KeymapMode]][];
+  const compiled: NonNullable<CompiledKeymap["mode_parents"]> = {};
+  for (const [child, link] of links) {
+    if (!link) continue;
+    const blocked = Object.entries(keymap[child] ?? {}).flatMap(([sequence, binding]) => {
+      const { tokens } = parse_sequence(sequence);
+      return binding === null && tokens ? [tokens] : [];
+    });
+    const set_mode = link.leave ? resolve("mode.set") : undefined;
+    if (link.leave && !set_mode) {
+      warnings.push(`${child}: keeps only its own keys: no mode.set to leave it for ${link.parent}`);
+      continue;
+    }
+    const leave: LeafStep | undefined = set_mode && { invocation: { id: "mode.set", args: { mode: link.parent } }, runs_in: set_mode.runs_in, count_rule: set_mode.count, ...(set_mode.bundle && { bundle: set_mode.bundle }), leave: true };
+    // The compile fills `runs` once it has checked the trees against the registry.
+    const entry: CompiledModeParent = { parent: link.parent, ...(leave && { leave }), runs: [], ...(blocked.length > 0 && { blocked }) };
+    compiled[child] = entry;
+  }
+  return Object.keys(compiled).length > 0 ? compiled : undefined;
+}
+
 export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>, resolve: ResolveCommand, label_sources: LabelSources = { engine_labels: {} }, default_layer: KeymapConfig = {}, row_sources: readonly SiteRuleSource[] = []): CompileResult {
   const warnings: string[] = [];
   const modes: CompiledKeymap["modes"] = {};
@@ -444,6 +480,7 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
     name_groups(root, group_names);
     if (Object.keys(root.children).length > 0) modes[mode] = root;
   }
+  const mode_parents = compiled_mode_parents(keymap, resolve, warnings);
   const site_rules = compile_site_rules(settings.site_rules ?? DEFAULT_SETTINGS.site_rules, resolve, settings, label_sources, warnings, row_sources);
   const frame_site_globals = Object.fromEntries(FRAME_SITE_SETTINGS.flatMap((name) => (settings[name] === undefined || is_default_value(name, settings[name]) ? [] : [[name, settings[name]]])));
   const which_key_skip = (settings.which_key_skip ?? []).flatMap((entry) => {
@@ -455,11 +492,12 @@ export function compile_keymap(keymap: KeymapConfig, settings: Partial<Settings>
   const compiled: CompiledKeymap = {
     format_version: COMPILED_KEYMAP_VERSION,
     modes,
+    ...(mode_parents && { mode_parents }),
     ...(site_rules.length > 0 ? { site_rules } : {}),
     mode_indicator: settings.mode_indicator ?? DEFAULT_SETTINGS.mode_indicator,
     ...(settings.bridge === true ? { bridge: true as const } : {}),
     ...(settings.bridge === true && settings.bridge_share_tabs === true ? { bridge_share_tabs: true as const } : {}),
-    ...(settings.item_navigator === true ? { item_navigator: true as const } : {}),
+    ...(settings.item_navigator !== undefined && settings.item_navigator !== false ? { item_navigator: settings.item_navigator } : {}),
     ...(Object.keys(frame_site_globals).length > 0 ? { frame_site_globals } : {}),
     which_key_border: settings.which_key_border ?? DEFAULT_SETTINGS.which_key_border,
     which_key_delay_ms: settings.which_key_delay_ms ?? DEFAULT_SETTINGS.which_key_delay_ms,

@@ -1,6 +1,8 @@
+diff --git a/vendor/desertfox/command.ts b/vendor/desertfox/command.ts
+index f7749ef..f487b3b 100644
 --- a/vendor/desertfox/command.ts
 +++ b/vendor/desertfox/command.ts
-@@ -15,7 +15,7 @@
+@@ -25,7 +25,7 @@ export const SCROLL_TO_DEFAULT_AXIS = "y";
  const CARET_MODES: readonly Mode[] = ["caret", "visual", "visual_line"];
  export const is_caret_mode = (mode: Mode): boolean => CARET_MODES.includes(mode);
  
@@ -9,7 +11,7 @@
  
  export type ContextSourceName = "current_url" | "selection" | "clipboard" | "bookmark_title" | "search_query";
  
-@@ -38,7 +38,7 @@
+@@ -48,7 +48,7 @@ export type ParamDefault = ParamValue | ContextSource | readonly (DefaultArm | P
  
  // Value lists filled at run time from the user's config or from Firefox. `tabs`, `bookmarks`, `history`, `windows`, `headings`, `sessions`, `registers`, `folders`, `marks`, `quickmarks`, `saved_quickmarks` and `groups` go on a string param and
  // only feed the completion list. The page asks the background for the first three (`complete_items`) and the host script for the headings, nobody checks a typed value against them.
@@ -18,7 +20,7 @@
  
  export type ParamDef = {
    name: string;
-@@ -86,8 +86,8 @@
+@@ -96,8 +96,8 @@ export type CountBehavior =
    | "ignore" // drop the count
    | { param: string }; // fill this param with the count
  
@@ -29,7 +31,7 @@
  
  export type CommandContext = {
    tab_id: number | undefined;
-@@ -143,7 +143,7 @@
+@@ -163,7 +163,7 @@ export type BackgroundCommandDef = CommandCommon & { runs_in: "background"; run:
  
  // The code of a content command lives in the page: `content_handlers` in the content script, or a lazy bundle named by `bundle`. The definition holds no `run`.
  export type ContentCommandDef = CommandCommon & {
@@ -38,52 +40,13 @@
    // The lazy bundle that holds the code. The content script loads it on the first run and asks it for the handler.
    bundle?: BundleName;
    run?: undefined;
---- a/vendor/desertfox/registry/define.ts
-+++ b/vendor/desertfox/registry/define.ts
-@@ -262,7 +262,7 @@
-     if (new Set(list).size !== list.length) fail(`${at}.values`, "has a repeated value");
-   } else if (is_dynamic_values(param.values)) {
-     const from = (param.values as { from: unknown }).from;
--    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything" && from !== "groups") fail(`${at}.values`, `unknown source "${String(from)}"`);
-+    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything" && from !== "groups" && from !== "tags") fail(`${at}.values`, `unknown source "${String(from)}"`);
-   }
-   check_rules(param, at, fail);
-   check_value_labels(param, at, fail);
-@@ -385,9 +385,9 @@
- }
- 
- function check_count_and_modes(input: CommandInput, fail: Fail): void {
--  if (input.runs_in !== "background" && input.runs_in !== "content") fail("runs_in", "must be background or content");
--  if (input.bundle !== undefined && input.runs_in !== "content") fail("bundle", "belongs to a content command");
--  if (input.runs_in === "content" && input.run) fail("run", "belongs to a background command, since content code lives in the page");
-+  if (input.runs_in !== "background" && input.runs_in !== "chrome" && input.runs_in !== "message" && input.runs_in !== "compose") fail("runs_in", "must be background, chrome, message or compose");
-+  if (input.bundle !== undefined && (input.runs_in as string) === "background") fail("bundle", "belongs to a content command");
-+  if (input.runs_in !== "background" && input.run) fail("run", "belongs to a background command, since content code lives in the page");
-   if (input.runs_in === "background" && !input.run) fail("run", "is missing");
-   if (typeof input.count === "object" && !find_param(input, input.count.param)) {
-     fail("count", `names "${input.count.param}", which is not a param`);
---- a/vendor/desertfox/completion/tokenize.ts
-+++ b/vendor/desertfox/completion/tokenize.ts
-@@ -1,10 +1,10 @@
- // Finds the word under the caret and what kind of thing it should be: a command name, a flag, the value of a flag
- // or the subject. Pure: it reads the text and a lookup, never the DOM.
- 
--import type { ParamDef } from "../../shared/command.ts";
--import { parse_line, read_flag, tokenize } from "../../shared/registry/command_line.ts";
--import type { CommandLookup } from "../../shared/registry/command_line.ts";
--import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../../shared/registry/params.ts";
-+import type { ParamDef } from "../command.ts";
-+import { parse_line, read_flag, tokenize } from "../registry/command_line.ts";
-+import type { CommandLookup } from "../registry/command_line.ts";
-+import { bare_word_param, find_param, is_dynamic_values, subject_param } from "../registry/params.ts";
- 
- type Command = NonNullable<ReturnType<CommandLookup["find"]>>;
- 
+diff --git a/vendor/desertfox/find_match.ts b/vendor/desertfox/find_match.ts
+index a988878..a5cb6b1 100644
 --- a/vendor/desertfox/find_match.ts
 +++ b/vendor/desertfox/find_match.ts
 @@ -1,6 +1,3 @@
 -import { RuntimeRefusal } from "../../shared/command.ts";
--import type { FindScanAnswer } from "../../shared/messages.ts";
+-import type { FindScanAnswer } from "../../shared/messages/content.ts";
 -
  // The pure half of page search: a query to a search, the match list over the model's text, and which match is next.
  // A match is the pair of arrays `from` and `to`, one entry each, in text order. A page can hold hundreds of thousands, so no object per match.
@@ -159,22 +122,29 @@
  // The first match at or after `start` going forward, or the last one before it going backward. Wraps to the other end when there is none.
  export function nearest_match(from: number[], start: number, direction: Direction): { index: number; wrapped: boolean } | undefined {
    if (from.length === 0) return undefined;
---- a/vendor/desertfox/completion/keys.ts
-+++ b/vendor/desertfox/completion/keys.ts
-@@ -1,11 +1,11 @@
- // The keys column: for each command, the keys that run it bare, read once from the compiled keymap. The stored tree
- // is already the merge of the defaults and the user's keymap, and its tokens are the which-key notation.
+diff --git a/vendor/desertfox/registry/define.ts b/vendor/desertfox/registry/define.ts
+index 74fe1a4..73e1fd0 100644
+--- a/vendor/desertfox/registry/define.ts
++++ b/vendor/desertfox/registry/define.ts
+@@ -262,7 +262,7 @@ function check_param_shape(param: ParamDef, at: string, fail: Fail): void {
+     if (new Set(list).size !== list.length) fail(`${at}.values`, "has a repeated value");
+   } else if (is_dynamic_values(param.values)) {
+     const from = (param.values as { from: unknown }).from;
+-    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything" && from !== "groups") fail(`${at}.values`, `unknown source "${String(from)}"`);
++    if (from !== "search_engines" && from !== "containers" && from !== "tabs" && from !== "bookmarks" && from !== "history" && from !== "open" && from !== "windows" && from !== "headings" && from !== "sessions" && from !== "registers" && from !== "folders" && from !== "marks" && from !== "quickmarks" && from !== "saved_quickmarks" && from !== "anything" && from !== "groups" && from !== "tags") fail(`${at}.values`, `unknown source "${String(from)}"`);
+   }
+   check_rules(param, at, fail);
+   check_value_labels(param, at, fail);
+@@ -385,9 +385,9 @@ function check_when(input: CommandInput, param: ParamDef, at: string, fail: Fail
+ }
  
--import type { CommandMeta } from "../../shared/command.ts";
--import type { KeymapMode } from "../../shared/keymap.ts";
--import { LIVE_KEY, token_label } from "../../shared/prefix_tree.ts";
--import type { CompiledKeymap, TreeNode } from "../../shared/prefix_tree.ts";
--import { default_of, flag_params } from "../../shared/registry/params.ts";
-+import type { CommandMeta } from "../command.ts";
-+import type { KeymapMode } from "../keymap.ts";
-+import { LIVE_KEY, token_label } from "../prefix_tree.ts";
-+import type { CompiledKeymap, TreeNode } from "../prefix_tree.ts";
-+import { default_of, flag_params } from "../registry/params.ts";
- 
- // Keys shown before the rest fold into `+N`.
- const SHOWN_KEYS = 2;
+ function check_count_and_modes(input: CommandInput, fail: Fail): void {
+-  if (input.runs_in !== "background" && input.runs_in !== "content") fail("runs_in", "must be background or content");
+-  if (input.bundle !== undefined && input.runs_in !== "content") fail("bundle", "belongs to a content command");
+-  if (input.runs_in === "content" && input.run) fail("run", "belongs to a background command, since content code lives in the page");
++  if (input.runs_in !== "background" && input.runs_in !== "chrome" && input.runs_in !== "message" && input.runs_in !== "compose") fail("runs_in", "must be background, chrome, message or compose");
++  if (input.bundle !== undefined && (input.runs_in as string) === "background") fail("bundle", "belongs to a content command");
++  if (input.runs_in !== "background" && input.run) fail("run", "belongs to a background command, since content code lives in the page");
+   if (input.runs_in === "background" && !input.run) fail("run", "is missing");
+   if (typeof input.count === "object" && !find_param(input, input.count.param)) {
+     fail("count", `names "${input.count.param}", which is not a param`);

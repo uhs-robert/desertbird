@@ -10,7 +10,7 @@ import type { PerSiteName, Settings } from "./settings_table.ts";
 
 export const COMPILED_KEYMAP_STORAGE_KEY = "desertfox_compiled_keymap";
 
-export const COMPILED_KEYMAP_VERSION = 13;
+export const COMPILED_KEYMAP_VERSION = 18;
 
 // One step of a binding. The side that runs it and the count rule are resolved at compile time.
 export type LeafStep = {
@@ -26,6 +26,8 @@ export type LeafStep = {
   register?: true;
   // The command moves the view and the router records the place it left, so the leaf goes there for a first press and the keys after it wait. A held key's repeats run in the page and record nothing.
   jump?: true;
+  // The step a child mode puts before each key it takes from its parent (`mode_parents.ts`). Key listings skip it, so the key lists under the parent's command. The matcher and the runner ignore it.
+  leave?: true;
 };
 
 export type TreeLeaf = {
@@ -34,10 +36,12 @@ export type TreeLeaf = {
   label?: string;
   // The which-key hover text the binding wrote. Without one the row shows the command intent.
   intent?: string;
-  // A site row bind's guards (`when_focus` and `when_present` in `invocation.ts`), and the leaf that runs when a guard fails: the next choice of a choice list, else the leaf the bind replaced. Without `otherwise` a key whose guard fails does nothing.
+  // A site row bind's guards (`when_focus` and `when_present` in `invocation.ts`), and the leaf that runs when a guard fails: the next choice of a choice list, else the leaf the bind replaced. Without `otherwise` a key whose guard fails goes to the page.
   when_focus?: string;
   when_present?: string;
   otherwise?: TreeLeaf;
+  // The bind wrote `otherwise = "page"`: the graft keeps the replaced leaf off the chain, so a failed guard leaves the key to the page.
+  otherwise_page?: true;
   steps: LeafStep[];
 };
 
@@ -75,10 +79,17 @@ export type SiteBind = { tokens: string[]; leaf: TreeLeaf };
 export type SiteRuleSource = { origin: "user" } | { origin: "default"; name: string };
 export type SiteRule = SiteRuleSource & { site: string; regex: string; off?: boolean; keys?: { pass: string[][] } | { only: string[][] }; bind?: Record<string, SiteBind>; keymap?: Record<string, Record<string, SiteBind>>; modes?: Record<string, { label: string; bind: Record<string, SiteBind> }>; values?: Readonly<Record<string, unknown>> };
 
+export type ItemSelectKeys = Record<"down" | "up" | "left" | "right", LeafStep>;
+
+// A mode's parent as the compile stores it. `leave` is the checked step that sets the parent mode. `runs` holds the ids of the keymap's commands that run in the mode a taken key runs in (the parent after a leave step, else the child), so a reader needs no registry. `blocked` holds the keys the child's section unbinds, each as tokens: an inherited key or group there is dropped.
+export type CompiledModeParent = { parent: KeymapMode; leave?: LeafStep; runs: string[]; blocked?: string[][] };
+
 export type CompiledKeymap = {
   format_version: typeof COMPILED_KEYMAP_VERSION;
-  // Root branch per mode. A mode without bindings is absent.
+  // Root branch per mode. A mode without bindings is absent. A child mode holds only its own keys: every reader resolves its parent's keys in (`resolve_mode_parents`).
   modes: Partial<Record<KeymapMode, TreeBranch>>;
+  // Absent when no mode has a parent. Pages never see this field: the background resolves their trees.
+  mode_parents?: Partial<Record<KeymapMode, CompiledModeParent>>;
   // Settings the content script needs before it can handle a key.
   // In list order. Each column takes the first rule that fits the page and sets it. Absent when no rule exists.
   site_rules?: SiteRule[];
@@ -89,8 +100,10 @@ export type CompiledKeymap = {
   bridge_share_tabs?: true;
   // The global values of the frame site settings, each only when it differs from its default. The background resolves them with the page's site rows into `site_values`, so pages never see this field.
   frame_site_globals?: FrameSiteValues;
-  // Set when the `item_navigator` setting is on. A site row can turn the finder on or off for its pages against it. Absent means off.
-  item_navigator?: true;
+  // The global `item_navigator` value when it is not false: `shipped` starts item mode on the sites of the shipped rows, true on every list page. Absent means off.
+  item_navigator?: true | "shipped";
+  // The page.send_key steps of the four arrow keys, set only when some setting asks for `item_select = "arrows"`. The background rewrites a page's item tree with them. Pages never see this field.
+  item_select_keys?: ItemSelectKeys;
   // Set only on the keymap published while DesertFox is switched off. The page then lets a lone keyup through.
   off?: true;
   which_key_delay_ms: number;
@@ -120,8 +133,10 @@ export const HINT_SITE_SETTINGS = ["hint_add", "hint_remove"] as const satisfies
 export const STRIP_SITE_SETTINGS = ["strip_tracking"] as const satisfies readonly PerSiteName[];
 // The background answers the quality bundle's report with its own (`quality_report`).
 export const QUALITY_SITE_SETTINGS = ["media_quality"] as const satisfies readonly PerSiteName[];
+// Resolved by the background for the frame that holds the list. Content.js never reads it.
+export const ITEM_SELECT_SITE_SETTINGS = ["item_select"] as const satisfies readonly PerSiteName[];
 // A literal, not a spread of the lists: the bundler keeps an unused spread in content.js.
-export const FRAME_SITE_SETTINGS = ["blur_on_load", "focus_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "media_quality", "strip_tracking"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS, ...typeof QUALITY_SITE_SETTINGS, ...typeof STRIP_SITE_SETTINGS];
+export const FRAME_SITE_SETTINGS = ["blur_on_load", "focus_on_load", "editable_add", "editable_remove", "editable_remove_unsized", "escape_to_page", "scroll_selector", "hint_add", "hint_remove", "media_quality", "strip_tracking", "item_select"] as const satisfies readonly [...typeof PAGE_REPLY_SITE_SETTINGS, ...typeof HINT_SITE_SETTINGS, ...typeof QUALITY_SITE_SETTINGS, ...typeof STRIP_SITE_SETTINGS, ...typeof ITEM_SELECT_SITE_SETTINGS];
 export type FrameSiteName = (typeof FRAME_SITE_SETTINGS)[number];
 export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partial<Pick<Settings, Name>>;
 
@@ -129,7 +144,7 @@ export type FrameSiteValues<Name extends FrameSiteName = FrameSiteName> = Partia
 // What a site mode adds to the page's normal tree: its badge label and the top-level children that differ from the normal tree, which the content script lays over it. A sticky mode ignores mouse presses and keys the page keeps.
 export type PageSiteMode = { label: string; tree: Record<string, TreeNode>; sticky?: boolean };
 
-export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals" | "item_navigator">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
+export type PageKeymap = { keymap: Omit<CompiledKeymap, "site_rules" | "frame_site_globals" | "item_navigator" | "item_select_keys" | "mode_parents">; all_off: boolean; site_modes?: Record<string, PageSiteMode>; frees?: PageFrees; recording?: string; join?: "insert" | "media" | "item"; site_values?: FrameSiteValues<(typeof PAGE_REPLY_SITE_SETTINGS)[number]> };
 
 // A tree stored by an older build has another shape, and the page then gets no keymap until the background recompiles.
 export const current_keymap = (stored: CompiledKeymap | undefined): CompiledKeymap | undefined =>
