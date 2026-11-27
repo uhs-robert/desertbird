@@ -66,7 +66,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `completion/keys.ts` | copy | `5844a5c177682bacb0966aa17064e7211739d3ff7ba0e6ef1207afde1021b4ff` | `5844a5c177682bacb0966aa17064e7211739d3ff7ba0e6ef1207afde1021b4ff` |
 | `completion/tokenize.ts` | copy | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` | `34e96e891167a023890e2b1f09477c7edcc11a733605f2b1563e1fc7fea4819d` |
 | `config.ts` | stub | `-` | `782044001ffb548804beac17fbae8f01eafa4c800181b555729418a27cb7f41e` |
-| `default_settings.ts` | stub | `-` | `137e4588c24adef136c9b9b725fd2befcfafc449c7c074fc0e10376d7009078d` |
+| `default_settings.ts` | stub | `-` | `d52fae25d23c768b51e4d1d7409400b6dfa88a9886c6d11b8ec78f8848ea5f21` |
 | `find_match.ts` | edited | `5498b1552b757414166e60ddf4144121922e73f0ae8df55f74e41899fb85c09e` | `f320289d274b638326562913c43ad2c9a83087df77de5952b4ab486fd2c8e31a` |
 | `history_cursor.ts` | copy | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` | `281922828ff8ce21aa527ce550f439f990102ba9ff3b4667ab6c2aff481d3f84` |
 | `invocation.ts` | copy | `c7417bf1998040a648634014061d2be531670f09aafb1836c3549aca94fca0da` | `c7417bf1998040a648634014061d2be531670f09aafb1836c3549aca94fca0da` |
@@ -76,7 +76,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `keys/notation.ts` | copy | `09556b643ff85cd62cf5839084b6e3117c699084ca6bee0efe70084a030dac4d` | `09556b643ff85cd62cf5839084b6e3117c699084ca6bee0efe70084a030dac4d` |
 | `keys/token.ts` | copy | `51e51b0a508e26fa80d3ec3d44eb34ff87c756f1032c6d981546c18bb48f34c3` | `51e51b0a508e26fa80d3ec3d44eb34ff87c756f1032c6d981546c18bb48f34c3` |
 | `match_pattern.ts` | stub | `-` | `d29cde2dbc27f7eb57f8aefefd4b670259355b4e36403e99cfa3fcc4ecf8a3e7` |
-| `messages.ts` | stub | `-` | `ac9b5b4f605f061373d26378fb14c0bed479699bfcb05d371a9e34d05e57b1e5` |
+| `messages/content.ts` | stub | `-` | `240adea837d6a8c6f4d6fdb1e366bd813044856263d9ed37ba63f61618ce9350` |
 | `prefix_tree.ts` | copy | `3b3c8a26ea0907dca28c5f5a1e7387144cb19dd610999c65a949b830f6b71479` | `3b3c8a26ea0907dca28c5f5a1e7387144cb19dd610999c65a949b830f6b71479` |
 | `register_names.ts` | copy | `1d75546949b7bab964fde8c482921058b95cbab007d8d244c0bda187721bed01` | `1d75546949b7bab964fde8c482921058b95cbab007d8d244c0bda187721bed01` |
 | `registry/check_args.ts` | copy | `a9656151caf562f85a3ef7c3d6c639cb5f97b9fe6cd3a9e80cb8cc6aa14dcbf0` | `a9656151caf562f85a3ef7c3d6c639cb5f97b9fe6cd3a9e80cb8cc6aa14dcbf0` |
@@ -90,7 +90,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `registry/usage.ts` | copy | `76ee0dab6e7ae055caa44bbd2a80f148ece2fc270ea59cbe8f1e273ec44156c5` | `76ee0dab6e7ae055caa44bbd2a80f148ece2fc270ea59cbe8f1e273ec44156c5` |
 | `score.ts` | copy | `15428cd33a574cac08f2ecd31e27a4b4ad12d57d3050cdbae8192ca36eb20186` | `15428cd33a574cac08f2ecd31e27a4b4ad12d57d3050cdbae8192ca36eb20186` |
 | `settings_schema.ts` | stub | `-` | `376fcfdfe3c389f1451d5b291db23effc5ef77d6445ddae3627a4ee92d2a93aa` |
-| `settings_table.ts` | stub | `-` | `226647ddb8619857494875c8267ca8c2f0e0bac52930c8e150de172608e28986` |
+| `settings_table.ts` | stub | `-` | `bae884acd649e00d5c46f549870c1130c314f94aa7fa1374c4d1c1fb3e640860` |
 | `table_constants.ts` | stub | `-` | `8e953d6ed720a6477e3c3ff9b76fe8627b177dad5c978ac7336046d2c197ffc2` |
 | `theme/contrast.ts` | copy | `1456a9a3746efac46dc9f19e47c13c06896b4d52cc1349fbd0aab679e99838ce` | `1456a9a3746efac46dc9f19e47c13c06896b4d52cc1349fbd0aab679e99838ce` |
 | `theme/derive.ts` | copy | `43a49337b0c4b3e39ed003b82b7afb673774e55dcbe19881afe8d536225973e1` | `43a49337b0c4b3e39ed003b82b7afb673774e55dcbe19881afe8d536225973e1` |
