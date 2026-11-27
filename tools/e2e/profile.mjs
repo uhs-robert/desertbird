@@ -194,6 +194,8 @@ const mail_account_inbox = () =>
 // Kind "shots" is for the screenshots of the README and the listing: its own Inbox of realistic mail (shots_fixture.mjs), the newest message first, an identity with a real-looking name, and none of the checks' fixture folders.
 const SHOTS_PREFS = {
   "mailnews.default_sort_order": 2,
+  // G on the options page jumps to the bottom with no scrolling frames in the film.
+  "general.smoothScroll": false,
   // The table view, which has the room for the sender and the date, in place of the cards.
   "mail.threadpane.listview": 1,
   // The classic layout puts the message pane below the list, so the list keeps the width of its subjects when the pane shows.

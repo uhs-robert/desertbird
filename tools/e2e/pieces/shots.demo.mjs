@@ -25,8 +25,8 @@ const END_CARD_MS = 6000;
 const TYPE_MS = 320;
 // The hint targets the piece picks, each by the label of an environment variable.
 const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL", theme: "DEMO_THEME_LABEL", border: "DEMO_BORDER_LABEL", save: "DEMO_SAVE_LABEL" };
-// Steps down the theme list from the default oasis_moonlight to the light oasis_canyon, and down the border list from square to chamfer.
-const THEME_STEPS_UP = 7;
+// Steps up the theme list from the default oasis_moonlight to oasis_mirage, and down the border list from square to chamfer.
+const THEME_STEPS_UP = 1;
 const BORDER_STEPS_DOWN = 2;
 
 async function run_demo(instance, ctx) {
@@ -159,8 +159,6 @@ async function run_demo(instance, ctx) {
     await hint_pick("border", "f  Click any setting", 800);
     for (let step = 0; step < BORDER_STEPS_DOWN; step++) await key(step === 0 ? "j  Pick a border" : null, ["j"], null, 450);
     await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
-    caption("Ctrl+d  Scroll down");
-    for (let step = 0; step < 7; step++) { recording.assert_alive(); await instance.press(["-M", "ctrl", "d", "-m", "ctrl"]); await pause(700); }
     await key("G  Bottom", ["G"], null, 700);
     await hint_pick("save", "f  Click any button", 800);
     await pause(HOLD_MS);
