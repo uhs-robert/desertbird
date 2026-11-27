@@ -3,10 +3,10 @@
 This folder holds a pinned copy of part of DesertFox, the keyboard-first Firefox extension. DesertFox is the source of the key matcher, the key notation, the keymap compiler, the command registry validator, the command line parser and printer, the completion tokenizer and scorer, and the search query compiler and match stepper. The copy exists so DesertBird can build from its own repository and the store reviewer can match every file against the pin.
 
 - Source: the DesertFox repository, folder `src/shared/` plus the three style files named below
-- Commit: `61427fac6d6b569860078e55e156afdaf9f4f5d5`, a commit on DesertFox `main` after `v1.0.0` (use the commit, since a tag can move)
+- Commit: `ef9c70a9425fcca90302be1ef1fd3a804b6b9647`, a commit on DesertFox `main` after `v1.0.0` (use the commit, since a tag can move)
 - License: MPL-2.0, the same as DesertBird (see `LICENSE` at the repository root). The copied files keep their text unchanged apart from the edits listed below.
 
-The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin), except `completion/tokenize.ts`, `completion/keys.ts` and `history_cursor.ts`, which come from `src/cmdline/`, and `find_match.ts`, which comes from `src/content/caret/`. The three style modules keep their sheets as pure text and have distinct names here, since two upstream files are called `style.ts`: `whichkey_style.ts` and `whichkey_layout.ts` come from `src/content/whichkey/` (`style.ts`, `layout.ts`), and `cmdline_style.ts` comes from `src/cmdline/style.ts`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
+The folder mirrors `src/shared/` (the theme files are `themes.ts`, `theme_names.ts` and `theme/{roles,tokens,contrast,derive,theme_file,load}.ts`, all copies at the same pin), except `history_cursor.ts`, which comes from `src/cmdline/`, and `find_match.ts`, which comes from `src/content/caret/`. The three style modules keep their sheets as pure text and have distinct names here, since two upstream files are called `style.ts`: `whichkey_style.ts` and `whichkey_layout.ts` come from `src/content/whichkey/` (`style.ts`, `layout.ts`), and `cmdline_style.ts` comes from `src/cmdline/style.ts`. A file marked `copy` below is byte-identical to the pin. A file marked `edited` differs only by the edits under Local edits. A file marked `stub` is not a DesertFox file: it carries a `STUB` header and stands in for a DesertFox file that is not copied.
 
 ## Commands
 
@@ -88,7 +88,7 @@ DesertBird never imports `COMPILED_KEYMAP_STORAGE_KEY`. It stores its compiled k
 | `registry/single_quote.ts` | copy | `69108762c4226d0040ca8c53532b00013e1f7ca2ff9581d90da373ea90d233b9` | `69108762c4226d0040ca8c53532b00013e1f7ca2ff9581d90da373ea90d233b9` |
 | `registry/summary.ts` | copy | `3ec30b815417c7f27c2b1dd685f48b033870f21ef2504c505be2606899acb78e` | `3ec30b815417c7f27c2b1dd685f48b033870f21ef2504c505be2606899acb78e` |
 | `registry/usage.ts` | copy | `76ee0dab6e7ae055caa44bbd2a80f148ece2fc270ea59cbe8f1e273ec44156c5` | `76ee0dab6e7ae055caa44bbd2a80f148ece2fc270ea59cbe8f1e273ec44156c5` |
-| `score.ts` | copy | `15428cd33a574cac08f2ecd31e27a4b4ad12d57d3050cdbae8192ca36eb20186` | `15428cd33a574cac08f2ecd31e27a4b4ad12d57d3050cdbae8192ca36eb20186` |
+| `score.ts` | copy | `30841c73642a307befde7b4019b2df70d322d7b357155c4ffe092515c3afa1ef` | `30841c73642a307befde7b4019b2df70d322d7b357155c4ffe092515c3afa1ef` |
 | `settings_schema.ts` | stub | `-` | `376fcfdfe3c389f1451d5b291db23effc5ef77d6445ddae3627a4ee92d2a93aa` |
 | `settings_table.ts` | stub | `-` | `bae884acd649e00d5c46f549870c1130c314f94aa7fa1374c4d1c1fb3e640860` |
 | `table_constants.ts` | stub | `-` | `8e953d6ed720a6477e3c3ff9b76fe8627b177dad5c978ac7336046d2c197ffc2` |

@@ -129,6 +129,16 @@ test("command completion ranks a short whole name above a longer dotted one", as
     assert.equal(await first("tg"), "tag");
     assert.equal(await first("pt"), "pane.toggle");
     assert.equal(await first("tc"), "tab.close");
+    assert.equal(await first("tabc"), "tab.close");
+});
+
+test("command completion ranks a thread command above search for th and thread", async () => {
+    for (const word of ["th", "thread"]) {
+        const names = (await complete(word, word.length, no_selection)).rows.map((row) => row.name);
+        const thread = names.findIndex((name) => name.startsWith("thread."));
+        assert.ok(thread >= 0, word);
+        assert.ok(names.indexOf("search") < 0 || thread < names.indexOf("search"), word);
+    }
 });
 
 test("completion offers the folders for move and the tags for tag, and quotes a name with a space", async () => {

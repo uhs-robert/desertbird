@@ -8,7 +8,7 @@
 # Stand-ins (files with a STUB header) are written by hand and never touched here.
 set -euo pipefail
 
-PIN_SHA=61427fac6d6b569860078e55e156afdaf9f4f5d5
+PIN_SHA=ef9c70a9425fcca90302be1ef1fd3a804b6b9647
 UPSTREAM_DIR=src/shared
 # The three style files keep their upstream basenames out of the flat folder: `whichkey_style.ts` and `whichkey_layout.ts` come from `src/content/whichkey/`, `cmdline_style.ts` from `src/cmdline/style.ts`.
 # `history_cursor.ts` comes from `src/cmdline/`. `find_match.ts` comes from `src/content/caret/`. Every other file mirrors `src/shared/`.
