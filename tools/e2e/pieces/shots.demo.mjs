@@ -24,10 +24,9 @@ const END_CARD_MS = 6000;
 // The pace of letters typed in the command line.
 const TYPE_MS = 320;
 // The hint targets the piece picks, each by the label of an environment variable.
-const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL", theme: "DEMO_THEME_LABEL", border: "DEMO_BORDER_LABEL", save: "DEMO_SAVE_LABEL" };
-// Steps up the theme list from the default oasis_moonlight to oasis_mirage, and down the border list from square to chamfer.
+const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL", theme: "DEMO_THEME_LABEL", save: "DEMO_SAVE_LABEL" };
+// Steps up the theme list from the default oasis_moonlight to oasis_mirage.
 const THEME_STEPS_UP = 1;
-const BORDER_STEPS_DOWN = 2;
 
 async function run_demo(instance, ctx) {
   const { report, show_folder, wait_for_state, wait_pixels, open_command_line, close_compose } = ctx;
@@ -154,10 +153,7 @@ async function run_demo(instance, ctx) {
     await key("o  Options", ["o"], { what: "the options tab to open", until: has_tab((tab) => /options|desertbird/i.test(`${tab.title} ${tab.raw?.url ?? ""}`) && tab.type !== "mail") }, 1200);
     // f focuses a select, j and k step it, Escape leaves it.
     await hint_pick("theme", "f  Click any setting", 800);
-    for (let step = 0; step < THEME_STEPS_UP; step++) await key(step === 0 ? "k  Try themes" : null, ["k"], null, 350);
-    await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
-    await hint_pick("border", "f  Click any setting", 800);
-    for (let step = 0; step < BORDER_STEPS_DOWN; step++) await key(step === 0 ? "j  Pick a border" : null, ["j"], null, 450);
+    for (let step = 0; step < THEME_STEPS_UP; step++) await key(step === 0 ? "k  Pick a theme" : null, ["k"], null, 350);
     await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
     await key("G  Bottom", ["G"], null, 700);
     await hint_pick("save", "f  Click any button", 800);
