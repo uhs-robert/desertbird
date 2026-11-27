@@ -124,6 +124,13 @@ test("completion ranks a typed word and marks the matched letters", async () => 
     assert.deepEqual([answer.start, answer.end], [0, 2]);
 });
 
+test("command completion ranks a short whole name above a longer dotted one", async () => {
+    const first = async (word: string) => (await complete(word, word.length, no_selection)).rows[0]?.name;
+    assert.equal(await first("tg"), "tag");
+    assert.equal(await first("pt"), "pane.toggle");
+    assert.equal(await first("tc"), "tab.close");
+});
+
 test("completion offers the folders for move and the tags for tag, and quotes a name with a space", async () => {
     const folders = await complete("move ", 5, no_selection);
     assert.deepEqual(folders.rows.map((row) => row.name), ["/Archive", "/Archive/2026", "/Inbox"]);

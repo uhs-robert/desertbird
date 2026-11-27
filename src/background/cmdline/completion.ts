@@ -175,7 +175,8 @@ export function create_completer(registry: Registry, sources: ValueSources): (te
     const is_whole = (word: string, rows: Row[], tab_numbers: boolean) => (tab_numbers ? /^\d+$/.test(word) : rows.filter((row) => row.name === word).length === 1);
 
     function finish(context: Exclude<CursorContext, { kind: "none" }>, rows: Row[], command?: Command, picks_value = false, tab_numbers = false): Completion {
-        const ranked = rank(context.word, rows).slice(0, MAX_ROWS);
+        // Only command names earn the coverage bonus, so `tg` finds `tag` before `tab.goto`. Flags, folders, tags and tabs keep the plain score.
+        const ranked = rank(context.word, rows, () => 0, context.kind === "command").slice(0, MAX_ROWS);
         const usage = command && usage_line(command);
         // A word that is already a whole value runs as typed, so Enter never swaps `/Projects` for a longer match. For tabs only a number is whole: a title word always highlights, since the handler matches a title as a part and could pick another tab. A path two accounts hold is no whole value, since typed alone it names two folders.
         const highlight_first = picks_value && context.word !== "" && ranked.length > 0 && !is_whole(context.word, rows, tab_numbers);
