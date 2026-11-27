@@ -21,7 +21,10 @@ const END_CARD_MS = 6000;
 // The pace of letters typed in the command line.
 const TYPE_MS = 200;
 // The hint targets the piece picks, each by the label of an environment variable.
-const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL" };
+const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL", theme: "DEMO_THEME_LABEL", border: "DEMO_BORDER_LABEL", save: "DEMO_SAVE_LABEL" };
+// Steps down the theme list from the default oasis_moonlight to the light oasis_canyon, and down the border list from square to chamfer.
+const THEME_STEPS_UP = 7;
+const BORDER_STEPS_DOWN = 2;
 
 async function run_demo(instance, ctx) {
   const { report, show_folder, wait_for_state, wait_pixels, open_command_line, close_compose } = ctx;
@@ -69,6 +72,8 @@ async function run_demo(instance, ctx) {
     return label;
   };
 
+  // Shown once so the app builds the summary of /Receipts, or `u` after a move into it finds no message to bring back.
+  await show_folder(instance, "/Receipts");
   await show_folder(instance, "/Inbox");
   await sleep(1500);
   await instance.press(["-k", "F6"]);
@@ -144,8 +149,18 @@ async function run_demo(instance, ctx) {
     await hint_pick("toolbar", "f  Click any button", 1000);
     await sleep(800);
     await key("o  Options", ["o"], { what: "the options tab to open", until: has_tab((tab) => /options|desertbird/i.test(`${tab.title} ${tab.raw?.url ?? ""}`) && tab.type !== "mail") }, 1200);
+    // f focuses a select, j and k step it, Escape leaves it.
+    await hint_pick("theme", "f  Click any setting", 800);
+    for (let step = 0; step < THEME_STEPS_UP; step++) await key(step === 0 ? "k  Try themes" : null, ["k"], null, 350);
+    await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
+    await hint_pick("border", "f  Click any setting", 800);
+    for (let step = 0; step < BORDER_STEPS_DOWN; step++) await key(step === 0 ? "j  Pick a border" : null, ["j"], null, 450);
+    await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
     caption("Ctrl+d  Scroll down");
     for (let step = 0; step < 7; step++) { recording.assert_alive(); await instance.press(["-M", "ctrl", "d", "-m", "ctrl"]); await sleep(700); }
+    await key("G  Bottom", ["G"], null, 700);
+    await hint_pick("save", "f  Click any button", 800);
+    await sleep(HOLD_MS);
     await key("q  Close the tab", ["q"], null, 500);
 
     // 5. Do anything by name: a tag and a move typed by name, then undo.
@@ -155,9 +170,8 @@ async function run_demo(instance, ctx) {
     caption(":  Command line");
     await open_command_line(instance, [":"], { attempts: 3 });
     await sleep(1000);
-    // "tg" ranks tab.goto above tag, so the whole name.
-    caption(": tag  Tab");
-    await type_letters("tag");
+    caption(": tg  Tab");
+    await type_letters("tg");
     await sleep(400);
     await instance.press(["-k", "Tab"]);
     await sleep(400);
