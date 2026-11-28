@@ -34,9 +34,6 @@ const STARTUP_POLL_MS = 100;
 // Only the first main window of the add-on's run gets the startup focus. A later window (open in new window) opens on a deliberate target. The flag lives as long as the module, so a reload that finds a window already open claims it too, and then its age check refuses.
 let startup_focus_claimed = false;
 
-/** Resets the once-only flag. Tests only. */
-export const reset_startup_focus_claim = (): void => void (startup_focus_claimed = false);
-
 /** One look at the window: "wait" while the mail tab is not ready, "done" once the focus moved or must stay. The focus moves only when the front tab is a mail tab with a visible folder pane and the focus is still untouched. */
 export function focus_folder_pane_when_ready(window: MainWindow): "wait" | "done" {
     const tab = tabmail_of(window)?.currentTabInfo;

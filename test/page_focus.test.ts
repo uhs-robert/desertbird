@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { focus_folder_pane_when_ready, focus_remote_tab, hook_page_focus, reset_startup_focus_claim } from "../src/chrome/page_focus.ts";
+import { focus_folder_pane_when_ready, focus_remote_tab } from "../src/chrome/page_focus.ts";
 import { stub_platform } from "./chrome_stubs.ts";
 
 function window_with(active: { localName: string } | null, browser: { isRemoteBrowser: boolean } | null, mode = "contentTab") {
@@ -52,8 +52,8 @@ test("an element the user focused keeps the focus, and a page that is not remote
     assert.deepEqual(none.focused, []);
 });
 
-test("every main window is hooked on load, and unhooked on unload and on stop", () => {
-    reset_startup_focus_claim();
+test("every main window is hooked on load, and unhooked on unload and on stop", async () => {
+    const hook_page_focus = await fresh_hook_page_focus();
     const platform = stub_platform();
     try {
         const stop = hook_page_focus();
@@ -114,8 +114,12 @@ function startup_window(options: StartupOptions = {}) {
     return { window: window as never, state, focused, timers };
 }
 
-function hooked(...windows: { window: never }[]) {
-    reset_startup_focus_claim();
+let instance = 0;
+// The once-only startup claim lives in module state, so each case loads its own copy of the module.
+const fresh_hook_page_focus = async () => (await import(`../src/chrome/page_focus.ts?instance=${instance++}`) as typeof import("../src/chrome/page_focus.ts")).hook_page_focus;
+
+async function hooked(...windows: { window: never }[]) {
+    const hook_page_focus = await fresh_hook_page_focus();
     const platform = stub_platform();
     const stop = hook_page_focus();
     const [listener] = [...platform.window_listeners.values()] as { onLoadWindow(window: never): void }[];
@@ -128,9 +132,9 @@ function hooked(...windows: { window: never }[]) {
     };
 }
 
-test("the first window gets the folder tree focus once the mail tab is ready", () => {
+test("the first window gets the folder tree focus once the mail tab is ready", async () => {
     const first = startup_window({ ready_state: "loading" });
-    const hook = hooked(first);
+    const hook = await hooked(first);
     try {
         assert.deepEqual(first.focused, [], "the page is not ready yet");
         assert.equal(first.timers.length, 1, "a poll is waiting");
@@ -143,9 +147,9 @@ test("the first window gets the folder tree focus once the mail tab is ready", (
     }
 });
 
-test("no mail tab yet is waited out, and the focus lands once the tab appears", () => {
+test("no mail tab yet is waited out, and the focus lands once the tab appears", async () => {
     const first = startup_window({ has_tab: false });
-    const hook = hooked(first);
+    const hook = await hooked(first);
     try {
         assert.equal(first.timers.length, 1);
         first.state.has_tab = true;
@@ -156,9 +160,9 @@ test("no mail tab yet is waited out, and the focus lands once the tab appears", 
     }
 });
 
-test("a hidden folder pane keeps the focus where it is", () => {
+test("a hidden folder pane keeps the focus where it is", async () => {
     const first = startup_window({ folder_pane_visible: false });
-    const hook = hooked(first);
+    const hook = await hooked(first);
     try {
         assert.deepEqual(first.focused, []);
         assert.equal(first.timers.length, 0, "nothing is left to wait for");
@@ -167,10 +171,10 @@ test("a hidden folder pane keeps the focus where it is", () => {
     }
 });
 
-test("a front tab that is not a mail tab keeps the focus", () => {
+test("a front tab that is not a mail tab keeps the focus", async () => {
     for (const mode of ["contentTab", "calendar", "chat", "mailMessageTab"]) {
         const first = startup_window({ mode });
-        const hook = hooked(first);
+        const hook = await hooked(first);
         try {
             assert.deepEqual(first.focused, [], mode);
             assert.equal(first.timers.length, 0, mode);
@@ -180,10 +184,10 @@ test("a front tab that is not a mail tab keeps the focus", () => {
     }
 });
 
-test("focus the user already moved stays, and an empty or body focus counts as untouched", () => {
+test("focus the user already moved stays, and an empty or body focus counts as untouched", async () => {
     for (const active of ["input", "folder_tree"] as const) {
         const first = startup_window({ active });
-        const hook = hooked(first);
+        const hook = await hooked(first);
         try {
             assert.deepEqual(first.focused, [], active);
         } finally {
@@ -192,7 +196,7 @@ test("focus the user already moved stays, and an empty or body focus counts as u
     }
     for (const active of ["none", "body"] as const) {
         const first = startup_window({ active });
-        const hook = hooked(first);
+        const hook = await hooked(first);
         try {
             assert.deepEqual(first.focused, ["folders"], active);
         } finally {
@@ -201,10 +205,10 @@ test("focus the user already moved stays, and an empty or body focus counts as u
     }
 });
 
-test("a second main window keeps Thunderbird's focus, also when the first is gone", () => {
+test("a second main window keeps Thunderbird's focus, also when the first is gone", async () => {
     const first = startup_window();
     const second = startup_window();
-    const hook = hooked(first, second);
+    const hook = await hooked(first, second);
     try {
         assert.deepEqual(first.focused, ["folders"]);
         assert.deepEqual(second.focused, [], "only the first main window of the run");
@@ -213,10 +217,10 @@ test("a second main window keeps Thunderbird's focus, also when the first is gon
     }
 });
 
-test("an add-on reload with a window that has been open a while does not move the focus", () => {
+test("an add-on reload with a window that has been open a while does not move the focus", async () => {
     const open = startup_window({ age_ms: 5 * 60_000 });
     const later = startup_window();
-    const hook = hooked(open, later);
+    const hook = await hooked(open, later);
     try {
         assert.deepEqual(open.focused, []);
         assert.equal(open.timers.length, 0);
@@ -226,9 +230,9 @@ test("an add-on reload with a window that has been open a while does not move th
     }
 });
 
-test("a window that never gets a ready mail tab gives up after the startup window, and unhooking ends the poll", () => {
+test("a window that never gets a ready mail tab gives up after the startup window, and unhooking ends the poll", async () => {
     const slow = startup_window({ ready_state: "loading" });
-    const hook = hooked(slow);
+    const hook = await hooked(slow);
     try {
         assert.equal(slow.timers.length, 1);
         slow.timers.shift()!();
@@ -238,7 +242,7 @@ test("a window that never gets a ready mail tab gives up after the startup windo
     }
     assert.equal(slow.timers.length, 0, "unhooking cancels the live poll");
     const old = startup_window({ ready_state: "loading", age_ms: 31_000 });
-    const hook2 = hooked(old);
+    const hook2 = await hooked(old);
     try {
         assert.equal(old.timers.length, 0, "past the window the poll gives up");
         assert.deepEqual(old.focused, []);
