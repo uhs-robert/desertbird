@@ -156,7 +156,7 @@ async function run_demo(instance, ctx) {
     for (let step = 0; step < THEME_STEPS_UP; step++) await key(step === 0 ? "k  Pick a theme" : null, ["k"], null, 350);
     await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
     await key("G  Bottom", ["G"], null, 700);
-    // The helper add-on cannot read another add-on's storage and the select is page DOM, so the saved theme shows as a change of the page's pixels. The k count is fixed, so a change means the page took the new theme.
+    // The helper add-on cannot read another add-on's storage and the select is page DOM, so the theme cannot be read back. A changed, settled frame proves only that the Save click landed ("Saved." shows, the hint labels go). That the theme is oasis_lagoon rests on the fixed k count.
     const before_save = await wait_pixels(instance, "the options page to hold still before Save", `${app}_demo_save_page_before`, strip_region, holds_twice(), { timeout_ms: 5000 });
     await hint_pick("save", "f  Click any button", 800);
     const settled = holds_twice();
