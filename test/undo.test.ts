@@ -683,16 +683,23 @@ test("a move into the folder while it parses fails as busy, and the undo still f
     assert.equal(mail.entries(), 0);
 });
 
-test("when FolderLoaded never fires, u refuses with the folder name, keeps the step unmarked, and a second u parses again", async () => {
+test("when FolderLoaded never fires, u refuses with the folder name and the second u parses again and drops the step", async () => {
     const mail = mail_store([inbox("a@x", 1)], { unindexed: ["receipts"], index: "never_loads" });
     await mail.run("msg.move", [1], { folder: "/Receipts" });
     await mail.run("msg.undo");
-    assert.equal(mail.notices.at(-1), "Thunderbird has not indexed /Receipts yet, so u cannot find the message. Open the folder once, then press u. The step stays.");
+    assert.equal(mail.notices.at(-1), "Thunderbird has not indexed /Receipts yet, so u cannot find the message. Open the folder once and press u, or press u again to drop this step.");
     assert.equal(mail.entries(), 1);
     assert.deepEqual(mail.places(), ["a@x@receipts"]);
     await mail.run("msg.undo");
-    assert.equal(mail.entries(), 1, "the second u does not drop the step");
+    assert.equal(mail.entries(), 0, "the second u drops the step");
     assert.equal(mail.calls.filter((call) => call.startsWith("index")).length, 2, "it tried the folder again");
+    assert.deepEqual(mail.places(), ["a@x@receipts"]);
+});
+
+test("a folder that is opened after the refusal lets the second u move the message back", async () => {
+    const mail = mail_store([inbox("a@x", 1)], { unindexed: ["receipts"], index: "never_loads" });
+    await mail.run("msg.move", [1], { folder: "/Receipts" });
+    await mail.run("msg.undo");
     mail.open_folder("receipts");
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@inbox"]);
@@ -704,13 +711,11 @@ test("an IMAP folder with no summary is refused without a parse, and the step st
     await mail.run("msg.move", [1], { folder: "/Receipts", account: "Home" });
     await mail.run("msg.undo");
     assert.deepEqual(mail.parsed, [], "no reparse of a folder that is not local");
-    assert.equal(mail.notices.at(-1), "Thunderbird has not indexed /Receipts yet, so u cannot find the message. Open the folder once, then press u. The step stays.");
+    assert.equal(mail.notices.at(-1), "Thunderbird has not indexed /Receipts yet, so u cannot find the message. Open the folder once and press u, or press u again to drop this step.");
     assert.equal(mail.entries(), 1);
     await mail.run("msg.undo");
-    assert.equal(mail.entries(), 1);
-    mail.open_folder("imap-receipts");
-    await mail.run("msg.undo");
-    assert.deepEqual(mail.places(), ["a@x@imap-inbox"]);
+    assert.equal(mail.entries(), 0, "the second u drops the step");
+    assert.deepEqual(mail.places(), ["a@x@imap-receipts"]);
 });
 
 test("a message truly gone from an indexed folder still takes two u, after an unindexed step was refused", async () => {
