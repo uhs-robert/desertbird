@@ -706,7 +706,7 @@ test("a folder that is opened after the refusal lets the second u move the messa
     assert.equal(mail.entries(), 0);
 });
 
-test("an IMAP folder with no summary is refused without a parse, and the step stays for the next u", async () => {
+test("an IMAP folder with no summary is refused without a parse, and the second u drops the step", async () => {
     const mail = mail_store([{ id: 1, header: "a@x", folder: "imap-inbox" }], { unindexed: ["imap-receipts"] });
     await mail.run("msg.move", [1], { folder: "/Receipts", account: "Home" });
     await mail.run("msg.undo");
