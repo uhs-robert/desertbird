@@ -696,6 +696,21 @@ test("when FolderLoaded never fires, u refuses with the folder name and the seco
     assert.deepEqual(mail.places(), ["a@x@receipts"]);
 });
 
+test("a step whose folder never indexes no longer blocks an older delete behind it", async () => {
+    const mail = mail_store([inbox("a@x", 1), inbox("b@x", 2)], { unindexed: ["receipts"], index: "never_loads" });
+    await mail.run("msg.delete", [2]);
+    await mail.run("msg.move", [1], { folder: "/Receipts" });
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 2);
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 1, "the second u drops the move step");
+    assert.equal(mail.notices.at(-1), "Dropped the move step. Dropped 1 message that is no longer in the folder of the move.");
+    assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@trash"]);
+    await mail.run("msg.undo");
+    assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@inbox"]);
+    assert.equal(mail.entries(), 0);
+});
+
 test("a folder that is opened after the refusal lets the second u move the message back", async () => {
     const mail = mail_store([inbox("a@x", 1)], { unindexed: ["receipts"], index: "never_loads" });
     await mail.run("msg.move", [1], { folder: "/Receipts" });
