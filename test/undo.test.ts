@@ -704,7 +704,7 @@ test("a step whose folder never indexes no longer blocks an older delete behind 
     assert.equal(mail.entries(), 2);
     await mail.run("msg.undo");
     assert.equal(mail.entries(), 1, "the second u drops the move step");
-    assert.equal(mail.notices.at(-1), "Dropped the move step. Dropped 1 message that is no longer in the folder of the move.");
+    assert.equal(mail.notices.at(-1), "Dropped the move step. Thunderbird has not indexed the folder of the move.");
     assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@trash"]);
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@inbox"]);
@@ -730,6 +730,7 @@ test("an IMAP folder with no summary is refused without a parse, and the second 
     assert.equal(mail.entries(), 1);
     await mail.run("msg.undo");
     assert.equal(mail.entries(), 0, "the second u drops the step");
+    assert.equal(mail.notices.at(-1), "Dropped the move step. Thunderbird has not indexed the folder of the move.");
     assert.deepEqual(mail.places(), ["a@x@imap-receipts"]);
 });
 

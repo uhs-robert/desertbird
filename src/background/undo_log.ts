@@ -44,8 +44,8 @@ export interface TagItem {
 export type MoveAction = "delete" | "archive" | "move";
 export type StateField = "read" | "flagged" | "junk";
 
-/** `refused` marks an entry whose undo found a message missing once. The next undo of it drops what is still missing. */
-export type UndoEntry = NewUndoEntry & { id: string; refused?: true };
+/** `refused` marks an entry whose undo found a message missing once. The next undo of it drops what is still missing. `refused_for` says why: "unindexed" is a folder Thunderbird has not indexed, and no value is a message that is gone. */
+export type UndoEntry = NewUndoEntry & { id: string; refused?: true; refused_for?: "unindexed" };
 
 /** An entry before the log gives it an id. */
 export type NewUndoEntry = { kind: "moved"; action: MoveAction; items: MovedItem[] } | { kind: "state"; field: StateField; items: StateItem[] } | { kind: "tag"; items: TagItem[] };
@@ -61,6 +61,7 @@ export interface UndoOutcome {
     left: UndoEntry["items"];
     refusal?: string;
     refused?: true;
+    refused_for?: "unindexed";
     undone?: number;
     dropped?: number;
 }
@@ -150,7 +151,7 @@ export function create_undo_log(api: RecordStorageApi): UndoLog {
             const entry = (await store.read()).entries.find((other) => other.id === taken.id);
             if (entry === undefined) return undefined;
             const outcome = await undo(entry);
-            const left = outcome.left.length === 0 ? undefined : ({ ...entry, items: outcome.left, ...(outcome.refused && { refused: true }) } as UndoEntry);
+            const left = outcome.left.length === 0 ? undefined : ({ ...entry, items: outcome.left, ...(outcome.refused && { refused: true, ...(outcome.refused_for && { refused_for: outcome.refused_for }) }) } as UndoEntry);
             await store.update((record) => ({ value: { ...record, entries: record.entries.flatMap((other) => (other.id !== entry.id ? [other] : left ? [left] : [])) }, result: undefined }));
             return { entry, outcome };
         });
