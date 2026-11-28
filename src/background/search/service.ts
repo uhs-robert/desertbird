@@ -102,7 +102,11 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     // The tab a search or an `n` began in is still the one in front with the same folder.
     async function shows(window_id: number, tab_id: number, folder_id: string): Promise<boolean> {
-        const tab = await find_active_mail_tab(scope_of(window_id));
+        // A folder still in its first display is never the one the search began in, which was displayed already.
+        const tab = await find_active_mail_tab(scope_of(window_id)).catch((error: unknown) => {
+            if (error instanceof RuntimeRefusal) return undefined;
+            throw error;
+        });
         return tab?.id === tab_id && tab.displayedFolder?.id === folder_id;
     }
 
