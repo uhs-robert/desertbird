@@ -704,7 +704,7 @@ test("a step whose folder never indexes no longer blocks an older delete behind 
     assert.equal(mail.entries(), 2);
     await mail.run("msg.undo");
     assert.equal(mail.entries(), 1, "the second u drops the move step");
-    assert.equal(mail.notices.at(-1), "Dropped the move step. Thunderbird has not indexed the folder of the move.");
+    assert.equal(mail.notices.at(-1), "Dropped the move step. Dropped 1 message in the folder of the move, which Thunderbird has not indexed.");
     assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@trash"]);
     await mail.run("msg.undo");
     assert.deepEqual(mail.places(), ["a@x@receipts", "b@x@inbox"]);
@@ -730,8 +730,19 @@ test("an IMAP folder with no summary is refused without a parse, and the second 
     assert.equal(mail.entries(), 1);
     await mail.run("msg.undo");
     assert.equal(mail.entries(), 0, "the second u drops the step");
-    assert.equal(mail.notices.at(-1), "Dropped the move step. Thunderbird has not indexed the folder of the move.");
+    assert.equal(mail.notices.at(-1), "Dropped the move step. Dropped 1 message in the folder of the move, which Thunderbird has not indexed.");
     assert.deepEqual(mail.places(), ["a@x@imap-receipts"]);
+});
+
+test("a step with one copy found and one in an unindexed folder says what it undid and what it dropped", async () => {
+    const mail = mail_store([inbox("a@x", 1), { id: 2, header: "b@x", folder: "imap-inbox" }], { unindexed: ["imap-trash"] });
+    await mail.run("msg.delete", [1, 2]);
+    await mail.run("msg.undo");
+    assert.equal(mail.entries(), 1);
+    await mail.run("msg.undo");
+    assert.equal(mail.notices.at(-1), "Undid the delete of 1 message. Dropped 1 message in Trash, which Thunderbird has not indexed.");
+    assert.deepEqual(mail.places(), ["a@x@inbox", "b@x@imap-trash"]);
+    assert.equal(mail.entries(), 0);
 });
 
 test("a message truly gone from an indexed folder still takes two u, after an unindexed step was refused", async () => {

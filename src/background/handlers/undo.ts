@@ -373,6 +373,6 @@ export async function undo(scope: UndoScope): Promise<void> {
     const dropped = outcome.dropped ?? 0;
     const undid = (outcome.undone ?? 0) > 0 ? `Undid the ${step} of ${plural(outcome.undone ?? 0)}.` : `Dropped the ${step} step.`;
     const gone = ` Dropped ${plural(dropped)} that ${dropped === 1 ? "is" : "are"} no longer in ${where_of(entry)}.`;
-    const note = dropped === 0 ? "" : entry.refused_for === "unindexed" ? ` Thunderbird has not indexed ${where_of(entry)}.` : gone;
+    const note = dropped === 0 ? "" : entry.refused_for === "unindexed" ? ` Dropped ${plural(dropped)} in ${where_of(entry)}, which Thunderbird has not indexed.` : gone;
     await notify_result(scope.api, undid + note, scope.window_id);
 }
