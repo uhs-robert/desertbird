@@ -29,7 +29,7 @@
         "open_in_tab": true
     },
     "permissions": ["accountsFolders", "accountsRead", "alarms", "clipboardWrite", "compose", "compose.save", "downloads", "messagesDelete", "messagesModify", "messagesMove", "messagesRead", "messagesTags", "messagesTagsList", "messagesUpdate", "notifications", "storage", "tabs"],
-    "optional_permissions": ["nativeMessaging"],
+    "optional_permissions": ["addressBooks", "nativeMessaging"],
     "message_display_scripts": [{ "js": ["content/message_display.js"] }],
     "experiment_apis": {
         "keys": {

@@ -283,6 +283,17 @@ test("a read frame goes to the reads with its fields and comes back in the reply
     assert.deepEqual(last().posted, [{ ok: true, verb_read: "message", id: 12, verb: "reply", request_id: 4 }]);
 });
 
+test("a contacts frame is a read, and a verb that is not fixed is still dropped", async () => {
+    const { bridge, last, ready } = bridge_under_test();
+    await bridge.start();
+    await ready();
+    last().posted.length = 0;
+    last().host_says({ verb: "contacts", request_id: 7, query: "ann" });
+    last().host_says({ verb: "contact", request_id: 8 });
+    await settle();
+    assert.deepEqual(last().posted, [{ ok: true, verb_read: "contacts", id: undefined, verb: "reply", request_id: 7 }]);
+});
+
 test("a draft frame goes to the drafts with its fields, and a throw answers fixed text", async () => {
     const { bridge, last, ready } = bridge_under_test();
     await bridge.start();

@@ -68,6 +68,7 @@ The other permissions are the ones the commands need:
 | `tabs` | Tab keys |
 | `clipboardWrite` | The yank keys |
 | `downloads` | `ga` saves attachments to `Downloads/DesertBird/` |
+| `addressBooks` (optional) | The bridge contact lookup. Thunderbird asks for it when you save `bridge_share_contacts` as true. The add-on only searches contacts |
 | `nativeMessaging` (optional) | The native host. Thunderbird asks for it when you save `external_editor` or `bridge` as true on the options page |
 
 DesertBird makes no network request of its own. See [docs/privacy.md](docs/privacy.md).
@@ -280,7 +281,7 @@ Open a group for the details. [docs/keymap.md](docs/keymap.md) lists every defau
 - Choose when the mode label shows with `mode_indicator`.
 - Bridge: it is off by default and nothing connects until you turn it on. See [docs/privacy.md](docs/privacy.md) for what it can pass to programs on your own computer. The `bridge` setting lets the DesertFox bridge host connect, so a desktop bar can show the mode and a script can run a few safe commands, such as `pane.toggle folder` or `step.unread`. The add-on needs the `nativeMessaging` permission for this. It is an optional permission: Thunderbird shows "Exchange messages with programs other than Thunderbird" as a prompt when you turn `bridge` on and press Save on the options page. If you deny it, the setting is not saved. Nothing connects while `bridge` is off, which is the default. While it is on, the add-on sends the mode of the focused window and the ids of that window and its active tab, plus the list of commands the bridge allows. Commands that send mail, delete it for good or open a link never run through the bridge. Archive, trash and move run only when `bridge_allow_actions` is on and you press `y` on a prompt in Thunderbird.
 
-Four more settings, each off by default and each inert while `bridge` is off, let a script read mail:
+Five more settings, each off by default and each inert while `bridge` is off, let a script read mail or look up a contact:
 
 | Setting | What leaves Thunderbird |
 | --- | --- |
@@ -288,8 +289,9 @@ Four more settings, each off by default and each inert while `bridge` is off, le
 | `bridge_share_headers` | Sender, subject, date and read and flagged state of the messages in one folder, at most 200 at a time. Needs `bridge_share_folders` on too |
 | `bridge_share_bodies` | The text of one message, with `bridge_share_headers` on too. HTML turns into plain text, the text is cut at 64 KiB, and an encrypted message is never sent |
 | `bridge_share_attachments` | Attachment names, sizes and types. Never the files |
+| `bridge_share_contacts` | Name and email address of at most 20 contacts that match a search of at least 2 characters per word, in local address books only. Needs the optional `addressBooks` permission, which Thunderbird asks for when you save this setting as true. No phone, address, note, photo or mailing list |
 
-With all four off, the bridge sends no mail, no folder names and no tags.
+With all five off, the bridge sends no mail, no folder names, no tags and no contacts.
 
 Two settings let a script write, each off by default and inert while `bridge` is off:
 
@@ -307,7 +309,7 @@ Saving a draft needs the `compose.save` permission, which Thunderbird shows on i
 - Thunderbird 153 does not support action buttons on notifications, so DesertBird notifications have none.
 - Some keys stay Thunderbird's, such as `Ctrl+Enter` and `Ctrl+S` in the compose window. A single key that is missing from a table reaches Thunderbird. See [docs/thunderbird-behavior.md](docs/thunderbird-behavior.md).
 - The privileged part is an Experiment, and it can break when Thunderbird internals change between ESR releases. A fixed table of calls keeps the breakage in one small file. See [Risks](docs/design.md#risks).
-- The `nativeMessaging` permission is optional. The options page asks for it when you save `external_editor` or `bridge` as true. A key or a bridge start with no grant refuses with a message that says how to grant it. The native host itself is optional too.
+- The `nativeMessaging` permission is optional. The options page asks for it when you save `external_editor` or `bridge` as true. The `addressBooks` permission is optional too and is asked for when you save `bridge_share_contacts` as true. A key or a bridge start with no grant refuses with a message that says how to grant it. The native host itself is optional too.
 - A first install opens the help page once. An update does not.
 
 ## 🔒 Privacy

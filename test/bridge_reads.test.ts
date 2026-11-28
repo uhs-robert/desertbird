@@ -5,12 +5,12 @@ import type { ReadVerb, ReadsApi, ShareSettings } from "../src/background/bridge
 import { SETTING_DEFAULTS } from "../src/background/config/settings.ts";
 import { fake_reads_api } from "./fake_api.ts";
 
-const ALL_ON: ShareSettings = { bridge: true, bridge_share_headers: true, bridge_share_bodies: true, bridge_share_attachments: true, bridge_share_folders: true };
+const ALL_ON: ShareSettings = { bridge: true, bridge_share_headers: true, bridge_share_bodies: true, bridge_share_attachments: true, bridge_share_folders: true, bridge_share_contacts: true };
 
-function reads_under_test(options: Parameters<typeof fake_reads_api>[0] = {}, settings: Partial<ShareSettings> = {}) {
+function reads_under_test(options: Parameters<typeof fake_reads_api>[0] = {}, settings: Partial<ShareSettings> = {}, address_books = true) {
     const { api, calls } = fake_reads_api(options);
     const current = { ...ALL_ON, ...settings };
-    const reads = create_bridge_reads({ api: api as unknown as ReadsApi, read_settings: async () => current });
+    const reads = create_bridge_reads({ api: api as unknown as ReadsApi, read_settings: async () => current, address_books_granted: async () => (calls.push("permission"), address_books) });
     return { read: (verb: ReadVerb, request: Record<string, unknown> = {}) => reads.read(verb, request), calls, settings: current };
 }
 
@@ -18,8 +18,8 @@ const INBOX = { id: "a1://INBOX", name: "Inbox", path: "/INBOX", accountId: "a1"
 const header = (id: number, extra: object = {}) => ({ id, folder: INBOX.id, author: "Ann <ann@x.invalid>", subject: `Subject ${id}`, date: new Date(Date.UTC(2026, 0, id)), recipients: ["me@x.invalid"], ...extra });
 const text_part = (body: string, type = "text/plain") => ({ contentType: "message/rfc822", parts: [{ contentType: type, body }] });
 
-test("the four share settings default to off", () => {
-    assert.deepEqual([SETTING_DEFAULTS.bridge, SETTING_DEFAULTS.bridge_share_headers, SETTING_DEFAULTS.bridge_share_bodies, SETTING_DEFAULTS.bridge_share_attachments, SETTING_DEFAULTS.bridge_share_folders], [false, false, false, false, false]);
+test("the five share settings default to off", () => {
+    assert.deepEqual([SETTING_DEFAULTS.bridge, SETTING_DEFAULTS.bridge_share_headers, SETTING_DEFAULTS.bridge_share_bodies, SETTING_DEFAULTS.bridge_share_attachments, SETTING_DEFAULTS.bridge_share_folders, SETTING_DEFAULTS.bridge_share_contacts], [false, false, false, false, false, false]);
 });
 
 test("each read refuses while its setting is off and makes no API call", async () => {
@@ -30,10 +30,11 @@ test("each read refuses while its setting is off and makes no API call", async (
         ["message", { bridge_share_bodies: false }, /bridge_share_bodies/],
         ["message", { bridge_share_headers: false }, /bridge_share_headers/],
         ["attachments", { bridge_share_attachments: false }, /bridge_share_attachments/],
+        ["contacts", { bridge_share_contacts: false }, /bridge_share_contacts/],
     ];
     for (const [verb, settings, pattern] of cases) {
         const { read, calls } = reads_under_test({ folders: [INBOX], headers: [header(1)] }, settings);
-        const answer = await read(verb, { id: 1, folder: INBOX.id });
+        const answer = await read(verb, { id: 1, folder: INBOX.id, query: "ann" });
         assert.equal(answer.ok, false, verb);
         assert.match((answer as { message: string }).message, pattern, verb);
         assert.deepEqual(calls, [], verb);
@@ -41,9 +42,9 @@ test("each read refuses while its setting is off and makes no API call", async (
 });
 
 test("every share setting is inert while bridge is off", async () => {
-    for (const verb of ["folders", "messages", "message", "attachments"] as const) {
+    for (const verb of ["folders", "messages", "message", "attachments", "contacts"] as const) {
         const { read, calls } = reads_under_test({ folders: [INBOX], headers: [header(1)] }, { bridge: false });
-        assert.deepEqual(await read(verb, { id: 1, folder: INBOX.id }), { ok: false, message: "the bridge is off, set bridge to true" });
+        assert.deepEqual(await read(verb, { id: 1, folder: INBOX.id, query: "ann" }), { ok: false, message: "the bridge is off, set bridge to true" });
         assert.deepEqual(calls, []);
     }
 });
@@ -185,4 +186,92 @@ test("messages finds the newest rows of the whole folder, however large", async 
     const answer = (await read("messages", { folder: INBOX.id, limit: 3 })) as unknown as { messages: { id: number }[]; truncated: boolean };
     assert.deepEqual(answer.messages.map((row) => row.id), [25_000, 24_999, 24_998]);
     assert.equal(answer.truncated, true);
+});
+
+const card = (extra: object = {}, properties: object = {}) => ({ id: "c1", parentId: "b1", type: "contact", readOnly: false, remote: false, vCard: "BEGIN:VCARD\nTEL:555\nEND:VCARD", properties: { DisplayName: "Ann Lee", PrimaryEmail: "ann@x.invalid", CellularNumber: "555", Notes: "secret", ...properties }, ...extra });
+
+test("contacts searches local books only, with every flag spelled out", async () => {
+    const { read, calls } = reads_under_test({ contacts: [card()] });
+    await read("contacts", { query: "  ann   lee " });
+    assert.deepEqual(calls.filter((call) => call !== "permission"), ['contacts.quickSearch {"searchString":"ann lee","includeLocal":true,"includeRemote":false,"includeReadOnly":true,"includeReadWrite":true}']);
+});
+
+test("contacts returns the name and bare addresses only, marked untrusted", async () => {
+    const { read } = reads_under_test({ contacts: [card({}, { SecondEmail: "ann2@x.invalid" })] });
+    assert.deepEqual(await read("contacts", { query: "ann" }), { ok: true, contacts: [{ name: "Ann Lee", emails: ["ann@x.invalid", "ann2@x.invalid"] }], untrusted: true, truncated: false });
+});
+
+test("contacts leaks no vCard, phone or note, and no photo or id", async () => {
+    const { read } = reads_under_test({ contacts: [card()] });
+    assert.doesNotMatch(JSON.stringify(await read("contacts", { query: "ann" })), /555|secret|VCARD|b1|c1/);
+});
+
+test("contacts drops a remote node, a mailing list and a card without a usable address", async () => {
+    const { read } = reads_under_test({ contacts: [card({ remote: true }), card({ type: "mailingList" }), card({}, { PrimaryEmail: "" }), card({}, { PrimaryEmail: "Ann <ann@x.invalid>" }), card({}, { DisplayName: "Bo", PrimaryEmail: "bo@x.invalid" })] });
+    assert.deepEqual(((await read("contacts", { query: "bo" })) as unknown as { contacts: unknown[] }).contacts, [{ name: "Bo", emails: ["bo@x.invalid"] }]);
+});
+
+test("contacts cleans control and bidi characters and falls back to first and last name", async () => {
+    const { read } = reads_under_test({ contacts: [card({}, { DisplayName: "", FirstName: "A\u202Enn\u0007", LastName: "Lee", PrimaryEmail: "an\u200Bn@x.invalid" })] });
+    assert.deepEqual(((await read("contacts", { query: "ann" })) as unknown as { contacts: unknown[] }).contacts, [{ name: "Ann Lee", emails: ["ann@x.invalid"] }]);
+});
+
+test("contacts returns at most 20 rows and says truncated", async () => {
+    const many = Array.from({ length: 30 }, (_, index) => card({}, { DisplayName: `P${index}`, PrimaryEmail: `p${index}@x.invalid` }));
+    const { read } = reads_under_test({ contacts: many });
+    const answer = (await read("contacts", { query: "pp" })) as unknown as { contacts: unknown[]; truncated: boolean };
+    assert.equal(answer.contacts.length, 20);
+    assert.equal(answer.truncated, true);
+    const fewer = (await read("contacts", { query: "pp", limit: 5 })) as unknown as { contacts: unknown[] };
+    assert.equal(fewer.contacts.length, 5);
+});
+
+test("contacts refuses a short query with a fixed text and no search", async () => {
+    for (const query of ["", " ", "a", " a ", "ann b", "a bc", "\u00e9"]) {
+        const { read, calls } = reads_under_test({ contacts: [card()] });
+        const answer = (await read("contacts", { query })) as { ok: boolean; message: string };
+        assert.equal(answer.ok, false, JSON.stringify(query));
+        assert.match(answer.message, /too short/, JSON.stringify(query));
+        assert.ok(!calls.some((call) => call.startsWith("contacts.")), JSON.stringify(query));
+        assert.doesNotMatch(answer.message, new RegExp(`"${query.trim()}"`));
+    }
+});
+
+test("contacts counts characters, so two code points pass", async () => {
+    const { read } = reads_under_test({ contacts: [card()] });
+    assert.equal(((await read("contacts", { query: "\u{1F600}\u{1F600}" })) as { ok: boolean }).ok, true);
+});
+
+test("contacts refuses bad fields without a search", async () => {
+    for (const request of [{}, { query: 5 }, { query: "x".repeat(101) }, { query: "an\nn" }, { query: "an\u202Eer" }, { query: "ab cd ef gh ij kl" }, { query: "ann", limit: 0 }, { query: "ann", limit: 21 }, { query: "ann", limit: 1.5 }, { query: "ann", limit: "2" }]) {
+        const { read, calls } = reads_under_test({ contacts: [card()] });
+        assert.deepEqual(await read("contacts", request), { ok: false, message: "the request has a missing or bad field" }, JSON.stringify(request));
+        assert.ok(!calls.some((call) => call.startsWith("contacts.")));
+    }
+});
+
+test("contacts refuses while the addressBooks permission is missing, and makes no search", async () => {
+    const { read, calls } = reads_under_test({ contacts: [card()] }, {}, false);
+    const answer = (await read("contacts", { query: "ann" })) as { ok: boolean; message: string };
+    assert.equal(answer.ok, false);
+    assert.match(answer.message, /addressBooks permission is not granted.*bridge_share_contacts/);
+    assert.deepEqual(calls, ["permission"]);
+});
+
+test("contacts checks the permission at each request", async () => {
+    const { api } = fake_reads_api({ contacts: [card()] });
+    let granted = true;
+    const reads = create_bridge_reads({ api: api as unknown as ReadsApi, read_settings: async () => ALL_ON, address_books_granted: async () => granted });
+    assert.equal((await reads.read("contacts", { query: "ann" })).ok, true);
+    granted = false;
+    assert.equal((await reads.read("contacts", { query: "ann" })).ok, false);
+});
+
+test("contacts answers a fixed refusal when the search throws", async () => {
+    const { api } = fake_reads_api();
+    api.contacts.quickSearch = async () => {
+        throw new Error("secret detail ann");
+    };
+    const reads = create_bridge_reads({ api: api as unknown as ReadsApi, read_settings: async () => ALL_ON, address_books_granted: async () => true });
+    assert.deepEqual(await reads.read("contacts", { query: "ann" }), { ok: false, message: "the address book could not be searched" });
 });

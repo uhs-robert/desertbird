@@ -60,7 +60,7 @@ import { create_compose_markdown } from "./compose_markdown.ts";
 import type { MarkdownGlobals } from "./compose_markdown.ts";
 import { EDITOR_HOST_NAME, create_compose_requests, create_editor_client, create_external_editor } from "./external_editor.ts";
 import { HELP_PAGE } from "./handlers/help.ts";
-import { require_native_permission, missing_permission_message } from "./native_permission.ts";
+import { ADDRESS_BOOKS_PERMISSION, require_native_permission, missing_permission_message } from "./native_permission.ts";
 import type { PermissionsApi } from "./native_permission.ts";
 import { best_effort, ignore_refusal, refused_as } from "../shared/swallow.ts";
 
@@ -351,7 +351,7 @@ const last_focused_main_window = async (): Promise<number | undefined> => {
     return window?.id !== undefined && window.type === "normal" ? window.id : undefined;
 };
 const bridge_run = create_bridge_run({ target_window: last_focused_main_window, route: (invocation) => router.route(invocation) });
-const bridge_reads = create_bridge_reads({ api: messenger as unknown as ReadsApi, read_settings: async () => (await config_store.read()).settings });
+const bridge_reads = create_bridge_reads({ api: messenger as unknown as ReadsApi, read_settings: async () => (await config_store.read()).settings, address_books_granted: () => messenger.permissions.contains({ permissions: [ADDRESS_BOOKS_PERMISSION] }) });
 const bridge_drafts = create_bridge_drafts({ api: messenger as unknown as DraftsApi, read_settings: async () => (await config_store.read()).settings, timers: { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) } });
 const bridge_acts = create_bridge_acts({ api: handler_api as unknown as ActsApi, read_settings: async () => (await config_store.read()).settings, request_confirm: (request) => confirm.request_confirm(request), target_window: () => last_focused_main_window() });
 const bridge = create_bridge_port({

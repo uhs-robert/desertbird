@@ -10,7 +10,7 @@ The `options_ui` page of the add-on. It opens in a tab, lists the settings, the 
 
 ## Native host settings
 
-A save that sets `external_editor` or `bridge` to true first calls `permissions.request` for `nativeMessaging`, before any other await, because the request needs the user gesture of the Save click. A denial stops the save and says so in the status line. Nothing else is written then.
+A save that sets `external_editor` or `bridge` to true needs `nativeMessaging`, and one that sets `bridge_share_contacts` to true needs `addressBooks`. It first calls `permissions.request` once for what the save needs, before any other await, because the request needs the user gesture of the Save click. A denial stops the save and says so in the status line. Nothing else is written then.
 
 ## Quick replies
 
