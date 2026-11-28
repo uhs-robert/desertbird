@@ -190,7 +190,7 @@ test("messages finds the newest rows of the whole folder, however large", async 
 
 const card = (extra: object = {}, properties: object = {}) => ({ id: "c1", parentId: "b1", type: "contact", readOnly: false, remote: false, vCard: "BEGIN:VCARD\nTEL:555\nEND:VCARD", properties: { DisplayName: "Ann Lee", PrimaryEmail: "ann@x.invalid", CellularNumber: "555", Notes: "secret", ...properties }, ...extra });
 
-test("contacts searches local books only, with every flag spelled out", async () => {
+test("contacts leaves out remote (LDAP) books and searches the rest, with every flag spelled out", async () => {
     const { read, calls } = reads_under_test({ contacts: [card()] });
     await read("contacts", { query: "  ann   lee " });
     assert.deepEqual(calls.filter((call) => call !== "permission"), ['contacts.quickSearch {"searchString":"ann lee","includeLocal":true,"includeRemote":false,"includeReadOnly":true,"includeReadWrite":true}']);
