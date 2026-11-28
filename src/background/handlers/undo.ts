@@ -289,7 +289,7 @@ async function undo_entry(api: UndoApi, entry: UndoEntry, indexed: Set<string>):
     // A refused step, and a folder whose parse just finished, take the mark-then-drop path below: another internal error behind the same generic text must not keep a step, and the older steps behind it, forever.
     const unindexed = missing > 0 && entry.refused !== true ? (await unindexed_folder_ids(api, found)).filter((id) => !indexed.has(id)) : [];
     // Every unindexed folder was tried before this lookup and stayed unindexed (IMAP, or a parse past the timeout). Marked refused so the next `u` takes the drop path.
-    if (unindexed.length > 0) return { left: entry.items, refused: true, refusal: await unindexed_refusal(api, unindexed) };
+    if (unindexed.length > 0) return { left: entry.items, refused: true, refused_for: "unindexed", refusal: await unindexed_refusal(api, unindexed) };
     if (missing > 0 && entry.refused !== true) {
         const which = missing === found.length ? (found.length === 1 ? "The message is" : "The messages are") : `${missing} of ${plural(found.length)} are`;
         return { left: entry.items, refused: true, refusal: `${which} no longer in ${where_of(entry)}, so nothing changed. Press u again to drop this step.` };
@@ -372,6 +372,7 @@ export async function undo(scope: UndoScope): Promise<void> {
     const step = UNDONE[entry.kind === "moved" ? entry.action : entry.kind === "tag" ? "tag" : entry.field];
     const dropped = outcome.dropped ?? 0;
     const undid = (outcome.undone ?? 0) > 0 ? `Undid the ${step} of ${plural(outcome.undone ?? 0)}.` : `Dropped the ${step} step.`;
-    const note = dropped === 0 ? "" : ` Dropped ${plural(dropped)} that ${dropped === 1 ? "is" : "are"} no longer in ${where_of(entry)}.`;
+    const gone = ` Dropped ${plural(dropped)} that ${dropped === 1 ? "is" : "are"} no longer in ${where_of(entry)}.`;
+    const note = dropped === 0 ? "" : entry.refused_for === "unindexed" ? ` Thunderbird has not indexed ${where_of(entry)}.` : gone;
     await notify_result(scope.api, undid + note, scope.window_id);
 }
