@@ -289,7 +289,7 @@ Five more settings, each off by default and each inert while `bridge` is off, le
 | `bridge_share_headers` | Sender, subject, date and read and flagged state of the messages in one folder, at most 200 at a time. Needs `bridge_share_folders` on too |
 | `bridge_share_bodies` | The text of one message, with `bridge_share_headers` on too. HTML turns into plain text, the text is cut at 64 KiB, and an encrypted message is never sent |
 | `bridge_share_attachments` | Attachment names, sizes and types. Never the files |
-| `bridge_share_contacts` | Name and email address of at most 20 contacts that match a search of at least 2 characters per word, in local address books only. Needs the optional `addressBooks` permission, which Thunderbird asks for when you save this setting as true. No phone, address, note, photo or mailing list |
+| `bridge_share_contacts` | Name and email address of at most 20 contacts that match a search of at least 2 characters per word, in the address books on your device (LDAP books are not searched, and a synced CardDAV book is). Needs the optional `addressBooks` permission, which Thunderbird asks for when you save this setting as true. No phone, address, note, photo or mailing list |
 
 With all five off, the bridge sends no mail, no folder names, no tags and no contacts.
 
