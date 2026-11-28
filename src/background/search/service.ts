@@ -6,7 +6,7 @@ import { RuntimeRefusal } from "../../../vendor/desertfox/command.ts";
 import { describe_match, opposite, step_match } from "../../../vendor/desertfox/find_match.ts";
 import type { AppApi, CmdlineSearchNote, FilterApi, FolderpaneApi, SearchDirection, ViewRow } from "../../shared/protocol.ts";
 import type { ThreadViewApi } from "../handlers/thread_view.ts";
-import { active_mail_tab, apply_filter, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
+import { apply_filter, find_active_mail_tab, filters_ready, forget_filter, list_mail_tab, remembered_filter } from "../handlers/view.ts";
 import type { AppliedFilter } from "../handlers/view.ts";
 import type { Timers } from "../hud/toasts.ts";
 import { create_folder_search } from "./folder_search.ts";
@@ -19,6 +19,7 @@ export const SEARCH_DEBOUNCE_MS = 150;
 // How often a count asks whether Thunderbird still fills the filtered list, and how long a keystroke or `n` asks. A search that runs on past the limit (a saved search over remote folders, a search that never ends) stops that count with a message. Enter waits with no limit.
 const LIST_FILLED_POLL_MS = 100;
 export const LIST_FILLED_LIMIT_MS = 5000;
+const TAB_OR_FOLDER_CHANGED = "The tab or folder changed, so the search ended.";
 const STILL_SEARCHING = "Thunderbird's search still runs after 5 s, so there is no count yet. Try again when it ends.";
 
 export type SearchApi = { mailTabs: ThreadViewApi["mailTabs"] & { get(tab_id: number): Promise<{ displayedFolder?: { id: string } | null }> } } & { app?: Pick<AppApi, "viewRows" | "paneFocus">; folderpane?: ThreadViewApi["folderpane"]; filter?: FilterApi | undefined } & Partial<Pick<FolderSearchApi, "folders">>;
@@ -101,8 +102,8 @@ export function create_search_service(deps: SearchDeps): SearchService {
 
     // The tab a search or an `n` began in is still the one in front with the same folder.
     async function shows(window_id: number, tab_id: number, folder_id: string): Promise<boolean> {
-        const tab = await active_mail_tab(scope_of(window_id));
-        return tab.id === tab_id && tab.displayedFolder?.id === folder_id;
+        const tab = await find_active_mail_tab(scope_of(window_id));
+        return tab?.id === tab_id && tab.displayedFolder?.id === folder_id;
     }
 
     async function row_at(window_id: number, index: number): Promise<ViewRow | undefined> {
@@ -126,14 +127,19 @@ export function create_search_service(deps: SearchDeps): SearchService {
         if (live.get(window_id) === search) live.delete(window_id);
     }
 
+    // A search that lost its tab or folder leaves the filter alone and ends, so no later key acts on it.
+    function end_search_of_changed_tab(window_id: number, search: LiveSearch): void {
+        forget_filter(search.tab_id);
+        leave_search(window_id, search);
+    }
+
     const wait = (ms: number) => new Promise<void>((resolve) => deps.timers.set(resolve, ms));
 
     // The start of a search job refuses the same way, so a folder change during a wait never commits in the new folder.
     async function refuse_unless_here(window_id: number, search: LiveSearch): Promise<void> {
         if (await still_here(window_id, search)) return;
-        forget_filter(search.tab_id);
-        leave_search(window_id, search);
-        throw new RuntimeRefusal("The folder changed, so the search ended.");
+        end_search_of_changed_tab(window_id, search);
+        throw new RuntimeRefusal(TAB_OR_FOLDER_CHANGED);
     }
 
     // A commit counts and selects the final rows, so it waits for the search of its filter with no limit: the user pressed Enter to get that answer. `filter.set` stops waiting after 5 s and a plain text filter never waits, so the search can still run here. Only Escape and a change of tab or folder end the wait.
@@ -176,18 +182,21 @@ export function create_search_service(deps: SearchDeps): SearchService {
             return in_order<CmdlineSearchNote>(search, async () => {
                 if (mine !== search.sequence) return { stale: true };
                 if (!(await still_here(window_id, search))) {
-                    forget_filter(search.tab_id);
-                    leave_search(window_id, search);
-                    return { note: "The folder changed, so the search ended.", is_error: true };
+                    end_search_of_changed_tab(window_id, search);
+                    return { note: TAB_OR_FOLDER_CHANGED, is_error: true };
                 }
-                if (!(await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text), owns_search(window_id, search)))) return { stale: true };
+                if (!(await apply_filter(deps.api, search.tab_id, text === "" ? search.prior : with_text(search.prior, text), owns_search(window_id, search)))) {
+                    // The apply declined. A search still live and still wanted lost its tab or folder in the apply chain.
+                    if (live.get(window_id) !== search || mine !== search.sequence) return { stale: true };
+                    end_search_of_changed_tab(window_id, search);
+                    return { note: TAB_OR_FOLDER_CHANGED, is_error: true };
+                }
                 if (text === "") return { note: "", is_error: false };
                 const filled = await list_filled(search.tab_id, async () => mine === search.sequence && (await still_here(window_id, search)));
                 if (mine !== search.sequence) return { stale: true };
                 if (filled === "stopped") {
-                    forget_filter(search.tab_id);
-                    leave_search(window_id, search);
-                    return { note: "The folder changed, so the search ended.", is_error: true };
+                    end_search_of_changed_tab(window_id, search);
+                    return { note: TAB_OR_FOLDER_CHANGED, is_error: true };
                 }
                 if (filled === "timed_out") return { note: STILL_SEARCHING, is_error: true };
                 const count = await count_rows(window_id);
@@ -208,13 +217,16 @@ export function create_search_service(deps: SearchDeps): SearchService {
             if (query === undefined) throw new RuntimeRefusal("No earlier search to repeat.");
             await in_order(search, async () => {
                 if (!(await still_here(window_id, search))) {
-                    forget_filter(search.tab_id);
-                    leave_search(window_id, search);
-                    throw new RuntimeRefusal("The folder changed, so the search ended.");
+                    end_search_of_changed_tab(window_id, search);
+                    throw new RuntimeRefusal(TAB_OR_FOLDER_CHANGED);
                 }
                 const wanted = with_text(search.prior, query);
                 // Enter right after the last keystroke finds its filter applied, and the search of that filter may still run. A second apply would restart it.
-                if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted) && !(await apply_filter(deps.api, search.tab_id, wanted, owns_search(window_id, search)))) throw new RuntimeRefusal("The search was cancelled.");
+                if (JSON.stringify(remembered_filter(search.tab_id)) !== JSON.stringify(wanted) && !(await apply_filter(deps.api, search.tab_id, wanted, owns_search(window_id, search)))) {
+                    if (live.get(window_id) !== search) throw new RuntimeRefusal("The search was cancelled.");
+                    end_search_of_changed_tab(window_id, search);
+                    throw new RuntimeRefusal(TAB_OR_FOLDER_CHANGED);
+                }
                 await search_ended(window_id, search);
                 const count = await count_rows(window_id);
                 // Escape came while the filter ran. Its restore is queued behind this job, so the committed text must not stay.

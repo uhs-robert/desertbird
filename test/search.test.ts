@@ -60,21 +60,21 @@ function setup(options: { folder?: string; root?: boolean; mails?: Mail[] } = {}
     const said: string[] = [];
     const mails = options.mails ?? MAILS;
     const reads = { row_counts: 0, row_blocks: 0 };
-    const state = { tab_folders: { [tab_id]: options.folder ?? "f1" } as Record<number, string>, tab: tab_id, selected: -1, filter: {} as QuickFilter, root: options.root ?? false };
+    const state = { tab_folders: { [tab_id]: options.folder ?? "f1" } as Record<number, string>, tab: tab_id, selected: -1, filter: {} as QuickFilter, root: options.root ?? false, front: "mail" as "mail" | "none", selected_tabs: [] as number[] };
     const visible = () => {
         const text = state.filter.text?.text.toLowerCase();
         return text === undefined ? mails : mails.filter((mail) => `${mail.subject} ${mail.author}`.toLowerCase().includes(text));
     };
     const api = {
         mailTabs: {
-            query: async () => [{ id: state.tab, displayedFolder: { id: state.tab_folders[state.tab] ?? "other", accountId: "a1", path: "/Inbox", isRoot: state.root } }],
+            query: async () => (state.front === "none" ? [] : [{ id: state.tab, displayedFolder: { id: state.tab_folders[state.tab] ?? "other", accountId: "a1", path: "/Inbox", isRoot: state.root } }]),
             get: async (id: number) => ({ displayedFolder: { id: state.tab_folders[id] ?? "other" } }),
             update: async () => undefined,
             setQuickFilter: async (id: number, filter: QuickFilter) => {
                 filters.push(filter);
                 if (id === tab_id) state.filter = filter;
             },
-            setSelectedMessages: async (_id: number, ids: number[]) => void (state.selected = visible().findIndex((mail) => mail.id === ids[0])),
+            setSelectedMessages: async (id: number, ids: number[]) => void (state.selected_tabs.push(id), state.selected = visible().findIndex((mail) => mail.id === ids[0])),
         },
         app: {
             viewRows: async ({ first, last }: { first: number; last: number }) => ({
@@ -249,7 +249,7 @@ test("a folder or tab change during a wait ends the search and counts nothing of
     await turns(typing.timers, 5);
     typing.state.tab_folders[typing.tab_id] = "f2";
     await turns(typing.timers, 3);
-    assert.deepEqual(await typed, { note: "The folder changed, so the search ended.", is_error: true });
+    assert.deepEqual(await typed, { note: "The tab or folder changed, so the search ended.", is_error: true });
     assert.equal(typed_control.counts, 0);
     // `n` after Escape waits for its own filter. A tab change in that wait stops it before it counts or selects.
     const stepping = setup();
@@ -262,6 +262,120 @@ test("a folder or tab change during a wait ends the search and counts nothing of
     await turns(stepping.timers, 3);
     await assert.rejects(stepped, /tab or folder changed/);
     assert.deepEqual([step_control.counts, stepping.state.selected], [0, -1]);
+});
+
+// A tab of another kind in front: `mailTabs.query` answers no tab at all.
+const ENDED = "The tab or folder changed, so the search ended.";
+
+test("a non-mail tab during the wait of a keystroke ends the search and counts nothing", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const typed = fixture.service.type(3, "invoice");
+    await turns(fixture.timers, 5);
+    fixture.state.front = "none";
+    await turns(fixture.timers, 3);
+    assert.deepEqual(await typed, { note: ENDED, is_error: true });
+    assert.equal(control.counts, 0);
+    await assert.rejects(fixture.service.type(3, "x"), /not open/);
+});
+
+test("a non-mail tab during the wait of Enter ends the search and selects nothing", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const control = stuck_search(fixture);
+    const committed = fixture.service.commit(3, "invoice");
+    void committed.catch(() => undefined);
+    await turns(fixture.timers, 5);
+    fixture.state.front = "none";
+    await turns(fixture.timers, 3);
+    await assert.rejects(committed, /tab or folder changed/);
+    assert.deepEqual([control.counts, fixture.state.selected_tabs], [0, []]);
+    await assert.rejects(fixture.service.type(3, "x"), /not open/);
+    await assert.rejects(fixture.service.commit(3, "x"), /ended/);
+});
+
+test("a non-mail tab during the wait of n names the tab and stops with no count or selection", async () => {
+    const fixture = setup();
+    await fixture.register.write({ text: "invoice", direction: "forward", kind: "threads" });
+    const control = stuck_search(fixture);
+    const stepped = fixture.service.step(3, "same");
+    void stepped.catch(() => undefined);
+    await turns(fixture.timers, 5);
+    fixture.state.front = "none";
+    await turns(fixture.timers, 3);
+    await assert.rejects(stepped, /tab or folder changed, so n stopped/);
+    assert.deepEqual([control.counts, fixture.state.selected_tabs], [0, []]);
+});
+
+test("a tab change before the debounce ends, and after the count finished, still ends the search", async () => {
+    const before = setup();
+    await before.service.start(3, "forward");
+    const pending = before.service.type(3, "invoice");
+    await new Promise((resolve) => setImmediate(resolve));
+    before.state.front = "none";
+    before.timers.advance(SEARCH_DEBOUNCE_MS);
+    assert.deepEqual(await pending, { note: ENDED, is_error: true });
+    assert.deepEqual(before.filters, []);
+    await assert.rejects(before.service.type(3, "x"), /not open/);
+    // The change lands after the count: that answer stands, and the next key ends the search.
+    const after = setup();
+    await after.service.start(3, "forward");
+    assert.equal(((await after.type("invoice")) as { note: string }).note, "1 of 3");
+    after.state.front = "none";
+    assert.deepEqual(await after.type("invoice2"), { note: ENDED, is_error: true });
+    await assert.rejects(after.service.type(3, "x"), /not open/);
+    // Enter before the change ends the search with the selection made in the captured tab.
+    const entered = setup();
+    await entered.service.start(3, "forward");
+    await entered.service.commit(3, "invoice");
+    await assert.rejects(entered.service.type(3, "x"), /not open/);
+});
+
+test("Enter and n select in the tab the search began in", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    await fixture.service.commit(3, "invoice");
+    await fixture.service.step(3, "same");
+    assert.deepEqual(fixture.state.selected_tabs, [fixture.tab_id, fixture.tab_id]);
+});
+
+// The tab changes after the check before a filter change and before that change takes its turn in the apply chain: `owns_search` declines.
+function tab_lost_at_the_apply(fixture: ReturnType<typeof setup>) {
+    const query = fixture.api.mailTabs.query;
+    let calls = 0;
+    fixture.api.mailTabs.query = async () => (++calls >= 2 ? ((fixture.state.front = "none"), query()) : query());
+}
+
+test("a search that loses its tab inside the apply of a keystroke ends and is not left live", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    tab_lost_at_the_apply(fixture);
+    assert.deepEqual(await fixture.type("invoice"), { note: ENDED, is_error: true });
+    assert.deepEqual(fixture.filters, []);
+    await assert.rejects(fixture.service.type(3, "x"), /not open/);
+});
+
+test("a search that loses its tab inside the apply of Enter ends and is not left live", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    tab_lost_at_the_apply(fixture);
+    await assert.rejects(fixture.service.commit(3, "invoice"), /tab or folder changed/);
+    assert.deepEqual(fixture.filters, []);
+    await assert.rejects(fixture.service.type(3, "x"), /not open/);
+});
+
+test("a newer keystroke or Escape that wins the race at the apply still answers stale or cancelled", async () => {
+    const fixture = setup();
+    await fixture.service.start(3, "forward");
+    const first = fixture.service.type(3, "inv");
+    await new Promise((resolve) => setImmediate(resolve));
+    fixture.timers.advance(SEARCH_DEBOUNCE_MS);
+    const second = fixture.service.type(3, "invo");
+    await new Promise((resolve) => setImmediate(resolve));
+    fixture.timers.advance(SEARCH_DEBOUNCE_MS);
+    assert.deepEqual(await first, { stale: true });
+    assert.equal(((await second) as { note: string }).note, "1 of 3");
 });
 
 test("a search that runs past the limit stops the keystroke and n with a message, and Enter waits on until it ends or Escape", async () => {
@@ -361,7 +475,7 @@ test("a folder that changes mid-search ends the search and touches no filter", a
     await service.start(3, "forward");
     state.tab_folders[tab_id] = "f2";
     const answer = await type("invoice");
-    assert.deepEqual(answer, { note: "The folder changed, so the search ended.", is_error: true });
+    assert.deepEqual(answer, { note: "The tab or folder changed, so the search ended.", is_error: true });
     assert.deepEqual(filters, []);
     await assert.rejects(service.type(3, "x"), /not open/);
     await assert.rejects(service.commit(3, "x"), /ended/);
