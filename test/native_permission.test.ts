@@ -9,10 +9,11 @@ const api_with = (granted: boolean) => {
     return { calls, permissions: { contains: async () => (calls.push("contains"), granted), request: async (query: { permissions: string[] }) => (calls.push(`request ${query.permissions.join()}`), granted) } };
 };
 
-test("the manifest lists nativeMessaging as optional only", () => {
+test("the manifest lists nativeMessaging and addressBooks as optional only", () => {
     const manifest = JSON.parse(readFileSync(new URL("../src/manifest.json", import.meta.url), "utf8")) as { permissions: string[]; optional_permissions: string[] };
     assert.ok(!manifest.permissions.includes("nativeMessaging"));
-    assert.deepEqual(manifest.optional_permissions, ["nativeMessaging"]);
+    assert.ok(!manifest.permissions.includes("addressBooks"));
+    assert.deepEqual(manifest.optional_permissions, ["addressBooks", "nativeMessaging"]);
 });
 
 test("a missing grant throws a message that says how to grant it, and a grant passes", async () => {

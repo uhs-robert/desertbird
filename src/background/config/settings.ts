@@ -11,7 +11,7 @@ import { DEFAULT_THEME, OASIS_THEME_NAMES } from "../../shared/theme_choice.ts";
 export type Settings = VendoredSettings & { message_scroll_step_px: number; notify_new_mail: boolean; notice_show_subject: boolean; mode_indicator_style: ModeLabelStyle; theme: string; external_editor: boolean; compose_send: boolean; cmdline_prompt: string; statusbar_widgets: string[]; hint_letters: string } & BridgeShareSettings & BridgeAllowSettings;
 
 /** What the bridge may read. Each is inert while `bridge` is off. */
-export type BridgeShareSettings = { bridge_share_headers: boolean; bridge_share_bodies: boolean; bridge_share_attachments: boolean; bridge_share_folders: boolean };
+export type BridgeShareSettings = { bridge_share_headers: boolean; bridge_share_bodies: boolean; bridge_share_attachments: boolean; bridge_share_folders: boolean; bridge_share_contacts: boolean };
 
 /** What the bridge may write. Each is inert while `bridge` is off. */
 export type BridgeAllowSettings = { bridge_allow_drafts: boolean; bridge_allow_actions: boolean };
@@ -55,6 +55,7 @@ export const SETTING_KINDS: Record<SettingName, SettingKind> = {
     bridge_share_bodies: { kind: "boolean" },
     bridge_share_attachments: { kind: "boolean" },
     bridge_share_folders: { kind: "boolean" },
+    bridge_share_contacts: { kind: "boolean" },
     bridge_allow_drafts: { kind: "boolean" },
     bridge_allow_actions: { kind: "boolean" },
 };
@@ -110,6 +111,6 @@ export function sanitize_settings(raw: unknown, on_problem: (message: string) =>
 }
 
 /** Every setting at its default: the vendored defaults plus DesertBird's own. */
-export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false, notice_show_subject: true, mode_indicator: "always", mode_indicator_style: "classic", theme: DEFAULT_THEME, external_editor: false, compose_send: false, cmdline_prompt: "caret", statusbar_widgets: ["folder", "position"], hint_letters: "asdfghjkl", bridge_share_headers: false, bridge_share_bodies: false, bridge_share_attachments: false, bridge_share_folders: false, bridge_allow_drafts: false, bridge_allow_actions: false };
+export const SETTING_DEFAULTS: Settings = { ...DEFAULT_SETTINGS, message_scroll_step_px: MESSAGE_SCROLL_STEP_PX, notify_new_mail: false, notice_show_subject: true, mode_indicator: "always", mode_indicator_style: "classic", theme: DEFAULT_THEME, external_editor: false, compose_send: false, cmdline_prompt: "caret", statusbar_widgets: ["folder", "position"], hint_letters: "asdfghjkl", bridge_share_headers: false, bridge_share_bodies: false, bridge_share_attachments: false, bridge_share_folders: false, bridge_share_contacts: false, bridge_allow_drafts: false, bridge_allow_actions: false };
 
 export const settings_with_defaults = (overrides: Partial<Settings>): Settings => ({ ...SETTING_DEFAULTS, ...overrides });

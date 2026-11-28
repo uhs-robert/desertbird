@@ -1,11 +1,11 @@
-// The four read frames of the bridge: `folders`, `messages`, `message` and `attachments`. Each is off until its share setting and `bridge` are on, checked in storage at request time. Every string a sender controls is cleaned here, and a body leaves only as marked, untrusted text.
+// The five read frames of the bridge: `folders`, `messages`, `message`, `attachments` and `contacts`. Each is off until its share setting and `bridge` are on, checked in storage at request time. Every string a sender controls is cleaned here, and a body leaves only as marked, untrusted text.
 
 import { refused_as } from "../../shared/swallow.ts";
 import { plain_body } from "../handlers/clipboard.ts";
 import type { MessagePart } from "../handlers/clipboard.ts";
 import { safe_filename } from "../safe_filename.ts";
 
-export const READ_VERBS = ["folders", "messages", "message", "attachments"] as const;
+export const READ_VERBS = ["folders", "messages", "message", "attachments", "contacts"] as const;
 export type ReadVerb = (typeof READ_VERBS)[number];
 
 export interface ShareSettings {
@@ -14,6 +14,7 @@ export interface ShareSettings {
     bridge_share_bodies: boolean;
     bridge_share_attachments: boolean;
     bridge_share_folders: boolean;
+    bridge_share_contacts: boolean;
 }
 
 interface ReadFolder {
@@ -36,6 +37,13 @@ interface ReadHeader {
     flagged?: boolean;
 }
 
+/** The fields of a `contacts.quickSearch` node that the reader looks at. The node holds far more (phones, addresses, notes, the whole vCard), and none of it is read. */
+interface ReadContact {
+    type?: string;
+    remote?: boolean;
+    properties?: { DisplayName?: string; FirstName?: string; LastName?: string; PrimaryEmail?: string; SecondEmail?: string };
+}
+
 /** A part of `messages.getFull` with the fields the encryption check reads. */
 type FullPart = MessagePart & { decryptionStatus?: string; parts?: FullPart[] };
 
@@ -55,11 +63,14 @@ export interface ReadsApi {
         listAttachments(id: number): Promise<{ name?: string; partName: string; size?: number; contentType?: string }[]>;
     };
     messengerUtilities: { convertToPlainText(html: string): Promise<string> };
+    contacts: { quickSearch(query_info: { searchString: string; includeLocal: boolean; includeRemote: boolean; includeReadOnly: boolean; includeReadWrite: boolean }): Promise<ReadContact[]> };
 }
 
 export interface BridgeReadsDeps {
     api: ReadsApi;
     read_settings(): Promise<ShareSettings>;
+    /** Whether the optional `addressBooks` permission is granted. Checked before each contacts search. */
+    address_books_granted(): Promise<boolean>;
 }
 
 type Reply = { ok: true; [field: string]: unknown } | { ok: false; message: string };
@@ -72,12 +83,17 @@ const NO_SUCH_FOLDER = refuse("no such folder");
 const NO_SUCH_MESSAGE = refuse("no such message");
 const ENCRYPTED = refuse("the message is encrypted, so its body never leaves Thunderbird");
 
+const NO_CONTACTS_PERMISSION = refuse("the addressBooks permission is not granted, open the DesertBird options, set bridge_share_contacts to true and press Save, then allow the prompt");
+const QUERY_TOO_SHORT = refuse("the query is too short, every word needs at least 2 characters");
+const CONTACTS_FAILED = refuse("the address book could not be searched");
+
 const GATES: Record<ReadVerb, { settings: (keyof ShareSettings)[]; refusal: string }> = {
     folders: { settings: ["bridge_share_folders"], refusal: "folder sharing is off, set bridge_share_folders to true" },
     // A folder id is the folder's path, so a "no such folder" answer would confirm a guessed name while folder sharing is off.
     messages: { settings: ["bridge_share_headers", "bridge_share_folders"], refusal: "header or folder sharing is off, set bridge_share_headers and bridge_share_folders to true" },
     message: { settings: ["bridge_share_headers", "bridge_share_bodies"], refusal: "body sharing is off, set bridge_share_headers and bridge_share_bodies to true" },
     attachments: { settings: ["bridge_share_attachments"], refusal: "attachment sharing is off, set bridge_share_attachments to true" },
+    contacts: { settings: ["bridge_share_contacts"], refusal: "contact sharing is off, set bridge_share_contacts to true" },
 };
 
 export const MAX_FOLDER_ID_CHARS = 1024;
@@ -90,6 +106,10 @@ export const MAX_FIELD_CHARS = 512;
 const MAX_RECIPIENTS = 100;
 const MAX_ATTACHMENTS = 500;
 const MAX_FOLDERS = 5000;
+export const MAX_CONTACTS = 20;
+export const MIN_QUERY_WORD_CHARS = 2;
+const MAX_QUERY_CHARS = 100;
+const MAX_QUERY_WORDS = 5;
 // Kept under the host's 1 MiB cap with room for the reply envelope. A list over it drops rows from its end and says `truncated`.
 export const MAX_REPLY_BYTES = 900 * 1024;
 
@@ -144,6 +164,16 @@ const is_folder_id = (value: unknown): value is string => typeof value === "stri
 const iso_date = (date: Date | string | undefined): string => {
     const parsed = date === undefined ? new Date(Number.NaN) : new Date(date);
     return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+};
+
+const contact_name = ({ properties = {} }: ReadContact): string => clean_line(properties.DisplayName?.trim() || [properties.FirstName, properties.LastName].filter(Boolean).join(" "));
+
+// One address: no space, angle bracket, comma, quote or backslash, so it stays a bare `local@domain` that a draft takes as it is.
+const BARE_ADDRESS = /^[^\s<>(),;:"\\@]+@[^\s<>(),;:"\\@]+$/u;
+
+const contact_emails = ({ properties = {} }: ReadContact): string[] => {
+    const cleaned = [properties.PrimaryEmail, properties.SecondEmail].map((address) => clean_line(address));
+    return [...new Set(cleaned.filter((address) => BARE_ADDRESS.test(address)))];
 };
 
 /** Drops rows from the end until the reply fits under `MAX_REPLY_BYTES`. */
@@ -245,7 +275,30 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
         return fit_rows(rows, (kept, truncated) => ({ ok: true, attachments: kept, truncated }), listed.length > MAX_ATTACHMENTS);
     }
 
-    const READERS: Record<ReadVerb, (request: Record<string, unknown>) => Promise<Reply>> = { folders, messages, message, attachments };
+        async function contacts(request: Record<string, unknown>): Promise<Reply> {
+        const { query, limit = MAX_CONTACTS } = request;
+        if (typeof query !== "string" || query.length > MAX_QUERY_CHARS || /[\u0000-\u001f\u007f-\u009f\p{Cf}\u2028\u2029]/u.test(query) || !Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_CONTACTS) return BAD_REQUEST;
+        // Thunderbird matches each word on its own, so one short word among long ones would still list a large part of the book. Every word must be long enough.
+        const words = query.split(/\s+/).filter((word) => word !== "");
+        if (words.length === 0 || words.some((word) => Array.from(word).length < MIN_QUERY_WORD_CHARS)) return QUERY_TOO_SHORT;
+        if (words.length > MAX_QUERY_WORDS) return BAD_REQUEST;
+        if (!(await deps.address_books_granted())) return NO_CONTACTS_PERMISSION;
+        let found: ReadContact[];
+        try {
+            // The four flags are all spelled out: Thunderbird treats a missing one as false and would skip every book. Remote books (LDAP, CardDAV) are never searched, because a search would send the typed name to a server.
+            found = await api.contacts.quickSearch({ searchString: words.join(" "), includeLocal: true, includeRemote: false, includeReadOnly: true, includeReadWrite: true });
+        } catch {
+            return CONTACTS_FAILED;
+        }
+        const rows = found
+            .filter((node) => node.type === "contact" && node.remote !== true)
+            .map((node) => ({ name: contact_name(node), emails: contact_emails(node) }))
+            .filter((row) => row.emails.length > 0);
+        // Only name and bare addresses are copied. The rest of the node is never read, so it cannot leak by a later field.
+        return fit_rows(rows.slice(0, limit as number), (kept, truncated) => ({ ok: true, contacts: kept, untrusted: true, truncated }), rows.length > (limit as number));
+    }
+
+    const READERS: Record<ReadVerb, (request: Record<string, unknown>) => Promise<Reply>> = { folders, messages, message, attachments, contacts };
 
     /** Answers one read frame. The settings are read from storage now, so a setting turned off a moment ago already refuses. */
     async function read(verb: ReadVerb, request: Record<string, unknown>): Promise<Reply> {

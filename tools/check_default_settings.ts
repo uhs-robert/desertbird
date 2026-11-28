@@ -14,7 +14,7 @@ export type DefaultsByName = Readonly<Record<string, unknown>>;
 /** Settings only DesertBird has. They are absent from the DesertFox table on purpose. */
 export const DESERTBIRD_ONLY: readonly string[] = [
     "message_scroll_step_px", "mode_indicator_style", "notify_new_mail", "notice_show_subject", "external_editor", "compose_send",
-    "bridge_share_headers", "bridge_share_bodies", "bridge_share_attachments", "bridge_share_folders", "bridge_allow_drafts", "bridge_allow_actions",
+    "bridge_share_headers", "bridge_share_bodies", "bridge_share_attachments", "bridge_share_folders", "bridge_share_contacts", "bridge_allow_drafts", "bridge_allow_actions",
 ];
 
 /** Shared names whose DesertBird default differs from DesertFox on purpose, with the DesertBird value. */

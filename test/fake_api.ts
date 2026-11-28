@@ -257,6 +257,7 @@ export function fake_reads_api(options: {
     full?: Record<number, object>;
     attachments?: Record<number, { name?: string; partName: string; size?: number; contentType?: string }[]>;
     page_size?: number;
+    contacts?: object[];
 } = {}) {
     const calls: string[] = [];
     const folders = options.folders ?? [];
@@ -316,6 +317,7 @@ export function fake_reads_api(options: {
             listAttachments: async (id: number) => (calls.push(`messages.listAttachments ${id}`), header_of(id), options.attachments?.[id] ?? []),
         },
         messengerUtilities: { convertToPlainText: async (html: string) => (calls.push("convertToPlainText"), html.replace(/<[^>]*>/g, "")) },
+        contacts: { quickSearch: async (query_info: object) => (calls.push(`contacts.quickSearch ${JSON.stringify(query_info)}`), options.contacts ?? []) },
     };
     return { api, calls };
 }

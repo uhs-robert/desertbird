@@ -30,7 +30,7 @@ The external editor sends the text of the message you are composing to the progr
 
 The setting `bridge` is off by default. Nothing connects to the host while it is off. When it is on, programs on your own computer that connect to the bridge socket of the host (readable by your user only) can read the state of Thunderbird and run a short list of safe commands. Commands that send mail, delete it for good or open a link never run through the bridge. Archive, trash and move run only when `bridge_allow_actions` is on and you press `y` on a prompt in Thunderbird.
 
-With `bridge` on and nothing else, a program sees the mode of the focused window, the ids of that window and its active tab and the list of allowed commands. Four more settings, each off by default, let a program read mail. Two more let a program write. The table lists what each one passes.
+With `bridge` on and nothing else, a program sees the mode of the focused window, the ids of that window and its active tab and the list of allowed commands. Five more settings, each off by default, let a program read mail or contacts. Two more let a program write. The table lists what each one passes.
 
 | Setting | What leaves Thunderbird for a program on your computer |
 | --- | --- |
@@ -38,6 +38,7 @@ With `bridge` on and nothing else, a program sees the mode of the focused window
 | `bridge_share_headers` | Sender, subject, date and read and flagged state of up to 200 messages of one folder at a time. Needs `bridge_share_folders` on too |
 | `bridge_share_bodies` | The text of one message, cut at 64 KiB. HTML turns into plain text. An encrypted message is never sent. Needs `bridge_share_headers` on too |
 | `bridge_share_attachments` | Attachment names, sizes and types. Never the files |
+| `bridge_share_contacts` | Name and email address of up to 20 contacts that match a search a program sends, from your local address books only. Remote books (LDAP, CardDAV) are not searched. No phone, address, note, photo or mailing list. Needs the optional `addressBooks` permission |
 | `bridge_allow_drafts` | A program can save a plain-text draft in your Drafts folder. You review it and press Send yourself. The answer holds no mail data |
 | `bridge_allow_actions` | A program can ask to archive, trash or move up to 50 messages. Nothing happens until you press `y` on a prompt in Thunderbird that lists the messages. `u` undoes it |
 
@@ -45,7 +46,7 @@ The host passes each answer to the program that asked and keeps none of it. Noth
 
 ## Permissions
 
-DesertBird asks Thunderbird for these permissions on install: read and change folders, messages, tags and drafts, run reminders (alarms), show notifications, store its own data, read the tab list, write the clipboard and save attachments to Downloads. It does not hold the permission to send mail. The key `gS` in a compose window sends the message only when you turn on the `compose_send` setting, and it uses Thunderbird's own send command with its checks. The bridge never sends mail. The `nativeMessaging` permission is optional and is asked for only as the section above says. Thunderbird also shows "Have full, unrestricted access to Thunderbird and your computer" for the Experiment, the privileged part of the add-on. The Experiment takes a fixed list of requests and sends nothing to a server.
+DesertBird asks Thunderbird for these permissions on install: read and change folders, messages, tags and drafts, run reminders (alarms), show notifications, store its own data, read the tab list, write the clipboard and save attachments to Downloads. It does not hold the permission to send mail. The key `gS` in a compose window sends the message only when you turn on the `compose_send` setting, and it uses Thunderbird's own send command with its checks. The bridge never sends mail. The `nativeMessaging` permission is optional and is asked for only as the section above says. The `addressBooks` permission is optional too. Thunderbird asks for it when you turn on `bridge_share_contacts` and press Save. Thunderbird words it as read and change your address books, because it has no read-only form. DesertBird only searches contacts and never writes to an address book, and a test checks that. Thunderbird also shows "Have full, unrestricted access to Thunderbird and your computer" for the Experiment, the privileged part of the add-on. The Experiment takes a fixed list of requests and sends nothing to a server.
 
 ## Changes and contact
 
