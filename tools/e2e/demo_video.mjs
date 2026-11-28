@@ -1,13 +1,14 @@
 // Turns the film of the opt-in piece shots/demo into the demo video: burns the key captions, the title card of each part and the end card into the raw film and cuts a small WebM preview.
 // Usage: node tools/e2e/demo_video.mjs <the out dir of the piece> <output dir> [name, default desertbird-demo]
-// The piece (pieces/shots.demo.mjs) writes demo_raw.mp4 and demo_captions.json there. A caption has `text` (a key caption), `title` (a title card) or `end` (the end card, to the end of the film). Needs ffmpeg with libx264, libvpx-vp9 and drawtext.
+// The piece (pieces/shots.demo.mjs) writes demo_raw.mp4 and demo_captions.json there. A caption has `text` (a key caption), `title` with `show_ms` (a title card and how long it shows) or `end` (the end card, to the end of the film). Needs ffmpeg with libx264, libvpx-vp9 and drawtext.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const [piece_out_dir, output_dir, name = "desertbird-demo"] = process.argv.slice(2);
 if (!piece_out_dir || !output_dir) {
-  console.error("usage: node tools/e2e/demo_video.mjs <piece out dir> <output dir>");
+  console.error("usage: node tools/e2e/demo_video.mjs <piece out dir> <output dir> [name]");
   process.exit(2);
 }
 mkdirSync(output_dir, { recursive: true });
@@ -29,11 +30,10 @@ const escape_level = (value, specials) => value.replace(new RegExp(`[${specials}
 const escaped_option = (value) => escape_level(escape_level(value, "\\\\:'"), "\\\\:',;\\[\\]");
 // wf-recorder starts a moment after the piece takes its clock, so DEMO_CAPTION_OFFSET_S (seconds, may be negative) shifts every caption.
 const OFFSET_S = Number(process.env.DEMO_CAPTION_OFFSET_S ?? 0);
-// A key caption stays until the next one, but never longer than this. A title card shows for TITLE_S.
+// A key caption stays until the next one, but never longer than this. A title card shows for the `show_ms` the piece wrote into its caption.
 const MAX_SHOW_S = 6;
-const TITLE_S = 1.8;
 // The logo is the add-on icon. Its small mark sits in the empty middle of the spaces bar, above the command line list. The title and end cards carry the logo themselves.
-const LOGO = process.env.DEMO_LOGO ?? new URL("../../src/icons/desertbird-128.png", import.meta.url).pathname;
+const LOGO = process.env.DEMO_LOGO ?? fileURLToPath(new URL("../../src/icons/desertbird-128.png", import.meta.url));
 const MARK_PX = 34;
 const MARK_X = 6;
 const MARK_Y = 400;
@@ -69,12 +69,12 @@ key_captions.forEach((caption, index) => {
   const until_s = Math.min(next_s, from_s + MAX_SHOW_S);
   filters.push(`drawtext=${text_option(caption.text)}:fontsize=22:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=6:x=290:y=10:enable='between(t,${from_s.toFixed(2)},${until_s.toFixed(2)})'`);
 });
-// A title card is a lower third over the live app for TITLE_S, the same length the piece waits. The end card holds to the end of the film.
+// A title card is a lower third over the live app for the `show_ms` the piece waits. The end card holds to the end of the film.
 const card_dir = join(output_dir, "cards");
 mkdirSync(card_dir, { recursive: true });
 const titles = captions.filter((caption) => caption.title);
-execFileSync("python3", [new URL("./demo_cards.py", import.meta.url).pathname, card_dir, LOGO, find_title_font(), ...titles.map((caption) => caption.title)], { stdio: "inherit" });
-const card_overlays = titles.map((caption, index) => ({ file: join(card_dir, `title_${index + 1}.png`), window: `between(t,${at_s(caption).toFixed(2)},${(at_s(caption) + TITLE_S).toFixed(2)})` }));
+execFileSync("python3", [fileURLToPath(new URL("./demo_cards.py", import.meta.url)), card_dir, LOGO, find_title_font(), ...titles.map((caption) => caption.title)], { stdio: "inherit" });
+const card_overlays = titles.map((caption, index) => ({ file: join(card_dir, `title_${index + 1}.png`), window: `between(t,${at_s(caption).toFixed(2)},${(at_s(caption) + caption.show_ms / 1000).toFixed(2)})` }));
 const end = captions.find((caption) => caption.end);
 if (end) card_overlays.push({ file: join(card_dir, "end.png"), window: `gte(t,${at_s(end).toFixed(2)})` });
 const end_window = end ? card_overlays.at(-1).window : "0";

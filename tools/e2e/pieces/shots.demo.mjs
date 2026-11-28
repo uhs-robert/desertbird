@@ -39,7 +39,7 @@ async function run_demo(instance, ctx) {
   let recording = null;
   const clock = () => (recording ? Date.now() - recording.started_at : 0);
   const caption = (text) => captions.push({ at_ms: clock(), text });
-  const title = async (text) => { captions.push({ at_ms: clock(), title: text }); await sleep(TITLE_MS); };
+  const title = async (text) => { captions.push({ at_ms: clock(), title: text, show_ms: TITLE_MS }); await sleep(TITLE_MS); };
   const selected_is = (name) => (state) => state.selected.some((message) => message.header_id === id_of(name));
   const unlisted = (name) => (state) => !state.listed.includes(id_of(name));
   // Each letter of a chord as its own press: typed as one chunk, a later letter can reach the app before the prefix.
@@ -156,7 +156,11 @@ async function run_demo(instance, ctx) {
     for (let step = 0; step < THEME_STEPS_UP; step++) await key(step === 0 ? "k  Pick a theme" : null, ["k"], null, 350);
     await key("Esc  Leave the list", [["-k", "Escape"]], null, 500);
     await key("G  Bottom", ["G"], null, 700);
+    // The helper add-on cannot read another add-on's storage and the select is page DOM, so the saved theme shows as a change of the page's pixels. The k count is fixed, so a change means the page took the new theme.
+    const before_save = await wait_pixels(instance, "the options page to hold still before Save", `${app}_demo_save_page_before`, strip_region, holds_twice(), { timeout_ms: 5000 });
     await hint_pick("save", "f  Click any button", 800);
+    const settled = holds_twice();
+    await wait_pixels(instance, "the options page to take the saved theme", `${app}_demo_save_page_after`, strip_region, (hash) => settled(hash) && hash !== before_save, { timeout_ms: 10000 });
     await pause(HOLD_MS);
     await key("q  Close the tab", ["q"], null, 500);
 
