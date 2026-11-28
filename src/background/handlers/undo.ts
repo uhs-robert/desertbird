@@ -276,7 +276,7 @@ const reason_of = (error: unknown) => (error instanceof Error ? error.message : 
 
 async function unindexed_refusal(api: UndoApi, folder_ids: string[]): Promise<string> {
     const names = await Promise.all(folder_ids.map(async (id) => (await refused_as(api.folders.get(id), undefined))?.path ?? id));
-    return `Thunderbird has not indexed ${names.join(", ")} yet, so u cannot find the message. Open the folder once, then press u. The step stays.`;
+    return `Thunderbird has not indexed ${names.join(", ")} yet, so u cannot find the message. Open the folder once and press u, or press u again to drop this step.`;
 }
 
 /**
@@ -288,8 +288,8 @@ async function undo_entry(api: UndoApi, entry: UndoEntry, indexed: Set<string>):
     const missing = found.filter(({ copy }) => copy === undefined).length;
     // A refused step, and a folder whose parse just finished, take the mark-then-drop path below: another internal error behind the same generic text must not keep a step, and the older steps behind it, forever.
     const unindexed = missing > 0 && entry.refused !== true ? (await unindexed_folder_ids(api, found)).filter((id) => !indexed.has(id)) : [];
-    // Not marked refused: the message is not known to be gone, so the next `u` waits and indexes again instead of dropping the step.
-    if (unindexed.length > 0) return { left: entry.items, refusal: await unindexed_refusal(api, unindexed) };
+    // Every unindexed folder was parsed before this lookup and stayed unindexed (IMAP, or a parse past the timeout). Marked refused so the next `u` takes the drop path, after one more parse: a folder that never indexes must not keep the step, and the older steps behind it, forever.
+    if (unindexed.length > 0) return { left: entry.items, refused: true, refusal: await unindexed_refusal(api, unindexed) };
     if (missing > 0 && entry.refused !== true) {
         const which = missing === found.length ? (found.length === 1 ? "The message is" : "The messages are") : `${missing} of ${plural(found.length)} are`;
         return { left: entry.items, refused: true, refusal: `${which} no longer in ${where_of(entry)}, so nothing changed. Press u again to drop this step.` };
