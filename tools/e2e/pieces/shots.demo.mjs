@@ -25,8 +25,8 @@ const END_CARD_MS = 6000;
 const TYPE_MS = 320;
 // The hint targets the piece picks, each by the label of an environment variable.
 const HINT_TARGETS = { body: "DEMO_UNSUBSCRIBE_LABEL", toolbar: "DEMO_BUTTON_LABEL", theme: "DEMO_THEME_LABEL", save: "DEMO_SAVE_LABEL" };
-// Steps up the theme list from the default oasis_moonlight to oasis_mirage.
-const THEME_STEPS_UP = 1;
+// Steps up the theme list from the default oasis_moonlight to oasis_lagoon.
+const THEME_STEPS_UP = 4;
 
 async function run_demo(instance, ctx) {
   const { report, show_folder, wait_for_state, wait_pixels, open_command_line, close_compose } = ctx;
