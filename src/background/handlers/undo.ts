@@ -288,7 +288,7 @@ async function undo_entry(api: UndoApi, entry: UndoEntry, indexed: Set<string>):
     const missing = found.filter(({ copy }) => copy === undefined).length;
     // A refused step, and a folder whose parse just finished, take the mark-then-drop path below: another internal error behind the same generic text must not keep a step, and the older steps behind it, forever.
     const unindexed = missing > 0 && entry.refused !== true ? (await unindexed_folder_ids(api, found)).filter((id) => !indexed.has(id)) : [];
-    // Every unindexed folder was parsed before this lookup and stayed unindexed (IMAP, or a parse past the timeout). Marked refused so the next `u` takes the drop path, after one more parse: a folder that never indexes must not keep the step, and the older steps behind it, forever.
+    // Every unindexed folder was tried before this lookup and stayed unindexed (IMAP, or a parse past the timeout). Marked refused so the next `u` takes the drop path.
     if (unindexed.length > 0) return { left: entry.items, refused: true, refusal: await unindexed_refusal(api, unindexed) };
     if (missing > 0 && entry.refused !== true) {
         const which = missing === found.length ? (found.length === 1 ? "The message is" : "The messages are") : `${missing} of ${plural(found.length)} are`;
