@@ -5,7 +5,11 @@ Usage: demo_cards.py <out dir> <logo png> <title font file> <title>...
 Writes title_<n>.png for each title (n from 1) and end.png. ffmpeg drawtext cannot pick the weight of a variable font, so the cards are drawn here and demo_video.mjs overlays them.
 """
 import sys
-from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    sys.exit("demo_cards: Python Pillow is missing. Install it (pip install pillow, or your distribution package python-pillow).")
 
 WIDTH, HEIGHT = 1280, 720
 SAND = (217, 160, 102, 255)
@@ -64,4 +68,5 @@ def main():
     end_card(logo, font_path).save(f"{out_dir}/end.png")
 
 
-main()
+if __name__ == "__main__":
+    main()
