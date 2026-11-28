@@ -1,4 +1,4 @@
-// The `nativeMessaging` and `addressBooks` permissions are optional. The options page asks for them when the user saves a setting that needs them, and every native call and every contacts search checks its permission first. `addressBooks` is one grant for reading and changing contacts, which Thunderbird does not split, so only the contacts read uses it and nothing in `src/` writes to an address book.
+// The `nativeMessaging` and `addressBooks` permissions are optional. The options page asks for them when the user saves a setting that needs them, and every native call and every contacts search checks its permission first. `addressBooks` is one grant for reading and changing contacts, which Thunderbird does not split. `test/no_address_book_write.test.ts` limits which files may name an address-book API.
 
 export const NATIVE_PERMISSION = "nativeMessaging";
 export const ADDRESS_BOOKS_PERMISSION = "addressBooks";
@@ -19,12 +19,12 @@ export async function require_native_permission(api: PermissionsApi, feature: st
     if (!(await api.permissions.contains({ permissions: [NATIVE_PERMISSION] }))) throw new NativePermissionMissing(missing_permission_message(feature, setting));
 }
 
-/** Asks the person. It resolves true without a prompt when the permission is already granted. It needs a user gesture, so call it first in a click handler. */
-export function request_native_permission(api: PermissionsApi): Promise<boolean> {
-    return api.permissions.request({ permissions: [NATIVE_PERMISSION] });
+/** The optional permissions a save of these settings needs, in the order they are asked for. Empty when none of the settings is on. */
+export function permissions_needed(settings: { external_editor: boolean; bridge: boolean; bridge_share_contacts: boolean }): string[] {
+    return [...(settings.external_editor || settings.bridge ? [NATIVE_PERMISSION] : []), ...(settings.bridge_share_contacts ? [ADDRESS_BOOKS_PERMISSION] : [])];
 }
 
-/** One request for several optional permissions, so the person sees one prompt and one gesture covers all. */
+/** Asks the person. It resolves true without a prompt when every permission is already granted. It needs a user gesture, so call it first in a click handler. One request for all, so the person sees one prompt. */
 export function request_permissions(api: PermissionsApi, permissions: string[]): Promise<boolean> {
     return api.permissions.request({ permissions });
 }

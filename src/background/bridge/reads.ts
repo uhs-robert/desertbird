@@ -275,9 +275,9 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
         return fit_rows(rows, (kept, truncated) => ({ ok: true, attachments: kept, truncated }), listed.length > MAX_ATTACHMENTS);
     }
 
-        async function contacts(request: Record<string, unknown>): Promise<Reply> {
+    async function contacts(request: Record<string, unknown>): Promise<Reply> {
         const { query, limit = MAX_CONTACTS } = request;
-        if (typeof query !== "string" || query.length > MAX_QUERY_CHARS || /[\u0000-\u001f\u007f-\u009f\p{Cf}\u2028\u2029]/u.test(query) || !Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_CONTACTS) return BAD_REQUEST;
+        if (typeof query !== "string" || query.length > MAX_QUERY_CHARS || query.replace(CONTROL_OR_FORMAT, "") !== query || !Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_CONTACTS) return BAD_REQUEST;
         // Thunderbird matches each word on its own, so one short word among long ones would still list a large part of the book. Every word must be long enough.
         const words = query.split(/\s+/).filter((word) => word !== "");
         if (words.length === 0 || words.some((word) => Array.from(word).length < MIN_QUERY_WORD_CHARS)) return QUERY_TOO_SHORT;
@@ -285,7 +285,7 @@ export function create_bridge_reads(deps: BridgeReadsDeps) {
         if (!(await deps.address_books_granted())) return NO_CONTACTS_PERMISSION;
         let found: ReadContact[];
         try {
-            // The four flags are all spelled out: Thunderbird treats a missing one as false and would skip every book. Remote books (LDAP, CardDAV) are never searched, because a search would send the typed name to a server.
+            // The four flags default to true in Thunderbird's schema, so each is spelled out to keep the choice in view. `includeRemote: false` leaves out LDAP books, which a search would send the typed name to. A CardDAV book reports `remote: false` (it is a synced copy in a local database), so it is still searched: the API gives no way to tell it from a local book.
             found = await api.contacts.quickSearch({ searchString: words.join(" "), includeLocal: true, includeRemote: false, includeReadOnly: true, includeReadWrite: true });
         } catch {
             return CONTACTS_FAILED;
