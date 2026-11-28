@@ -16,7 +16,9 @@ export const names_outside_allowed = (files: Map<string, string>): string[] => [
 export const unsafe_contacts_uses = (text: string): string[] => {
     const uses = [...text.matchAll(/\.\s*contacts\b(?!\s*\.\s*quickSearch\s*\()/g)].map((match) => match[0]);
     const brackets = [...text.matchAll(/\[\s*["'`](?:contacts|addressBooks|mailingLists)/g)].map((match) => match[0]);
-    return [...uses, ...brackets];
+    // `const { contacts } = api` takes the handle without a dot. The `=` must not start `=>` or `==`.
+    const destructured = [...text.matchAll(/\{[^{}]*\bcontacts\b[^{}]*\}\s*=(?![=>])/g)].map((match) => match[0]);
+    return [...uses, ...brackets, ...destructured];
 };
 
 const sources_under = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? sources_under(join(dir, entry.name)) : /\.(?:ts|js|mjs)$/.test(entry.name) ? [join(dir, entry.name)] : []));
@@ -45,5 +47,7 @@ test("the scan fails on an aliased write, an optional-chain write, a bracket wri
     for (const write of writes) assert.deepEqual(names_outside_allowed(new Map([["handlers/x.ts", write]])), ["handlers/x.ts"], write);
     assert.deepEqual(unsafe_contacts_uses("const c = api.contacts; c.create();"), [".contacts"]);
     assert.deepEqual(unsafe_contacts_uses("api.contacts['create']()"), [".contacts"]);
+    assert.deepEqual(unsafe_contacts_uses("const { contacts } = api;"), ["{ contacts } ="]);
+    assert.deepEqual(unsafe_contacts_uses("const { api, contacts: book } = deps;"), ["{ api, contacts: book } ="]);
     assert.deepEqual(unsafe_contacts_uses("api.contacts.quickSearch({})"), []);
 });
